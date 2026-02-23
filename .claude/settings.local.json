@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(head:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(make help:*)",
+      "Bash(make new-project:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

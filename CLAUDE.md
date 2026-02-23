@@ -1,3 +1,43 @@
+## Monorepo project conventions
+
+### Structure
+Each project lives in its own folder under the repo root (e.g. `projects/my_tool/` or `tools/my_tool/`). Projects must **never** share source files across folders — treat each folder as an independent unit.
+
+```
+spec_coding/
+├── requirements.txt          # global: aggregates all project deps via -r includes
+├── Makefile                  # global: venv, sync, run, new-project targets
+├── CLAUDE.md                 # global rules (this file)
+├── tools/
+│   ├── mcp_youtube/          # example project
+│   │   ├── requirements.txt  # project-local deps
+│   │   └── main.py           # entry point (or app.py / run.sh)
+│   └── ollama_cursor_proxy/
+│       ├── requirements.txt
+│       └── app.py
+└── projects/                 # future projects go here
+    └── <new_project>/
+        ├── requirements.txt
+        └── main.py
+```
+
+### Rules for every new project
+- **Own folder**: one folder per project, no cross-project imports.
+- **Own `requirements.txt`**: list only that project's direct dependencies.
+- **Entry point**: name it `main.py` (preferred), `app.py`, `server.py`, or `run.sh` — `make run` auto-detects these in order.
+- **Register in global deps**: add `-r <project_folder>/requirements.txt` to the root `requirements.txt`.
+- **Scaffold with make**: run `make new-project PROJECT=projects/my_tool` to create the standard layout.
+
+### Running and syncing
+```bash
+make run PROJECT=tools/mcp_youtube           # run a project
+make sync-project PROJECT=tools/mcp_youtube  # install only that project's deps
+make new-project PROJECT=projects/my_tool    # scaffold a new project folder
+make sync                                    # install all deps (global requirements.txt)
+```
+
+---
+
 ## Repo purpose
 
 This repository demonstrates how Claude Code components work together:

@@ -2,5 +2,8 @@
   "enabledPlugins": {
     "ralph-loop@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true
+  },
+  "permissions": {
+    "defaultMode": "bypassPermissions"
   }
 }
