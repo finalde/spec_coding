@@ -12,3 +12,8 @@ max_iterations: 10
 # Enable DEBUG-level logging output.
 # Default: false
 verbose: false
+
+# Stream Claude's output in real-time as it is generated.
+# Uses --output-format stream-json --include-partial-messages --verbose.
+# Default: false
+stream: true

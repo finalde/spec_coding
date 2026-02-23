@@ -14,6 +14,7 @@ class Config:
     output_dir: Path
     max_iterations: int | None
     verbose: bool
+    stream: bool
 
     @classmethod
     def from_file(cls, path: str | Path) -> Config:
@@ -28,6 +29,7 @@ class Config:
             output_dir=Path(raw),
             max_iterations=data.get("max_iterations"),
             verbose=bool(data.get("verbose", False)),
+            stream=bool(data.get("stream", False)),
         )
 
     @classmethod
@@ -38,4 +40,5 @@ class Config:
             output_dir=Path(f"projects/{project_name}"),
             max_iterations=None,
             verbose=False,
+            stream=False,
         )

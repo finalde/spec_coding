@@ -32,7 +32,7 @@ def main() -> None:
                         format="%(levelname)s %(name)s: %(message)s")
     logging.info("Output dir: %s", config.output_dir)
     max_iter: int = config.max_iterations or spec.max_iterations or DEFAULT_MAX_ITERATIONS
-    sys.exit(RalphLoop(spec, max_iter).run())
+    sys.exit(RalphLoop(spec, max_iter, stream=config.stream).run())
 
 
 if __name__ == "__main__":

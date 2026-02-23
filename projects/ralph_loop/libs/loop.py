@@ -8,13 +8,17 @@ log: logging.Logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_ITERATIONS: int = 10
 _PROMISE_RE: re.Pattern[str] = re.compile(r"<promise>(.+?)</promise>", re.DOTALL)
+_CONTINUE_PROMPT: str = (
+    "Continue working on the spec. Check which acceptance criteria are still incomplete, "
+    "complete them, then emit <promise>all tasks complete</promise> once every criterion is confirmed."
+)
 
 
 class RalphLoop:
-    def __init__(self, spec: Spec, max_iterations: int) -> None:
+    def __init__(self, spec: Spec, max_iterations: int, stream: bool = False) -> None:
         self._spec: Spec = spec
         self._max_iterations: int = max_iterations
-        self._runner: ClaudeRunner = ClaudeRunner()
+        self._runner: ClaudeRunner = ClaudeRunner(stream=stream)
 
     @staticmethod
     def detect_promise(text: str) -> str | None:
@@ -32,6 +36,7 @@ class RalphLoop:
         for i in range(1, self._max_iterations + 1):
             log.info("Iteration %d/%d ...", i, self._max_iterations)
             result: RunResult = self._runner.run(prompt)
+            prompt = _CONTINUE_PROMPT  # subsequent iterations need only a short nudge
             if result.returncode != 0:
                 log.warning("claude exited %d", result.returncode)
             promise: str | None = self.detect_promise(result.stdout + result.stderr)
