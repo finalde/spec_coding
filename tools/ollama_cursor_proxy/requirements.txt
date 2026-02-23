@@ -1,0 +1,8 @@
+flask
+requests
+werkzeug
+markupsafe
+urllib3
+idna
+charset-normalizer
+certifi

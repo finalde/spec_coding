@@ -1,0 +1,6 @@
+# Monorepo Python dependencies (repo-level)
+# Add package groups from subprojects using nested -r includes.
+
+-r tools/mcp_youtube/requirements.txt
+-r tools/ollama_cursor_proxy/requirements.txt
+
