@@ -1,0 +1,6 @@
+# Project-level configuration for ralph_loop.
+# All paths are relative to the repository root unless absolute.
+
+# Where Claude Code should write the generated project files.
+# Default: projects/
+output_dir: projects/example_project

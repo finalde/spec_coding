@@ -2,7 +2,7 @@ SHELL := /bin/bash
 VENV_DIR := .venv
 PYTHON := $(VENV_DIR)/bin/python
 
-.PHONY: help venv sync sync-project run new-project run-mcp run-ollama-proxy clean-venv
+.PHONY: help venv sync sync-project run new-project run-mcp run-ollama-proxy run-ollama-proxy-deepseek clean-venv
 
 help:
 	@echo "Global targets:"
@@ -17,6 +17,7 @@ help:
 	@echo "Legacy targets:"
 	@echo "  make run-mcp                     - run tools/mcp_youtube"
 	@echo "  make run-ollama-proxy            - run tools/ollama_cursor_proxy"
+	@echo "  make run-ollama-proxy-deepseek   - same, with OLLAMA_MODEL=deepseek-r1:latest"
 	@echo "  make clean-venv                  - remove .venv"
 
 # ── Environment ──────────────────────────────────────────────────────────────
@@ -82,6 +83,9 @@ run-mcp:
 
 run-ollama-proxy:
 	@$(MAKE) run PROJECT=tools/ollama_cursor_proxy
+
+run-ollama-proxy-deepseek:
+	OLLAMA_MODEL=deepseek-r1:latest $(MAKE) run PROJECT=tools/ollama_cursor_proxy
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 

@@ -1,12 +1,13 @@
 # ralph_loop
 
-**ralph_loop** is a tool that repeatedly sends the same prompt to a running Claude session
+**ralph_loop** repeatedly sends a structured spec to a running Claude session
 (`claude --continue`) until Claude's response contains a `<promise>` tag — or a maximum
-number of attempts is reached.
+number of iterations is reached.
 
-Think of it as a retry loop with a clear "I'm done" signal. Claude keeps working on a task,
-and when it is satisfied with the result, it signals completion by wrapping its conclusion
-in a `<promise>` tag.
+The spec (`SPEC.yaml`) is a YAML file that defines a goal, one or more tasks, and
+**verifiable acceptance criteria** for each task. Every criterion declares exactly how
+Claude Code will check it: by running a shell command (script check) or by interpreting
+a natural-language instruction (natural check).
 
 ---
 
@@ -15,14 +16,15 @@ in a `<promise>` tag.
 1. [How it works](#how-it-works)
 2. [Prerequisites](#prerequisites)
 3. [Setup](#setup)
-4. [Writing your prompt file](#writing-your-prompt-file)
-5. [Running the loop](#running-the-loop)
-6. [CLI reference](#cli-reference)
-7. [Understanding the output](#understanding-the-output)
-8. [Exit codes](#exit-codes)
-9. [Troubleshooting](#troubleshooting)
-10. [Project structure](#project-structure)
-11. [Keeping this README up to date](#keeping-this-readme-up-to-date)
+4. [Writing your SPEC.yaml](#writing-your-specyaml)
+5. [Schema reference](#schema-reference)
+6. [Check types](#check-types)
+7. [Running the loop](#running-the-loop)
+8. [CLI reference](#cli-reference)
+9. [Understanding the output](#understanding-the-output)
+10. [Exit codes](#exit-codes)
+11. [Troubleshooting](#troubleshooting)
+12. [Project structure](#project-structure)
 
 ---
 
@@ -32,7 +34,7 @@ in a `<promise>` tag.
 ┌─────────────────────────────────────────────────────────┐
 │                      ralph_loop                         │
 │                                                         │
-│  Read PROMPT.md                                         │
+│  Parse SPEC.yaml → render structured prompt             │
 │       │                                                 │
 │       ▼                                                 │
 │  Send prompt ──► claude --continue -p                   │
@@ -48,15 +50,13 @@ in a `<promise>` tag.
 └─────────────────────────────────────────────────────────┘
 ```
 
-**The `<promise>` tag** is the contract. When your prompt instructs Claude to wrap its
-final answer in `<promise>done</promise>` (or any text inside the tags), ralph_loop
-detects it and stops immediately. Without this tag, ralph_loop keeps retrying.
+The prompt rendered from your spec instructs Claude to work through each task, verify
+every acceptance criterion, and emit `<promise>all tasks complete</promise>` only when
+all criteria have been confirmed.
 
 ---
 
 ## Prerequisites
-
-Before you start, make sure you have these installed:
 
 | Requirement | Why | How to check |
 |---|---|---|
@@ -75,7 +75,7 @@ Before you start, make sure you have these installed:
 
 ## Setup
 
-Run all commands from the **repo root** (the `spec_coding/` folder), not from inside
+Run all commands from the **repo root** (`spec_coding/`), not from inside
 `projects/ralph_loop/`.
 
 **Step 1 — Create the virtual environment** (only needed once per machine):
@@ -84,106 +84,180 @@ Run all commands from the **repo root** (the `spec_coding/` folder), not from in
 make venv
 ```
 
-This creates a `.venv/` folder and installs all dependencies.
+**Step 2 — Install ralph_loop's dependencies** (adds `pyyaml`):
 
-**Step 2 — Verify the setup:**
+```bash
+make sync-project PROJECT=projects/ralph_loop
+```
+
+**Step 3 — Verify the setup:**
 
 ```bash
 .venv/bin/python projects/ralph_loop/main.py --help
 ```
 
-You should see the help message. If you get an error, revisit step 1.
+---
+
+## Writing your SPEC.yaml
+
+Create a `SPEC.yaml` file (default location: the directory you run the tool from).
+
+### Annotated example
+
+```yaml
+goal: "Add a /health endpoint to the Flask API"
+
+context: |
+  The API is a small Flask app in app.py. It currently has no health check.
+  We need a simple GET /health that returns {"status": "ok"} with HTTP 200.
+
+instructions:
+  - "Follow the existing code style in app.py"
+  - "Do not introduce new dependencies"
+
+# Optional: override the default max_iterations (10) for this spec
+max_iterations: 5
+
+tasks:
+  - id: add-endpoint                         # unique identifier (required)
+    title: "Add GET /health endpoint"        # short label (required)
+    description: |                           # what to implement (required)
+      Add a route at GET /health to app.py that returns a JSON response
+      with status 200 and body {"status": "ok"}.
+    instructions:                            # task-specific hints (optional)
+      - "Use Flask's jsonify() for the response"
+    acceptance_criteria:                     # at least one required
+      - criterion: "pytest passes with no failures"
+        check:
+          type: script
+          run: "pytest tests/ -v"            # exit code 0 = pass
+
+      - criterion: "GET /health returns HTTP 200 with correct body"
+        check:
+          type: natural
+          description: >
+            Start the Flask app in test mode and send GET /health.
+            Confirm the response status is 200 and the body is {"status": "ok"}.
+
+  - id: write-test
+    title: "Write a test for GET /health"
+    description: |
+      Add a test in tests/test_app.py that calls GET /health and
+      asserts the response status and body.
+    acceptance_criteria:
+      - criterion: "A test for /health exists and pytest exits 0"
+        check:
+          type: script
+          run: "pytest tests/test_app.py -v -k health"
+```
 
 ---
 
-## Writing your prompt file
+## Schema reference
 
-ralph_loop reads its instructions from a plain text file (default: `PROMPT.md` in whatever
-directory you run it from).
-
-**The golden rule:** your prompt must tell Claude to wrap its final answer in a
-`<promise>` tag. Without this instruction, Claude will never emit the tag, and
-ralph_loop will run until it hits the iteration limit.
-
-### Minimal example
-
-Create a file called `PROMPT.md` anywhere you like:
-
-```markdown
-Review the code in `main.py` and fix any bugs you find.
-
-When you are fully satisfied that all bugs are fixed and the code is correct,
-respond with:
-
-<promise>all bugs fixed</promise>
+```
+Spec
+├── goal            str      required — what the spec achieves overall
+├── context         str      optional — background for Claude
+├── instructions    list     optional — global hints applied to all tasks
+├── max_iterations  int      optional — overrides the CLI default (10)
+└── tasks           list     required, ≥1 entry
+    └── Task
+        ├── id                  str    required, unique across the spec
+        ├── title               str    required
+        ├── description         str    required
+        ├── instructions        list   optional — task-specific hints
+        └── acceptance_criteria list   required, ≥1 entry
+            └── Criterion
+                ├── criterion   str    required — what must be true
+                └── check       obj    required — how Claude verifies it
+                    ├── ScriptCheck  — type: script
+                    │   └── run: str — shell command; passes when exit code 0
+                    └── NaturalCheck — type: natural
+                        └── description: str — Claude interprets this
 ```
 
-The text inside `<promise>...</promise>` can be anything — ralph_loop just captures and
-displays it. Use it to carry a meaningful status message.
+**Validation rules enforced at parse time:**
 
-### A more detailed example
+- `goal` must be non-empty
+- `tasks` must have ≥1 entry
+- Every `Task.id` must be non-empty and unique across the spec
+- Every task must have ≥1 `acceptance_criteria`
+- Every criterion must have a `check` object
+- `check.type` must be `"script"` or `"natural"`
+- `ScriptCheck.run` must be non-empty
+- `NaturalCheck.description` must be non-empty
 
-```markdown
-You are reviewing a Python script for correctness and style.
+Any violation causes an immediate exit with a clear error message before Claude is called.
 
-Tasks:
-1. Read `app.py`
-2. Fix any syntax errors
-3. Ensure all functions have docstrings
-4. Run the tests and confirm they pass
+---
 
-Only respond with the promise tag once ALL four tasks are complete:
+## Check types
 
-<promise>review complete — tests passing</promise>
+### Script check
 
-If you cannot complete a task, describe the problem instead of emitting the promise tag.
+```yaml
+check:
+  type: script
+  run: "pytest tests/ -v"
 ```
 
-> **Tip:** The clearer your stopping condition, the more reliably Claude will know
-> when to emit `<promise>`. Vague prompts lead to more iterations.
+Claude runs the shell command. Exit code 0 = criterion satisfied. Non-zero = criterion
+failed and Claude must keep working.
+
+Use script checks for anything objectively measurable: test suites, linters, file
+existence checks, HTTP status codes via curl, etc.
+
+### Natural language check
+
+```yaml
+check:
+  type: natural
+  description: >
+    Start the Flask app in test mode and send GET /health.
+    Confirm the response status is 200 and the body is {"status": "ok"}.
+```
+
+Claude interprets the description and performs the steps itself. Use natural checks for
+things that require judgment or multi-step interaction that is awkward to encode as a
+single shell command.
 
 ---
 
 ## Running the loop
 
-All commands are run from the **repo root**.
+All commands run from the **repo root**.
 
-### Using `make run` (recommended)
+### Using `make run` (recommended, uses default `SPEC.yaml`):
 
 ```bash
 make run PROJECT=projects/ralph_loop
 ```
 
-This uses the default prompt file (`PROMPT.md` in the current directory).
-
-### Passing a custom prompt file
-
-`make run` does not forward extra arguments. Use the Python interpreter directly:
+### Passing a custom spec file:
 
 ```bash
-.venv/bin/python projects/ralph_loop/main.py path/to/my_prompt.md
+.venv/bin/python projects/ralph_loop/main.py path/to/my_spec.yaml
 ```
 
-### Limiting the number of iterations
-
-By default the loop runs up to **10 times**. To change this:
+### Limiting the number of iterations:
 
 ```bash
-.venv/bin/python projects/ralph_loop/main.py PROMPT.md --max-iterations 5
+.venv/bin/python projects/ralph_loop/main.py SPEC.yaml --max-iterations 5
 ```
 
 Or with the short flag:
 
 ```bash
-.venv/bin/python projects/ralph_loop/main.py PROMPT.md -n 5
+.venv/bin/python projects/ralph_loop/main.py SPEC.yaml -n 5
 ```
 
-### Enabling verbose (debug) output
+The CLI flag takes priority over `max_iterations` in the spec file.
 
-Add `--verbose` or `-v` to see the first 200 characters of each Claude response:
+### Enabling verbose (debug) output:
 
 ```bash
-.venv/bin/python projects/ralph_loop/main.py PROMPT.md --verbose
+.venv/bin/python projects/ralph_loop/main.py SPEC.yaml --verbose
 ```
 
 ---
@@ -191,17 +265,17 @@ Add `--verbose` or `-v` to see the first 200 characters of each Claude response:
 ## CLI reference
 
 ```
-usage: main.py [-h] [--max-iterations N] [--verbose] [prompt_file]
+usage: main.py [-h] [--max-iterations N] [--verbose] [spec_file]
 
 positional arguments:
-  prompt_file            Path to the prompt file.
-                         Default: PROMPT.md (in the current directory)
+  spec_file              Path to the SPEC.yaml file.
+                         Default: SPEC.yaml (in the current directory)
 
 options:
   -h, --help             Show this help message and exit.
 
   --max-iterations N,    Maximum number of times to call Claude before giving up.
-  -n N                   Default: 10
+  -n N                   Priority: CLI flag > spec max_iterations > default (10)
 
   --verbose, -v          Show DEBUG log output, including a 200-character
                          preview of each Claude response.
@@ -218,18 +292,16 @@ ralph_loop uses Python's standard logging. Each line follows this format:
 LEVEL libs.loop: message
 ```
 
-Here is what each message means:
-
 | Log line | What it means |
 |---|---|
-| `INFO libs.loop: Starting — prompt='PROMPT.md', max_iterations=10` | The loop has started. Shows which file and limit are in use. |
+| `INFO libs.loop: Starting — spec='SPEC.yaml', goal='...', max_iterations=10` | The loop has started. Shows spec file, goal, and iteration limit. |
 | `INFO libs.loop: Iteration 1/10 ...` | About to call Claude for the Nth time. |
-| `WARNING libs.loop: claude exited 1` | Claude returned a non-zero exit code. The loop continues anyway, but something may be wrong with the Claude CLI or your session. |
-| `INFO libs.loop: Promise detected: 'all bugs fixed' — done in 3 iteration(s).` | Success. The text inside `<promise>` is shown. |
+| `WARNING libs.loop: claude exited 1` | Claude returned a non-zero exit code. The loop continues but something may be wrong. |
+| `INFO libs.loop: Promise detected: 'all tasks complete' — done in 3 iteration(s).` | Success. |
 | `DEBUG libs.loop: preview: 'I have reviewed...'` | Only visible with `--verbose`. First 200 chars of Claude's response. |
-| `ERROR libs.loop: Max iterations (10) reached without a promise.` | The loop gave up. Claude never emitted a `<promise>` tag. |
-| `ERROR libs.loop: Prompt file not found: PROMPT.md` | The prompt file path does not exist. |
-| `ERROR libs.loop: Prompt file is empty: PROMPT.md` | The prompt file exists but has no content. |
+| `ERROR libs.loop: Max iterations (10) reached without a promise.` | The loop gave up. Claude never emitted `<promise>`. |
+| `ERROR main: Spec file not found: SPEC.yaml` | The spec file path does not exist. |
+| `ERROR main: Spec must have a non-empty 'goal'` | Validation error — fix your SPEC.yaml. |
 
 ---
 
@@ -237,33 +309,41 @@ Here is what each message means:
 
 | Code | Meaning |
 |---|---|
-| `0` | A `<promise>` tag was detected. Claude finished the task. |
-| `1` | Something went wrong: missing/empty prompt file, or max iterations reached without a promise. |
-
-You can use exit codes in shell scripts:
-
-```bash
-.venv/bin/python projects/ralph_loop/main.py my_prompt.md && echo "Done!" || echo "Failed."
-```
+| `0` | A `<promise>` tag was detected. All tasks complete. |
+| `1` | Something went wrong: spec validation failed, file not found, or max iterations reached. |
 
 ---
 
 ## Troubleshooting
 
-### "Prompt file not found"
+### "Spec file not found"
 
 ```
-ERROR libs.loop: Prompt file not found: PROMPT.md
+ERROR main: Spec file not found: SPEC.yaml
 ```
 
-ralph_loop looks for the file relative to the directory you run it from, not relative to
-the project folder. If you run from the repo root, `PROMPT.md` must be in the repo root.
-
-Fix: use an absolute path or a path relative to where you run the command.
+ralph_loop looks for the file relative to the directory you run it from. Use an absolute
+path or a path relative to your working directory:
 
 ```bash
-.venv/bin/python projects/ralph_loop/main.py /absolute/path/to/PROMPT.md
+.venv/bin/python projects/ralph_loop/main.py /absolute/path/to/SPEC.yaml
 ```
+
+---
+
+### Spec validation errors
+
+Examples:
+
+```
+ERROR main: Spec must have a non-empty 'goal'
+ERROR main: Task 'my-task' has no acceptance_criteria — every task must have at least one verifiable criterion
+ERROR main: Criterion 'tests pass' has no 'check' — all criteria must be verifiable
+ERROR main: Unknown check type 'shell' for criterion 'tests pass'. Must be 'script' or 'natural'.
+ERROR main: Duplicate task id: 'add-endpoint'
+```
+
+All validation errors are reported before Claude is called. Fix the SPEC.yaml and retry.
 
 ---
 
@@ -277,11 +357,9 @@ The Claude CLI returned an error. Common causes:
 
 - No active Claude session (`claude --continue` needs a prior session). Fix: run `claude`
   once, send any message, then exit.
-- The `claude` command is not on your `PATH`. Fix: check `which claude` or reinstall the
-  Claude CLI.
+- The `claude` command is not on your `PATH`. Fix: check `which claude` or reinstall.
 
-The loop does not stop on this warning — it treats the (possibly empty) output as a normal
-iteration. This means if Claude keeps failing, you will exhaust all iterations.
+The loop does not stop on this warning — it treats the output as a normal iteration.
 
 ---
 
@@ -291,22 +369,20 @@ iteration. This means if Claude keeps failing, you will exhaust all iterations.
 ERROR libs.loop: Max iterations (10) reached without a promise.
 ```
 
-Claude ran the full loop but never emitted `<promise>...</promise>`. Possible reasons:
+Possible reasons:
 
-1. **The prompt does not instruct Claude to emit the tag.** Fix: add an explicit instruction
-   like `"When done, respond with: <promise>done</promise>"`.
-2. **Claude decided it could not complete the task** and described the problem instead.
-   Fix: run with `--verbose` to read Claude's responses and adjust your prompt.
-3. **The iteration limit is too low** for the task. Fix: increase it with `--max-iterations`.
+1. **Claude is not completing all criteria.** Run with `--verbose` to read the responses.
+2. **The iteration limit is too low.** Increase with `--max-iterations` or add
+   `max_iterations` to the spec.
+3. **A script check keeps failing.** Ensure the command runs correctly in your environment.
 
 ---
 
 ### "Virtualenv not found. Run: make venv"
 
-You skipped the setup step. Run:
-
 ```bash
 make venv
+make sync-project PROJECT=projects/ralph_loop
 ```
 
 ---
@@ -316,44 +392,25 @@ make venv
 ```
 projects/ralph_loop/
 ├── README.md            ← you are here
-├── requirements.txt     # dependencies (stdlib only — nothing to install)
+├── requirements.txt     # pyyaml
+├── SPEC.yaml            # default/example spec
 ├── main.py              # entry point: argument parsing + object construction only
 └── libs/
     ├── __init__.py      # marks libs/ as a Python package
-    ├── state.py         # Prompt class — validates and holds the prompt file's content
-    ├── runner.py        # RunResult dataclass + ClaudeRunner class — subprocess wrapper
-    └── loop.py          # RalphLoop class — orchestrates the iteration loop
+    ├── spec.py          # Spec, Task, Criterion, ScriptCheck, NaturalCheck — schema + validation
+    ├── runner.py        # RunResult dataclass + ClaudeRunner — subprocess wrapper
+    └── loop.py          # RalphLoop — orchestrates the iteration loop
 ```
 
 **Class responsibilities:**
 
 | Class | File | What it does |
 |---|---|---|
-| `Prompt` | `state.py` | Validates the prompt file on construction; exposes `.path` and `.text` |
-| `RunResult` | `runner.py` | Immutable dataclass holding `stdout`, `stderr`, and `returncode` from one Claude call |
+| `Spec` | `spec.py` | Parses and validates SPEC.yaml; renders a structured prompt via `.to_prompt()` |
+| `Task` | `spec.py` | Holds task fields; validates id and acceptance_criteria at parse time |
+| `Criterion` | `spec.py` | Holds a criterion string and its associated `Check` object |
+| `ScriptCheck` | `spec.py` | Shell command to run; passes when exit code is 0 |
+| `NaturalCheck` | `spec.py` | Natural-language description Claude interprets and executes |
+| `RunResult` | `runner.py` | Immutable dataclass: `stdout`, `stderr`, `returncode` from one Claude call |
 | `ClaudeRunner` | `runner.py` | Runs `claude --continue -p` as a subprocess; returns a `RunResult` |
-| `RalphLoop` | `loop.py` | Composes a `Prompt` and `ClaudeRunner`; runs the iteration loop via `.run()` |
-
-**Why this structure?** Each class owns exactly one concern. `main.py` only constructs
-objects and wires them together — it contains no logic. All real behaviour lives in
-`libs/` so it can be imported and tested independently, without going through the CLI.
-
----
-
-## Keeping this README up to date
-
-> **For contributors and maintainers:**
->
-> This README is the primary documentation for junior users. Every time a feature is
-> added or changed, update this file in the same commit. Specifically:
->
-> - **New CLI flag** → add a row to the [CLI reference](#cli-reference) table and a
->   usage example in [Running the loop](#running-the-loop).
-> - **New log message** → add a row to the table in
->   [Understanding the output](#understanding-the-output).
-> - **New exit code** → add a row to [Exit codes](#exit-codes).
-> - **New error condition** → add a section to [Troubleshooting](#troubleshooting).
-> - **New module in `libs/`** → add a row to the table in
->   [Project structure](#project-structure).
->
-> Do not leave documentation as a follow-up task — it is part of the feature.
+| `RalphLoop` | `loop.py` | Composes a `Spec` and `ClaudeRunner`; runs the iteration loop via `.run()` |

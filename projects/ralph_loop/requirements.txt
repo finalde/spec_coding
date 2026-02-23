@@ -1,1 +1,1 @@
-# ralph_loop dependencies — stdlib only, no external packages needed
+pyyaml

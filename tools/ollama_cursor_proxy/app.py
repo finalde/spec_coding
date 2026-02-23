@@ -33,6 +33,10 @@ def list_models():
     })
 
 
+# OpenAI params that Ollama's /v1/chat/completions accepts; drop the rest to avoid 400s
+OLLAMA_CHAT_KEYS = {"model", "messages", "stream", "max_tokens", "temperature", "top_p", "stop", "frequency_penalty", "presence_penalty"}
+
+
 @app.route("/v1/chat/completions", methods=["POST"])
 def chat_completions():
     """Forward chat completions to Ollama, rewriting model to OLLAMA_MODEL."""
@@ -42,6 +46,8 @@ def chat_completions():
         body = {}
     # Force the model Ollama should use
     body["model"] = OLLAMA_MODEL
+    # Strip params Ollama may reject (e.g. tools, response_format) to avoid 400
+    body = {k: v for k, v in body.items() if k in OLLAMA_CHAT_KEYS}
     url = f"{OLLAMA_BASE.rstrip('/')}/v1/chat/completions"
     resp = requests.post(
         url,

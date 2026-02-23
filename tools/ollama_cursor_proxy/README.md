@@ -49,3 +49,17 @@ Copy the **https** URL (e.g. `https://abc123.ngrok-free.app`).
 - **Model:** `gpt-4o-mini` (or whatever you set for `CURSOR_MODEL`)
 
 Cursor will send requests to the proxy; the proxy forwards them to Ollama with `qwen3-coder:latest` (or your `OLLAMA_MODEL`).
+
+## Troubleshooting: "We're having trouble connecting to the model provider"
+
+- **Use localhost first**  
+  If Cursor runs on the same machine as the proxy (e.g. Cursor on Windows, proxy in WSL), set **Override Base URL** to `http://localhost:8000/v1` and leave ngrok off. No browser warning and fewer moving parts.
+
+- **ngrok free tier**  
+  Free ngrok can show an HTML "Visit Site" page instead of the API. Cursor can’t add headers, so that response breaks the connection. Options: (1) Use **localhost:8000** as above, or (2) use another tunnel (e.g. `cloudflared tunnel --url http://localhost:8000`), or (3) upgrade ngrok so the interstitial is disabled.
+
+- **Checklist**  
+  1. Ollama: `ollama serve` and `ollama pull <model>`.  
+  2. Proxy: `make run-ollama-proxy` (or `make run-ollama-proxy-deepseek`) — must be on port 8000.  
+  3. If using ngrok: `ngrok http 8000` (tunnel to the **proxy**, not 11434).  
+  4. In Cursor: Base URL ends with `/v1`, model is `gpt-4o-mini`.

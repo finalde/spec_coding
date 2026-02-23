@@ -2,7 +2,7 @@ import logging
 import re
 
 from .runner import ClaudeRunner, RunResult
-from .state import Prompt
+from .spec import Spec
 
 log: logging.Logger = logging.getLogger(__name__)
 
@@ -11,8 +11,8 @@ _PROMISE_RE: re.Pattern[str] = re.compile(r"<promise>(.+?)</promise>", re.DOTALL
 
 
 class RalphLoop:
-    def __init__(self, prompt: Prompt, max_iterations: int = DEFAULT_MAX_ITERATIONS) -> None:
-        self._prompt: Prompt = prompt
+    def __init__(self, spec: Spec, max_iterations: int) -> None:
+        self._spec: Spec = spec
         self._max_iterations: int = max_iterations
         self._runner: ClaudeRunner = ClaudeRunner()
 
@@ -22,10 +22,16 @@ class RalphLoop:
         return m.group(1).strip() if m else None
 
     def run(self) -> int:
-        log.info("Starting — prompt=%r, max_iterations=%d", self._prompt.path, self._max_iterations)
+        log.info(
+            "Starting — spec=%r, goal=%r, max_iterations=%d",
+            self._spec.path,
+            self._spec.goal,
+            self._max_iterations,
+        )
+        prompt: str = self._spec.to_prompt()
         for i in range(1, self._max_iterations + 1):
             log.info("Iteration %d/%d ...", i, self._max_iterations)
-            result: RunResult = self._runner.run(self._prompt.text)
+            result: RunResult = self._runner.run(prompt)
             if result.returncode != 0:
                 log.warning("claude exited %d", result.returncode)
             promise: str | None = self.detect_promise(result.stdout + result.stderr)

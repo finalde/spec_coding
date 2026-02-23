@@ -1,0 +1,41 @@
+goal: "Add a /health endpoint to the Flask API"
+
+context: |
+  The API is a small Flask app in app.py. It currently has no health check.
+  We need a simple GET /health that returns {"status": "ok"} with HTTP 200.
+
+instructions:
+  - "Follow the existing code style in app.py"
+  - "Do not introduce new dependencies"
+
+tasks:
+  - id: add-endpoint
+    title: "Add GET /health endpoint"
+    description: |
+      Add a route at GET /health to app.py that returns a JSON response
+      with status 200 and body {"status": "ok"}.
+    instructions:
+      - "Use Flask's jsonify() for the response"
+    acceptance_criteria:
+      - criterion: "pytest passes with no failures"
+        check:
+          type: script
+          run: "pytest tests/ -v"
+
+      - criterion: "GET /health returns HTTP 200 with correct body"
+        check:
+          type: natural
+          description: >
+            Start the Flask app in test mode and send GET /health.
+            Confirm the response status is 200 and the body is {"status": "ok"}.
+
+  - id: write-test
+    title: "Write a test for GET /health"
+    description: |
+      Add a test in tests/test_app.py that calls GET /health and asserts
+      the response status and body.
+    acceptance_criteria:
+      - criterion: "A test for /health exists and pytest exits 0"
+        check:
+          type: script
+          run: "pytest tests/test_app.py -v -k health"
