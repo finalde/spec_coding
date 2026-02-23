@@ -4,4 +4,5 @@
 -r tools/mcp_youtube/requirements.txt
 -r tools/ollama_cursor_proxy/requirements.txt
 -r projects/ralph_loop/requirements.txt
+-e ./projects/ralph_loop
 

@@ -2,5 +2,13 @@
 # All paths are relative to the repository root unless absolute.
 
 # Where Claude Code should write the generated project files.
-# Default: projects/
+# Default: projects/<project_name>
 output_dir: projects/example_project
+
+# Maximum number of claude loop iterations before giving up.
+# Default: 10 (from DEFAULT_MAX_ITERATIONS)
+max_iterations: 10
+
+# Enable DEBUG-level logging output.
+# Default: false
+verbose: false

@@ -4,10 +4,13 @@
 (`claude --continue`) until Claude's response contains a `<promise>` tag — or a maximum
 number of iterations is reached.
 
-The spec (`SPEC.yaml`) is a YAML file that defines a goal, one or more tasks, and
-**verifiable acceptance criteria** for each task. Every criterion declares exactly how
-Claude Code will check it: by running a shell command (script check) or by interpreting
-a natural-language instruction (natural check).
+Each spec lives in its own subfolder under `specs/` and consists of two files:
+
+- **`spec.yml`** — goal, tasks, and verifiable acceptance criteria
+- **`config.yml`** — settings such as where generated project files are written
+
+Every criterion declares exactly how Claude Code will check it: by running a shell
+command (script check) or by interpreting a natural-language instruction (natural check).
 
 ---
 
@@ -98,11 +101,11 @@ make sync-project PROJECT=projects/ralph_loop
 
 ---
 
-## Writing your SPEC.yaml
+## Writing your spec.yml
 
-Create a `SPEC.yaml` file (default location: the directory you run the tool from).
+Create a `specs/<project_name>/` folder containing `spec.yml` and `config.yml`.
 
-### Annotated example
+### Annotated spec.yml example
 
 ```yaml
 goal: "Add a /health endpoint to the Flask API"
@@ -226,60 +229,48 @@ single shell command.
 
 ## Running the loop
 
-All commands run from the **repo root**.
+All commands run from the **repo root** (`spec_coding/`).
 
-### Using `make run` (recommended, uses default `SPEC.yaml`):
-
-```bash
-make run PROJECT=projects/ralph_loop
-```
-
-### Passing a custom spec file:
+### Recommended — `python -m ralph_loop <project_name>`:
 
 ```bash
-.venv/bin/python projects/ralph_loop/main.py path/to/my_spec.yaml
+PYTHONPATH=projects .venv/bin/python -m ralph_loop example_project
 ```
 
-### Limiting the number of iterations:
+`max_iterations` and `verbose` are read from `specs/example_project/config.yml` — there
+are no CLI flags for them.
+
+### Direct script invocation:
 
 ```bash
-.venv/bin/python projects/ralph_loop/main.py SPEC.yaml --max-iterations 5
+.venv/bin/python projects/ralph_loop/main.py example_project
 ```
 
-Or with the short flag:
-
-```bash
-.venv/bin/python projects/ralph_loop/main.py SPEC.yaml -n 5
-```
-
-The CLI flag takes priority over `max_iterations` in the spec file.
-
-### Enabling verbose (debug) output:
-
-```bash
-.venv/bin/python projects/ralph_loop/main.py SPEC.yaml --verbose
-```
+Both forms resolve `projects/ralph_loop/specs/<project_name>/spec.yml` and `config.yml`
+automatically.
 
 ---
 
 ## CLI reference
 
 ```
-usage: main.py [-h] [--max-iterations N] [--verbose] [spec_file]
+usage: python -m ralph_loop <project_name>
+       python projects/ralph_loop/main.py <project_name>
 
 positional arguments:
-  spec_file              Path to the SPEC.yaml file.
-                         Default: SPEC.yaml (in the current directory)
+  project_name    Name of the project folder under specs/
+                  e.g. "example_project" → specs/example_project/{spec.yml,config.yml}
 
 options:
-  -h, --help             Show this help message and exit.
+  -h, --help      Show this help message and exit.
+```
 
-  --max-iterations N,    Maximum number of times to call Claude before giving up.
-  -n N                   Priority: CLI flag > spec max_iterations > default (10)
+All other settings (`max_iterations`, `verbose`, `output_dir`) live in `config.yml`:
 
-  --verbose, -v          Show DEBUG log output, including a 200-character
-                         preview of each Claude response.
-                         Without this flag only INFO and ERROR messages are shown.
+```yaml
+output_dir: projects/example_project  # where generated files land
+max_iterations: 10                    # stop after N claude calls (default: 10)
+verbose: false                        # set true for DEBUG logging
 ```
 
 ---
@@ -393,11 +384,18 @@ make sync-project PROJECT=projects/ralph_loop
 projects/ralph_loop/
 ├── README.md            ← you are here
 ├── requirements.txt     # pyyaml
-├── SPEC.yaml            # default/example spec
 ├── main.py              # entry point: argument parsing + object construction only
+├── specs/               # one subfolder per project
+│   └── example_project/
+│       ├── spec.yml     # goal, tasks, acceptance criteria
+│       └── config.yml   # output_dir and other settings
 └── libs/
     ├── __init__.py      # marks libs/ as a Python package
-    ├── spec.py          # Spec, Task, Criterion, ScriptCheck, NaturalCheck — schema + validation
+    ├── config.py        # Config — loads config.yml, provides defaults
+    ├── spec.py          # Spec + validation — renders the structured prompt
+    ├── criterion.py     # Criterion dataclass
+    ├── checks.py        # ScriptCheck, NaturalCheck
+    ├── task.py          # Task dataclass
     ├── runner.py        # RunResult dataclass + ClaudeRunner — subprocess wrapper
     └── loop.py          # RalphLoop — orchestrates the iteration loop
 ```
@@ -406,11 +404,12 @@ projects/ralph_loop/
 
 | Class | File | What it does |
 |---|---|---|
-| `Spec` | `spec.py` | Parses and validates SPEC.yaml; renders a structured prompt via `.to_prompt()` |
-| `Task` | `spec.py` | Holds task fields; validates id and acceptance_criteria at parse time |
-| `Criterion` | `spec.py` | Holds a criterion string and its associated `Check` object |
-| `ScriptCheck` | `spec.py` | Shell command to run; passes when exit code is 0 |
-| `NaturalCheck` | `spec.py` | Natural-language description Claude interprets and executes |
+| `Config` | `config.py` | Loads `config.yml`; provides `output_dir` with default `projects/<project_name>` |
+| `Spec` | `spec.py` | Parses and validates `spec.yml`; renders a structured prompt via `.to_prompt()` |
+| `Task` | `task.py` | Holds task fields; validates id and acceptance_criteria at parse time |
+| `Criterion` | `criterion.py` | Holds a criterion string and its associated `Check` object |
+| `ScriptCheck` | `checks.py` | Shell command to run; passes when exit code is 0 |
+| `NaturalCheck` | `checks.py` | Natural-language description Claude interprets and executes |
 | `RunResult` | `runner.py` | Immutable dataclass: `stdout`, `stderr`, `returncode` from one Claude call |
 | `ClaudeRunner` | `runner.py` | Runs `claude --continue -p` as a subprocess; returns a `RunResult` |
 | `RalphLoop` | `loop.py` | Composes a `Spec` and `ClaudeRunner`; runs the iteration loop via `.run()` |

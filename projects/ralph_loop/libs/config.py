@@ -11,7 +11,9 @@ class Config:
     """Runtime configuration loaded from a project's config.yml."""
 
     project_name: str
-    output_dir: Path  # where generated project files are written
+    output_dir: Path
+    max_iterations: int | None
+    verbose: bool
 
     @classmethod
     def from_file(cls, path: str | Path) -> Config:
@@ -21,9 +23,19 @@ class Config:
         project_name: str = p.parent.name
         data: dict[str, Any] = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
         raw: str = (data.get("output_dir") or f"projects/{project_name}").strip()
-        return cls(project_name=project_name, output_dir=Path(raw))
+        return cls(
+            project_name=project_name,
+            output_dir=Path(raw),
+            max_iterations=data.get("max_iterations"),
+            verbose=bool(data.get("verbose", False)),
+        )
 
     @classmethod
     def default(cls, project_name: str) -> Config:
         """Return a Config with all defaults (no file required)."""
-        return cls(project_name=project_name, output_dir=Path(f"projects/{project_name}"))
+        return cls(
+            project_name=project_name,
+            output_dir=Path(f"projects/{project_name}"),
+            max_iterations=None,
+            verbose=False,
+        )
