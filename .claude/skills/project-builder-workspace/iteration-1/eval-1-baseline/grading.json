@@ -1,0 +1,46 @@
+{
+  "eval_id": 1,
+  "eval_name": "data-fetcher-no-deps",
+  "run": "without_skill",
+  "expectations": [
+    {
+      "text": "all-required-files-created: outputs contains main.py, requirements.txt, libs/__init__.py, libs/fetcher.py, README.md",
+      "passed": true,
+      "evidence": "All 5 required files present under projects/data_fetcher/"
+    },
+    {
+      "text": "root-requirements-registered: requirements.txt contains '-r projects/data_fetcher/requirements.txt'",
+      "passed": true,
+      "evidence": "Line '-r projects/data_fetcher/requirements.txt' found in root requirements.txt"
+    },
+    {
+      "text": "main-py-is-thin: main.py is 15 lines or fewer and contains no business logic",
+      "passed": false,
+      "evidence": "main.py is 24 lines and contains a print() call. Architecture is also more complex: instantiates FetcherConfig + Fetcher separately rather than a single class."
+    },
+    {
+      "text": "main-py-imports-from-libs: main.py imports the Fetcher class from libs",
+      "passed": true,
+      "evidence": "'from libs.fetcher import Fetcher, FetcherConfig' present"
+    },
+    {
+      "text": "class-has-type-hints: Fetcher class has typed __init__ parameters and typed method return values",
+      "passed": true,
+      "evidence": "Full type hints present, including parameterized generics like dict[str, str] | None"
+    },
+    {
+      "text": "no-optional-syntax: libs/fetcher.py does not use Optional[] syntax",
+      "passed": true,
+      "evidence": "Uses 'str | None' union syntax. No Optional imports found."
+    },
+    {
+      "text": "readme-has-real-content: README.md contains usage and project structure sections",
+      "passed": true,
+      "evidence": "78-line README with extensive documentation: usage, argument table, error conditions, class reference"
+    }
+  ],
+  "pass_count": 6,
+  "total": 7,
+  "pass_rate": 0.857,
+  "notes": "Baseline produced FULL IMPLEMENTATION in libs/fetcher.py (urllib HTTP calls, URL builder, __post_init__ validation) instead of a skeleton. This is the critical failure vs with-skill but isn't captured by current assertions — need a 'methods-are-skeleton' assertion."
+}

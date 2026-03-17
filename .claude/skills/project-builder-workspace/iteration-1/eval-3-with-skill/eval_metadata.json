@@ -1,0 +1,1 @@
+{"eval_id": 3, "eval_name": "log-analyzer-user-methods", "prompt": "Let's build something new — a log analyzer that reads server logs and produces a summary report. Put it under projects/log_analyzer. I'm thinking a class called Analyzer with a parse() and summarize() method.", "run": "with_skill"}

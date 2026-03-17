@@ -1,0 +1,1 @@
+{"eval_id": 1, "eval_name": "data-fetcher-no-deps", "prompt": "I want to add a new project called data_fetcher under projects/. It fetches data from a REST API and saves it as JSON. Main class should be Fetcher. No dependencies yet.", "run": "with_skill"}

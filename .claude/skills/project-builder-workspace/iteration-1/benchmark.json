@@ -1,0 +1,182 @@
+{
+  "metadata": {
+    "skill_name": "project-builder",
+    "skill_path": "C:/workspace/spec_coding/.claude/skills/project-builder",
+    "executor_model": "claude-sonnet-4-6",
+    "timestamp": "2026-03-16T21:21:22Z",
+    "evals_run": [1, 2, 3],
+    "runs_per_configuration": 1
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "eval_name": "data-fetcher-no-deps",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.857,
+        "passed": 6,
+        "failed": 1,
+        "total": 7,
+        "time_seconds": 71.8,
+        "tokens": 18043,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "all-required-files-created", "passed": true, "evidence": "All 5 required files present under projects/data_fetcher/"},
+        {"text": "root-requirements-registered", "passed": true, "evidence": "'-r projects/data_fetcher/requirements.txt' found in root requirements.txt"},
+        {"text": "main-py-is-thin (<=15 lines, no business logic)", "passed": false, "evidence": "17 lines — clean argparse only, no logic. 2 extra blank lines caused overage."},
+        {"text": "main-py-imports-from-libs", "passed": true, "evidence": "'from libs.fetcher import Fetcher' present"},
+        {"text": "class-has-type-hints", "passed": true, "evidence": "__init__(url: str, output_path: str) -> None; fetch() -> dict; save(data: dict) -> None; run() -> None"},
+        {"text": "no-optional-syntax", "passed": true, "evidence": "No Optional imports. Uses str | None union syntax."},
+        {"text": "readme-has-real-content", "passed": true, "evidence": "40-line README with ## Usage, ## Project structure, ## Development sections"}
+      ],
+      "notes": ["Methods correctly have pass bodies (skeleton). Key differentiator vs baseline not captured by line-count assertion alone."]
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "data-fetcher-no-deps",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.857,
+        "passed": 6,
+        "failed": 1,
+        "total": 7,
+        "time_seconds": 80.5,
+        "tokens": 14970,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "all-required-files-created", "passed": true, "evidence": "All 5 required files present"},
+        {"text": "root-requirements-registered", "passed": true, "evidence": "Line present in root requirements.txt"},
+        {"text": "main-py-is-thin (<=15 lines, no business logic)", "passed": false, "evidence": "24 lines with print() call. Complex architecture: FetcherConfig dataclass + Fetcher."},
+        {"text": "main-py-imports-from-libs", "passed": true, "evidence": "'from libs.fetcher import Fetcher, FetcherConfig' present"},
+        {"text": "class-has-type-hints", "passed": true, "evidence": "Full type hints present including generics"},
+        {"text": "no-optional-syntax", "passed": true, "evidence": "Uses str | None union syntax correctly"},
+        {"text": "readme-has-real-content", "passed": true, "evidence": "78-line README with argument table, error conditions, class reference"}
+      ],
+      "notes": ["CRITICAL: Generated FULL IMPLEMENTATION with urllib HTTP calls, URL builder, __post_init__ validation. Key failure vs with_skill not captured by current assertions."]
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "slack-notifier-with-deps",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.833,
+        "passed": 5,
+        "failed": 1,
+        "total": 6,
+        "time_seconds": 86.3,
+        "tokens": 18677,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "all-required-files-created", "passed": true, "evidence": "All 5 required files present under tools/slack_notifier/"},
+        {"text": "root-requirements-registered", "passed": true, "evidence": "'-r tools/slack_notifier/requirements.txt' present"},
+        {"text": "deps-in-project-requirements (requests, slack-sdk)", "passed": true, "evidence": "Both 'requests' and 'slack-sdk' listed in requirements.txt"},
+        {"text": "main-py-is-thin (<=15 lines, no business logic)", "passed": false, "evidence": "20 lines — 5 add_argument calls for 5 parameters. No business logic. Structural overage from argument count."},
+        {"text": "class-has-type-hints", "passed": true, "evidence": "notify() and build_message() fully typed with str | None parameters"},
+        {"text": "readme-has-real-content", "passed": true, "evidence": "61-line README with description, usage, argument table, project structure"}
+      ],
+      "notes": ["Line count failure is structural — 5 args naturally produces ~20 lines. Skill's '~15 line' guidance needs to acknowledge argument count scaling."]
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "slack-notifier-with-deps",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.833,
+        "passed": 5,
+        "failed": 1,
+        "total": 6,
+        "time_seconds": 84.2,
+        "tokens": 16013,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "all-required-files-created", "passed": true, "evidence": "All 5 required files present under tools/slack_notifier/"},
+        {"text": "root-requirements-registered", "passed": true, "evidence": "Line present in root requirements.txt"},
+        {"text": "deps-in-project-requirements (requests, slack-sdk)", "passed": true, "evidence": "requests>=2.31.0 and slack-sdk>=3.27.0 both listed with version pins"},
+        {"text": "main-py-is-thin (<=15 lines, no business logic)", "passed": false, "evidence": "41 lines — 8 argparse args + PipelineResult dataclass construction inline. Nearly 3x the limit."},
+        {"text": "class-has-type-hints", "passed": true, "evidence": "Full type hints, Slack Block Kit message builder, PipelineResult dataclass"},
+        {"text": "readme-has-real-content", "passed": true, "evidence": "84-line README with features, argument table, exit codes, library API reference"}
+      ],
+      "notes": ["Full Slack Block Kit implementation generated. main.py at 41 lines constructs PipelineResult inline — significant logic leak into entry point."]
+    },
+    {
+      "eval_id": 3,
+      "eval_name": "log-analyzer-user-methods",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.833,
+        "passed": 5,
+        "failed": 1,
+        "total": 6,
+        "time_seconds": 86.0,
+        "tokens": 19029,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "all-required-files-created", "passed": true, "evidence": "All 5 required files present under projects/log_analyzer/"},
+        {"text": "root-requirements-registered", "passed": true, "evidence": "'-r projects/log_analyzer/requirements.txt' present"},
+        {"text": "parse-and-summarize-methods-present", "passed": true, "evidence": "parse() -> list[dict[str, str]] and summarize() -> str both present with pass bodies"},
+        {"text": "main-py-is-thin (<=15 lines, no business logic)", "passed": false, "evidence": "17 lines — clean argparse only, same pattern as eval 1."},
+        {"text": "class-has-type-hints", "passed": true, "evidence": "__init__(log_path: str, verbose: bool = False); parse() and summarize() correctly typed"},
+        {"text": "readme-has-real-content", "passed": true, "evidence": "40-line README with description, usage, project structure, dev instructions"}
+      ],
+      "notes": ["Skeleton behavior correct. User-specified methods present with pass bodies and correct types."]
+    },
+    {
+      "eval_id": 3,
+      "eval_name": "log-analyzer-user-methods",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.833,
+        "passed": 5,
+        "failed": 1,
+        "total": 6,
+        "time_seconds": 77.3,
+        "tokens": 14682,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "all-required-files-created", "passed": true, "evidence": "All 5 required files present under projects/log_analyzer/"},
+        {"text": "root-requirements-registered", "passed": true, "evidence": "'-r projects/log_analyzer/requirements.txt' present"},
+        {"text": "parse-and-summarize-methods-present", "passed": true, "evidence": "Both methods present but return custom dataclasses (LogEntry, SummaryReport) not simple types"},
+        {"text": "main-py-is-thin (<=15 lines, no business logic)", "passed": false, "evidence": "28 lines with formatting logic: prints SummaryReport, handles exit codes based on parse results."},
+        {"text": "class-has-type-hints", "passed": true, "evidence": "Full typing with LogEntry, SummaryReport dataclasses — complete regex log parser implementation."},
+        {"text": "readme-has-real-content", "passed": true, "evidence": "83-line README with supported log formats, class reference, exit codes"}
+      ],
+      "notes": ["CRITICAL: Complete working log parser generated. User asked for stubs, baseline implemented fully including regex patterns and dataclass hierarchy."]
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {"mean": 0.841, "stddev": 0.013, "min": 0.833, "max": 0.857},
+      "time_seconds": {"mean": 81.4, "stddev": 7.7, "min": 71.8, "max": 86.3},
+      "tokens": {"mean": 18583, "stddev": 415, "min": 18043, "max": 19029}
+    },
+    "without_skill": {
+      "pass_rate": {"mean": 0.841, "stddev": 0.013, "min": 0.833, "max": 0.857},
+      "time_seconds": {"mean": 80.7, "stddev": 3.1, "min": 77.3, "max": 84.2},
+      "tokens": {"mean": 15222, "stddev": 679, "min": 14682, "max": 16013}
+    },
+    "delta": {
+      "pass_rate": "+0.00",
+      "time_seconds": "+0.7s",
+      "tokens": "+3361"
+    }
+  },
+  "notes": [
+    "ASSERTION GAP: Current assertions miss the most critical difference. With_skill always produces skeleton (pass bodies); baseline always generates full implementation. Both score identically (0.841) because no assertion checks method body content. Add 'methods-are-skeleton' assertion in iteration 2.",
+    "main-py-is-thin fails for BOTH configurations every time — it is non-discriminating on pass/fail (always fails) but does capture magnitude: with_skill 17-20 lines vs baseline 24-41 lines. Split into two: 'no-logic-in-main' (discriminating) and 'line-count-reasonable' (threshold should be ~20, not 15).",
+    "no-optional-syntax passes for both in all evals — non-discriminating, can be removed or hardened.",
+    "With_skill uses ~22% more tokens (18583 vs 15222 mean) — cost of reading skill instructions.",
+    "With_skill README quality is lower than baseline (40 vs 78 lines avg). Skill should set a minimum README length expectation."
+  ]
+}

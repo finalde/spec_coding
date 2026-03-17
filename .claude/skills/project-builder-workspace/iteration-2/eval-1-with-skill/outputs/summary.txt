@@ -1,0 +1,54 @@
+## Project Builder Skill — Iteration 2, Eval 1 (with skill)
+
+### Task
+Scaffold a new project called `data_fetcher` under `projects/`.
+Purpose: Fetches data from a REST API and saves it as JSON.
+Main class: Fetcher
+Dependencies: None
+
+### Skill followed
+.claude/skills/project-builder/SKILL.md
+
+### Steps executed
+
+Step 0 — Gathered information from task description (no spec.md provided):
+  - Project path: projects/data_fetcher
+  - Purpose: Fetches data from a REST API and saves the response as a JSON file
+  - Module name: Fetcher (in libs/fetcher.py)
+  - Dependencies: none
+
+Step 1 — Scaffolded project directory:
+  Replicated `make new-project PROJECT=projects/data_fetcher` manually in temp dir.
+  Created: projects/data_fetcher/ with bare main.py and requirements.txt.
+
+Step 2 — Created libs/:
+  - projects/data_fetcher/libs/__init__.py  (empty package marker)
+  - projects/data_fetcher/libs/fetcher.py   (Fetcher class skeleton with typed signatures)
+    Methods: fetch() -> dict, save(data: dict) -> None, run() -> None
+    All method bodies are `pass` (scaffolding only, no implementation).
+
+Step 3 — Wrote thin entry point:
+  Overwrote projects/data_fetcher/main.py with argparse wiring and a single runner.run() call.
+  Arguments: --url (required), --output (required). ~16 lines total.
+
+Step 4 — Wrote README:
+  projects/data_fetcher/README.md includes purpose, usage, project structure, and development instructions.
+
+Step 5 — Registered in root requirements.txt:
+  Added `-r projects/data_fetcher/requirements.txt` to requirements.txt.
+
+### Files created
+- projects/data_fetcher/main.py           — thin CLI entry point (~16 lines)
+- projects/data_fetcher/requirements.txt  — project dependencies (empty, no deps specified)
+- projects/data_fetcher/libs/__init__.py  — package marker (empty)
+- projects/data_fetcher/libs/fetcher.py   — Fetcher skeleton class with typed interface
+- projects/data_fetcher/README.md         — project documentation
+- requirements.txt                        — updated to include -r projects/data_fetcher/requirements.txt
+
+### Conventions followed
+- Thin entry point: only argparse + single runner.run() call
+- OO libs/: Fetcher class with __init__, typed attributes, typed method signatures
+- Skeleton only: all method bodies are `pass`, no logic added
+- Strong typing: all parameters and return values annotated, str | None union syntax used
+- No cross-project imports
+- README written in same step as scaffolding

@@ -1,0 +1,12 @@
+{
+  "eval_id": 2, "eval_name": "slack-notifier-with-deps", "run": "with_skill",
+  "expectations": [
+    {"text": "all-required-files-created", "passed": true, "evidence": "All 5 files present under tools/slack_notifier/"},
+    {"text": "root-requirements-registered", "passed": true, "evidence": "'-r tools/slack_notifier/requirements.txt' in root requirements.txt"},
+    {"text": "deps-registered: requests and slack-sdk in requirements.txt", "passed": true, "evidence": "tools/slack_notifier/requirements.txt lists 'requests' and 'slack-sdk'"},
+    {"text": "methods-are-skeleton: every method body contains only 'pass'", "passed": true, "evidence": "notify(status: str, message: str | None = None) -> None: pass; send_message(text: str) -> dict: pass. No SDK imports in the class file."},
+    {"text": "no-logic-in-main: only argparse + single call into libs", "passed": true, "evidence": "19 lines. Argparse for --token, --channel, --status, --pipeline. SlackNotifier(args.token, args.channel, args.pipeline), notifier.notify(args.status). Clean."},
+    {"text": "class-has-type-hints", "passed": true, "evidence": "__init__(token: str, channel: str, pipeline_name: str | None = None); notify() and send_message() typed"}
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0}
+}

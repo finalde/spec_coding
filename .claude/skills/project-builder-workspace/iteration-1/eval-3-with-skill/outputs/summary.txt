@@ -1,0 +1,36 @@
+Skill: project-builder
+Task: Scaffold projects/log_analyzer — a server log analyzer that produces summary reports.
+
+Steps followed per SKILL.md:
+
+Step 0 (Gather info): All required details were present in the task description.
+  - Project path: projects/log_analyzer
+  - Purpose: Reads server logs and produces a summary report
+  - Class: Analyzer with parse() and summarize() methods
+  - Dependencies: none specified
+
+Step 1 (Scaffolder): Replicated `make new-project PROJECT=projects/log_analyzer` manually
+  (make was not available in this environment). Created the folder and bare requirements.txt.
+
+Step 2 (libs/): Created libs/__init__.py (empty package marker) and libs/analyzer.py
+  with a typed Analyzer class skeleton matching the requested interface:
+    - __init__(self, log_path: str, verbose: bool = False) -> None
+    - parse(self) -> list[dict[str, str]]
+    - summarize(self) -> str
+
+Step 3 (Entry point): Wrote thin main.py (~15 lines) with argparse for --input and
+  --verbose flags, delegating entirely to Analyzer.
+
+Step 4 (README): Created README.md with usage examples, project structure tree,
+  and development instructions.
+
+Step 5 (Register): Added `-r projects/log_analyzer/requirements.txt` to root
+  requirements.txt alongside existing project includes.
+
+Files created:
+- projects/log_analyzer/main.py           — thin CLI entry point
+- projects/log_analyzer/requirements.txt  — project dependencies (empty)
+- projects/log_analyzer/libs/__init__.py  — package marker
+- projects/log_analyzer/libs/analyzer.py  — Analyzer class skeleton with typed interface
+- projects/log_analyzer/README.md         — project documentation
+- requirements.txt                        — updated to include log_analyzer

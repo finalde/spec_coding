@@ -1,0 +1,63 @@
+Iteration-2 Test — eval-3-with-skill
+=====================================
+
+Task
+----
+Scaffold a new project: a log analyzer that reads server logs and produces a
+summary report, placed under projects/log_analyzer, with a class called
+Analyzer having parse() and summarize() methods.
+
+Skill followed
+--------------
+.claude/skills/project-builder/SKILL.md (project-builder)
+
+Steps executed
+--------------
+Step 0 — Gather information
+  All required information was provided in the task:
+  - Project path:   projects/log_analyzer
+  - Purpose:        Reads server logs and produces a summary report.
+  - Class name:     Analyzer
+  - Methods:        parse(), summarize()
+  - Dependencies:   none specified
+
+Step 1 — Run scaffolder (make new-project)
+  make was not available in the shell environment; folder and requirements.txt
+  were created manually, exactly as the Makefile new-project target does.
+
+Step 2 — Create libs/
+  Created libs/__init__.py (empty package marker) and libs/analyzer.py with a
+  typed skeleton class. Method bodies are strictly `pass` — no logic, no
+  imports beyond type hints, matching the skill's "scaffolding not
+  implementation" requirement.
+
+Step 3 — Write thin entry point
+  Overwrote main.py with argparse wiring only: --input (required, log file
+  path) and --verbose (optional flag). Single call to runner.summarize().
+  ~15 lines, no business logic.
+
+Step 4 — Write README
+  Created README.md with one-line description, make run / direct usage
+  examples, project structure tree, and make sync-project instructions.
+
+Step 5 — Register in root requirements.txt
+  Added `-r projects/log_analyzer/requirements.txt` to the root
+  requirements.txt, grouped with the other -r includes.
+
+Files created
+-------------
+projects/log_analyzer/main.py           — thin CLI entry point (~15 lines)
+projects/log_analyzer/requirements.txt  — project dependencies (none yet)
+projects/log_analyzer/libs/__init__.py  — package marker (empty)
+projects/log_analyzer/libs/analyzer.py  — Analyzer skeleton with parse()/summarize()
+projects/log_analyzer/README.md         — project documentation
+requirements.txt                        — root deps updated with new -r include
+
+Skill adherence notes
+---------------------
+- Class skeleton uses only `pass` bodies with no logic or imports.
+- Type hints on all parameters and return values (list[dict[str,str]], str).
+- main.py contains only argparse + a single runner.summarize() call.
+- README has no placeholder text; all sections are filled in.
+- root requirements.txt updated in the same operation as project creation.
+- No cross-project imports; project is self-contained.

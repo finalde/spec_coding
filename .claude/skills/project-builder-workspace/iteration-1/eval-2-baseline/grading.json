@@ -1,0 +1,41 @@
+{
+  "eval_id": 2,
+  "eval_name": "slack-notifier-with-deps",
+  "run": "without_skill",
+  "expectations": [
+    {
+      "text": "all-required-files-created: outputs contains main.py, requirements.txt, libs/__init__.py, libs/notifier.py, README.md",
+      "passed": true,
+      "evidence": "All 5 required files present under tools/slack_notifier/"
+    },
+    {
+      "text": "root-requirements-registered: requirements.txt contains '-r tools/slack_notifier/requirements.txt'",
+      "passed": true,
+      "evidence": "Line present in root requirements.txt"
+    },
+    {
+      "text": "deps-in-project-requirements: requirements.txt lists both 'requests' and 'slack-sdk'",
+      "passed": true,
+      "evidence": "requests>=2.31.0 and slack-sdk>=3.27.0 both listed with version pins"
+    },
+    {
+      "text": "main-py-is-thin: main.py is 15 lines or fewer with no business logic",
+      "passed": false,
+      "evidence": "main.py is 41 lines — nearly 3x the limit. Contains 8 argparse arguments and post-parse logic constructing PipelineResult dataclass with named fields."
+    },
+    {
+      "text": "class-has-type-hints: SlackNotifier class has typed __init__ and typed method signatures",
+      "passed": true,
+      "evidence": "Full type hints throughout. Uses str | None, dict[str, Any], proper return types."
+    },
+    {
+      "text": "readme-has-real-content: README.md has a meaningful description and usage instructions",
+      "passed": true,
+      "evidence": "84-line README with Features, Usage, argument table, exit codes, library API reference"
+    }
+  ],
+  "pass_count": 5,
+  "total": 6,
+  "pass_rate": 0.833,
+  "notes": "Baseline generated full Slack Block Kit message builder with real implementation logic in libs/. main.py is 41 lines and constructs a PipelineResult dataclass inline. Both are well above the thin-entry-point convention."
+}

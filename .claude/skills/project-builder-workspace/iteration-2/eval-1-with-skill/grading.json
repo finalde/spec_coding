@@ -1,0 +1,12 @@
+{
+  "eval_id": 1, "eval_name": "data-fetcher-no-deps", "run": "with_skill",
+  "expectations": [
+    {"text": "all-required-files-created", "passed": true, "evidence": "All 5 files present under projects/data_fetcher/"},
+    {"text": "root-requirements-registered", "passed": true, "evidence": "'-r projects/data_fetcher/requirements.txt' in root requirements.txt"},
+    {"text": "methods-are-skeleton: every method body contains only 'pass'", "passed": true, "evidence": "fetch() -> dict: pass; save(data: dict) -> None: pass; run() -> None: pass. Only import is 'import json' at module level (for the type annotation)."},
+    {"text": "no-logic-in-main: only argparse + single call into libs", "passed": true, "evidence": "15 lines. Argparse for --url and --output, Fetcher(args.url, args.output), runner.run(). No print, no branching, no post-call logic."},
+    {"text": "class-has-type-hints", "passed": true, "evidence": "__init__(url: str, output_path: str) -> None; fetch() -> dict; save(data: dict) -> None; run() -> None"},
+    {"text": "readme-has-real-content", "passed": true, "evidence": "README has project description, ## Usage with make run, ## Project structure, ## Development sections"}
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0}
+}

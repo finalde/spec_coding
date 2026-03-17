@@ -1,0 +1,6 @@
+# Global requirements — aggregates all project dependencies.
+# Add one -r line per project below.
+
+-r tools/mcp_youtube/requirements.txt
+-r tools/ollama_cursor_proxy/requirements.txt
+-r projects/log_analyzer/requirements.txt

@@ -1,0 +1,46 @@
+{
+  "eval_id": 1,
+  "eval_name": "data-fetcher-no-deps",
+  "run": "with_skill",
+  "expectations": [
+    {
+      "text": "all-required-files-created: outputs contains main.py, requirements.txt, libs/__init__.py, libs/fetcher.py, README.md",
+      "passed": true,
+      "evidence": "All 5 required files present under projects/data_fetcher/"
+    },
+    {
+      "text": "root-requirements-registered: requirements.txt contains '-r projects/data_fetcher/requirements.txt'",
+      "passed": true,
+      "evidence": "Line '-r projects/data_fetcher/requirements.txt' found in root requirements.txt"
+    },
+    {
+      "text": "main-py-is-thin: main.py is 15 lines or fewer and contains no business logic",
+      "passed": false,
+      "evidence": "main.py is 17 lines (2 over limit). Content is clean — only argparse + instantiation + call, no logic. Blank lines account for the overage."
+    },
+    {
+      "text": "main-py-imports-from-libs: main.py imports the Fetcher class from libs",
+      "passed": true,
+      "evidence": "'from libs.fetcher import Fetcher' present in main.py"
+    },
+    {
+      "text": "class-has-type-hints: Fetcher class has typed __init__ parameters and typed method return values",
+      "passed": true,
+      "evidence": "__init__(url: str, output_path: str) -> None; fetch() -> dict; save(data: dict) -> None; run() -> None"
+    },
+    {
+      "text": "no-optional-syntax: libs/fetcher.py does not use Optional[] syntax",
+      "passed": true,
+      "evidence": "No Optional imports. channel: str | None used correctly in related code."
+    },
+    {
+      "text": "readme-has-real-content: README.md contains usage and project structure sections",
+      "passed": true,
+      "evidence": "40-line README with ## Usage (make run PROJECT=projects/data_fetcher), ## Project structure, ## Development sections"
+    }
+  ],
+  "pass_count": 6,
+  "total": 7,
+  "pass_rate": 0.857,
+  "notes": "MISSING ASSERTION: no check for skeleton bodies (methods should be `pass`, not implementation). With-skill correctly produced pass bodies — this is the key differentiator vs baseline but isn't captured in current assertions."
+}

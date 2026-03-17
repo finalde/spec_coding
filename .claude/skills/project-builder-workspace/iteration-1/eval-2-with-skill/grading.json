@@ -1,0 +1,41 @@
+{
+  "eval_id": 2,
+  "eval_name": "slack-notifier-with-deps",
+  "run": "with_skill",
+  "expectations": [
+    {
+      "text": "all-required-files-created: outputs contains main.py, requirements.txt, libs/__init__.py, libs/slack_notifier.py, README.md",
+      "passed": true,
+      "evidence": "All 5 required files present under tools/slack_notifier/"
+    },
+    {
+      "text": "root-requirements-registered: requirements.txt contains '-r tools/slack_notifier/requirements.txt'",
+      "passed": true,
+      "evidence": "Line '-r tools/slack_notifier/requirements.txt' found in root requirements.txt"
+    },
+    {
+      "text": "deps-in-project-requirements: tools/slack_notifier/requirements.txt lists both 'requests' and 'slack-sdk'",
+      "passed": true,
+      "evidence": "requirements.txt contains 'requests' and 'slack-sdk' on separate lines"
+    },
+    {
+      "text": "main-py-is-thin: main.py is 15 lines or fewer with no business logic",
+      "passed": false,
+      "evidence": "main.py is 20 lines — 5 argparse.add_argument calls for the 5 tool parameters. No business logic present, just arg definitions. Overage is purely from argument count."
+    },
+    {
+      "text": "class-has-type-hints: SlackNotifier class has typed __init__ and typed method signatures",
+      "passed": true,
+      "evidence": "__init__(webhook_url: str, channel: str | None = None) -> None; notify() and build_message() both typed with str | None parameters and return types"
+    },
+    {
+      "text": "readme-has-real-content: README.md has a meaningful description and usage instructions",
+      "passed": true,
+      "evidence": "61-line README with project description, ## Usage, argument table, ## Project structure, ## Development sections"
+    }
+  ],
+  "pass_count": 5,
+  "total": 6,
+  "pass_rate": 0.833,
+  "notes": "Line count failure is structural: a 5-argument CLI will naturally produce ~20 lines of thin main.py. The skill's '~15 line' guidance needs to acknowledge that argument count drives length. Otherwise skeleton behavior is correct."
+}

@@ -1,0 +1,51 @@
+PROJECT: log_analyzer
+LOCATION: projects/log_analyzer/
+
+FILES CREATED
+=============
+projects/log_analyzer/main.py
+projects/log_analyzer/requirements.txt
+projects/log_analyzer/README.md
+projects/log_analyzer/libs/__init__.py
+projects/log_analyzer/libs/analyzer.py
+requirements.txt  (root, aggregates project deps via -r include)
+
+ARCHITECTURE DECISIONS
+======================
+- Thin entry point: main.py is ~15 lines — only argparse + single call to Analyzer.
+- All logic lives in libs/analyzer.py, split across three classes:
+
+  LogEntry (frozen dataclass)
+    - Represents one parsed log line.
+    - Class method `from_line(line: str) -> LogEntry | None` handles regex matching
+      and timestamp normalization (WARN->WARNING, FATAL->CRITICAL).
+
+  SummaryReport (dataclass)
+    - Holds all aggregated stats: total/parsed/unparsed counts, level_counts,
+      module_counts, time range, top 5 error messages.
+    - `as_text() -> str` renders a human-readable report.
+
+  Analyzer
+    - Owns the file path; validates existence and type in __init__.
+    - `parse() -> list[LogEntry]` reads the file once (idempotent on repeat calls).
+    - `summarize() -> SummaryReport` calls parse() if needed, then aggregates stats
+      using collections.Counter.
+
+CONVENTIONS FOLLOWED
+====================
+- Type hints on every parameter, return value, and non-obvious local variable.
+- Union syntax (str | None, datetime | None) — Python 3.10+.
+- No external dependencies (stdlib only: re, collections, dataclasses, datetime, pathlib).
+- README.md documents usage, log format, flags, class roles, and exit codes.
+- Root requirements.txt updated with: -r projects/log_analyzer/requirements.txt
+
+USAGE EXAMPLE
+=============
+  python main.py /var/log/app.log
+  python main.py /var/log/app.log --output report.txt
+
+SUPPORTED LOG FORMAT
+====================
+  2024-01-15 12:34:56 ERROR [auth] Invalid token received
+  2024-01-15T12:34:56 WARNING Connection timeout after 30s
+  (module field is optional)

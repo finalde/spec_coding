@@ -1,0 +1,1 @@
+-r tools/slack_notifier/requirements.txt

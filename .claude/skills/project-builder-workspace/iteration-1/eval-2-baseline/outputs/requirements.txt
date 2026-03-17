@@ -1,0 +1,3 @@
+-r tools/mcp_youtube/requirements.txt
+-r tools/ollama_cursor_proxy/requirements.txt
+-r tools/slack_notifier/requirements.txt

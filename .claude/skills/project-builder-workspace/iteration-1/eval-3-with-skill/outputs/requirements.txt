@@ -5,5 +5,5 @@
 -r tools/ollama_cursor_proxy/requirements.txt
 -r projects/ralph_loop/requirements.txt
 -e ./projects/ralph_loop
--r projects/trend_radar/requirements.txt
+-r projects/log_analyzer/requirements.txt
 
