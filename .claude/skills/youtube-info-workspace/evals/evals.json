@@ -1,0 +1,23 @@
+{
+  "skill_name": "youtube-info",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Get me all the info on this video: https://www.youtube.com/watch?v=jNQXAC9IVRw",
+      "expected_output": "Structured metadata block with title, channel, upload date, duration, views, likes, description, tags, and URL for 'Me at the zoo' video",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "List the 5 most recent videos from https://www.youtube.com/@TED",
+      "expected_output": "A markdown table with 5 rows showing recent TED videos with columns for title, date, duration, views, and URL",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Get basic info about this YouTube video using only the oEmbed endpoint (no yt-dlp): https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "expected_output": "Basic metadata from oEmbed showing title, author name, thumbnail URL — explicitly using WebFetch to the oEmbed API",
+      "files": []
+    }
+  ]
+}

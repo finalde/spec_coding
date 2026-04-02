@@ -1,0 +1,35 @@
+{
+  "eval_id": 3,
+  "eval_name": "oembed-fallback",
+  "prompt": "Get basic info about this YouTube video using only the oEmbed endpoint (no yt-dlp): https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "assertions": [
+    {
+      "id": "used-oembed",
+      "text": "Output or method used the oEmbed endpoint (youtube.com/oembed or noembed) rather than yt-dlp",
+      "type": "manual"
+    },
+    {
+      "id": "title-present",
+      "text": "Output contains the video title (Rick Astley - Never Gonna Give You Up)",
+      "type": "regex",
+      "value": "(?i)never gonna give you up|rick astley"
+    },
+    {
+      "id": "author-present",
+      "text": "Output contains the author/channel name",
+      "type": "regex",
+      "value": "(?i)rick astley|author"
+    },
+    {
+      "id": "thumbnail-present",
+      "text": "Output includes a thumbnail URL",
+      "type": "regex",
+      "value": "https?://.*\\.(jpg|png|webp)|thumbnail"
+    },
+    {
+      "id": "no-yt-dlp-used",
+      "text": "Did not fall back to yt-dlp when user explicitly asked for oEmbed only",
+      "type": "manual"
+    }
+  ]
+}

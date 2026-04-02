@@ -1,0 +1,26 @@
+## Video: Me at the zoo
+- **Channel**: jawed
+- **Uploaded**: 2005-04-24
+- **Duration**: 00:19
+- **Views**: 385,383,389
+- **Likes**: 18,624,373
+- **Tags**: me at the zoo, jawed karim, first youtube video
+- **Categories**: Film & Animation
+- **Thumbnail**: https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg
+- **URL**: https://www.youtube.com/watch?v=jNQXAC9IVRw
+
+### Description (first 500 chars)
+Microplastics are accumulating in human brains at an alarming rate
+https://www.youtube.com/watch?v=0PT5c1z3LL8
+
+"Nanoplastics and Human Health" with Matthew J Campen, PhD, MSPH
+https://www.youtube.com/watch?v=RRBN_4L09Mg
+
+00:00 Intro
+00:05 The cool thing
+00:17 End
+
+### Evidence
+- Data fetched via `yt-dlp -j --no-download` (tier 2 fallback — direct CLI)
+- Video ID: jNQXAC9IVRw
+- This is the first video ever uploaded to YouTube, posted by YouTube co-founder Jawed Karim on April 24, 2005.

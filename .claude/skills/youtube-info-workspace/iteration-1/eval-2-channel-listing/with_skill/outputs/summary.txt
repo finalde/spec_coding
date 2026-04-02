@@ -1,0 +1,15 @@
+## 5 Most Recent Videos from TED
+
+**Channel**: TED | **Subscribers**: 27,200,000 | **Source**: https://www.youtube.com/@TED
+
+| # | Title | Date | Duration | Views | URL |
+|---|-------|------|----------|-------|-----|
+| 1 | Will AI Take Your Job in the Next 10 Years? Wrong Question \| Vinciane Beauchene \| TED | — | 12:18 | 7,269 | https://www.youtube.com/watch?v=lX2V8p-hByE |
+| 2 | A Different Way to Measure Success in Health Care \| Andrew Bastawrous \| TED | — | 6:17 | 11,787 | https://www.youtube.com/watch?v=C81xJ3OioB8 |
+| 3 | How to Make Your Idea Unforgettable \| London \| TED Idea Search | — | 46:26 | 16,098 | https://www.youtube.com/watch?v=YJc-3AGX1JA |
+| 4 | Why I Want to Bring Lions Back to My Village \| Seif Hamisi \| TED | — | 9:43 | 13,864 | https://www.youtube.com/watch?v=YsWrw83zktY |
+| 5 | The 6 Essential Ingredients of Loving Relationships \| Sara Nasserzadeh \| TED | — | 9:28 | 52,794 | https://www.youtube.com/watch?v=21U0jTwBKIc |
+
+**Note**: Upload dates are not available via `--flat-playlist` index-level metadata. To get exact upload dates, full video details would need to be fetched individually.
+
+**Evidence**: Data fetched via `yt-dlp --flat-playlist -J --playlist-end 5 "https://www.youtube.com/@TED/videos"` on 2026-03-22.

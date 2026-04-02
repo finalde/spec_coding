@@ -1,0 +1,12 @@
+{
+  "eval_id": 2,
+  "eval_name": "channel-listing",
+  "configuration": "with_skill",
+  "expectations": [
+    {"text": "Output contains exactly 5 video entries", "passed": true, "evidence": "5 rows in the markdown table (lines 7-11)"},
+    {"text": "Output uses a markdown table with column headers", "passed": true, "evidence": "Lines 5-6: '| # | Title | Date | Duration | Views | URL |' with separator row"},
+    {"text": "Each entry has a video title", "passed": true, "evidence": "All 5 rows contain non-empty titles"},
+    {"text": "Each entry includes a YouTube URL", "passed": true, "evidence": "All rows contain youtube.com/watch?v= URLs"},
+    {"text": "Output includes duration info for videos", "passed": true, "evidence": "Durations: 12:18, 6:17, 46:26, 9:43, 9:28"}
+  ]
+}

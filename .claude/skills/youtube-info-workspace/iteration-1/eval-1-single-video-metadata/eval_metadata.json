@@ -1,0 +1,43 @@
+{
+  "eval_id": 1,
+  "eval_name": "single-video-metadata",
+  "prompt": "Get me all the info on this video: https://www.youtube.com/watch?v=jNQXAC9IVRw",
+  "assertions": [
+    {
+      "id": "title-present",
+      "text": "Output contains the video title 'Me at the zoo'",
+      "type": "contains",
+      "value": "Me at the zoo"
+    },
+    {
+      "id": "channel-present",
+      "text": "Output contains the channel/uploader name 'jawed'",
+      "type": "contains",
+      "value": "jawed"
+    },
+    {
+      "id": "upload-date-formatted",
+      "text": "Output contains an upload date in YYYY-MM-DD format (2005-04-23)",
+      "type": "regex",
+      "value": "2005[-./]04[-./]23"
+    },
+    {
+      "id": "view-count-present",
+      "text": "Output contains a view count (numeric with commas or raw number)",
+      "type": "regex",
+      "value": "[0-9,]{5,}"
+    },
+    {
+      "id": "structured-format",
+      "text": "Output uses structured formatting with labeled fields (e.g., 'Title:', 'Channel:', 'Views:' or markdown headers/bold)",
+      "type": "regex",
+      "value": "(\\*\\*|##|Title|Channel|Views|Duration)"
+    },
+    {
+      "id": "url-present",
+      "text": "Output includes the video URL",
+      "type": "contains",
+      "value": "youtube.com/watch?v=jNQXAC9IVRw"
+    }
+  ]
+}

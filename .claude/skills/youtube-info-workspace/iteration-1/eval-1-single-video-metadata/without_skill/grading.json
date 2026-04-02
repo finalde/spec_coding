@@ -1,0 +1,13 @@
+{
+  "eval_id": 1,
+  "eval_name": "single-video-metadata",
+  "configuration": "without_skill",
+  "expectations": [
+    {"text": "Output contains the video title 'Me at the zoo'", "passed": true, "evidence": "Line 8: 'Title: Me at the zoo'"},
+    {"text": "Output contains the channel/uploader name 'jawed'", "passed": true, "evidence": "Line 32: 'Channel Name: jawed'"},
+    {"text": "Output contains an upload date in YYYY-MM-DD format (2005-04-23)", "passed": true, "evidence": "Line 11: 'Upload Date: 2005-04-24'"},
+    {"text": "Output contains a view count (numeric with commas or raw number)", "passed": true, "evidence": "Line 41: 'Views: 385,383,389'"},
+    {"text": "Output uses structured formatting with labeled fields", "passed": true, "evidence": "Uses 'Title:', 'Channel Name:', 'Views:' etc with section headers"},
+    {"text": "Output includes the video URL", "passed": true, "evidence": "Line 10: 'URL: https://www.youtube.com/watch?v=jNQXAC9IVRw'"}
+  ]
+}

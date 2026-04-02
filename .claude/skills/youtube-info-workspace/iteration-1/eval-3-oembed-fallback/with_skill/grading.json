@@ -1,0 +1,12 @@
+{
+  "eval_id": 3,
+  "eval_name": "oembed-fallback",
+  "configuration": "with_skill",
+  "expectations": [
+    {"text": "Used the oEmbed endpoint rather than yt-dlp", "passed": true, "evidence": "Line 19: 'fetched using the YouTube oEmbed endpoint (tier 3 fallback)'"},
+    {"text": "Output contains the video title", "passed": true, "evidence": "Line 1: 'Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)'"},
+    {"text": "Output contains the author/channel name", "passed": true, "evidence": "Line 2: '**Channel**: Rick Astley'"},
+    {"text": "Output includes a thumbnail URL", "passed": true, "evidence": "Line 9: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'"},
+    {"text": "Did not fall back to yt-dlp when user asked for oEmbed only", "passed": true, "evidence": "Explicitly used tier 3, marked unavailable fields as 'Unknown (oEmbed does not provide...)'"}
+  ]
+}

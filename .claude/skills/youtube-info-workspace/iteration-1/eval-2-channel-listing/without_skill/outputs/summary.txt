@@ -1,0 +1,23 @@
+5 Most Recent Videos from @TED
+================================
+Channel: https://www.youtube.com/@TED
+Retrieved: 2026-03-22
+
+No. | Title                                                                          | Date       | Duration | Views
+----|--------------------------------------------------------------------------------|------------|----------|-------
+  1 | Will AI Take Your Job in the Next 10 Years? Wrong Question | Vinciane Beauchene | 2026-03-22 | 12:18    | 7,267
+  2 | A Different Way to Measure Success in Health Care | Andrew Bastawrous           | 2026-03-20 |  6:17    | 11,786
+  3 | How to Make Your Idea Unforgettable | London | TED Idea Search                  | 2026-03-19 | 46:26    | 16,098
+  4 | Why I Want to Bring Lions Back to My Village | Seif Hamisi                      | 2026-03-17 |  9:43    | 13,864
+  5 | The 6 Essential Ingredients of Loving Relationships | Sara Nasserzadeh          | 2026-03-16 |  9:28    | 52,794
+
+Links:
+  1. https://www.youtube.com/watch?v=lX2V8p-hByE
+  2. https://www.youtube.com/watch?v=C81xJ3OioB8
+  3. https://www.youtube.com/watch?v=YJc-3AGX1JA
+  4. https://www.youtube.com/watch?v=YsWrw83zktY
+  5. https://www.youtube.com/watch?v=21U0jTwBKIc
+
+Evidence:
+  - Data source: yt-dlp (flat-playlist mode for listing, individual lookups for upload dates)
+  - View counts are point-in-time snapshots as of retrieval date

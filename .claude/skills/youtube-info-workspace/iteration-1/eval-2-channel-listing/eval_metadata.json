@@ -1,0 +1,36 @@
+{
+  "eval_id": 2,
+  "eval_name": "channel-listing",
+  "prompt": "List the 5 most recent videos from https://www.youtube.com/@TED",
+  "assertions": [
+    {
+      "id": "five-videos",
+      "text": "Output contains exactly 5 video entries (rows in a table or items in a list)",
+      "type": "count",
+      "value": 5
+    },
+    {
+      "id": "table-format",
+      "text": "Output uses a markdown table with column headers",
+      "type": "regex",
+      "value": "\\|.*\\|.*\\|"
+    },
+    {
+      "id": "titles-present",
+      "text": "Each entry has a video title (non-empty text in the title column)",
+      "type": "manual"
+    },
+    {
+      "id": "urls-present",
+      "text": "Each entry includes a YouTube URL",
+      "type": "regex",
+      "value": "youtube\\.com|youtu\\.be"
+    },
+    {
+      "id": "duration-present",
+      "text": "Output includes duration info for videos (MM:SS or HH:MM:SS format)",
+      "type": "regex",
+      "value": "\\d+:\\d{2}"
+    }
+  ]
+}
