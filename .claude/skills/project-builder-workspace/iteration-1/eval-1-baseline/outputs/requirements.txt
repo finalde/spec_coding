@@ -1,2 +1,0 @@
-# Global requirements — aggregates all project dependencies
--r projects/data_fetcher/requirements.txt

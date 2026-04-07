@@ -1,3 +1,0 @@
-# slack_notifier dependencies
-requests
-slack-sdk

@@ -65,11 +65,47 @@ This repository demonstrates how Claude Code components work together:
 - **Agents** (`.claude/agents/*.md`): specialized subagents Claude can delegate to
 - **MCP** (`.mcp.json` + local server): external tools Claude can call for real data/actions
 
+## Claude component naming
+
+- All repo-owned skills must use a prefix.
+- Use `common-...` for reusable cross-domain skills such as project scaffolding, skill authoring, meetings, and general YouTube metadata work.
+- Use `video_generation-...` for skills and agents that exist specifically to support AI video planning, prompt packaging, continuity control, or Seedance-oriented workflows.
+- Prefer a small number of broader, composable skills over many tiny overlapping ones. If two skills are routinely used back-to-back by default, consider merging them.
+- Treat legacy unprefixed video skills as deprecated. Future work should use the prefixed names documented in `.claude/README.md`.
+
 ## Global rules for this repo
 
 - Prefer **progressive disclosure**: start with a short plan + the minimum useful output, then go deeper as needed.
 - When producing an analysis, include an **Evidence** section (links, video ids, or raw fields) so conclusions are auditable.
 - Do not invent metrics you cannot derive. If a value is unknown, label it **Unknown** and state what is needed to compute it.
+
+## AI video production rules
+
+- Treat **Seedance 2.0** as the default renderer for this repository unless the user explicitly asks for a different generator.
+- Claude's job in AI video workflows is to produce **planning artifacts**, not media. Preferred outputs are prompt packs, shot lists, continuity bibles, voiceover maps, and asset checklists.
+- For any video longer than a single short clip, lock a **Visual Bible** before writing scene prompts. At minimum this must freeze character wording, wardrobe, environment, lighting, camera language, and style anchors.
+- For any multi-scene video, also define a **Continuity Bible** covering what must remain stable across scenes and what is allowed to vary.
+- Prefer building long videos from **15-second scene units** that can be generated independently in Seedance and stitched later.
+- When writing generation prompts, reuse the exact locked character and environment wording verbatim rather than paraphrasing. Consistency should be engineered, not implied.
+- When packaging assets for Seedance, include explicit generation specs rather than just prose prompts. Say how many images to generate, what views are required, what must stay fixed, what file naming to use, and what makes an output acceptable.
+- Default deliverables for a production-ready pack should include:
+  - scene outline
+  - visual bible
+  - continuity bible
+  - Seedance-ready prompts
+  - character reference-set prompts
+  - background reference-set prompts
+  - reference-frame prompts
+  - narration / voiceover timing
+  - edit / assembly notes
+- Do not claim that prompts will guarantee perfect identity consistency. Instead, explicitly call out drift risks and provide reinforcement language or fallback strategies.
+- The canonical video workflow is:
+  - `video_generation-reference-scout`
+  - `video_generation-preproduction`
+  - `video_generation-storyboard-master`
+  - `video_generation-seedance-packager`
+  - `video_generation-continuity-director`
+  - `video_generation-assembly-planner`
 
 ## YouTube analysis rules
 
@@ -84,6 +120,6 @@ This repository demonstrates how Claude Code components work together:
 ## Quick start (what to try in Claude Code)
 
 - Run the skill directly:
-  - `/youtube-channel-audit https://www.youtube.com/@SomeChannel 30`
+  - `common-youtube-info` for fast public YouTube metadata work
 - Or ask naturally and let Claude delegate to the `youtube-researcher` subagent:
-  - “Analyze this channel and suggest 10 next video ideas: https://www.youtube.com/@SomeChannel”
+  - “Use `video_generation-youtube-researcher` to analyze this channel and suggest 10 next video ideas: https://www.youtube.com/@SomeChannel”

@@ -1,1 +1,0 @@
-{"eval_id": 2, "eval_name": "slack-notifier-with-deps", "prompt": "Create a new tool at tools/slack_notifier that sends Slack messages when CI pipelines finish. Main class: SlackNotifier. Dependencies: requests, slack-sdk.", "run": "with_skill"}
