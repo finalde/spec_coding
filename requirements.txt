@@ -6,4 +6,5 @@
 -r projects/ralph_loop/requirements.txt
 -e ./projects/ralph_loop
 -r projects/trend_radar/requirements.txt
+-r projects/char3d_gen/requirements.txt
 

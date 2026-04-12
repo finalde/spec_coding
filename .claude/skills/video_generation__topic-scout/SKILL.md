@@ -93,32 +93,49 @@ Must be vivid and specific — describe what the viewer SEES, not abstract conce
 Include sensory details: colors, textures, movement, lighting shifts, emotional beats.
 This is the primary source a downstream agent will use to understand the story.}
 
-### Characters
+### Character Constraint
 
-For EACH character (even minor ones):
+**Maximum 1–2 characters per video.** Single-character stories are preferred for AI generation reliability. Two characters are allowed only when the narrative absolutely requires interaction. Never exceed two characters — crowd scenes, group shots, and ensemble casts are out of scope.
+
+### Characters (3D 模型三视图规范)
+
+For EACH character, generate **3 independent view prompts** (front / side / back) in Chinese, each containing ALL of the following (缺一不可):
 
 - **Name/Role**: {e.g., "The Child (主角)"}
-- **Appearance**: {ethnicity, age range, build, height impression, hair color/style/length}
-- **Face**: {facial features, expression range needed across the video}
-- **Wardrobe**: {specific clothing — fabric, color hex codes if possible, fit, condition}
-- **Props**: {anything they carry or interact with}
-- **Body Language**: {how they move, posture, energy level}
-- **Arc**: {how their appearance/expression changes from start to end}
+- **基础信息**: age, gender, ethnicity/nationality, height, build
+- **五官细节**: brow shape, eye shape, nose shape, lip shape, face shape, skin tone + texture (细腻/粗糙/皱纹), makeup (无妆/淡妆/浓妆 + specific effects)
+- **发型细节**: hair color (hex), length, style, hair texture
+- **穿搭细节**: top, bottom, shoes, accessories — specify material, color (hex), pattern, fit for each
+- **神态细节**: expression tied to story emotion, specific eye/gaze description
+- **肢体姿态**: natural pose (standing/sitting/holding props) appropriate to each view angle
+- **Props**: anything they carry or interact with
+- **Body Language**: how they move, posture, energy level
+- **Arc**: how their appearance/expression changes from start to end
+- **参考说明**: 末尾统一标注 —— 以附带的 3 张人物三视图参考图为基准生成 3D 人物模型
+- **画质要求**: 末尾统一标注 —— 4K 超高清，电影级光影，真实质感，全身无裁切，纯白背景便于模型提取
 - **Prompt Fragment**: {a reusable 20–40 word description to paste into every generation prompt}
 
-### Environments / Backgrounds
+### Environments / Backgrounds (3 张不同视角规范)
 
-For EACH distinct environment:
+For EACH distinct environment, generate exactly **3 prompts** from different viewing angles (远景 + 近景 + 特写, or 正面 + 侧面 + 俯视/仰视). All 3 must depict the **same** scene with unified details.
+
+Each prompt must include (缺一不可):
 
 - **Name**: {e.g., "The Wasteland", "The Underwater Cave"}
-- **Setting**: {location type, time of day, season, weather}
-- **Key Elements**: {3–5 must-have visual elements that define this environment}
-- **Color Palette**: {3–4 dominant colors with hex codes}
-- **Lighting**: {light source, direction, quality, color temperature}
-- **Atmosphere**: {fog, particles, volumetric light, dust, rain, etc.}
-- **Scale/Depth**: {how vast or intimate the space feels}
-- **Sound Impression**: {what the viewer imagines hearing — informs mood even in silent}
-- **Prompt Fragment**: {a reusable 20–40 word description to paste into every generation prompt}
+- **场景信息**: scene name, purpose in the story
+- **Setting**: location type, time of day, season, weather
+- **环境细节**: indoor/outdoor, materials, colors, condition
+- **Key Elements**: 3–5 must-have visual elements that define this environment
+- **道具细节**: position, material, color, and texture of every prop in the scene
+- **Color Palette**: 3–4 dominant colors with hex codes
+- **光影细节**: light source type, angle, effect (柔光/逆光/阴影 etc.), color temperature
+- **氛围色调**: overall mood + color style (暖/冷/高饱和/低饱和)
+- **Atmosphere**: fog, particles, volumetric light, dust, rain, etc.
+- **Scale/Depth**: how vast or intimate the space feels
+- **Sound Impression**: what the viewer imagines hearing — informs mood even in silent
+- **参考说明**: 末尾统一标注 —— 以附带的 3 张不同视角背景参考图为基准搭建 3D 场景
+- **画质要求**: 末尾统一标注 —— 4K 超高清，极致细节，真实质感，无人物仅场景道具，电影级氛围
+- **Prompt Fragment**: a reusable 20–40 word description to paste into every generation prompt
 
 ### Scene Breakdown
 
