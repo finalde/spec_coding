@@ -22,6 +22,7 @@ Use `__` (double underscore) as the delimiter between prefix and name. Do not ad
 
 ### Video Generation Skills
 
+- `video_generation__topic-scout`
 - `video_generation__reference-scout`
 - `video_generation__preproduction`
 - `video_generation__storyboard-master`
