@@ -137,21 +137,71 @@ Each prompt must include (缺一不可):
 - **画质要求**: 末尾统一标注 —— 4K 超高清，极致细节，真实质感，无人物仅场景道具，电影级氛围
 - **Prompt Fragment**: a reusable 20–40 word description to paste into every generation prompt
 
-### Scene Breakdown
+### Scene Breakdown (3 场景 + 4 关键帧 + 3 视频)
 
-For EACH scene (target 15-second units):
+**Always exactly 3 scenes.** Structure: 钩子(Scene 1) → 剧情推进(Scene 2) → 高潮+结尾(Scene 3). One scene = one core action/emotion. Each scene 5–15 seconds.
+
+**4 shared keyframe system**: generate exactly 4 keyframe picture prompts. Adjacent scenes share a keyframe — this guarantees perfect continuity with zero frame gaps.
+
+```
+Keyframe 1 ──── Scene 1 Video ──── Keyframe 2 ──── Scene 2 Video ──── Keyframe 3 ──── Scene 3 Video ──── Keyframe 4
+(start of S1)                    (end of S1 =    (end of S2 =                      (end of S3)
+                                  start of S2)    start of S3)
+```
 
 | # | Duration | Shot Type | Camera | Action Summary |
 |---|----------|-----------|--------|----------------|
 | 1 | {x}s | {ECU/CU/MS/MFS/WS/EWS} | {movement} | {1-sentence action} |
-| ... | | | | |
+| 2 | {x}s | ... | ... | ... |
+| 3 | {x}s | ... | ... | ... |
 
-For each scene, also provide:
-- **What the viewer sees**: {2–3 sentence detailed visual description}
-- **Emotion/Mood**: {what the viewer should feel}
-- **Lighting in this shot**: {specific to this moment}
-- **Key motion**: {what moves, how fast, in what direction}
-- **Transition**: {how this shot connects to the next}
+#### Keyframe Picture Prompts
+
+Generate exactly 4 keyframe prompts. Each keyframe is a single image.
+
+**关键帧 1（Scene 1 起始帧）**
+- Opening line: 本次将根据附带的人物参考图与背景参考图，仅生成 1 张画面，用于后续分镜视频生成
+- Specify: shot type, character action, scene, lighting/color
+- Describe: expression, posture, prop positions, material, lighting in detail
+- Closing line: 以附带的人物参考图和背景参考图为基准生成
+
+**关键帧 2（Scene 1 结束帧 = Scene 2 起始帧）**
+- Opening line: 本次将根据附带的人物参考图与背景参考图，仅生成 1 张画面，作为上一分镜的结束帧与下一分镜的起始帧
+- Must naturally conclude Scene 1's action AND set up Scene 2's action
+- Must show visible progression from Keyframe 1
+- Closing line: 以附带的人物参考图和背景参考图为基准生成
+
+**关键帧 3（Scene 2 结束帧 = Scene 3 起始帧）**
+- Opening line: 本次将根据附带的人物参考图与背景参考图，仅生成 1 张画面，作为上一分镜的结束帧与下一分镜的起始帧
+- Must naturally conclude Scene 2's action AND set up Scene 3's action
+- Must show visible progression from Keyframe 2
+- Closing line: 以附带的人物参考图和背景参考图为基准生成
+
+**关键帧 4（Scene 3 结束帧）**
+- Opening line: 本次将根据附带的人物参考图与背景参考图，仅生成 1 张画面，作为全片最终帧
+- Must be the story's visual conclusion — emotionally resolved, visually complete
+- Must show visible progression from Keyframe 3
+- Closing line: 以附带的人物参考图和背景参考图为基准生成
+
+#### Scene Video Prompts
+
+For EACH of the 3 scenes, provide one video prompt:
+
+**Scene {N} 分镜视频 Prompt** (Keyframe {N} → Keyframe {N+1})
+- Opening line: 将根据附带的人物参考图、背景参考图、起始帧（关键帧{N}）与结束帧（关键帧{N+1}）画面，生成本段分镜视频
+- Describe: full action flow, shot type changes, camera movement (推近/拉远/跟拍/平移), emotion shifts
+- Specify: duration (5–15s), camera speed, color tone, ambient sound
+- Quality tag: 4K 超高清，镜头运动流畅，皮肤与场景真实质感，电影级光影，短视频风格
+- Closing line: 以人物参考图、背景参考图、关键帧{N}、关键帧{N+1}为全部参考生成视频
+
+#### Per-scene metadata
+
+For each scene also provide:
+- **What the viewer sees**: 2–3 sentence detailed visual description
+- **Emotion/Mood**: what the viewer should feel
+- **Lighting in this shot**: specific to this moment
+- **Key motion**: what moves, how fast, in what direction
+- **Transition**: how this shot connects to the next (handled by the shared keyframe)
 
 ### Visual Style
 
@@ -227,6 +277,12 @@ The research file should contain:
 - Target 15-second scene units for Seedance compatibility
 - Default to 9:16 vertical (mobile-first) unless user specifies otherwise
 - The storyboard is the FINAL output — it must be complete enough for a downstream agent to extract scenes, characters, and prompts without needing to re-research the topic
+- **Maximum 1–2 characters per video** — single character preferred; two only when interaction is essential
+- **All generation prompts must be in Chinese** (纯中文规范), precise and unambiguous
+- **Ban vague adjectives**: never use 好看/唯美/漂亮 — replace with concrete details (e.g., 柔和 golden hour 阳光、皮肤细腻毛孔、布料哑光质感)
+- **Same character / same scene = identical details** across all prompts — no contradictions or sudden changes
+- **Reference-image tags must be consistent** — never omit, never paraphrase
+- **All prompts must be Seedance 2 compatible** — designed for 图生图, 帧间生成, and 视频生成 workflows
 
 ## Edge cases
 
