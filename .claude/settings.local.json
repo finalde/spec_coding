@@ -4,7 +4,11 @@
       "Bash(head:*)",
       "Bash(python3:*)",
       "Bash(make help:*)",
-      "Bash(make new-project:*)"
+      "Bash(make new-project:*)",
+      "Bash(mkdir -p /home/dalu/workspace/spec_coding/.audit/adhoc_agents)",
+      "Bash(mkdir -p /home/dalu/workspace/spec_coding/.audit/prompt_history)",
+      "Bash(mkdir -p /home/dalu/workspace/spec_coding/.audit/self_evolving)",
+      "Bash(mkdir -p /home/dalu/workspace/spec_coding/.claude/skills/agent_team)"
     ]
   },
   "enableAllProjectMcpServers": true,
