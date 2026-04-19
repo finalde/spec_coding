@@ -209,3 +209,6 @@ __marimo__/
 # Claude
 !.claude/
 !.claude/**
+
+# Agent team audit trail (local runtime artifacts)
+.audit/

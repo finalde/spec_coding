@@ -107,10 +107,29 @@ This repository demonstrates how Claude Code components work together:
   - `video_generation-continuity-director`
   - `video_generation-assembly-planner`
 
+## External APIs — known issues
+
+- **YouTube API / trending feeds** return 403 without authentication. When encountering YouTube API or trending feed access issues, immediately fall back to `WebSearch`-based approaches or `yt-dlp` rather than retrying API calls. Do not spend more than one attempt on a failing endpoint before switching strategies.
+- When a research task combines multiple strict filters (recency + virality + language + AI-generated), start with broader criteria and narrow down. Set an explicit search-attempt budget (e.g., max 10 queries) and fall back to relaxed constraints before exhausting it.
+
+## Content defaults
+
+- All content generation skills and outputs should default to **Chinese (中文)** unless explicitly told otherwise.
+- Character limits defined in skill files must be respected — validate outputs against them before reporting success.
+
+## Environment setup
+
+- Before attempting CUDA/GPU-dependent Python projects, first verify compatibility:
+  1. Run `nvidia-smi` to check driver and CUDA driver version.
+  2. Run `nvcc --version` to check toolkit version.
+  3. Confirm PyTorch CUDA version matches (`python -c “import torch; print(torch.version.cuda)”`).
+  4. Do **not** proceed with model downloads or heavy setup until the environment is confirmed working.
+- Report any version mismatches to the user immediately rather than attempting repeated reinstalls.
+
 ## YouTube analysis rules
 
 - Only analyze **publicly accessible** YouTube data.
-- If the user asks to “scrape” content, use the project MCP server (`youtube`) when available; otherwise fall back to `yt-dlp` in the shell.
+- If the user asks to “scrape” content, use the project MCP server (`youtube`) when available; otherwise fall back to `yt-dlp` in the shell. If MCP is unavailable and `yt-dlp` fails, use `WebSearch` as a final fallback.
 - Keep outputs structured and skimmable:
   - a short executive summary
   - a table of sampled videos

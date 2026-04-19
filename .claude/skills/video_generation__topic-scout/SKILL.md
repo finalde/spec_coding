@@ -58,235 +58,242 @@ Score each candidate on the **AI Generation Feasibility Scorecard** (0–10 per 
 
 ### Step 3 — Present Candidates (Rich Detail)
 
-Each candidate must contain enough detail for a downstream agent to directly extract scene prompts, character reference prompts, and background prompts **without any further research**. Present each candidate in this format:
+每个候选主题必须包含足够细节，下游工作流可直接提取分镜 Prompt、人物参考 Prompt、背景参考 Prompt，无需额外调研。格式如下：
 
 ```markdown
-## Candidate {N}: {Title (English)} | {Title (Chinese)}
+## 候选主题 {N}：{中文标题}
 
-### Overview
+### 概览
 
-**Mode**: Short / Long
-**Duration**: {target duration}s
-**Aspect Ratio**: 9:16 (default) or as specified
-**Source/Trend**: {where you found it, why it's trending or has proven appeal}
-**One-line pitch**: {the hook in one sentence}
-**Hashtags**: {8–12 hashtags, mixed Chinese + English}
+**模式**：短视频 / 长视频
+**时长**：{目标时长}秒
+**画幅**：9:16（默认）或用户指定
+**来源/趋势**：{出处，为何正在流行或有长期吸引力}
+**一句话概要**：{核心钩子，一句话}
+**标签**：{8–12 个标签，中文为主}
 
-### AI Feasibility Score: {score}/60
+### AI 可行性评分：{总分}/60
 
-| Criterion | Score | Notes |
-|-----------|-------|-------|
-| Visual Simplicity | {x}/10 | {why this score} |
-| Character Feasibility | {x}/10 | {why this score} |
-| Scene Variety | {x}/10 | {why this score} |
-| Motion Friendliness | {x}/10 | {why this score} |
-| Emotional Hook | {x}/10 | {why this score} |
-| Narrative Clarity | {x}/10 | {why this score} |
+| 评估维度 | 得分 | 说明 |
+|----------|------|------|
+| 视觉简洁度 | {x}/10 | {评分理由} |
+| 人物可行性 | {x}/10 | {评分理由} |
+| 场景多样性 | {x}/10 | {评分理由} |
+| 运动友好度 | {x}/10 | {评分理由} |
+| 情绪钩子 | {x}/10 | {评分理由} |
+| 叙事清晰度 | {x}/10 | {评分理由} |
 
-**Drift Risks**: {what might be hard for AI to render consistently}
-**Mitigation Strategies**: {how to reduce each drift risk}
+**漂移风险**：{AI 生成中可能不一致的部分}
+**缓解策略**：{如何降低每项漂移风险}
 
-### Narrative
+### 叙事
 
-{3–5 paragraph prose telling the full story from opening frame to final frame.
-Must be vivid and specific — describe what the viewer SEES, not abstract concepts.
-Include sensory details: colors, textures, movement, lighting shifts, emotional beats.
-This is the primary source a downstream agent will use to understand the story.}
+{3–5 段散文体，从第一帧到最后一帧完整讲述故事。
+必须具体生动——描述观众"看到"什么，而非抽象概念。
+包含感官细节：颜色、质感、运动方式、光线变化、情绪节拍。
+这是下游工作流理解故事的核心来源。}
 
-### Character Constraint
+### 人物约束
 
-**Maximum 1–2 characters per video.** Single-character stories are preferred for AI generation reliability. Two characters are allowed only when the narrative absolutely requires interaction. Never exceed two characters — crowd scenes, group shots, and ensemble casts are out of scope.
+**每条视频最多 1–2 个人物。** 单人物故事优先，仅在剧情必须互动时允许两个人物。严禁超过两个——群像、人群、多人合照均不在范围内。
 
-### Characters (3D 模型三视图规范)
+### 人物（3D 模型三视图规范）
 
-For EACH character, generate **3 independent view prompts** (front / side / back) in Chinese, each containing ALL of the following (缺一不可):
+每个人物生成**正面、侧面、背面 3 张独立视角 Prompt**（纯中文），每张必须包含以下内容（缺一不可）：
 
-- **Name/Role**: {e.g., "The Child (主角)"}
-- **基础信息**: age, gender, ethnicity/nationality, height, build
-- **五官细节**: brow shape, eye shape, nose shape, lip shape, face shape, skin tone + texture (细腻/粗糙/皱纹), makeup (无妆/淡妆/浓妆 + specific effects)
-- **发型细节**: hair color (hex), length, style, hair texture
-- **穿搭细节**: top, bottom, shoes, accessories — specify material, color (hex), pattern, fit for each
-- **神态细节**: expression tied to story emotion, specific eye/gaze description
-- **肢体姿态**: natural pose (standing/sitting/holding props) appropriate to each view angle
-- **Props**: anything they carry or interact with
-- **Body Language**: how they move, posture, energy level
-- **Arc**: how their appearance/expression changes from start to end
-- **参考说明**: 末尾统一标注 —— 以附带的 3 张人物三视图参考图为基准生成 3D 人物模型
-- **画质要求**: 末尾统一标注 —— 4K 超高清，电影级光影，真实质感，全身无裁切，纯白背景便于模型提取
-- **Prompt Fragment**: {a reusable 20–40 word description to paste into every generation prompt}
+- **名称/角色**：如"小女孩（主角）"
+- **基础信息**：年龄、性别、国籍/民族、身高、体型
+- **五官细节**：眉形、眼型、鼻型、唇形、脸型、肤色及肤质（细腻/粗糙/皱纹）、妆容（无妆/淡妆/浓妆 + 具体效果）
+- **发型细节**：发色（hex）、长度、造型、发丝质感
+- **穿搭细节**：上衣、下装、鞋子、配饰——材质、颜色（hex）、花纹、版型逐一标明
+- **神态细节**：贴合剧情情绪，明确眼神与面部表情
+- **肢体姿态**：站姿/坐姿/手持道具等自然姿态，适配各视角
+- **随身道具**：角色携带或互动的物品
+- **肢体语言**：移动方式、体态、精力状态
+- **弧线**：从开头到结尾外貌/表情的变化
+- **参考说明**：末尾统一标注 —— 以附带的 3 张人物三视图参考图为基准生成 3D 人物模型
+- **画质要求**：末尾统一标注 —— 4K 超高清，电影级光影，真实质感，全身无裁切，纯白背景便于模型提取
+- **复用片段**：{20–40 字可复制粘贴到所有生成 Prompt 中的人物描述}
 
-### Environments / Backgrounds (3 张不同视角规范)
+### 环境/背景（3 张不同视角规范）
 
-For EACH distinct environment, generate exactly **3 prompts** from different viewing angles (远景 + 近景 + 特写, or 正面 + 侧面 + 俯视/仰视). All 3 must depict the **same** scene with unified details.
+每个环境生成**远景 + 近景 + 特写**（或正面 + 侧面 + 俯视/仰视）共 3 张 Prompt。3 张必须描绘**同一场景**，细节统一。
 
-Each prompt must include (缺一不可):
+每张必须包含以下内容（缺一不可）：
 
-- **Name**: {e.g., "The Wasteland", "The Underwater Cave"}
-- **场景信息**: scene name, purpose in the story
-- **Setting**: location type, time of day, season, weather
-- **环境细节**: indoor/outdoor, materials, colors, condition
-- **Key Elements**: 3–5 must-have visual elements that define this environment
-- **道具细节**: position, material, color, and texture of every prop in the scene
-- **Color Palette**: 3–4 dominant colors with hex codes
-- **光影细节**: light source type, angle, effect (柔光/逆光/阴影 etc.), color temperature
-- **氛围色调**: overall mood + color style (暖/冷/高饱和/低饱和)
-- **Atmosphere**: fog, particles, volumetric light, dust, rain, etc.
-- **Scale/Depth**: how vast or intimate the space feels
-- **Sound Impression**: what the viewer imagines hearing — informs mood even in silent
-- **参考说明**: 末尾统一标注 —— 以附带的 3 张不同视角背景参考图为基准搭建 3D 场景
-- **画质要求**: 末尾统一标注 —— 4K 超高清，极致细节，真实质感，无人物仅场景道具，电影级氛围
-- **Prompt Fragment**: a reusable 20–40 word description to paste into every generation prompt
+- **名称**：如"荒原""水下洞穴"
+- **场景信息**：场景名称、在故事中的用途
+- **环境设定**：地点类型、时间段、季节、天气
+- **环境细节**：室内/室外、材质、颜色、状态
+- **关键元素**：3–5 个定义此环境的必备视觉元素
+- **道具细节**：场景内所有道具的位置、材质、颜色、纹理
+- **色彩组合**：3–4 种主色调（附 hex 值）
+- **光影细节**：光源类型、角度、效果（柔光/逆光/阴影等）、色温
+- **氛围色调**：整体情绪 + 色调风格（暖/冷/高饱和/低饱和）
+- **氛围效果**：雾气、微粒、体积光、灰尘、雨水等
+- **空间感/纵深**：空间是宏大还是亲密
+- **声音印象**：观众想象中会听到什么——即使无声也用来塑造情绪
+- **参考说明**：末尾统一标注 —— 以附带的 3 张不同视角背景参考图为基准搭建 3D 场景
+- **画质要求**：末尾统一标注 —— 4K 超高清，极致细节，真实质感，无人物仅场景道具，电影级氛围
+- **复用片段**：{20–40 字可复制粘贴到所有生成 Prompt 中的场景描述}
 
-### Scene Breakdown (3 场景 + 4 关键帧 + 3 视频)
+### 分镜拆解（顺序视频 Prompt + 15 秒快照机制）
 
-**Always exactly 3 scenes.** Structure: 钩子(Scene 1) → 剧情推进(Scene 2) → 高潮+结尾(Scene 3). One scene = one core action/emotion. Each scene 5–15 seconds.
+**固定 3 场分镜。** 结构：钩子（场景 1）→ 剧情推进（场景 2）→ 高潮+结尾（场景 3）。每场只讲一个核心动作/情绪。
 
-**4 shared keyframe system**: generate exactly 4 keyframe picture prompts. Adjacent scenes share a keyframe — this guarantees perfect continuity with zero frame gaps.
+**Seedance 15 秒上限规则**：Seedance 单次生成上限 15 秒。当某场超过 15 秒时，必须按 15 秒切分。在每个 15 秒边界处提供一张**快照图 Prompt**，描述该时刻的精确画面。用户据此生成静帧图，作为下一段视频的起始帧参考，确保视觉连贯。
 
 ```
-Keyframe 1 ──── Scene 1 Video ──── Keyframe 2 ──── Scene 2 Video ──── Keyframe 3 ──── Scene 3 Video ──── Keyframe 4
-(start of S1)                    (end of S1 =    (end of S2 =                      (end of S3)
-                                  start of S2)    start of S3)
+场景 1 视频 Prompt（≤15s）
+    ↓（若场景 > 15s）
+  快照图 Prompt @ 15s 处 → 生成参考图
+    ↓
+场景 1 视频 Prompt 续（下一段 ≤15s，以快照为起始帧）
+    ↓
+场景 2 视频 Prompt（≤15s）
+    ↓（若场景 > 15s）
+  快照图 Prompt @ 15s 处 → 生成参考图
+    ↓
+场景 2 视频 Prompt 续 ...
+    ↓
+场景 3 视频 Prompt（≤15s）
+    ...
 ```
 
-| # | Duration | Shot Type | Camera | Action Summary |
-|---|----------|-----------|--------|----------------|
-| 1 | {x}s | {ECU/CU/MS/MFS/WS/EWS} | {movement} | {1-sentence action} |
-| 2 | {x}s | ... | ... | ... |
-| 3 | {x}s | ... | ... | ... |
+| 序号 | 时长 | 景别 | 镜头运动 | 动作概要 |
+|------|------|------|----------|----------|
+| 1 | {x}秒 | {大特写/特写/近景/中近景/全景/远景} | {运镜方式} | {一句话动作} |
+| 2 | {x}秒 | ... | ... | ... |
+| 3 | {x}秒 | ... | ... | ... |
 
-#### Keyframe Picture Prompts
+#### 分镜视频 Prompt
 
-Generate exactly 4 keyframe prompts. Each keyframe is a single image.
+按时间顺序输出。每场根据时长生成一个或多个视频 Prompt。**每条分镜视频 Prompt 不超过 2000 字。**
 
-**关键帧 1（Scene 1 起始帧）**
-- Opening line: 本次将根据附带的人物参考图与背景参考图，仅生成 1 张画面，用于后续分镜视频生成
-- Specify: shot type, character action, scene, lighting/color
-- Describe: expression, posture, prop positions, material, lighting in detail
-- Closing line: 以附带的人物参考图和背景参考图为基准生成
+**场景 {N} 分镜视频 Prompt**（第 {M} 段，若有拆分）
+- 开头（场景首段）：将根据附带的人物参考图、背景参考图，生成本段分镜视频
+- 开头（快照续接段）：将根据附带的人物参考图、背景参考图、以及前一段快照参考图，继续生成本段分镜视频
+- 内容：完整描述本段动作流程、景别、镜头运动（推近/拉远/跟拍/平移）、情绪变化
+- 参数：时长（≤15s）、运镜速度、色调、氛围音效
+- 画质标注：4K 超高清，镜头运动流畅，皮肤与场景真实质感，电影级光影，短视频风格
+- 结尾：以人物参考图、背景参考图为全部参考生成视频（续接段则为：以人物参考图、背景参考图、快照参考图为全部参考生成视频）
 
-**关键帧 2（Scene 1 结束帧 = Scene 2 起始帧）**
-- Opening line: 本次将根据附带的人物参考图与背景参考图，仅生成 1 张画面，作为上一分镜的结束帧与下一分镜的起始帧
-- Must naturally conclude Scene 1's action AND set up Scene 2's action
-- Must show visible progression from Keyframe 1
-- Closing line: 以附带的人物参考图和背景参考图为基准生成
+#### 快照图 Prompt（15 秒边界处）
 
-**关键帧 3（Scene 2 结束帧 = Scene 3 起始帧）**
-- Opening line: 本次将根据附带的人物参考图与背景参考图，仅生成 1 张画面，作为上一分镜的结束帧与下一分镜的起始帧
-- Must naturally conclude Scene 2's action AND set up Scene 3's action
-- Must show visible progression from Keyframe 2
-- Closing line: 以附带的人物参考图和背景参考图为基准生成
+当某场超过 15 秒时，在视频段之间插入快照图 Prompt。快照描述该时刻的精确视觉状态，用于生成静帧图锚定下一段。
 
-**关键帧 4（Scene 3 结束帧）**
-- Opening line: 本次将根据附带的人物参考图与背景参考图，仅生成 1 张画面，作为全片最终帧
-- Must be the story's visual conclusion — emotionally resolved, visually complete
-- Must show visible progression from Keyframe 3
-- Closing line: 以附带的人物参考图和背景参考图为基准生成
+**快照图 Prompt（场景 {N}，{时间戳}秒）**
+- 开头：本次将根据附带的人物参考图与背景参考图，仅生成 1 张快照画面，用于后续视频续接的起始帧参考
+- 内容：精确描述此刻的景别、人物姿态/表情/位置、光线状态、道具位置
+- 必须与前一段视频末帧完全一致
+- 结尾：以附带的人物参考图和背景参考图为基准生成
 
-#### Scene Video Prompts
+#### Prompt 序列示例
 
-For EACH of the 3 scenes, provide one video prompt:
+以场景 1（10秒）+ 场景 2（20秒）+ 场景 3（15秒）= 总计 45 秒为例：
 
-**Scene {N} 分镜视频 Prompt** (Keyframe {N} → Keyframe {N+1})
-- Opening line: 将根据附带的人物参考图、背景参考图、起始帧（关键帧{N}）与结束帧（关键帧{N+1}）画面，生成本段分镜视频
-- Describe: full action flow, shot type changes, camera movement (推近/拉远/跟拍/平移), emotion shifts
-- Specify: duration (5–15s), camera speed, color tone, ambient sound
-- Quality tag: 4K 超高清，镜头运动流畅，皮肤与场景真实质感，电影级光影，短视频风格
-- Closing line: 以人物参考图、背景参考图、关键帧{N}、关键帧{N+1}为全部参考生成视频
-
-#### Per-scene metadata
-
-For each scene also provide:
-- **What the viewer sees**: 2–3 sentence detailed visual description
-- **Emotion/Mood**: what the viewer should feel
-- **Lighting in this shot**: specific to this moment
-- **Key motion**: what moves, how fast, in what direction
-- **Transition**: how this shot connects to the next (handled by the shared keyframe)
-
-### Visual Style
-
-- **Overall Style**: {e.g., cinematic photorealistic, stylized illustration, anime-inspired}
-- **Reference Look**: {camera/film reference, e.g., "Arri Alexa look, shallow DoF"}
-- **Color Strategy**: {how color changes across the story arc}
-- **Style Anchors**: {a reusable prompt prefix for ALL shots, ~20 words}
-
-### Music / Audio Direction
-
-- **Overall Mood**: {genre, tempo, instruments}
-- **Arc**: {how the audio evolves from start to end}
-- **Key Moments**: {which shots need audio emphasis — hits, silence, swells}
-
-### Why This Works for AI Video
-
-- **Virality angle**: {1–2 sentences}
-- **AI generation strengths**: {what about this topic is easy for AI}
-- **Rewatch / engagement hooks**: {what makes viewers comment, share, or loop}
+```
+1. 场景 1 视频 Prompt         （0s–10s，≤15s，无需拆分）
+2. 场景 2 视频 Prompt 第 1 段 （10s–25s，场景 2 前 15s）
+3. 快照图 Prompt @ 25s        （场景 2 第 15 秒处的画面快照）
+4. 场景 2 视频 Prompt 第 2 段 （25s–30s，剩余 5s，以快照为起始帧）
+5. 场景 3 视频 Prompt         （30s–45s，恰好 15s，无需拆分）
 ```
 
-**Ask the user to pick one** (or request more candidates). When generating a batch list (e.g., "find me top 10 topics"), use the same rich format for every entry.
+#### 单场附加信息
 
-### Step 4 — Develop Foundation Storyboard
+每场还需提供：
+- **观众所见**：2–3 句详细视觉描写
+- **情绪/氛围**：观众应感受到什么
+- **本场光线**：此刻的具体光线情况
+- **关键运动**：什么在动、速度多快、方向如何
 
-Once the user confirms a topic, produce a full storyboard document with:
+### 视觉风格
 
-1. **Title** — bilingual (Chinese + English) catchy title
-2. **Description** — 2–3 sentence pitch with hashtags (Chinese + English)
-3. **Visual Bible** — style, aspect ratio, color palette, lighting, mood, characters, environments, style anchors
-4. **Enhanced Narrative** — the story in prose form, vivid and specific
-5. **Storyboard** — shot-by-shot breakdown, each shot with:
-   - Duration (target 15s scene units, can be shorter)
-   - Shot type and camera movement
-   - Action description
-   - Audio/mood notes
-   - Transition to next shot
-   - Generation prompt (reusing exact Visual Bible wording)
-6. **Production Notes** — total duration, shot count, music mood, key consistency notes
+- **整体风格**：如"电影写实""风格化插画""动漫风"
+- **参考质感**：摄影机/胶片参考，如"Arri Alexa 质感，浅景深"
+- **色彩策略**：色彩如何随故事弧线变化
+- **风格锚点**：{适用于所有镜头的可复用 Prompt 前缀，约 20 字}
 
-Use the exact format demonstrated in existing storyboards in `ai_videos/`.
+### 音乐/音效方向
 
-### Step 5 — Save Output
+- **整体情绪**：曲风、节奏、乐器
+- **弧线**：音频从头到尾如何演变
+- **关键时刻**：哪些镜头需要音效强调——重击、静默、渐强
 
-Save the storyboard to:
+### 为何适合 AI 视频
+
+- **传播角度**：{1–2 句}
+- **AI 生成优势**：{此主题对 AI 来说容易在哪里}
+- **复看/互动钩子**：{什么让观众评论、分享或循环播放}
+```
+
+**请用户选择一个**（或要求更多候选）。生成批量列表（如"找 10 个主题"）时，每个条目使用相同的详细格式。
+
+### 第四步 — 制作基础分镜文档
+
+用户确认主题后，生成完整分镜文档，包含：
+
+1. **标题** — 中文标题
+2. **简介** — 2–3 句概要 + 标签
+3. **视觉圣经** — 风格、画幅、色彩组合、光线、情绪、人物、环境、风格锚点
+4. **完整叙事** — 散文体故事，具体生动
+5. **分镜表** — 逐镜头拆解，每镜包含：
+   - 时长（以 15 秒为单位，可更短）
+   - 景别与镜头运动
+   - 动作描述
+   - 音效/情绪备注
+   - 向下一镜头的过渡
+   - 生成 Prompt（复用视觉圣经原文）
+6. **制作备注** — 总时长、镜头数、音乐情绪、关键一致性注意事项
+
+参照 `ai_videos/` 中已有分镜文档的格式。
+
+### 第五步 — 保存输出
+
+分镜文档保存至：
 
 ```
 ai_videos/{date}/{story_id}/story/storyboard.md
 ```
 
-Where:
-- `{date}` = today's date in `YYYY-MM-DD` format
-- `{story_id}` = a short snake_case slug derived from the title (e.g., `tornado_cat`, `code_world`)
+其中：
+- `{date}` = 当天日期，格式 `YYYY-MM-DD`
+- `{story_id}` = 由标题生成的短蛇形命名（如 `tornado_cat`、`code_world`）
 
-Also save the research evidence to:
+调研资料保存至：
 
 ```
 ai_videos/{date}/{story_id}/story/research.md
 ```
 
-The research file should contain:
-- Search queries used
-- Raw candidate list with scores
-- Links/sources for the chosen topic
-- Rationale for selection
+调研文件应包含：
+- 使用的搜索关键词
+- 原始候选列表及评分
+- 选定主题的链接/来源
+- 选择理由
 
-## Output contract
+## 输出规范
 
-- Always ask for user confirmation before writing the storyboard
-- Always include the AI Feasibility Scorecard — never skip scoring
-- Never claim AI will perfectly render any topic — call out drift risks explicitly
-- Reuse exact character/environment wording in every prompt (no paraphrasing)
-- Target 15-second scene units for Seedance compatibility
-- Default to 9:16 vertical (mobile-first) unless user specifies otherwise
-- The storyboard is the FINAL output — it must be complete enough for a downstream agent to extract scenes, characters, and prompts without needing to re-research the topic
-- **Maximum 1–2 characters per video** — single character preferred; two only when interaction is essential
-- **All generation prompts must be in Chinese** (纯中文规范), precise and unambiguous
-- **Ban vague adjectives**: never use 好看/唯美/漂亮 — replace with concrete details (e.g., 柔和 golden hour 阳光、皮肤细腻毛孔、布料哑光质感)
-- **Same character / same scene = identical details** across all prompts — no contradictions or sudden changes
-- **Reference-image tags must be consistent** — never omit, never paraphrase
-- **All prompts must be Seedance 2 compatible** — designed for 图生图, 帧间生成, and 视频生成 workflows
+- 写分镜前必须先征得用户确认
+- 必须包含 AI 可行性评分卡——不可跳过评分
+- 不得声称 AI 能完美渲染任何主题——必须明确标注漂移风险
+- 所有 Prompt 中复用人物/环境描述原文，禁止改写
+- 以 15 秒为场景单位，适配 Seedance
+- 默认 9:16 竖屏（移动端优先），除非用户另行指定
+- 分镜文档是最终交付物——必须完整到下游工作流可直接提取分镜、人物、Prompt，无需重新调研
+- **每条视频最多 1–2 个人物**——单人物优先；仅在互动必不可少时允许两人
+- **全部输出使用中文**——整个 MD 文件（标题、小标题、描述、评分、备注、Prompt）必须为中文。仅 hex 色值和无标准中文对应的技术术语（如 4K、golden hour、DoF）可保留英文
+- **所有生成 Prompt 必须为纯中文**，精准无歧义
+- **分镜 Prompt 字数限制**：每条分镜视频 Prompt 不超过 2000 字。超出时压缩语言、合并冗余描述，但不可删减必要细节
+- **禁用空泛形容词**：禁止使用"好看""唯美""漂亮"——替换为具体细节（如：柔和 golden hour 阳光、皮肤细腻毛孔、布料哑光质感）
+- **同一人物/同一场景 = 所有 Prompt 细节完全统一**——不矛盾、不突变
+- **参考图标注必须一致**——不遗漏、不改写
+- **所有 Prompt 必须适配 Seedance 2**——面向图生图、帧间生成、视频生成工作流设计
 
-## Edge cases
+## 边界情况
 
-- If no candidates score above 40/60, report this honestly and suggest the user provide a niche or constraint to narrow the search.
-- If the user provides a topic directly, skip Steps 1–3 and go straight to evaluation + storyboard.
-- If the user wants both short and long versions of the same topic, produce two separate storyboards.
-- Default mode is **short** unless the user specifies otherwise.
+- 若无候选主题评分超过 40/60，如实告知并建议用户提供细分方向或约束条件以缩小搜索范围。
+- 若用户直接提供主题，跳过第一至三步，直接进入评估 + 分镜。
+- 若用户希望同一主题出短视频和长视频两个版本，分别生成两套分镜。
+- 默认模式为**短视频**，除非用户另行指定。
