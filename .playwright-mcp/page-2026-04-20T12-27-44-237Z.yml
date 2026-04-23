@@ -1,0 +1,740 @@
+- generic [ref=e2]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Guide" [active] [ref=e9] [cursor=pointer]:
+          - generic [ref=e12]:
+            - img
+        - link "YouTube Home" [ref=e14] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e19]:
+            - img
+        - button "Skip navigation" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Skip navigation
+      - generic [ref=e28]:
+        - search [ref=e29]:
+          - generic [ref=e30]:
+            - generic [ref=e31]:
+              - combobox "Search" [expanded] [ref=e33]: "#veo3"
+              - button "Clear search query" [ref=e35] [cursor=pointer]:
+                - generic [ref=e38]:
+                  - img
+            - button "Search" [ref=e42] [cursor=pointer]:
+              - generic [ref=e45]:
+                - img
+        - generic [ref=e47]:
+          - button "Search with your voice" [ref=e49] [cursor=pointer]:
+            - generic [ref=e53]:
+              - img
+          - tooltip "tooltip"
+      - generic [ref=e58]:
+        - button "Settings" [ref=e63] [cursor=pointer]:
+          - generic [ref=e66]:
+            - img
+        - link "Sign in" [ref=e69] [cursor=pointer]:
+          - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252Fresults%253Fsearch_query%253D%252523veo3%2526sp%253DEgIYAQ%2525253D%2525253D&hl=en&ec=65620
+          - generic [ref=e73]:
+            - img
+          - generic [ref=e74]: Sign in
+  - navigation [ref=e78]:
+    - generic [ref=e79]:
+      - link "Home" [ref=e81] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e84]:
+          - img
+        - generic [ref=e85]: Home
+      - link "Shorts" [ref=e87] [cursor=pointer]:
+        - /url: /shorts/
+        - generic [ref=e90]:
+          - img
+        - generic [ref=e91]: Shorts
+      - link "Subscriptions" [ref=e93] [cursor=pointer]:
+        - /url: /feed/subscriptions
+        - generic [ref=e96]:
+          - img
+        - generic [ref=e97]: Subscriptions
+      - link "You" [ref=e99] [cursor=pointer]:
+        - /url: /feed/you
+        - generic [ref=e102]:
+          - img
+        - generic [ref=e103]: You
+  - generic [ref=e104]:
+    - main [ref=e105]:
+      - generic [ref=e106]:
+        - generic [ref=e108]:
+          - tablist [ref=e113]:
+            - tab "All" [selected] [ref=e117] [cursor=pointer]:
+              - generic [ref=e119]: All
+            - tab "Shorts" [ref=e126] [cursor=pointer]:
+              - generic [ref=e128]: Shorts
+            - tab "Unwatched" [ref=e135] [cursor=pointer]:
+              - generic [ref=e137]: Unwatched
+            - tab "Watched" [ref=e144] [cursor=pointer]:
+              - generic [ref=e146]: Watched
+            - tab "Videos" [ref=e153] [cursor=pointer]:
+              - generic [ref=e155]: Videos
+            - tab "Recently uploaded" [ref=e162] [cursor=pointer]:
+              - generic [ref=e164]: Recently uploaded
+            - tab "Live" [ref=e171] [cursor=pointer]:
+              - generic [ref=e173]: Live
+          - generic [ref=e178]:
+            - button "Search filters" [ref=e180] [cursor=pointer]:
+              - generic [ref=e181]: Filters
+              - generic [ref=e185]:
+                - img
+            - tooltip "tooltip"
+        - generic [ref=e194]:
+          - generic [ref=e196]:
+            - text: "Including results for:"
+            - link "veo3" [ref=e197] [cursor=pointer]:
+              - /url: /results?search_query=veo3&sp=EgIYAQ%253D%253D
+              - generic [ref=e198]: veo3
+            - text: Search only for
+            - link "#veo3" [ref=e199] [cursor=pointer]:
+              - /url: /results?search_query=%23veo3&sp=EgIYAUIGEgR2ZW8z
+          - generic [ref=e200]:
+            - generic [ref=e203]:
+              - img [ref=e205]:
+                - generic [ref=e207]:
+                  - img
+              - heading "Shorts" [level=2] [ref=e210]
+            - generic [ref=e212]:
+              - generic [ref=e215]:
+                - link [ref=e216] [cursor=pointer]:
+                  - /url: /shorts/rwUt22HTTx0
+                - generic [ref=e220] [cursor=pointer]:
+                  - link "Anchors away. ⚓️ Veo 3 is rolling out in 70+ countries and Google AI Pro subscribers can try it too" [ref=e221]:
+                    - /url: /shorts/rwUt22HTTx0
+                  - generic [ref=e222]: 863K views
+                - button "More actions" [ref=e224] [cursor=pointer]:
+                  - generic [ref=e228]:
+                    - img
+              - generic [ref=e234]:
+                - link [ref=e235] [cursor=pointer]:
+                  - /url: /shorts/LevMqxCUw6E
+                - generic [ref=e239] [cursor=pointer]:
+                  - link "Veo3 Quality vs Fast | Which one do you think is better?" [ref=e240]:
+                    - /url: /shorts/LevMqxCUw6E
+                  - generic [ref=e241]: 7.4K views
+                - button "More actions" [ref=e243] [cursor=pointer]:
+                  - generic [ref=e247]:
+                    - img
+              - generic [ref=e253]:
+                - link [ref=e254] [cursor=pointer]:
+                  - /url: /shorts/bg2tlXzRdN8
+                - generic [ref=e258] [cursor=pointer]:
+                  - link "Google Veo 3 AI Model Now Generates Videos with Sound" [ref=e259]:
+                    - /url: /shorts/bg2tlXzRdN8
+                  - generic [ref=e260]: 184K views
+                - button "More actions" [ref=e262] [cursor=pointer]:
+                  - generic [ref=e266]:
+                    - img
+              - generic [ref=e272]:
+                - link [ref=e273] [cursor=pointer]:
+                  - /url: /shorts/_9y1Dxa46hY
+                - generic [ref=e277] [cursor=pointer]:
+                  - link "AI video made with google veo 3." [ref=e278]:
+                    - /url: /shorts/_9y1Dxa46hY
+                  - generic [ref=e279]: 127K views
+                - button "More actions" [ref=e281] [cursor=pointer]:
+                  - generic [ref=e285]:
+                    - img
+              - generic [ref=e291]:
+                - link [ref=e292] [cursor=pointer]:
+                  - /url: /shorts/M0UDfCS-SkM
+                - generic [ref=e296] [cursor=pointer]:
+                  - 'link "Veo 3.1 Vs Sora 2: Which One is the Best AI Video Generator?" [ref=e297]':
+                    - /url: /shorts/M0UDfCS-SkM
+                  - generic [ref=e298]: 114K views
+                - button "More actions" [ref=e300] [cursor=pointer]:
+                  - generic [ref=e304]:
+                    - img
+            - button "Show more" [ref=e311] [cursor=pointer]:
+              - generic [ref=e312]: Show more
+              - generic [ref=e316]:
+                - img
+          - generic [ref=e321]:
+            - link [ref=e323] [cursor=pointer]:
+              - /url: /shorts/QvtVEDZf-iE
+              - img [ref=e325]
+              - img [ref=e328]:
+                - generic [ref=e331]:
+                  - img
+                - generic [ref=e332]: SHORTS
+              - generic:
+                - generic: Now playing
+                - generic:
+                  - img
+            - generic [ref=e333] [cursor=pointer]:
+              - generic [ref=e334]:
+                - generic [ref=e335]:
+                  - 'heading "Veo Cam 😍 #football #veo3 #matchday #goal by FC Veddel United 7,243 views 10 months ago 33 seconds - play Short" [level=3] [ref=e336]':
+                    - 'link "Veo Cam 😍 #football #veo3 #matchday #goal by FC Veddel United 7,243 views 10 months ago 33 seconds - play Short" [ref=e337]':
+                      - /url: /shorts/QvtVEDZf-iE
+                      - text: "Veo Cam 😍 #football #veo3 #matchday #goal"
+                  - button "Action menu" [ref=e341]:
+                    - generic [ref=e344]:
+                      - img
+                - generic [ref=e347]:
+                  - generic [ref=e348]: 7.2K views
+                  - generic [ref=e349]: •10 months ago
+              - generic [ref=e350]:
+                - link "Go to channel FC Veddel United" [ref=e351]:
+                  - /url: /@fcveddelunited
+                - link "FC Veddel United" [ref=e357]:
+                  - /url: /@fcveddelunited
+          - generic [ref=e359]:
+            - link [ref=e361] [cursor=pointer]:
+              - /url: /watch?v=2T-ZiEdMHvw&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e363] [cursor=pointer]:
+              - generic [ref=e364]:
+                - generic [ref=e365]:
+                  - heading "Veo3 test // non-existent car show 1 minute, 12 seconds" [level=3] [ref=e366]:
+                    - link "Veo3 test // non-existent car show 1 minute, 12 seconds" [ref=e367]:
+                      - /url: /watch?v=2T-ZiEdMHvw&pp=ygUFI3ZlbzM%3D
+                      - text: Veo3 test // non-existent car show
+                  - button "Action menu" [ref=e371]:
+                    - generic [ref=e374]:
+                      - img
+                - generic [ref=e377]:
+                  - generic [ref=e378]: 451K views
+                  - generic [ref=e379]: •10 months ago
+              - generic [ref=e380]:
+                - link "Go to channel László Gaál" [ref=e381]:
+                  - /url: /@laszlo_gaal
+                - link "László Gaál" [ref=e387]:
+                  - /url: /@laszlo_gaal
+              - generic [ref=e388]:
+                - generic [ref=e389]: "Before you ask: yes, everything is AI here. The video and sound both coming from a single text prompt per clip using #Veo3 by ..."
+                - tooltip "tooltip"
+          - generic [ref=e391]:
+            - link [ref=e393] [cursor=pointer]:
+              - /url: /shorts/iev8-AZhGdM
+            - generic [ref=e395] [cursor=pointer]:
+              - generic [ref=e396]:
+                - generic [ref=e397]:
+                  - 'heading "AI image to video test with Kling , Filmora，vs Google''s new Veo 3. #shorts #kling #veo #veo3 by 真探玩赚AI 2,669,316 views 10 months ago 8 seconds - play Short" [level=3] [ref=e398]':
+                    - 'link "AI image to video test with Kling , Filmora，vs Google''s new Veo 3. #shorts #kling #veo #veo3 by 真探玩赚AI 2,669,316 views 10 months ago 8 seconds - play Short" [ref=e399]':
+                      - /url: /shorts/iev8-AZhGdM
+                      - text: "AI image to video test with Kling , Filmora，vs Google's new Veo 3. #shorts #kling #veo #veo3"
+                  - button "Action menu" [ref=e403]:
+                    - generic [ref=e406]:
+                      - img
+                - generic [ref=e409]:
+                  - generic [ref=e410]: 2.6M views
+                  - generic [ref=e411]: •10 months ago
+              - generic [ref=e412]:
+                - link "Go to channel 真探玩赚AI" [ref=e413]:
+                  - /url: /@zhentanai
+                - link "真探玩赚AI" [ref=e418]:
+                  - /url: /@zhentanai
+              - generic [ref=e419]:
+                - text: "googleio #commonsenseonmars#filmora #aianimation #city."
+                - tooltip "tooltip"
+          - generic [ref=e420]:
+            - generic [ref=e423]:
+              - img [ref=e425]:
+                - generic [ref=e427]:
+                  - img
+              - heading "Shorts" [level=2] [ref=e430]
+            - generic [ref=e432]:
+              - generic [ref=e435]:
+                - link [ref=e436] [cursor=pointer]:
+                  - /url: /shorts/SRw6-u8WLrI
+                - generic [ref=e440] [cursor=pointer]:
+                  - link "the world is your playground, with Veo 3 coming to YouTube Shorts ✨" [ref=e441]:
+                    - /url: /shorts/SRw6-u8WLrI
+                  - generic [ref=e442]: 157K views
+                - button "More actions" [ref=e444] [cursor=pointer]:
+                  - generic [ref=e448]:
+                    - img
+              - generic [ref=e454]:
+                - link [ref=e455] [cursor=pointer]:
+                  - /url: /shorts/PFVIgAqfakg
+                - generic [ref=e459] [cursor=pointer]:
+                  - 'link "I Built a Google Veo 3 Viral ASMR Shorts Machine #aiagent #n8n #googleveo3" [ref=e460]':
+                    - /url: /shorts/PFVIgAqfakg
+                  - generic [ref=e461]: 51K views
+                - button "More actions" [ref=e463] [cursor=pointer]:
+                  - generic [ref=e467]:
+                    - img
+              - generic [ref=e473]:
+                - link [ref=e474] [cursor=pointer]:
+                  - /url: /shorts/wo6XFg9q42A
+                - generic [ref=e478] [cursor=pointer]:
+                  - link "Created using Veo 3 vs @seedance.ai Pro | AI Motion Test Using the Same JSON Prompt" [ref=e479]:
+                    - /url: /shorts/wo6XFg9q42A
+                  - generic [ref=e480]: 16K views
+                - button "More actions" [ref=e482] [cursor=pointer]:
+                  - generic [ref=e486]:
+                    - img
+              - generic [ref=e492]:
+                - link [ref=e493] [cursor=pointer]:
+                  - /url: /shorts/Ogo5KyRPY-U
+                - generic [ref=e497] [cursor=pointer]:
+                  - link "🔥VEO 3 VS Nano Banana, AI Tools 2025" [ref=e498]:
+                    - /url: /shorts/Ogo5KyRPY-U
+                  - generic [ref=e499]: 9.6K views
+                - button "More actions" [ref=e501] [cursor=pointer]:
+                  - generic [ref=e505]:
+                    - img
+              - generic [ref=e511]:
+                - link [ref=e512] [cursor=pointer]:
+                  - /url: /shorts/d7DYVA3VEDI
+                - generic [ref=e516] [cursor=pointer]:
+                  - link "Another Google VEO 3 prompt went wrong, but it's still a new discovery" [ref=e517]:
+                    - /url: /shorts/d7DYVA3VEDI
+                  - generic [ref=e518]: 501K views
+                - button "More actions" [ref=e520] [cursor=pointer]:
+                  - generic [ref=e524]:
+                    - img
+            - button "Show more" [ref=e531] [cursor=pointer]:
+              - generic [ref=e532]: Show more
+              - generic [ref=e536]:
+                - img
+          - generic [ref=e541]:
+            - link [ref=e543] [cursor=pointer]:
+              - /url: /watch?v=x_x-JAAKSvU&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e545] [cursor=pointer]:
+              - generic [ref=e546]:
+                - generic [ref=e547]:
+                  - heading "Opening Film Created with Veo 3 | I/O 2025 1 minute, 23 seconds" [level=3] [ref=e548]:
+                    - link "Opening Film Created with Veo 3 | I/O 2025 1 minute, 23 seconds" [ref=e549]:
+                      - /url: /watch?v=x_x-JAAKSvU&pp=ygUFI3ZlbzM%3D
+                      - text: Opening Film Created with Veo 3 | I/O 2025
+                  - button "Action menu" [ref=e553]:
+                    - generic [ref=e556]:
+                      - img
+                - generic [ref=e559]:
+                  - generic [ref=e560]: 519K views
+                  - generic [ref=e561]: •10 months ago
+              - generic [ref=e562]:
+                - link "Go to channel Google" [ref=e563]:
+                  - /url: /@Google
+                - generic [ref=e564]:
+                  - link "Google" [ref=e568]:
+                    - /url: /@Google
+                  - img "Verified" [ref=e573]:
+                    - generic [ref=e576]:
+                      - img
+              - generic [ref=e577]:
+                - generic [ref=e578]: We kicked off I/O 2025 with a wild ride, made entirely with Google's most advanced AI video generation tool, Veo 3. Watch the full ...
+                - tooltip "tooltip"
+              - img "Closed captions" [ref=e583]:
+                - generic [ref=e584]: CC
+          - generic [ref=e586]:
+            - link [ref=e588] [cursor=pointer]:
+              - /url: /watch?v=mCFMn0UkRt0&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e590] [cursor=pointer]:
+              - generic [ref=e591]:
+                - generic [ref=e592]:
+                  - heading "Veo 3 demo | Sailor and the sea 8 seconds" [level=3] [ref=e593]:
+                    - link "Veo 3 demo | Sailor and the sea 8 seconds" [ref=e594]:
+                      - /url: /watch?v=mCFMn0UkRt0&pp=ygUFI3ZlbzM%3D
+                      - text: Veo 3 demo | Sailor and the sea
+                  - button "Action menu" [ref=e598]:
+                    - generic [ref=e601]:
+                      - img
+                - generic [ref=e604]:
+                  - generic [ref=e605]: 525K views
+                  - generic [ref=e606]: •10 months ago
+              - generic [ref=e607]:
+                - link "Go to channel Google DeepMind" [ref=e608]:
+                  - /url: /@googledeepmind
+                - generic [ref=e609]:
+                  - link "Google DeepMind" [ref=e613]:
+                    - /url: /@googledeepmind
+                  - img "Verified" [ref=e618]:
+                    - generic [ref=e621]:
+                      - img
+              - generic [ref=e622]:
+                - generic [ref=e623]: Created with Veo 3 - our new state-of-the-art video generation model, designed to empower filmmakers and storytellers. Veo 3 ...
+                - tooltip "tooltip"
+              - generic [ref=e625]:
+                - img "4K" [ref=e628]:
+                  - generic [ref=e629]: 4K
+                - img "Closed captions" [ref=e632]:
+                  - generic [ref=e633]: CC
+          - generic [ref=e635]:
+            - link [ref=e637] [cursor=pointer]:
+              - /url: /watch?v=ecTqFLS-9mg&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e639] [cursor=pointer]:
+              - generic [ref=e640]:
+                - generic [ref=e641]:
+                  - heading "Veo 3 in Gemini is now in the UK 33 seconds" [level=3] [ref=e642]:
+                    - link "Veo 3 in Gemini is now in the UK 33 seconds" [ref=e643]:
+                      - /url: /watch?v=ecTqFLS-9mg&pp=ygUFI3ZlbzM%3D
+                      - text: Veo 3 in Gemini is now in the UK
+                  - button "Action menu" [ref=e647]:
+                    - generic [ref=e650]:
+                      - img
+                - generic [ref=e653]:
+                  - generic [ref=e654]: 153K views
+                  - generic [ref=e655]: •10 months ago
+              - generic [ref=e656]:
+                - link "Go to channel Google" [ref=e657]:
+                  - /url: /@Google
+                - generic [ref=e658]:
+                  - link "Google" [ref=e662]:
+                    - /url: /@Google
+                  - img "Verified" [ref=e667]:
+                    - generic [ref=e670]:
+                      - img
+              - generic [ref=e671]:
+                - generic [ref=e672]: Video generation with Veo 3 is now available in the Gemini app in the UK through the Google AI Ultra plan. And Google AI Pro ...
+                - tooltip "tooltip"
+              - img "Closed captions" [ref=e677]:
+                - generic [ref=e678]: CC
+          - generic [ref=e680]:
+            - link [ref=e682] [cursor=pointer]:
+              - /url: /watch?v=WeIzH2jFsNw&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e684] [cursor=pointer]:
+              - generic [ref=e685]:
+                - generic [ref=e686]:
+                  - heading "Video created with Google's Veo 3! 33 seconds" [level=3] [ref=e687]:
+                    - link "Video created with Google's Veo 3! 33 seconds" [ref=e688]:
+                      - /url: /watch?v=WeIzH2jFsNw&pp=ygUFI3ZlbzM%3D
+                      - text: Video created with Google's Veo 3!
+                  - button "Action menu" [ref=e692]:
+                    - generic [ref=e695]:
+                      - img
+                - generic [ref=e698]:
+                  - generic [ref=e699]: 81K views
+                  - generic [ref=e700]: •8 months ago
+              - generic [ref=e701]:
+                - link "Go to channel Google Workspace" [ref=e702]:
+                  - /url: /@googleworkspace
+                - generic [ref=e703]:
+                  - link "Google Workspace" [ref=e707]:
+                    - /url: /@googleworkspace
+                  - img "Verified" [ref=e712]:
+                    - generic [ref=e715]:
+                      - img
+              - generic [ref=e716]:
+                - text: From video production to dev workflows with new AI-powered tools in Google Workspace Check out Google AI Ultra for Business, ...
+                - tooltip "tooltip"
+              - img "Closed captions" [ref=e721]:
+                - generic [ref=e722]: CC
+          - generic [ref=e724]:
+            - link [ref=e726] [cursor=pointer]:
+              - /url: /shorts/ONkZLO_0fDo
+            - generic [ref=e728] [cursor=pointer]:
+              - generic [ref=e729]:
+                - generic [ref=e730]:
+                  - heading "Sora 2 vs Veo 3 – Gymnast Example (AI Video Battle) by Dom the AI Tutor | Tech Tutor Zones 335,715 views 6 months ago 15 seconds - play Short" [level=3] [ref=e731]:
+                    - link "Sora 2 vs Veo 3 – Gymnast Example (AI Video Battle) by Dom the AI Tutor | Tech Tutor Zones 335,715 views 6 months ago 15 seconds - play Short" [ref=e732]:
+                      - /url: /shorts/ONkZLO_0fDo
+                      - text: Sora 2 vs Veo 3 – Gymnast Example (AI Video Battle)
+                  - button "Action menu" [ref=e736]:
+                    - generic [ref=e739]:
+                      - img
+                - generic [ref=e742]:
+                  - generic [ref=e743]: 335K views
+                  - generic [ref=e744]: •6 months ago
+              - generic [ref=e745]:
+                - link "Go to channel Dom the AI Tutor | Tech Tutor Zones" [ref=e746]:
+                  - /url: /@TechTutorZones
+                - link "Dom the AI Tutor | Tech Tutor Zones" [ref=e751]:
+                  - /url: /@TechTutorZones
+              - generic [ref=e752]:
+                - generic [ref=e753]: I tested Sora 2 and Veo 3 using the same gymnast prompt — and the results are interesting. Both AI video generators show ...
+                - tooltip "tooltip"
+          - generic [ref=e755]:
+            - link [ref=e757] [cursor=pointer]:
+              - /url: /shorts/GJ--bbXtFqk
+            - generic [ref=e759] [cursor=pointer]:
+              - generic [ref=e760]:
+                - generic [ref=e761]:
+                  - heading "This VEO 3 Prompt Library gives you 1000+ Ready-to-use VEO 3 JSON Prompts by Nick Automates 56,935 views 7 months ago 38 seconds - play Short" [level=3] [ref=e762]:
+                    - link "This VEO 3 Prompt Library gives you 1000+ Ready-to-use VEO 3 JSON Prompts by Nick Automates 56,935 views 7 months ago 38 seconds - play Short" [ref=e763]:
+                      - /url: /shorts/GJ--bbXtFqk
+                      - text: This VEO 3 Prompt Library gives you 1000+ Ready-to-use VEO 3 JSON Prompts
+                  - button "Action menu" [ref=e767]:
+                    - generic [ref=e770]:
+                      - img
+                - generic [ref=e773]:
+                  - generic [ref=e774]: 56K views
+                  - generic [ref=e775]: •7 months ago
+              - generic [ref=e776]:
+                - link "Go to channel Nick Automates" [ref=e777]:
+                  - /url: /@nickautomates
+                - link "Nick Automates" [ref=e782]:
+                  - /url: /@nickautomates
+              - generic [ref=e783]:
+                - generic [ref=e784]: Stop burning through your Veo 3 credits on random prompts that don't give you what you want. There's a better way.
+                - tooltip "tooltip"
+          - generic [ref=e786]:
+            - link [ref=e788] [cursor=pointer]:
+              - /url: /shorts/ot70b48k9ag
+            - generic [ref=e790] [cursor=pointer]:
+              - generic [ref=e791]:
+                - generic [ref=e792]:
+                  - heading "Sora 2 vs Veo 3 by Photoo AI 13,144 views 6 months ago 19 seconds - play Short" [level=3] [ref=e793]:
+                    - link "Sora 2 vs Veo 3 by Photoo AI 13,144 views 6 months ago 19 seconds - play Short" [ref=e794]:
+                      - /url: /shorts/ot70b48k9ag
+                      - text: Sora 2 vs Veo 3
+                  - button "Action menu" [ref=e798]:
+                    - generic [ref=e801]:
+                      - img
+                - generic [ref=e804]:
+                  - generic [ref=e805]: 13K views
+                  - generic [ref=e806]: •6 months ago
+              - generic [ref=e807]:
+                - link "Go to channel Photoo AI" [ref=e808]:
+                  - /url: /@PhotooAIfr
+                - link "Photoo AI" [ref=e813]:
+                  - /url: /@PhotooAIfr
+              - generic [ref=e814]:
+                - generic [ref=e815]: "Même prompt. Sora 2 et VEO 3. Quel est le meilleur pour vous ? #sora2 #veo3 #aivideo."
+                - tooltip "tooltip"
+          - generic [ref=e817]:
+            - link [ref=e819] [cursor=pointer]:
+              - /url: /shorts/2zb4aGSFPQw
+            - generic [ref=e821] [cursor=pointer]:
+              - generic [ref=e822]:
+                - generic [ref=e823]:
+                  - heading "Google's Veo 3 vs OpenAI's Sora Same Text Prompt by Common Sense Made Simple 362,425 views 10 months ago 9 seconds - play Short" [level=3] [ref=e824]:
+                    - link "Google's Veo 3 vs OpenAI's Sora Same Text Prompt by Common Sense Made Simple 362,425 views 10 months ago 9 seconds - play Short" [ref=e825]:
+                      - /url: /shorts/2zb4aGSFPQw
+                      - text: Google's Veo 3 vs OpenAI's Sora Same Text Prompt
+                  - button "Action menu" [ref=e829]:
+                    - generic [ref=e832]:
+                      - img
+                - generic [ref=e835]:
+                  - generic [ref=e836]: 362K views
+                  - generic [ref=e837]: •10 months ago
+              - generic [ref=e838]:
+                - link "Go to channel Common Sense Made Simple" [ref=e839]:
+                  - /url: /@iamYork_
+                - link "Common Sense Made Simple" [ref=e844]:
+                  - /url: /@iamYork_
+              - generic [ref=e845]:
+                - generic [ref=e846]: Had time to finally test Google Veo 3 so I did a quick comparison with the exact same prompt in both text to video AIs. Veo 3 also ...
+                - tooltip "tooltip"
+          - generic [ref=e848]:
+            - link [ref=e850] [cursor=pointer]:
+              - /url: /shorts/HQ6BDMoKHcs
+            - generic [ref=e852] [cursor=pointer]:
+              - generic [ref=e853]:
+                - generic [ref=e854]:
+                  - 'heading "Google Veo 3 is sooo cool! #ai #veo3 #prompttheory by World Update 3.0 713,697 views 10 months ago 16 seconds - play Short" [level=3] [ref=e855]':
+                    - 'link "Google Veo 3 is sooo cool! #ai #veo3 #prompttheory by World Update 3.0 713,697 views 10 months ago 16 seconds - play Short" [ref=e856]':
+                      - /url: /shorts/HQ6BDMoKHcs
+                      - text: "Google Veo 3 is sooo cool! #ai #veo3 #prompttheory"
+                  - button "Action menu" [ref=e860]:
+                    - generic [ref=e863]:
+                      - img
+                - generic [ref=e866]:
+                  - generic [ref=e867]: 713K views
+                  - generic [ref=e868]: •10 months ago
+              - generic [ref=e869]:
+                - link "Go to channel World Update 3.0" [ref=e870]:
+                  - /url: /@worldupdate3.0
+                - link "World Update 3.0" [ref=e875]:
+                  - /url: /@worldupdate3.0
+              - generic [ref=e876]:
+                - generic [ref=e877]: "Google Veo 3 is sooo cool! #ai #veo3 #prompttheory."
+                - tooltip "tooltip"
+          - generic [ref=e879]:
+            - link [ref=e881] [cursor=pointer]:
+              - /url: /watch?v=I06Ef8alr2Y&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e883] [cursor=pointer]:
+              - generic [ref=e884]:
+                - generic [ref=e885]:
+                  - heading "Veo 3.1 - Designed to empower creatives 1 minute, 31 seconds" [level=3] [ref=e886]:
+                    - link "Veo 3.1 - Designed to empower creatives 1 minute, 31 seconds" [ref=e887]:
+                      - /url: /watch?v=I06Ef8alr2Y&pp=ygUFI3ZlbzM%3D
+                      - text: Veo 3.1 - Designed to empower creatives
+                  - button "Action menu" [ref=e891]:
+                    - generic [ref=e894]:
+                      - img
+                - generic [ref=e897]:
+                  - generic [ref=e898]: 96K views
+                  - generic [ref=e899]: •6 months ago
+              - generic [ref=e900]:
+                - link "Go to channel Google DeepMind" [ref=e901]:
+                  - /url: /@googledeepmind
+                - generic [ref=e902]:
+                  - link "Google DeepMind" [ref=e906]:
+                    - /url: /@googledeepmind
+                  - img "Verified" [ref=e911]:
+                    - generic [ref=e914]:
+                      - img
+              - generic [ref=e915]:
+                - generic [ref=e916]: Veo 3.1 is state-of-the-art and builds on Veo 3, with stronger prompt adherence and improved audiovisual quality when turning ...
+                - tooltip "tooltip"
+              - img "Closed captions" [ref=e921]:
+                - generic [ref=e922]: CC
+          - generic [ref=e924]:
+            - link [ref=e926] [cursor=pointer]:
+              - /url: /watch?v=K4OrSx0Vkj0&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e928] [cursor=pointer]:
+              - generic [ref=e929]:
+                - generic [ref=e930]:
+                  - heading "Veo 3 is now on Artlist 41 seconds" [level=3] [ref=e931]:
+                    - link "Veo 3 is now on Artlist 41 seconds" [ref=e932]:
+                      - /url: /watch?v=K4OrSx0Vkj0&pp=ygUFI3ZlbzM%3D
+                      - text: Veo 3 is now on Artlist
+                  - button "Action menu" [ref=e936]:
+                    - generic [ref=e939]:
+                      - img
+                - generic [ref=e942]:
+                  - generic [ref=e943]: 13M views
+                  - generic [ref=e944]: •8 months ago
+              - generic [ref=e945]:
+                - link "Go to channel Artlist" [ref=e946]:
+                  - /url: /@artlist_io
+                - link "Artlist" [ref=e951]:
+                  - /url: /@artlist_io
+              - generic [ref=e952]:
+                - generic [ref=e953]: Start generating videos the way you've always dreamed with Veo 3 on Artlist - https://artlist.io/text-to-video-ai ▻ Subscribe to our ...
+                - tooltip "tooltip"
+          - generic [ref=e955]:
+            - link [ref=e957] [cursor=pointer]:
+              - /url: /watch?v=-UW6nMGN2Bw&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e959] [cursor=pointer]:
+              - generic [ref=e960]:
+                - generic [ref=e961]:
+                  - heading "Impossible Challenges 2 (Google Veo 3) 1 minute, 8 seconds" [level=3] [ref=e962]:
+                    - link "Impossible Challenges 2 (Google Veo 3) 1 minute, 8 seconds" [ref=e963]:
+                      - /url: /watch?v=-UW6nMGN2Bw&pp=ygUFI3ZlbzM%3D
+                      - text: Impossible Challenges 2 (Google Veo 3)
+                  - button "Action menu" [ref=e967]:
+                    - generic [ref=e970]:
+                      - img
+                - generic [ref=e973]:
+                  - generic [ref=e974]: 429K views
+                  - generic [ref=e975]: •10 months ago
+              - generic [ref=e976]:
+                - link "Go to channel demonflyingfox" [ref=e977]:
+                  - /url: /@demonflyingfox
+                - generic [ref=e978]:
+                  - link "demonflyingfox" [ref=e982]:
+                    - /url: /@demonflyingfox
+                  - img "Verified" [ref=e987]:
+                    - generic [ref=e990]:
+                      - img
+              - generic [ref=e991]:
+                - text: "Merch: https://demonflyingfox.com/ Instagram: https://www.instagram.com/demonflyingfox Patreon to support this channel: ..."
+                - tooltip "tooltip"
+          - generic [ref=e993]:
+            - link [ref=e995] [cursor=pointer]:
+              - /url: /watch?v=A_YyAqukcwc&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e997] [cursor=pointer]:
+              - generic [ref=e998]:
+                - generic [ref=e999]:
+                  - 'heading "📢 Generate video with Veo 3: Now available in Google Vids 48 seconds" [level=3] [ref=e1000]':
+                    - 'link "📢 Generate video with Veo 3: Now available in Google Vids 48 seconds" [ref=e1001]':
+                      - /url: /watch?v=A_YyAqukcwc&pp=ygUFI3ZlbzM%3D
+                      - text: "📢 Generate video with Veo 3: Now available in Google Vids"
+                  - button "Action menu" [ref=e1005]:
+                    - generic [ref=e1008]:
+                      - img
+                - generic [ref=e1011]:
+                  - generic [ref=e1012]: 27K views
+                  - generic [ref=e1013]: •10 months ago
+              - generic [ref=e1014]:
+                - link "Go to channel Google Workspace" [ref=e1015]:
+                  - /url: /@googleworkspace
+                - generic [ref=e1016]:
+                  - link "Google Workspace" [ref=e1020]:
+                    - /url: /@googleworkspace
+                  - img "Verified" [ref=e1025]:
+                    - generic [ref=e1028]:
+                      - img
+              - generic [ref=e1029]:
+                - generic [ref=e1030]: Generate stunning AI video clips with sound using Veo 3 in Google Vids. Whether you're a seasoned video creator, or just starting ...
+                - tooltip "tooltip"
+              - img "Closed captions" [ref=e1035]:
+                - generic [ref=e1036]: CC
+          - generic [ref=e1038]:
+            - link [ref=e1040] [cursor=pointer]:
+              - /url: /watch?v=jK3DHRTKGRs&pp=ygUFI3ZlbzM%3D
+            - generic [ref=e1042] [cursor=pointer]:
+              - generic [ref=e1043]:
+                - generic [ref=e1044]:
+                  - heading "Veo 3.1 Free Unlimited 🔥 | Long AI Videos Without Any Limits (2026) 3 minutes, 41 seconds" [level=3] [ref=e1045]:
+                    - link "Veo 3.1 Free Unlimited 🔥 | Long AI Videos Without Any Limits (2026) 3 minutes, 41 seconds" [ref=e1046]:
+                      - /url: /watch?v=jK3DHRTKGRs&pp=ygUFI3ZlbzM%3D
+                      - text: Veo 3.1 Free Unlimited 🔥 | Long AI Videos Without Any Limits (2026)
+                  - button "Action menu" [ref=e1050]:
+                    - generic [ref=e1053]:
+                      - img
+                - generic [ref=e1056]:
+                  - generic [ref=e1057]: 7.4K views
+                  - generic [ref=e1058]: •12 days ago
+              - generic [ref=e1059]:
+                - link "Go to channel Saeed Bwp" [ref=e1060]:
+                  - /url: /@SaeedBwp
+                - link "Saeed Bwp" [ref=e1065]:
+                  - /url: /@SaeedBwp
+              - generic [ref=e1066]:
+                - text: Veo 3.1 Free Unlimited AI Video Generator is now easier than ever to use — in this video, I’ll show you a complete step-by ...
+                - tooltip "tooltip"
+          - generic [ref=e1068]:
+            - link [ref=e1070] [cursor=pointer]:
+              - /url: /shorts/nwuQ4qIL1hk
+            - generic [ref=e1072] [cursor=pointer]:
+              - generic [ref=e1073]:
+                - generic [ref=e1074]:
+                  - 'heading "Google Veo 3 vs. Sora 2 vs. Kling 2.5 #veo3 #sora2 #klingai #tech #chatgpt #ai #gpt by AI Teaching Network 93,095 views 6 months ago 15 seconds - play Short" [level=3] [ref=e1075]':
+                    - 'link "Google Veo 3 vs. Sora 2 vs. Kling 2.5 #veo3 #sora2 #klingai #tech #chatgpt #ai #gpt by AI Teaching Network 93,095 views 6 months ago 15 seconds - play Short" [ref=e1076]':
+                      - /url: /shorts/nwuQ4qIL1hk
+                      - text: "Google Veo 3 vs. Sora 2 vs. Kling 2.5 #veo3 #sora2 #klingai #tech #chatgpt #ai #gpt"
+                  - button "Action menu" [ref=e1080]:
+                    - generic [ref=e1083]:
+                      - img
+                - generic [ref=e1086]:
+                  - generic [ref=e1087]: 93K views
+                  - generic [ref=e1088]: •6 months ago
+              - generic [ref=e1089]:
+                - link "Go to channel AI Teaching Network" [ref=e1090]:
+                  - /url: /@AITeaching.Network
+                - link "AI Teaching Network" [ref=e1095]:
+                  - /url: /@AITeaching.Network
+              - generic [ref=e1096]:
+                - text: "tech #chatgpt #learnonline #ai #gpt #digitallearningpoint #entertainmenthub #google #mj #openai Building apps using AI without ..."
+                - tooltip "tooltip"
+          - generic [ref=e1098]:
+            - link [ref=e1100] [cursor=pointer]:
+              - /url: /shorts/ryNdnbp0oYg
+            - generic [ref=e1102] [cursor=pointer]:
+              - generic [ref=e1103]:
+                - generic [ref=e1104]:
+                  - heading "Google veo 3 is SCARY 🤯 by Anthony Mai 187,617 views 10 months ago 14 seconds - play Short" [level=3] [ref=e1105]:
+                    - link "Google veo 3 is SCARY 🤯 by Anthony Mai 187,617 views 10 months ago 14 seconds - play Short" [ref=e1106]:
+                      - /url: /shorts/ryNdnbp0oYg
+                      - text: Google veo 3 is SCARY 🤯
+                  - button "Action menu" [ref=e1110]:
+                    - generic [ref=e1113]:
+                      - img
+                - generic [ref=e1116]:
+                  - generic [ref=e1117]: 187K views
+                  - generic [ref=e1118]: •10 months ago
+              - generic [ref=e1119]:
+                - link "Go to channel Anthony Mai" [ref=e1120]:
+                  - /url: /@AnthonyMai
+                - link "Anthony Mai" [ref=e1125]:
+                  - /url: /@AnthonyMai
+          - generic [ref=e1127]:
+            - link [ref=e1129] [cursor=pointer]:
+              - /url: /shorts/4YeKJLzLFjg
+            - generic [ref=e1131] [cursor=pointer]:
+              - generic [ref=e1132]:
+                - generic [ref=e1133]:
+                  - 'heading "Normal Prompt or JSON Prompt? 🤔 #veo3 by Megzai 17,660 views 7 months ago 8 seconds - play Short" [level=3] [ref=e1134]':
+                    - 'link "Normal Prompt or JSON Prompt? 🤔 #veo3 by Megzai 17,660 views 7 months ago 8 seconds - play Short" [ref=e1135]':
+                      - /url: /shorts/4YeKJLzLFjg
+                      - text: "Normal Prompt or JSON Prompt? 🤔 #veo3"
+                  - button "Action menu" [ref=e1139]:
+                    - generic [ref=e1142]:
+                      - img
+                - generic [ref=e1145]:
+                  - generic [ref=e1146]: 17K views
+                  - generic [ref=e1147]: •7 months ago
+              - generic [ref=e1148]:
+                - link "Go to channel Megzai" [ref=e1149]:
+                  - /url: /@ahmedmagdyeditor
+                - link "Megzai" [ref=e1154]:
+                  - /url: /@ahmedmagdyeditor
+    - text: •

@@ -1,0 +1,159 @@
+- generic [ref=e40]:
+  - banner [ref=e42]:
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - button "Guide" [ref=e47] [cursor=pointer]:
+          - generic [ref=e50]:
+            - img
+        - generic [ref=e51]:
+          - link:
+            - /url: /
+            - generic:
+              - generic:
+                - img
+      - search [ref=e53]:
+        - generic [ref=e54]:
+          - combobox [expanded] [ref=e57]
+          - button "Search" [ref=e58] [cursor=pointer]:
+            - generic [ref=e61]:
+              - img
+  - main [ref=e64]:
+    - generic [ref=e65]:
+      - generic [ref=e67]:
+        - generic [ref=e74]:
+          - generic [ref=e75]: Sign in to confirm you’re not a bot
+          - generic [ref=e76]:
+            - text: This helps protect our community.
+            - link "Learn more" [ref=e77] [cursor=pointer]:
+              - /url: https://support.google.com/youtube/answer/3037019#zippy=%2Ccheck-that-youre-signed-into-youtube
+          - link "Sign in" [ref=e81] [cursor=pointer]:
+            - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fwatch%253Fv%253Di5liu1VczjI&hl=en
+            - generic [ref=e82]: Sign in
+        - generic [ref=e86]:
+          - generic [ref=e88]:
+            - 'heading "part 3.🌺🚩har har mahadev 😱😳🙏🌺 AI video #shortvideo #viral #reels #foryou #trending #shorts #aivideo" [level=1] [ref=e90]':
+              - 'generic "part 3.🌺🚩har har mahadev 😱😳🙏🌺 AI video #shortvideo #viral #reels #foryou #trending #shorts#aivideo" [ref=e91]':
+                - text: part 3.🌺🚩har har mahadev 😱😳🙏🌺 AI video
+                - link "#shortvideo" [ref=e92] [cursor=pointer]:
+                  - /url: /hashtag/shortvideo
+                - link "#viral" [ref=e93] [cursor=pointer]:
+                  - /url: /hashtag/viral
+                - link "#reels" [ref=e94] [cursor=pointer]:
+                  - /url: /hashtag/reels
+                - link "#foryou" [ref=e95] [cursor=pointer]:
+                  - /url: /hashtag/foryou
+                - link "#trending" [ref=e96] [cursor=pointer]:
+                  - /url: /hashtag/trending
+                - link "#shorts" [ref=e97] [cursor=pointer]:
+                  - /url: /hashtag/shorts
+                - link "#aivideo" [ref=e98] [cursor=pointer]:
+                  - /url: /hashtag/aivideo
+            - generic [ref=e99]:
+              - generic [ref=e100]:
+                - generic [ref=e101]:
+                  - link [ref=e102] [cursor=pointer]:
+                    - /url: /@RaviMehta-q1p
+                  - generic [ref=e104]:
+                    - generic "Ravi Mehta" [ref=e108]:
+                      - link "Ravi Mehta" [ref=e109] [cursor=pointer]:
+                        - /url: /@RaviMehta-q1p
+                    - generic "44.4 thousand subscribers" [ref=e110]: 44.4K subscribers
+                - button "Subscribe to Ravi Mehta." [ref=e116] [cursor=pointer]:
+                  - generic [ref=e117]: Subscribe
+              - generic [ref=e124]:
+                - generic [ref=e125]:
+                  - generic [ref=e129]:
+                    - button "like this video along with 353,794 other people" [ref=e133] [cursor=pointer]:
+                      - generic [ref=e136]: 353K
+                    - button "Dislike this video" [ref=e143] [cursor=pointer]
+                  - button "Share" [ref=e151] [cursor=pointer]:
+                    - generic [ref=e154]: Share
+                - button "Save to playlist" [ref=e161] [cursor=pointer]:
+                  - generic [ref=e164]: Save
+                - button "More actions" [ref=e169] [cursor=pointer]
+            - generic [ref=e177] [cursor=pointer]:
+              - generic [ref=e178]:
+                - generic [ref=e180]: 16M views 3 weeks ago
+                - tooltip "tooltip"
+              - text: No description has been added to this video.
+              - button "...more" [ref=e183]
+          - text: •
+      - generic [ref=e190]:
+        - generic [ref=e192] [cursor=pointer]:
+          - link [ref=e193]:
+            - /url: /watch?v=-V6tMjTlow0
+            - generic [ref=e200]: 2:00:43
+          - generic [ref=e202]:
+            - generic [ref=e203]:
+              - heading "MR WHITE MR BLACK Full Movie | New (2025) Released Bollywood Hindi Movie | Bollywood Comedy Movie 2 hours" [level=3] [ref=e204]:
+                - link "MR WHITE MR BLACK Full Movie | New (2025) Released Bollywood Hindi Movie | Bollywood Comedy Movie 2 hours" [ref=e205]:
+                  - /url: /watch?v=-V6tMjTlow0
+                  - text: MR WHITE MR BLACK Full Movie | New (2025) Released Bollywood Hindi Movie | Bollywood Comedy Movie
+              - generic [ref=e207]:
+                - group [ref=e208]:
+                  - generic [ref=e209]: Netplex Movies 2026
+                - group [ref=e210]:
+                  - generic [ref=e211]: 7.8M views
+                  - generic [ref=e212]: •
+                  - generic [ref=e213]: 2 months ago
+            - button "More actions" [ref=e216]
+        - generic [ref=e223] [cursor=pointer]:
+          - link [ref=e224]:
+            - /url: /watch?v=PDHD8vS4vbw
+            - generic [ref=e231]: 1:00:00
+          - generic [ref=e233]:
+            - generic [ref=e234]:
+              - heading "Itachi's RED EYE Live Wallpaper Will CHANGE Your Aesthetic FOREVER | 4K 1 hour" [level=3] [ref=e235]:
+                - link "Itachi's RED EYE Live Wallpaper Will CHANGE Your Aesthetic FOREVER | 4K 1 hour" [ref=e236]:
+                  - /url: /watch?v=PDHD8vS4vbw
+                  - text: Itachi's RED EYE Live Wallpaper Will CHANGE Your Aesthetic FOREVER | 4K
+              - generic [ref=e238]:
+                - group [ref=e239]:
+                  - generic [ref=e240]: THE EDIT STUDIOZ
+                - group [ref=e241]:
+                  - generic [ref=e242]: 287K views
+                  - generic [ref=e243]: •
+                  - generic [ref=e244]: 4 months ago
+            - button "More actions" [ref=e247]
+        - generic [ref=e254] [cursor=pointer]:
+          - link [ref=e255]:
+            - /url: /watch?v=yMkj6j9UAaM
+            - generic [ref=e262]: 23:11
+          - generic [ref=e264]:
+            - generic [ref=e265]:
+              - heading "中國真實失業率逼近40%，然後呢？牛馬人生、靈活就業能一直維持嗎？（文昭談古論今1694期） 23 minutes" [level=3] [ref=e266]:
+                - link "中國真實失業率逼近40%，然後呢？牛馬人生、靈活就業能一直維持嗎？（文昭談古論今1694期） 23 minutes" [ref=e267]:
+                  - /url: /watch?v=yMkj6j9UAaM
+                  - text: 中國真實失業率逼近40%，然後呢？牛馬人生、靈活就業能一直維持嗎？（文昭談古論今1694期）
+              - generic [ref=e269]:
+                - group [ref=e270]:
+                  - generic [ref=e271]:
+                    - text: 文昭談古論今 -Wen Zhao Official
+                    - img [ref=e274]
+                - group [ref=e275]:
+                  - generic [ref=e276]: 408K views
+                  - generic [ref=e277]: •
+                  - generic [ref=e278]: 2 days ago
+                - group [ref=e279]:
+                  - generic [ref=e283]: New
+            - button "More actions" [ref=e286]
+        - generic [ref=e293] [cursor=pointer]:
+          - link [ref=e294]:
+            - /url: /watch?v=SYyY4mX7O3s
+            - generic [ref=e301]: 31:07
+          - generic [ref=e303]:
+            - generic [ref=e304]:
+              - heading "牛马没有下一代谁最着急||人口问题将产生雪崩效应 31 minutes" [level=3] [ref=e305]:
+                - link "牛马没有下一代谁最着急||人口问题将产生雪崩效应 31 minutes" [ref=e306]:
+                  - /url: /watch?v=SYyY4mX7O3s
+                  - text: 牛马没有下一代谁最着急||人口问题将产生雪崩效应
+              - generic [ref=e308]:
+                - group [ref=e309]:
+                  - generic [ref=e310]: 躺平叔带你了解真正的中国
+                - group [ref=e311]:
+                  - generic [ref=e312]: 5.8K views
+                  - generic [ref=e313]: •
+                  - generic [ref=e314]: 4 hours ago
+                - group [ref=e315]:
+                  - generic [ref=e319]: New
+            - button "More actions" [ref=e322]

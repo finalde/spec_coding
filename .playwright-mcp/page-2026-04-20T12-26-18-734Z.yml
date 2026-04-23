@@ -1,0 +1,722 @@
+- generic [ref=e2]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Guide" [active] [ref=e9] [cursor=pointer]:
+          - generic [ref=e12]:
+            - img
+        - link "YouTube Home" [ref=e14] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e19]:
+            - img
+        - button "Skip navigation" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Skip navigation
+      - generic [ref=e28]:
+        - search [ref=e29]:
+          - generic [ref=e30]:
+            - generic [ref=e31]:
+              - combobox "Search" [expanded] [ref=e33]: seedance 2.0
+              - button "Clear search query" [ref=e35] [cursor=pointer]:
+                - generic [ref=e38]:
+                  - img
+            - button "Search" [ref=e42] [cursor=pointer]:
+              - generic [ref=e45]:
+                - img
+        - generic [ref=e47]:
+          - button "Search with your voice" [ref=e49] [cursor=pointer]:
+            - generic [ref=e53]:
+              - img
+          - tooltip "tooltip"
+      - generic [ref=e58]:
+        - button "Settings" [ref=e63] [cursor=pointer]:
+          - generic [ref=e66]:
+            - img
+        - link "Sign in" [ref=e69] [cursor=pointer]:
+          - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252Fresults%253Fsearch_query%253Dseedance%252B2.0%2526sp%253DCAMSBAgEEAE%2525253D&hl=en&ec=65620
+          - generic [ref=e73]:
+            - img
+          - generic [ref=e74]: Sign in
+  - navigation [ref=e78]:
+    - generic [ref=e79]:
+      - link "Home" [ref=e81] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e84]:
+          - img
+        - generic [ref=e85]: Home
+      - link "Shorts" [ref=e87] [cursor=pointer]:
+        - /url: /shorts/
+        - generic [ref=e90]:
+          - img
+        - generic [ref=e91]: Shorts
+      - link "Subscriptions" [ref=e93] [cursor=pointer]:
+        - /url: /feed/subscriptions
+        - generic [ref=e96]:
+          - img
+        - generic [ref=e97]: Subscriptions
+      - link "You" [ref=e99] [cursor=pointer]:
+        - /url: /feed/you
+        - generic [ref=e102]:
+          - img
+        - generic [ref=e103]: You
+  - generic [ref=e104]:
+    - main [ref=e105]:
+      - generic [ref=e106]:
+        - generic [ref=e108]:
+          - tablist [ref=e113]:
+            - tab "All" [selected] [ref=e117] [cursor=pointer]:
+              - generic [ref=e119]: All
+            - tab "Shorts" [ref=e126] [cursor=pointer]:
+              - generic [ref=e128]: Shorts
+            - tab "Unwatched" [ref=e135] [cursor=pointer]:
+              - generic [ref=e137]: Unwatched
+            - tab "Watched" [ref=e144] [cursor=pointer]:
+              - generic [ref=e146]: Watched
+            - tab "Videos" [ref=e153] [cursor=pointer]:
+              - generic [ref=e155]: Videos
+            - tab "Recently uploaded" [ref=e162] [cursor=pointer]:
+              - generic [ref=e164]: Recently uploaded
+            - tab "Live" [ref=e171] [cursor=pointer]:
+              - generic [ref=e173]: Live
+          - generic [ref=e178]:
+            - button "Search filters" [ref=e180] [cursor=pointer]:
+              - generic [ref=e181]: Filters
+              - generic [ref=e185]:
+                - img
+            - tooltip "tooltip"
+        - generic [ref=e194]:
+          - generic [ref=e196]:
+            - link [ref=e198] [cursor=pointer]:
+              - /url: /watch?v=MMArbV308gk&pp=ygUMc2VlZGFuY2UgMi4w
+              - img [ref=e200]
+              - img [ref=e203]:
+                - generic [ref=e204]: 6:28
+              - generic:
+                - generic: Now playing
+                - generic:
+                  - img
+            - generic [ref=e205] [cursor=pointer]:
+              - generic [ref=e206]:
+                - generic [ref=e207]:
+                  - heading "Cobain Bikin Konten Affiliate Pakai Dreamina Seedance 2.0! Hasilnya Gila! 6 minutes, 28 seconds" [level=3] [ref=e208]:
+                    - link "Cobain Bikin Konten Affiliate Pakai Dreamina Seedance 2.0! Hasilnya Gila! 6 minutes, 28 seconds" [ref=e209]:
+                      - /url: /watch?v=MMArbV308gk&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Cobain Bikin Konten Affiliate Pakai Dreamina Seedance 2.0! Hasilnya Gila!
+                  - button "Action menu" [ref=e213]:
+                    - generic [ref=e216]:
+                      - img
+                - generic [ref=e219]:
+                  - generic [ref=e220]: 21M views
+                  - generic [ref=e221]: •3 weeks ago
+              - generic [ref=e222]:
+                - link "Go to channel Ezza Ermuda" [ref=e223]:
+                  - /url: /@tipskontenkreator
+                - generic [ref=e225]:
+                  - link "Ezza Ermuda" [ref=e229]:
+                    - /url: /@tipskontenkreator
+                  - img "Verified" [ref=e234]:
+                    - generic [ref=e237]:
+                      - img
+              - generic [ref=e238]:
+                - text: Mau bikin video affiliate cepat tanpa ribet? Sekarang udah ada solusi AI yang bisa bantu kamu dari nol sampai jadi! Di video ini ...
+                - tooltip "tooltip"
+          - generic [ref=e240]:
+            - link [ref=e242] [cursor=pointer]:
+              - /url: /watch?v=U_k6hj2Fk5g&pp=ygUMc2VlZGFuY2UgMi4w
+              - img [ref=e244]
+              - img [ref=e247]:
+                - generic [ref=e248]: 1:59
+              - generic:
+                - generic: Now playing
+                - generic:
+                  - img
+            - generic [ref=e249] [cursor=pointer]:
+              - generic [ref=e250]:
+                - generic [ref=e251]:
+                  - heading "Finally here! Dreamina Seedance 2.0 and Seedream 5.0 Lite are Now Available on Dreamina AI 1 minute, 59 seconds" [level=3] [ref=e252]:
+                    - link "Finally here! Dreamina Seedance 2.0 and Seedream 5.0 Lite are Now Available on Dreamina AI 1 minute, 59 seconds" [ref=e253]:
+                      - /url: /watch?v=U_k6hj2Fk5g&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Finally here! Dreamina Seedance 2.0 and Seedream 5.0 Lite are Now Available on Dreamina AI
+                  - button "Action menu" [ref=e257]:
+                    - generic [ref=e260]:
+                      - img
+                - generic [ref=e263]:
+                  - generic [ref=e264]: 1.8M views
+                  - generic [ref=e265]: •3 weeks ago
+              - generic [ref=e266]:
+                - link "Go to channel Dreamina" [ref=e267]:
+                  - /url: /@Dreaminaofficial
+                - link "Dreamina" [ref=e273]:
+                  - /url: /@Dreaminaofficial
+              - generic [ref=e274]:
+                - text: We're excited to introduce our latest models, which are built for deeper control and broader creative possibilities. What Makes ...
+                - tooltip "tooltip"
+          - generic [ref=e276]:
+            - link [ref=e278] [cursor=pointer]:
+              - /url: /watch?v=77FAnT935IE&pp=ygUMc2VlZGFuY2UgMi4w
+              - img [ref=e280]
+              - img [ref=e283]:
+                - generic [ref=e284]: 0:52
+              - generic:
+                - generic: Now playing
+                - generic:
+                  - img
+            - generic [ref=e285] [cursor=pointer]:
+              - generic [ref=e286]:
+                - generic [ref=e287]:
+                  - heading "Seedance 2.0 is on Artlist 52 seconds" [level=3] [ref=e288]:
+                    - link "Seedance 2.0 is on Artlist 52 seconds" [ref=e289]:
+                      - /url: /watch?v=77FAnT935IE&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Seedance 2.0 is on Artlist
+                  - button "Action menu" [ref=e293]:
+                    - generic [ref=e296]:
+                      - img
+                - generic [ref=e299]:
+                  - generic [ref=e300]: 1.9M views
+                  - generic [ref=e301]: •9 days ago
+              - generic [ref=e302]:
+                - link "Go to channel Artlist" [ref=e303]:
+                  - /url: /@artlist_io
+                - link "Artlist" [ref=e309]:
+                  - /url: /@artlist_io
+              - generic [ref=e310]:
+                - generic [ref=e311]: "Seedance 2.0: https://artlist.io/ai/models/seedance-2-0 ▻ AI Video Generator: https://artlist.io/ai/video-generator ▻ Subscribe to ..."
+                - tooltip "tooltip"
+          - generic [ref=e313]:
+            - link [ref=e315] [cursor=pointer]:
+              - /url: /watch?v=z1M1SWLuW_o&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e317] [cursor=pointer]:
+              - generic [ref=e318]:
+                - generic [ref=e319]:
+                  - 'heading "Dragon Ball: Part III — Androids Awakening | Majin Buu (Seedance 2.0) 8 minutes, 19 seconds" [level=3] [ref=e320]':
+                    - 'link "Dragon Ball: Part III — Androids Awakening | Majin Buu (Seedance 2.0) 8 minutes, 19 seconds" [ref=e321]':
+                      - /url: /watch?v=z1M1SWLuW_o&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: "Dragon Ball: Part III — Androids Awakening | Majin Buu (Seedance 2.0)"
+                  - button "Action menu" [ref=e325]:
+                    - generic [ref=e328]:
+                      - img
+                - generic [ref=e331]:
+                  - generic [ref=e332]: 649K views
+                  - generic [ref=e333]: •2 weeks ago
+              - generic [ref=e334]:
+                - link "Go to channel Warvox Studio" [ref=e335]:
+                  - /url: /@WarvoxStudio
+                - link "Warvox Studio" [ref=e341]:
+                  - /url: /@WarvoxStudio
+              - generic [ref=e342]:
+                - text: After a humiliating defeat and the loss of one of their own in the previous part, Android 20 is forced to activate the most dangerous ...
+                - tooltip "tooltip"
+              - img "4K" [ref=e347]:
+                - generic [ref=e348]: 4K
+              - generic [ref=e351]:
+                - generic [ref=e352]:
+                  - generic [ref=e353]:
+                    - generic [ref=e356]:
+                      - img
+                    - generic [ref=e357]: Summary
+                  - button "Warvox Studio presents a cinematic take on the Dragon Ball saga, where an old martial arts master faces a formidable foe. Tensions escalate when a mysterious entity is unleashed, leading to a high-stakes battle for survival against powerful androids." [ref=e358]
+                  - text: ·
+                - button "More" [ref=e363]:
+                  - generic [ref=e367]:
+                    - img
+          - generic [ref=e372]:
+            - link [ref=e374] [cursor=pointer]:
+              - /url: /watch?v=5poSMcKjCL0&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e376] [cursor=pointer]:
+              - generic [ref=e377]:
+                - generic [ref=e378]:
+                  - heading "Dreamina Seedance 2.0 Finally Released - Best AI Video Model of 2026 7 minutes, 23 seconds" [level=3] [ref=e379]:
+                    - link "Dreamina Seedance 2.0 Finally Released - Best AI Video Model of 2026 7 minutes, 23 seconds" [ref=e380]:
+                      - /url: /watch?v=5poSMcKjCL0&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Dreamina Seedance 2.0 Finally Released - Best AI Video Model of 2026
+                  - button "Action menu" [ref=e384]:
+                    - generic [ref=e387]:
+                      - img
+                - generic [ref=e390]:
+                  - generic [ref=e391]: 1.5M views
+                  - generic [ref=e392]: •3 weeks ago
+              - generic [ref=e393]:
+                - link "Go to channel Bang Tutorial" [ref=e394]:
+                  - /url: /@BangTutorial
+                - generic [ref=e395]:
+                  - link "Bang Tutorial" [ref=e399]:
+                    - /url: /@BangTutorial
+                  - img "Verified" [ref=e404]:
+                    - generic [ref=e407]:
+                      - img
+              - generic [ref=e408]:
+                - text: "Access Dreamina Seedance 2.0 here: https://bit.ly/bangtutorial ---------------------------- The world of AI video is growing ..."
+                - tooltip "tooltip"
+              - generic [ref=e411]:
+                - generic [ref=e412]:
+                  - generic [ref=e416]: 9 chapters
+                  - button "Opening | Kelebihan Dreamina Seedance 2.0 | Membuat video super hero | Hasil video super hero | Membuat video UGC / Affiliate | Hasil video UGC | Meniru video lain | Hasil remix video | Kesimpulan" [ref=e417]
+                - button "More" [ref=e422]:
+                  - generic [ref=e426]:
+                    - img
+          - generic [ref=e431]:
+            - link [ref=e433] [cursor=pointer]:
+              - /url: /watch?v=MIudp4xv7Io&pp=ygUMc2VlZGFuY2UgMi4w0gcJCdMKAYcqIYzv
+            - generic [ref=e435] [cursor=pointer]:
+              - generic [ref=e436]:
+                - generic [ref=e437]:
+                  - heading "Why Chinese AI Is Suddenly So Good (ft. DeepSeek, SeeDance 2.0) | AB Explained 42 minutes" [level=3] [ref=e438]:
+                    - link "Why Chinese AI Is Suddenly So Good (ft. DeepSeek, SeeDance 2.0) | AB Explained 42 minutes" [ref=e439]:
+                      - /url: /watch?v=MIudp4xv7Io&pp=ygUMc2VlZGFuY2UgMi4w0gcJCdMKAYcqIYzv
+                      - text: Why Chinese AI Is Suddenly So Good (ft. DeepSeek, SeeDance 2.0) | AB Explained
+                  - button "Action menu" [ref=e443]:
+                    - generic [ref=e446]:
+                      - img
+                - generic [ref=e449]:
+                  - generic [ref=e450]: 549K views
+                  - generic [ref=e451]: •6 days ago
+              - generic [ref=e452]:
+                - link "Go to channel Asian Boss" [ref=e453]:
+                  - /url: /@AsianBoss
+                - generic [ref=e454]:
+                  - link "Asian Boss" [ref=e458]:
+                    - /url: /@AsianBoss
+                  - img "Verified" [ref=e463]:
+                    - generic [ref=e466]:
+                      - img
+              - generic [ref=e467]:
+                - text: "Take your personal data back with Incogni! Use code ASIANBOSS at the link below and get 60% off an annual plan: ..."
+                - tooltip "tooltip"
+              - generic [ref=e469]:
+                - img "New" [ref=e472]:
+                  - generic [ref=e473]: New
+                - img "4K" [ref=e476]:
+                  - generic [ref=e477]: 4K
+              - generic [ref=e480]:
+                - generic [ref=e481]:
+                  - generic [ref=e485]: 4 chapters
+                  - 'button "Intro | Chapter 1: The Hardware Battle For AI | Chapter 2: Deepseek’s Playbook | Chapter 3: China’s AI Flywheel" [ref=e486]'
+                - button "More" [ref=e491]:
+                  - generic [ref=e495]:
+                    - img
+          - generic [ref=e500]:
+            - link [ref=e502] [cursor=pointer]:
+              - /url: /watch?v=036jyFZWppw&pp=ygUMc2VlZGFuY2UgMi4w0gcJCdMKAYcqIYzv
+            - generic [ref=e504] [cursor=pointer]:
+              - generic [ref=e505]:
+                - generic [ref=e506]:
+                  - 'heading "Seedance 2.0: Arena Zero Breakdown 13 minutes, 26 seconds" [level=3] [ref=e507]':
+                    - 'link "Seedance 2.0: Arena Zero Breakdown 13 minutes, 26 seconds" [ref=e508]':
+                      - /url: /watch?v=036jyFZWppw&pp=ygUMc2VlZGFuY2UgMi4w0gcJCdMKAYcqIYzv
+                      - text: "Seedance 2.0: Arena Zero Breakdown"
+                  - button "Action menu" [ref=e512]:
+                    - generic [ref=e515]:
+                      - img
+                - generic [ref=e518]:
+                  - generic [ref=e519]: 534K views
+                  - generic [ref=e520]: •2 weeks ago
+              - generic [ref=e521]:
+                - link "Go to channel Higgsfield AI" [ref=e522]:
+                  - /url: /@HiggsfieldAI
+                - generic [ref=e523]:
+                  - link "Higgsfield AI" [ref=e527]:
+                    - /url: /@HiggsfieldAI
+                  - img "Verified" [ref=e532]:
+                    - generic [ref=e535]:
+                      - img
+              - generic [ref=e536]:
+                - generic [ref=e537]: We made an AI original series with 4 people and ~5000 generations on Seedance 2.0. This is the full behind-the-scenes workflow ...
+                - tooltip "tooltip"
+              - img "4K" [ref=e542]:
+                - generic [ref=e543]: 4K
+              - generic [ref=e546]:
+                - generic [ref=e547]:
+                  - generic [ref=e551]: 8 chapters
+                  - button "Arena Zero | Intro | Where the Idea Came From | Character Making — Hoko, Ziki & the Monster | Building the Locations | The Anime Scene — 3 Prompts | The Finale — Destroying Planet Gnid | Recap" [ref=e552]
+                - button "More" [ref=e557]:
+                  - generic [ref=e561]:
+                    - img
+          - generic [ref=e566]:
+            - link [ref=e568] [cursor=pointer]:
+              - /url: /watch?v=mnySZiRX6k8&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e570] [cursor=pointer]:
+              - generic [ref=e571]:
+                - generic [ref=e572]:
+                  - heading "Seedance 2.0 is now on Artlist 34 seconds" [level=3] [ref=e573]:
+                    - link "Seedance 2.0 is now on Artlist 34 seconds" [ref=e574]:
+                      - /url: /watch?v=mnySZiRX6k8&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Seedance 2.0 is now on Artlist
+                  - button "Action menu" [ref=e578]:
+                    - generic [ref=e581]:
+                      - img
+                - generic [ref=e584]:
+                  - generic [ref=e585]: 1.1M views
+                  - generic [ref=e586]: •9 days ago
+              - generic [ref=e587]:
+                - link "Go to channel Artlist" [ref=e588]:
+                  - /url: /@artlist_io
+                - link "Artlist" [ref=e593]:
+                  - /url: /@artlist_io
+              - generic [ref=e594]:
+                - generic [ref=e595]: "Seedance 2.0: https://artlist.io/ai/models/seedance-2-0 ▻ AI Video Generator: https://artlist.io/ai/video-generator ▻ Subscribe to ..."
+                - tooltip "tooltip"
+          - generic [ref=e597]:
+            - link [ref=e599] [cursor=pointer]:
+              - /url: /watch?v=MVlaJNaDXJs&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e601] [cursor=pointer]:
+              - generic [ref=e602]:
+                - generic [ref=e603]:
+                  - heading "Ep.1 CapCut Video Studio Tutorial · 101(with Dreamina Seedance 2.0) 4 minutes, 50 seconds" [level=3] [ref=e604]:
+                    - link "Ep.1 CapCut Video Studio Tutorial · 101(with Dreamina Seedance 2.0) 4 minutes, 50 seconds" [ref=e605]:
+                      - /url: /watch?v=MVlaJNaDXJs&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Ep.1 CapCut Video Studio Tutorial · 101(with Dreamina Seedance 2.0)
+                  - button "Action menu" [ref=e609]:
+                    - generic [ref=e612]:
+                      - img
+                - generic [ref=e615]:
+                  - generic [ref=e616]: 346K views
+                  - generic [ref=e617]: •2 weeks ago
+              - generic [ref=e618]:
+                - link "Go to channel CapCut" [ref=e619]:
+                  - /url: /@CapCutofficial
+                - generic [ref=e620]:
+                  - link "CapCut" [ref=e624]:
+                    - /url: /@CapCutofficial
+                  - img "Verified" [ref=e629]:
+                    - generic [ref=e632]:
+                      - img
+              - generic [ref=e633]:
+                - generic [ref=e634]: CapCut Video Studio is our latest web-based, timeline-free AI production workspace, with Dreamina Seedance 2.0 supported.
+                - tooltip "tooltip"
+              - generic [ref=e637]:
+                - generic [ref=e638]:
+                  - generic [ref=e642]: 5 chapters
+                  - button "Intro | AI Basics | Video Brief | Storyboard | Export" [ref=e643]
+                - button "More" [ref=e648]:
+                  - generic [ref=e652]:
+                    - img
+          - generic [ref=e657]:
+            - link [ref=e659] [cursor=pointer]:
+              - /url: /watch?v=Y4VMpEdK29c&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e661] [cursor=pointer]:
+              - generic [ref=e662]:
+                - generic [ref=e663]:
+                  - heading "One Prompt, Viral Results. Meet Dreamina Seedance 2.0 and Seedream 5.0 Lite 4 minutes, 40 seconds" [level=3] [ref=e664]:
+                    - link "One Prompt, Viral Results. Meet Dreamina Seedance 2.0 and Seedream 5.0 Lite 4 minutes, 40 seconds" [ref=e665]:
+                      - /url: /watch?v=Y4VMpEdK29c&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: One Prompt, Viral Results. Meet Dreamina Seedance 2.0 and Seedream 5.0 Lite
+                  - button "Action menu" [ref=e669]:
+                    - generic [ref=e672]:
+                      - img
+                - generic [ref=e675]:
+                  - generic [ref=e676]: 1.2M views
+                  - generic [ref=e677]: •2 weeks ago
+              - generic [ref=e678]:
+                - link "Go to channel AI ARENA" [ref=e679]:
+                  - /url: /@AI-ARENA-YT
+                - link "AI ARENA" [ref=e684]:
+                  - /url: /@AI-ARENA-YT
+              - generic [ref=e685]:
+                - text: Get Dreamina here https://bit.ly/AI-ARENA1 Video creation used to be slow, expensive, and messy. Not anymore. Dreamina by ...
+                - tooltip "tooltip"
+              - img "4K" [ref=e690]:
+                - generic [ref=e691]: 4K
+          - generic [ref=e693]:
+            - link [ref=e695] [cursor=pointer]:
+              - /url: /watch?v=o3vEhQMn3E8&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e697] [cursor=pointer]:
+              - generic [ref=e698]:
+                - generic [ref=e699]:
+                  - heading "Dreamina Seedance 2.0 is THIS a GAME CHANGER in AI VIDEO? 5 minutes" [level=3] [ref=e700]:
+                    - link "Dreamina Seedance 2.0 is THIS a GAME CHANGER in AI VIDEO? 5 minutes" [ref=e701]:
+                      - /url: /watch?v=o3vEhQMn3E8&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Dreamina Seedance 2.0 is THIS a GAME CHANGER in AI VIDEO?
+                  - button "Action menu" [ref=e705]:
+                    - generic [ref=e708]:
+                      - img
+                - generic [ref=e711]:
+                  - generic [ref=e712]: 931K views
+                  - generic [ref=e713]: •2 weeks ago
+              - generic [ref=e714]:
+                - link "Go to channel Web3World" [ref=e715]:
+                  - /url: /@Web-3-World
+                - link "Web3World" [ref=e720]:
+                  - /url: /@Web-3-World
+              - generic [ref=e721]:
+                - generic [ref=e722]: Get Dreamina Seedance 2.0 https://bit.ly/web3world1 Video creation used to be slow, expensive, and messy. Not anymore.
+                - tooltip "tooltip"
+              - img "4K" [ref=e727]:
+                - generic [ref=e728]: 4K
+              - generic [ref=e731]:
+                - generic [ref=e732]:
+                  - generic [ref=e733]:
+                    - generic [ref=e736]:
+                      - img
+                    - generic [ref=e737]: Summary
+                  - button "Web3World reviews the capabilities of the Ceadance 2.0 AI video model from Bytedance within the Dreamina platform. It features multimodal inputs like text, images, and video to guide camera movement, VFX, and character consistency for creating ads or narrative content." [ref=e738]
+                  - text: ·
+                - button "More" [ref=e743]:
+                  - generic [ref=e747]:
+                    - img
+          - generic [ref=e752]:
+            - link [ref=e754] [cursor=pointer]:
+              - /url: /watch?v=OxthpfoDK_c&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e756] [cursor=pointer]:
+              - generic [ref=e757]:
+                - generic [ref=e758]:
+                  - heading "Seedance 2.0 LIVE on Topview AI 1 minute, 3 seconds" [level=3] [ref=e759]:
+                    - link "Seedance 2.0 LIVE on Topview AI 1 minute, 3 seconds" [ref=e760]:
+                      - /url: /watch?v=OxthpfoDK_c&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Seedance 2.0 LIVE on Topview AI
+                  - button "Action menu" [ref=e764]:
+                    - generic [ref=e767]:
+                      - img
+                - generic [ref=e770]:
+                  - generic [ref=e771]: 1.6M views
+                  - generic [ref=e772]: •2 weeks ago
+              - generic [ref=e773]:
+                - link "Go to channel TopviewAI" [ref=e774]:
+                  - /url: /@TopviewAIOfficial
+                - link "TopviewAI" [ref=e779]:
+                  - /url: /@TopviewAIOfficial
+              - generic [ref=e780]:
+                - generic [ref=e781]: Seedance 2.0 is now LIVE on Topview AI—and it's redefining what AI video creation can do. From smoother motion to more ...
+                - tooltip "tooltip"
+          - generic [ref=e783]:
+            - link [ref=e785] [cursor=pointer]:
+              - /url: /watch?v=tYJQusOS2jI&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e787] [cursor=pointer]:
+              - generic [ref=e788]:
+                - generic [ref=e789]:
+                  - heading "Seedance 2.0 Officially Public! Full Prompting Tutorial (Claude + Higgsfield) 18 minutes" [level=3] [ref=e790]:
+                    - link "Seedance 2.0 Officially Public! Full Prompting Tutorial (Claude + Higgsfield) 18 minutes" [ref=e791]:
+                      - /url: /watch?v=tYJQusOS2jI&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Seedance 2.0 Officially Public! Full Prompting Tutorial (Claude + Higgsfield)
+                  - button "Action menu" [ref=e795]:
+                    - generic [ref=e798]:
+                      - img
+                - generic [ref=e801]:
+                  - generic [ref=e802]: 210K views
+                  - generic [ref=e803]: •10 days ago
+              - generic [ref=e804]:
+                - link "Go to channel Rourke Heath" [ref=e805]:
+                  - /url: /@RourkeHeath
+                - link "Rourke Heath" [ref=e810]:
+                  - /url: /@RourkeHeath
+              - generic [ref=e811]:
+                - generic [ref=e812]: "Seedance 2.0 available up to 70% off on Higgsfield: https://goto.higgsfield.ai/e1xkKz Claude Video Prompt Skill: ..."
+                - tooltip "tooltip"
+              - generic [ref=e815]:
+                - generic [ref=e816]:
+                  - generic [ref=e820]: 6 chapters
+                  - button "Introduction | Prompting | Pairing Seedance with real footage | Advertising | Storytelling | Outro" [ref=e821]
+                - button "More" [ref=e826]:
+                  - generic [ref=e830]:
+                    - img
+          - generic [ref=e835]:
+            - link [ref=e837] [cursor=pointer]:
+              - /url: /watch?v=lTdzqmcy2lo&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e839] [cursor=pointer]:
+              - generic [ref=e840]:
+                - generic [ref=e841]:
+                  - heading "This AI Makes Studio-Level Videos From One Prompt (Dreamina Seedance 2.0) 5 minutes, 1 second" [level=3] [ref=e842]:
+                    - link "This AI Makes Studio-Level Videos From One Prompt (Dreamina Seedance 2.0) 5 minutes, 1 second" [ref=e843]:
+                      - /url: /watch?v=lTdzqmcy2lo&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: This AI Makes Studio-Level Videos From One Prompt (Dreamina Seedance 2.0)
+                  - button "Action menu" [ref=e847]:
+                    - generic [ref=e850]:
+                      - img
+                - generic [ref=e853]:
+                  - generic [ref=e854]: 428K views
+                  - generic [ref=e855]: •2 weeks ago
+              - generic [ref=e856]:
+                - link "Go to channel AI BROS" [ref=e857]:
+                  - /url: /@CryptoBrosVortex
+                - link "AI BROS" [ref=e862]:
+                  - /url: /@CryptoBrosVortex
+              - generic [ref=e863]:
+                - text: Get Dreamina here http://bit.ly/aibroscrytobrosvortex Video creation used to be slow, expensive, and messy. Not anymore.
+                - tooltip "tooltip"
+              - img "4K" [ref=e868]:
+                - generic [ref=e869]: 4K
+          - generic [ref=e871]:
+            - link [ref=e873] [cursor=pointer]:
+              - /url: /watch?v=LQ-vSa9_H98&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e875] [cursor=pointer]:
+              - generic [ref=e876]:
+                - generic [ref=e877]:
+                  - heading "Zephyr - Episode 1 | Higgsfield Original Series (2026) 11 minutes, 1 second" [level=3] [ref=e878]:
+                    - link "Zephyr - Episode 1 | Higgsfield Original Series (2026) 11 minutes, 1 second" [ref=e879]:
+                      - /url: /watch?v=LQ-vSa9_H98&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Zephyr - Episode 1 | Higgsfield Original Series (2026)
+                  - button "Action menu" [ref=e883]:
+                    - generic [ref=e886]:
+                      - img
+                - generic [ref=e889]:
+                  - generic [ref=e890]: 151K views
+                  - generic [ref=e891]: •9 days ago
+              - generic [ref=e892]:
+                - link "Go to channel Higgsfield AI" [ref=e893]:
+                  - /url: /@HiggsfieldAI
+                - generic [ref=e894]:
+                  - link "Higgsfield AI" [ref=e898]:
+                    - /url: /@HiggsfieldAI
+                  - img "Verified" [ref=e903]:
+                    - generic [ref=e906]:
+                      - img
+              - generic [ref=e907]:
+                - generic [ref=e908]: Watch the full Episode 1 of Zephyr — the AI original series made with zero gatekeeping, zero compromise, and Seedance 2.0 on ...
+                - tooltip "tooltip"
+          - generic [ref=e910]:
+            - link [ref=e912] [cursor=pointer]:
+              - /url: /watch?v=iwUcmWX9rRA&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e914] [cursor=pointer]:
+              - generic [ref=e915]:
+                - generic [ref=e916]:
+                  - heading "Seedance 2.0 is NOW PUBLIC! And it's INSANE! (Not Clickbait) 8 minutes, 13 seconds" [level=3] [ref=e917]:
+                    - link "Seedance 2.0 is NOW PUBLIC! And it's INSANE! (Not Clickbait) 8 minutes, 13 seconds" [ref=e918]:
+                      - /url: /watch?v=iwUcmWX9rRA&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Seedance 2.0 is NOW PUBLIC! And it's INSANE! (Not Clickbait)
+                  - button "Action menu" [ref=e922]:
+                    - generic [ref=e925]:
+                      - img
+                - generic [ref=e928]:
+                  - generic [ref=e929]: 234K views
+                  - generic [ref=e930]: •3 weeks ago
+              - generic [ref=e931]:
+                - link "Go to channel Mikkel Lassalle" [ref=e932]:
+                  - /url: /@MikkelLassalle
+                - generic [ref=e933]:
+                  - link "Mikkel Lassalle" [ref=e937]:
+                    - /url: /@MikkelLassalle
+                  - img "Verified" [ref=e942]:
+                    - generic [ref=e945]:
+                      - img
+              - generic [ref=e946]:
+                - text: Try Topview AI Today! https://www.topview.ai/?via=mikkel Create your own Hollywood Blockbuster Movie! Business Annual plans ...
+                - tooltip "tooltip"
+              - img "4K" [ref=e951]:
+                - generic [ref=e952]: 4K
+              - generic [ref=e955]:
+                - generic [ref=e956]:
+                  - generic [ref=e957]:
+                    - generic [ref=e960]:
+                      - img
+                    - generic [ref=e961]: Summary
+                  - button "Mikkel Lassalle demonstrates how to create full cinematic sequences using Top View AI's multi-scene workflow and the latest video generation models. The platform combines multiple AI tools, allowing creators to generate complex scenes from simple text or image prompts." [ref=e962]
+                  - text: ·
+                - button "More" [ref=e967]:
+                  - generic [ref=e971]:
+                    - img
+          - generic [ref=e976]:
+            - link [ref=e978] [cursor=pointer]:
+              - /url: /watch?v=xIzX-XwQGnE&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e980] [cursor=pointer]:
+              - generic [ref=e981]:
+                - generic [ref=e982]:
+                  - 'heading "Seedance 2.0 is Here: No Face Limits, No Waitlist! 32 seconds" [level=3] [ref=e983]':
+                    - 'link "Seedance 2.0 is Here: No Face Limits, No Waitlist! 32 seconds" [ref=e984]':
+                      - /url: /watch?v=xIzX-XwQGnE&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: "Seedance 2.0 is Here: No Face Limits, No Waitlist!"
+                  - button "Action menu" [ref=e988]:
+                    - generic [ref=e991]:
+                      - img
+                - generic [ref=e994]:
+                  - generic [ref=e995]: 459K views
+                  - generic [ref=e996]: •11 days ago
+              - generic [ref=e997]:
+                - link "Go to channel Atlas Cloud" [ref=e998]:
+                  - /url: /@AtlasCloudAI
+                - link "Atlas Cloud" [ref=e1003]:
+                  - /url: /@AtlasCloudAI
+              - generic [ref=e1004]:
+                - generic [ref=e1005]: "Seedance 2.0 API is now live on Atlas Cloud! Try now: ..."
+                - tooltip "tooltip"
+          - generic [ref=e1007]:
+            - link [ref=e1009] [cursor=pointer]:
+              - /url: /watch?v=l89woJ0jidw&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e1011] [cursor=pointer]:
+              - generic [ref=e1012]:
+                - generic [ref=e1013]:
+                  - heading "Introducing Dreamina Seedance 2.0 1 minute, 15 seconds" [level=3] [ref=e1014]:
+                    - link "Introducing Dreamina Seedance 2.0 1 minute, 15 seconds" [ref=e1015]:
+                      - /url: /watch?v=l89woJ0jidw&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Introducing Dreamina Seedance 2.0
+                  - button "Action menu" [ref=e1019]:
+                    - generic [ref=e1022]:
+                      - img
+                - generic [ref=e1025]:
+                  - generic [ref=e1026]: 1M views
+                  - generic [ref=e1027]: •6 days ago
+              - generic [ref=e1028]:
+                - link "Go to channel BytePlus" [ref=e1029]:
+                  - /url: /@byteplusglobal
+                - link "BytePlus" [ref=e1034]:
+                  - /url: /@byteplusglobal
+              - generic [ref=e1035]:
+                - generic [ref=e1036]: Dreamina Seedance 2.0 is now officially live via BytePlus ModelArk API. Create videos from text, images, audio, and clips — with ...
+                - tooltip "tooltip"
+              - img "New" [ref=e1041]:
+                - generic [ref=e1042]: New
+          - generic [ref=e1044]:
+            - link [ref=e1046] [cursor=pointer]:
+              - /url: /watch?v=F2OpUJsf68g&pp=ygUMc2VlZGFuY2UgMi4w
+            - generic [ref=e1048] [cursor=pointer]:
+              - generic [ref=e1049]:
+                - generic [ref=e1050]:
+                  - heading "Claude Code + Seedance 2.0 = Insane Websites 8 minutes, 49 seconds" [level=3] [ref=e1051]:
+                    - link "Claude Code + Seedance 2.0 = Insane Websites 8 minutes, 49 seconds" [ref=e1052]:
+                      - /url: /watch?v=F2OpUJsf68g&pp=ygUMc2VlZGFuY2UgMi4w
+                      - text: Claude Code + Seedance 2.0 = Insane Websites
+                  - button "Action menu" [ref=e1056]:
+                    - generic [ref=e1059]:
+                      - img
+                - generic [ref=e1062]:
+                  - generic [ref=e1063]: 114K views
+                  - generic [ref=e1064]: •4 days ago
+              - generic [ref=e1065]:
+                - link "Go to channel Kyle Skelly" [ref=e1066]:
+                  - /url: /@kyleslyf
+                - link "Kyle Skelly" [ref=e1071]:
+                  - /url: /@kyleslyf
+              - generic [ref=e1072]:
+                - generic [ref=e1073]: Try Seedance 2.0 now - https://higgsfield.ai/s/seedance-2-0-kyleslyf-ibZwaG Learn how to create stunning, professional-looking ...
+                - tooltip "tooltip"
+              - generic [ref=e1075]:
+                - img "New" [ref=e1078]:
+                  - generic [ref=e1079]: New
+                - img "4K" [ref=e1082]:
+                  - generic [ref=e1083]: 4K
+              - generic [ref=e1086]:
+                - generic [ref=e1087]:
+                  - generic [ref=e1088]:
+                    - generic [ref=e1091]:
+                      - img
+                    - generic [ref=e1092]: Summary
+                  - button "Kyle Skelly demonstrates how to build a fully responsive hero section for a website using Claude Code and Figma screenshots. The process incorporates custom SVG backgrounds, animated elements, and high-quality character videos generated through the Seedance 2.0 model, providing a streamlined workflow for transforming static designs into polished, interactive web experiences." [ref=e1093]
+                  - text: ·
+                - button "More" [ref=e1098]:
+                  - generic [ref=e1102]:
+                    - img
+          - generic [ref=e1107]:
+            - link [ref=e1109] [cursor=pointer]:
+              - /url: /watch?v=qPKvGGAvi6Y&pp=ygUMc2VlZGFuY2UgMi4w0gcJCdMKAYcqIYzv
+            - generic [ref=e1111] [cursor=pointer]:
+              - generic [ref=e1112]:
+                - generic [ref=e1113]:
+                  - heading "Imagination | Made with CapCut Video Studio · Dreamina Seedance 2.0 2 minutes, 3 seconds" [level=3] [ref=e1114]:
+                    - link "Imagination | Made with CapCut Video Studio · Dreamina Seedance 2.0 2 minutes, 3 seconds" [ref=e1115]:
+                      - /url: /watch?v=qPKvGGAvi6Y&pp=ygUMc2VlZGFuY2UgMi4w0gcJCdMKAYcqIYzv
+                      - text: Imagination | Made with CapCut Video Studio · Dreamina Seedance 2.0
+                  - button "Action menu" [ref=e1119]:
+                    - generic [ref=e1122]:
+                      - img
+                - generic [ref=e1125]:
+                  - generic [ref=e1126]: 109K views
+                  - generic [ref=e1127]: •2 weeks ago
+              - generic [ref=e1128]:
+                - link "Collaboration channels" [ref=e1130]
+                - generic [ref=e1150]:
+                  - text: CapCut
+                  - img [ref=e1153]:
+                    - generic [ref=e1155]:
+                      - img
+                  - text: and Visionaist
+              - generic [ref=e1156]:
+                - text: Have you ever imagined a world hidden just beyond your bedroom walls? We invited Visionaist to bring this magical adventure to ...
+                - tooltip "tooltip"
+    - text: •

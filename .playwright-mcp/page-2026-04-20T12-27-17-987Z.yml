@@ -1,0 +1,458 @@
+- generic [ref=e2]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Guide" [ref=e9] [cursor=pointer]:
+          - generic [ref=e12]:
+            - img
+        - link "YouTube Home" [ref=e14] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e19]:
+            - img
+        - button "Skip navigation" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Skip navigation
+      - generic [ref=e28]:
+        - search [ref=e29]:
+          - generic [ref=e30]:
+            - combobox "Search" [expanded] [ref=e33]
+            - button "Search" [ref=e34] [cursor=pointer]:
+              - generic [ref=e37]:
+                - img
+        - generic [ref=e39]:
+          - button "Search with your voice" [ref=e41] [cursor=pointer]:
+            - generic [ref=e45]:
+              - img
+          - tooltip "tooltip"
+      - generic [ref=e50]:
+        - button "Settings" [ref=e55] [cursor=pointer]:
+          - generic [ref=e58]:
+            - img
+        - link "Sign in" [ref=e61] [cursor=pointer]:
+          - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252F%2540HookedConspiracy%252Fshorts&hl=en&ec=65620
+          - generic [ref=e65]:
+            - img
+          - generic [ref=e66]: Sign in
+  - navigation [ref=e70]:
+    - generic [ref=e71]:
+      - link "Home" [ref=e73] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e76]:
+          - img
+        - generic [ref=e77]: Home
+      - link "Shorts" [ref=e79] [cursor=pointer]:
+        - /url: /shorts/
+        - generic [ref=e82]:
+          - img
+        - generic [ref=e83]: Shorts
+      - link "Subscriptions" [ref=e85] [cursor=pointer]:
+        - /url: /feed/subscriptions
+        - generic [ref=e88]:
+          - img
+        - generic [ref=e89]: Subscriptions
+      - link "You" [ref=e91] [cursor=pointer]:
+        - /url: /feed/you
+        - generic [ref=e94]:
+          - img
+        - generic [ref=e95]: You
+  - generic [ref=e96]:
+    - main [ref=e97]:
+      - generic [ref=e104]:
+        - generic [ref=e120]:
+          - heading "Hooked Conspiracies" [level=1] [ref=e122]
+          - generic [ref=e123]:
+            - group [ref=e124]:
+              - generic [ref=e125]: "@HookedConspiracy"
+            - generic [ref=e126]: •
+            - group [ref=e127]:
+              - generic "39.7 thousand subscribers" [ref=e128]: 39.7K subscribers
+              - generic [ref=e129]: •
+              - generic [ref=e130]: 50 videos
+          - generic [ref=e132] [cursor=pointer]:
+            - generic [ref=e133]: Welcome to HookedConspiracy.
+            - button "Description. Welcome to HookedConspiracy....tap for more." [ref=e134]:
+              - generic [ref=e135]: ...more
+          - generic [ref=e136]:
+            - link "patreon.com/c/HookedConspiracy" [ref=e139] [cursor=pointer]:
+              - /url: https://www.youtube.com/redirect?event=channel_header&redir_token=QUFFLUhqbGMxQmlJSmVoNkhJcTdQcFRsWVE0bGJRemlIUXxBQ3Jtc0tueVRXWEtRMnFGNDNoTVQ2SkpBUmZVc0YtNV9tTlloaUxpZkx0TnNfX1M1dC1xVGNHNkFrcEEyVFZNUzlCNnkwRVhmbHMzMDhBUWlRR09xeEhHbE42dEx2OHN1eGhxdzhlcHdFVmM2c1RsS2NJN2Nraw&q=https%3A%2F%2Fwww.patreon.com%2Fc%2FHookedConspiracy
+            - button "and 1 more link" [ref=e142] [cursor=pointer]
+          - generic [ref=e143]:
+            - button "Subscribe" [ref=e146] [cursor=pointer]:
+              - generic [ref=e147]: Subscribe
+            - link "Community" [ref=e153] [cursor=pointer]:
+              - /url: /@HookedConspiracy/community
+              - generic [ref=e157]:
+                - img
+              - generic [ref=e158]: Community
+        - tablist [ref=e165]:
+          - tablist [ref=e169]:
+            - tab "Videos" [ref=e170] [cursor=pointer]:
+              - generic [ref=e171]: Videos
+            - tab "Shorts" [selected] [ref=e172] [cursor=pointer]:
+              - generic [ref=e173]: Shorts
+            - tab "Playlists" [ref=e174] [cursor=pointer]:
+              - generic [ref=e175]: Playlists
+            - tab "Posts" [ref=e176] [cursor=pointer]:
+              - generic [ref=e177]: Posts
+            - button "Search" [ref=e181] [cursor=pointer]:
+              - generic [ref=e184]:
+                - img
+      - generic [ref=e190]:
+        - tablist [ref=e193]:
+          - tab "Latest" [selected] [ref=e197] [cursor=pointer]:
+            - generic [ref=e199]: Latest
+          - tab "Popular" [ref=e206] [cursor=pointer]:
+            - generic [ref=e208]: Popular
+          - tab "Oldest" [ref=e215] [cursor=pointer]:
+            - generic [ref=e217]: Oldest
+        - generic [ref=e221]:
+          - generic [ref=e225]:
+            - link [ref=e226] [cursor=pointer]:
+              - /url: /shorts/hhh8wAOSRAE
+            - generic [ref=e230] [cursor=pointer]:
+              - 'link "What If Aliens Tried To Invade Earth? #ai #alien #funny #veo3 AI (VEO 3) • Fictional" [ref=e231]':
+                - /url: /shorts/hhh8wAOSRAE
+              - generic [ref=e232]: 124K views
+            - button "More actions" [ref=e234] [cursor=pointer]:
+              - generic [ref=e238]:
+                - img
+          - generic [ref=e245]:
+            - link [ref=e246] [cursor=pointer]:
+              - /url: /shorts/1WV1K3H19_0
+            - generic [ref=e250] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt. 20 #ai #alien #funny #hfy AI (VEO 3) • Fictional" [ref=e251]':
+                - /url: /shorts/1WV1K3H19_0
+              - generic [ref=e252]: 87K views
+            - button "More actions" [ref=e254] [cursor=pointer]:
+              - generic [ref=e258]:
+                - img
+          - generic [ref=e265]:
+            - link [ref=e266] [cursor=pointer]:
+              - /url: /shorts/f61CI_xRb0k
+            - generic [ref=e270] [cursor=pointer]:
+              - 'link "Aliens Vs Humans | Humanity core. #ai #alien #funny #hfy AI (VEO 3) • Fictional" [ref=e271]':
+                - /url: /shorts/f61CI_xRb0k
+              - generic [ref=e272]: 102K views
+            - button "More actions" [ref=e274] [cursor=pointer]:
+              - generic [ref=e278]:
+                - img
+          - generic [ref=e285]:
+            - link [ref=e286] [cursor=pointer]:
+              - /url: /shorts/gvlFuZWsaVc
+            - generic [ref=e290] [cursor=pointer]:
+              - 'link "What If Aliens Invaded Florida? #ai #alien #funny #hfy AI (VEO 3) • Fictional" [ref=e291]':
+                - /url: /shorts/gvlFuZWsaVc
+              - generic [ref=e292]: 43K views
+            - button "More actions" [ref=e294] [cursor=pointer]:
+              - generic [ref=e298]:
+                - img
+          - generic [ref=e305]:
+            - link [ref=e306] [cursor=pointer]:
+              - /url: /shorts/r8aIaoZqyjY
+            - generic [ref=e310] [cursor=pointer]:
+              - 'link "Aliens vs Humans | Human core #ai #alien #funny #hfy AI (VEO 3) • Fictional" [ref=e311]':
+                - /url: /shorts/r8aIaoZqyjY
+              - generic [ref=e312]: 136K views
+            - button "More actions" [ref=e314] [cursor=pointer]:
+              - generic [ref=e318]:
+                - img
+          - generic [ref=e325]:
+            - link [ref=e326] [cursor=pointer]:
+              - /url: /shorts/wCCqsh2TApY
+            - generic [ref=e330] [cursor=pointer]:
+              - 'link "What If Aliens Invaded Florida? #ai #alien #funny #hfy AI (VEO 3) • Fictional" [ref=e331]':
+                - /url: /shorts/wCCqsh2TApY
+              - generic [ref=e332]: 40K views
+            - button "More actions" [ref=e334] [cursor=pointer]:
+              - generic [ref=e338]:
+                - img
+          - generic [ref=e345]:
+            - link [ref=e346] [cursor=pointer]:
+              - /url: /shorts/4wVWjZXqcGA
+            - generic [ref=e350] [cursor=pointer]:
+              - 'link "Aliens vs Humans | Humanity #ai #alien #funny #hfy AI (VEO 3) • Fictional" [ref=e351]':
+                - /url: /shorts/4wVWjZXqcGA
+              - generic [ref=e352]: 141K views
+            - button "More actions" [ref=e354] [cursor=pointer]:
+              - generic [ref=e358]:
+                - img
+          - generic [ref=e365]:
+            - link [ref=e366] [cursor=pointer]:
+              - /url: /shorts/BuS6Tzn-g2s
+            - generic [ref=e370] [cursor=pointer]:
+              - 'link "Aliens Vs Humans Core #ai #alien #funny #veo3 AI (VEO 3) • Fictional" [ref=e371]':
+                - /url: /shorts/BuS6Tzn-g2s
+              - generic [ref=e372]: 44K views
+            - button "More actions" [ref=e374] [cursor=pointer]:
+              - generic [ref=e378]:
+                - img
+          - generic [ref=e385]:
+            - link [ref=e386] [cursor=pointer]:
+              - /url: /shorts/rHtE_IiwhVk
+            - generic [ref=e390] [cursor=pointer]:
+              - 'link "What If Aliens Tried To Invade Earth? #ai #alien #funny #veo3 AI (VEO 3) • Fictional" [ref=e391]':
+                - /url: /shorts/rHtE_IiwhVk
+              - generic [ref=e392]: 163K views
+            - button "More actions" [ref=e394] [cursor=pointer]:
+              - generic [ref=e398]:
+                - img
+          - generic [ref=e405]:
+            - link [ref=e406] [cursor=pointer]:
+              - /url: /shorts/giuM1LD99c4
+            - generic [ref=e410] [cursor=pointer]:
+              - 'link "Alien Soldiers Post-Battle With Humans #ai #alien #funny AI (VEO 3) • Fictional" [ref=e411]':
+                - /url: /shorts/giuM1LD99c4
+              - generic [ref=e412]: 133K views
+            - button "More actions" [ref=e414] [cursor=pointer]:
+              - generic [ref=e418]:
+                - img
+          - generic [ref=e425]:
+            - link [ref=e426] [cursor=pointer]:
+              - /url: /shorts/VsHyGNfQ_3o
+            - generic [ref=e430] [cursor=pointer]:
+              - 'link "If Aliens Tried To Invade Earth #ai #funny #veo3 #alien AI (VEO 3) • Fictional" [ref=e431]':
+                - /url: /shorts/VsHyGNfQ_3o
+              - generic [ref=e432]: 334K views
+            - button "More actions" [ref=e434] [cursor=pointer]:
+              - generic [ref=e438]:
+                - img
+          - generic [ref=e445]:
+            - link [ref=e446] [cursor=pointer]:
+              - /url: /shorts/MGOBEavflPM
+            - generic [ref=e450] [cursor=pointer]:
+              - 'link "Aliens Vs Humans Post-Battle Interview Pt. 18 #ai #alien #veo3 #funny AI (VEO 3) • Fictional" [ref=e451]':
+                - /url: /shorts/MGOBEavflPM
+              - generic [ref=e452]: 116K views
+            - button "More actions" [ref=e454] [cursor=pointer]:
+              - generic [ref=e458]:
+                - img
+          - generic [ref=e465]:
+            - link [ref=e466] [cursor=pointer]:
+              - /url: /shorts/putxdYWO78U
+            - generic [ref=e470] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt. 17 #ai #alien #funny AI (VEO 3) • Fictional" [ref=e471]':
+                - /url: /shorts/putxdYWO78U
+              - generic [ref=e472]: 27K views
+            - button "More actions" [ref=e474] [cursor=pointer]:
+              - generic [ref=e478]:
+                - img
+          - generic [ref=e485]:
+            - link [ref=e486] [cursor=pointer]:
+              - /url: /shorts/vCqt_xCcQ4s
+            - generic [ref=e490] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt. 15 #ai #alien #funny AI (VEO 3) • Fictional" [ref=e491]':
+                - /url: /shorts/vCqt_xCcQ4s
+              - generic [ref=e492]: 147K views
+            - button "More actions" [ref=e494] [cursor=pointer]:
+              - generic [ref=e498]:
+                - img
+          - generic [ref=e505]:
+            - link [ref=e506] [cursor=pointer]:
+              - /url: /shorts/92I4fQLkHPk
+            - generic [ref=e510] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt. 14 #ai #alien #funny AI (VEO 3) • Fictional" [ref=e511]':
+                - /url: /shorts/92I4fQLkHPk
+              - generic [ref=e512]: 64K views
+            - button "More actions" [ref=e514] [cursor=pointer]:
+              - generic [ref=e518]:
+                - img
+          - generic [ref=e525]:
+            - link [ref=e526] [cursor=pointer]:
+              - /url: /shorts/0EZMuhCLx6o
+            - generic [ref=e530] [cursor=pointer]:
+              - 'link "If Aliens Went to Battle With Humanity? #ai #alien #funny AI (VEO 3) • Fictional" [ref=e531]':
+                - /url: /shorts/0EZMuhCLx6o
+              - generic [ref=e532]: 57K views
+            - button "More actions" [ref=e534] [cursor=pointer]:
+              - generic [ref=e538]:
+                - img
+          - generic [ref=e545]:
+            - link [ref=e546] [cursor=pointer]:
+              - /url: /shorts/fZheeJoqlB0
+            - generic [ref=e550] [cursor=pointer]:
+              - 'link "What If Aliens Tried To Invade Earth? Pt. 12 #ai #alien #funny AI (VEO 3) • Fictional" [ref=e551]':
+                - /url: /shorts/fZheeJoqlB0
+              - generic [ref=e552]: 100K views
+            - button "More actions" [ref=e554] [cursor=pointer]:
+              - generic [ref=e558]:
+                - img
+          - generic [ref=e565]:
+            - link [ref=e566] [cursor=pointer]:
+              - /url: /shorts/mrdX8XgsCJc
+            - generic [ref=e570] [cursor=pointer]:
+              - 'link "If Alien Soldiers Fought Against Humans? #ai #alien #funny AI (VEO 3) • Fictional" [ref=e571]':
+                - /url: /shorts/mrdX8XgsCJc
+              - generic [ref=e572]: 250K views
+            - button "More actions" [ref=e574] [cursor=pointer]:
+              - generic [ref=e578]:
+                - img
+          - generic [ref=e585]:
+            - link [ref=e586] [cursor=pointer]:
+              - /url: /shorts/GzIpG6f9dL4
+            - generic [ref=e590] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt. 11 #ai #alien #veo3 #funny AI (VEO 3) • Fictional" [ref=e591]':
+                - /url: /shorts/GzIpG6f9dL4
+              - generic [ref=e592]: 200K views
+            - button "More actions" [ref=e594] [cursor=pointer]:
+              - generic [ref=e598]:
+                - img
+          - generic [ref=e605]:
+            - link [ref=e606] [cursor=pointer]:
+              - /url: /shorts/Y9x_yiZK1_Q
+            - generic [ref=e610] [cursor=pointer]:
+              - 'link "Alien Soldiers Post-Battle Humans Pt. 10 #ai #alien #funny AI (VEO 3) • Fictional" [ref=e611]':
+                - /url: /shorts/Y9x_yiZK1_Q
+              - generic [ref=e612]: 164K views
+            - button "More actions" [ref=e614] [cursor=pointer]:
+              - generic [ref=e618]:
+                - img
+          - generic [ref=e625]:
+            - link [ref=e626] [cursor=pointer]:
+              - /url: /shorts/yXKrRIGtGn4
+            - generic [ref=e630] [cursor=pointer]:
+              - 'link "Aliens Vs Humanity (Human POV) #ai #alien #funny AI (VEO 3) • Fictional" [ref=e631]':
+                - /url: /shorts/yXKrRIGtGn4
+              - generic [ref=e632]: 50K views
+            - button "More actions" [ref=e634] [cursor=pointer]:
+              - generic [ref=e638]:
+                - img
+          - generic [ref=e645]:
+            - link [ref=e646] [cursor=pointer]:
+              - /url: /shorts/Yg_deNRamUU
+            - generic [ref=e650] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humanity #ai #alien #funny AI (VEO 3) • Fictional" [ref=e651]':
+                - /url: /shorts/Yg_deNRamUU
+              - generic [ref=e652]: 467K views
+            - button "More actions" [ref=e654] [cursor=pointer]:
+              - generic [ref=e658]:
+                - img
+          - generic [ref=e665]:
+            - link [ref=e666] [cursor=pointer]:
+              - /url: /shorts/8jYfYHmT4aM
+            - generic [ref=e670] [cursor=pointer]:
+              - 'link "Aliens After Battle With Humans Pt. 8 #ai #alien #funny #veo3 AI (VEO 3) • Fictional" [ref=e671]':
+                - /url: /shorts/8jYfYHmT4aM
+              - generic [ref=e672]: 121K views
+            - button "More actions" [ref=e674] [cursor=pointer]:
+              - generic [ref=e678]:
+                - img
+          - generic [ref=e685]:
+            - link [ref=e686] [cursor=pointer]:
+              - /url: /shorts/2TtbES3TM8I
+            - generic [ref=e690] [cursor=pointer]:
+              - 'link "Humans After Battle With Alien Soldiers #ai #funny #alien AI (VEO 3) • Fictional" [ref=e691]':
+                - /url: /shorts/2TtbES3TM8I
+              - generic [ref=e692]: 19K views
+            - button "More actions" [ref=e694] [cursor=pointer]:
+              - generic [ref=e698]:
+                - img
+          - generic [ref=e705]:
+            - link [ref=e706] [cursor=pointer]:
+              - /url: /shorts/m4r6HyFN7Ts
+            - generic [ref=e710] [cursor=pointer]:
+              - 'link "Aliens vs Humanity (Human POV) #ai #funny #alien AI (VEO 3) • Fictional" [ref=e711]':
+                - /url: /shorts/m4r6HyFN7Ts
+              - generic [ref=e712]: 27K views
+            - button "More actions" [ref=e714] [cursor=pointer]:
+              - generic [ref=e718]:
+                - img
+          - generic [ref=e725]:
+            - link [ref=e726] [cursor=pointer]:
+              - /url: /shorts/wYOqXjdyl-g
+            - generic [ref=e730] [cursor=pointer]:
+              - 'link "Ranking BRUTAL Veo 3 Aliens Vs Humans💀 #funny #veo3 #alien #ai AI (VEO 3) • Fictional" [ref=e731]':
+                - /url: /shorts/wYOqXjdyl-g
+              - generic [ref=e732]: 54K views
+            - button "More actions" [ref=e734] [cursor=pointer]:
+              - generic [ref=e738]:
+                - img
+          - generic [ref=e745]:
+            - link [ref=e746] [cursor=pointer]:
+              - /url: /shorts/9iVrpc4YFwk
+            - generic [ref=e750] [cursor=pointer]:
+              - 'link "Alien After Battle Against Humans Pt. 7 #funny #ai #alien #veo3 AI (VEO 3) • Fictional" [ref=e751]':
+                - /url: /shorts/9iVrpc4YFwk
+              - generic [ref=e752]: 93K views
+            - button "More actions" [ref=e754] [cursor=pointer]:
+              - generic [ref=e758]:
+                - img
+          - generic [ref=e765]:
+            - link [ref=e766] [cursor=pointer]:
+              - /url: /shorts/u3A3dI9ofRg
+            - generic [ref=e770] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt. 6 #ai #alien #veo3 #funny AI (VEO 3) • Fictional" [ref=e771]':
+                - /url: /shorts/u3A3dI9ofRg
+              - generic [ref=e772]: 109K views
+            - button "More actions" [ref=e774] [cursor=pointer]:
+              - generic [ref=e778]:
+                - img
+          - generic [ref=e785]:
+            - link [ref=e786] [cursor=pointer]:
+              - /url: /shorts/EkDxw70KZyo
+            - generic [ref=e790] [cursor=pointer]:
+              - 'link "Humans After Battle With Aliens Pt. 1 #ai #alien #veo3 #funny AI (VEO 3) • Fictional" [ref=e791]':
+                - /url: /shorts/EkDxw70KZyo
+              - generic [ref=e792]: 17K views
+            - button "More actions" [ref=e794] [cursor=pointer]:
+              - generic [ref=e798]:
+                - img
+          - generic [ref=e805]:
+            - link [ref=e806] [cursor=pointer]:
+              - /url: /shorts/v60g09kovm0
+            - generic [ref=e810] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt. 5 #funny #ai #veo3 #alien AI (VEO 3) • Fictional" [ref=e811]':
+                - /url: /shorts/v60g09kovm0
+              - generic [ref=e812]: 40K views
+            - button "More actions" [ref=e814] [cursor=pointer]:
+              - generic [ref=e818]:
+                - img
+          - generic [ref=e825]:
+            - link [ref=e826] [cursor=pointer]:
+              - /url: /shorts/7x7gE04s7LQ
+            - generic [ref=e830] [cursor=pointer]:
+              - 'link "Ranking VEO 3 Aliens Vs Humans 🤣 #funny #ai #veo3 #alien AI (VEO 3) • Fictional" [ref=e831]':
+                - /url: /shorts/7x7gE04s7LQ
+              - generic [ref=e832]: 34K views
+            - button "More actions" [ref=e834] [cursor=pointer]:
+              - generic [ref=e838]:
+                - img
+          - generic [ref=e845]:
+            - link [ref=e846] [cursor=pointer]:
+              - /url: /shorts/DZwvFEs0AmQ
+            - generic [ref=e850] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt. 4 #ai #funny #veo3 #alien AI (VEO 3) • Fictional" [ref=e851]':
+                - /url: /shorts/DZwvFEs0AmQ
+              - generic [ref=e852]: 67K views
+            - button "More actions" [ref=e854] [cursor=pointer]:
+              - generic [ref=e858]:
+                - img
+          - generic [ref=e865]:
+            - link [ref=e866] [cursor=pointer]:
+              - /url: /shorts/YzK1C2_Uxhg
+            - generic [ref=e870] [cursor=pointer]:
+              - 'link "Alien Soldiers Post-Battle With Humanity Pt. 3 #funny #ai #veo3 #alien AI (VEO 3.1) • Fictional" [ref=e871]':
+                - /url: /shorts/YzK1C2_Uxhg
+              - generic [ref=e872]: 11K views
+            - button "More actions" [ref=e874] [cursor=pointer]:
+              - generic [ref=e878]:
+                - img
+          - generic [ref=e885]:
+            - link [ref=e886] [cursor=pointer]:
+              - /url: /shorts/uEMELx9qF3Y
+            - generic [ref=e890] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt.2 #funny #ai #veo3 #alien AI (VEO 3.1) • Fictional" [ref=e891]':
+                - /url: /shorts/uEMELx9qF3Y
+              - generic [ref=e892]: 70K views
+            - button "More actions" [ref=e894] [cursor=pointer]:
+              - generic [ref=e898]:
+                - img
+          - generic [ref=e905]:
+            - link [ref=e906] [cursor=pointer]:
+              - /url: /shorts/v9kOlxVsHR0
+            - generic [ref=e910] [cursor=pointer]:
+              - 'link "Alien Soldiers After Battle With Humans Pt. 1 #funny #ai #veo3 #alien AI (VEO 3) • Fictional" [ref=e911]':
+                - /url: /shorts/v9kOlxVsHR0
+              - generic [ref=e912]: 71K views
+            - button "More actions" [ref=e914] [cursor=pointer]:
+              - generic [ref=e918]:
+                - img
+    - text: •

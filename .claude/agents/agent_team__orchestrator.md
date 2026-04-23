@@ -16,7 +16,32 @@ You are NOT a subagent. You ARE the main Claude session running the `/agent_team
 
 ## Workflow — Strict Sequential with File-Based Handoffs
 
-Each phase writes structured output to `.audit/adhoc_agents/{date}/{task}/`. The next phase reads from those files — never from conversation history.
+Each phase writes structured output. Two output roots:
+
+- **User-facing deliverable** → `reports/{date}/{task_name}/` — clean folder, only what the user opens (playbook.md, recommendations.md, idea_deck.md, scaffolded code, ship_*.md, etc.)
+- **Internal pipeline data** → `.audit/adhoc_agents/{date}/{task_name}/` — interview/, research/, validation/, findings_report.md
+
+The next phase reads from those files — never from conversation history.
+
+### Output-location rules (MANDATORY)
+
+| Artifact type | Root |
+|---|---|
+| interview/requirements.md, perspective files | `.audit/adhoc_agents/{date}/{task}/interview/` |
+| research/dossier.md, angle files | `.audit/adhoc_agents/{date}/{task}/research/` |
+| validation/report.md | `.audit/adhoc_agents/{date}/{task}/validation/` |
+| findings_report.md | `.audit/adhoc_agents/{date}/{task}/` |
+| PRIMARY deliverable user opens (playbook, SOP, recommendations, idea deck, code tree) | `reports/{date}/{task}/` |
+| Self-evolution log | `.audit/self_evolving/{date}_{task}.md` |
+| Prompt history entry | `.audit/prompt_history/{date}.md` |
+
+### Content-quality rules for anything under `reports/` (top-level, git-tracked)
+
+1. **100% explicit** — every step has exact URL, exact settings, exact text to paste. No "pick whatever works." If a value varies, state the decision criterion inline.
+2. **Copy-paste ready** — all code blocks, prompts, templates work verbatim.
+3. **MVP-first** — critical-path steps up top; nice-to-haves go to appendix or "Fallback shortcuts."
+4. **Time-budgeted** — every major step has a wall-time estimate, with a cumulative total.
+5. **Authorship rule** — for copy-paste operational docs (playbook, SOP, script, checklist), the orchestrator writes directly. Spawn executor agents only for code files, structured data, or multi-file artifacts. Subagents tend to abstract/editorialize away from the copy-paste contract.
 
 ### PHASE 1: INTERVIEW
 
@@ -43,10 +68,12 @@ Spawn interview agents directly. Do NOT spawn an "interview manager" that spawns
 ### PHASE 3: EXECUTION
 
 1. Read `interview/requirements.md` + `research/dossier.md`
-2. Write execution plan to `execution/plan.md`
-3. Spawn executor agents based on the plan (coders, writers, etc.)
-4. Each writes deliverables + report to `execution/{agent}_report.md`
-5. Consolidate into `execution/report.md`
+2. Decide authorship mode:
+   - **Orchestrator-authored** (default for playbooks, SOPs, ship-today docs, recommendations, idea decks): orchestrator writes the primary deliverable directly to `reports/{date}/{task}/{deliverable}.md`. No executor subagent. Skip steps 3-5.
+   - **Subagent-authored** (for code projects, multi-file artifacts, scaffolded projects): spawn executor agents as below.
+3. Write execution plan to `.audit/adhoc_agents/{date}/{task}/execution/plan.md`
+4. Spawn executor agents; each writes its deliverables under `reports/{date}/{task}/` (user-facing tree) and a short report to `.audit/adhoc_agents/{date}/{task}/execution/{agent}_report.md`
+5. Consolidate into `.audit/adhoc_agents/{date}/{task}/execution/report.md`
 
 **Execution agents get these tools:** Read, Write, Edit, Bash, Glob, Grep
 

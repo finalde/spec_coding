@@ -1,0 +1,179 @@
+- generic [ref=e40]:
+  - banner [ref=e42]:
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - button "Guide" [ref=e47] [cursor=pointer]:
+          - generic [ref=e50]:
+            - img
+        - generic [ref=e51]:
+          - link:
+            - /url: /
+            - generic:
+              - generic:
+                - img
+      - search [ref=e53]:
+        - generic [ref=e54]:
+          - combobox [expanded] [ref=e57]
+          - button "Search" [ref=e58] [cursor=pointer]:
+            - generic [ref=e61]:
+              - img
+  - main [ref=e64]:
+    - generic [ref=e65]:
+      - generic [ref=e67]:
+        - generic [ref=e74]:
+          - generic [ref=e75]: Sign in to confirm you’re not a bot
+          - generic [ref=e76]:
+            - text: This helps protect our community.
+            - link "Learn more" [ref=e77] [cursor=pointer]:
+              - /url: https://support.google.com/youtube/answer/3037019#zippy=%2Ccheck-that-youre-signed-into-youtube
+          - link "Sign in" [ref=e81] [cursor=pointer]:
+            - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fwatch%253Fv%253DZt1rZaTr-q8&hl=en
+            - generic [ref=e82]: Sign in
+        - generic [ref=e86]:
+          - generic [ref=e88]:
+            - heading "#banaraslitfest" [level=1] [ref=e90]:
+              - generic "#banaraslitfest" [ref=e91]:
+                - link "#banaraslitfest" [ref=e92] [cursor=pointer]:
+                  - /url: /hashtag/banaraslitfest
+            - generic [ref=e93]:
+              - generic [ref=e94]:
+                - generic [ref=e95]:
+                  - link [ref=e96] [cursor=pointer]:
+                    - /url: /@Aimoonwala
+                  - generic [ref=e98]:
+                    - generic "Ai Moon Wala" [ref=e102]:
+                      - link "Ai Moon Wala" [ref=e103] [cursor=pointer]:
+                        - /url: /@Aimoonwala
+                    - generic "42.2 thousand subscribers" [ref=e104]: 42.2K subscribers
+                - button "Subscribe to Ai Moon Wala." [ref=e110] [cursor=pointer]:
+                  - generic [ref=e111]: Subscribe
+              - generic [ref=e118]:
+                - generic [ref=e119]:
+                  - generic [ref=e123]:
+                    - button "Like" [ref=e127] [cursor=pointer]:
+                      - generic [ref=e130]: Like
+                    - button "Dislike this video" [ref=e137] [cursor=pointer]
+                  - button "Share" [ref=e145] [cursor=pointer]:
+                    - generic [ref=e148]: Share
+                - button "Save to playlist" [ref=e155] [cursor=pointer]:
+                  - generic [ref=e158]: Save
+                - button "More actions" [ref=e163] [cursor=pointer]
+            - generic [ref=e171] [cursor=pointer]:
+              - generic [ref=e172]:
+                - generic [ref=e174]: 9.2M views 2 weeks ago
+                - tooltip "tooltip"
+              - generic [ref=e175]:
+                - generic [ref=e176]:
+                  - generic [ref=e179]:
+                    - link "#banaraslitfest" [ref=e181]:
+                      - /url: /hashtag/banaraslitfest
+                    - link "#cat" [ref=e183]:
+                      - /url: /hashtag/cat
+                    - link "#cats" [ref=e185]:
+                      - /url: /hashtag/cats
+                    - link "#kitten" [ref=e187]:
+                      - /url: /hashtag/kitten
+                    - link "#kittens" [ref=e189]:
+                      - /url: /hashtag/kittens
+                    - link "#meow" [ref=e191]:
+                      - /url: /hashtag/meow
+                    - link "#kitty" [ref=e193]:
+                      - /url: /hashtag/kitty
+                    - link "#catlover" [ref=e195]:
+                      - /url: /hashtag/catlover
+                    - link "#catlovers" [ref=e197]:
+                      - /url: /hashtag/catlovers
+                    - link "#catlife" [ref=e199]:
+                      - /url: /hashtag/catlife
+                    - link "#catstory" [ref=e201]:
+                      - /url: /hashtag/catstory
+                    - link "#story" [ref=e203]:
+                      - /url: /hashtag/story
+                    - link "#c" [ref=e205]:
+                      - /url: /hashtag/cutestory
+                  - generic: …
+                - button "...more" [ref=e206]
+          - text: •
+      - generic [ref=e213]:
+        - generic [ref=e215] [cursor=pointer]:
+          - link [ref=e216]:
+            - /url: /watch?v=iFvIbaeyy8k&pp=ugUEEgJlbg%3D%3D
+            - generic [ref=e223]: 48:21
+          - generic [ref=e225]:
+            - generic [ref=e226]:
+              - heading "If You Clean It, You Keep It! 48 minutes" [level=3] [ref=e227]:
+                - link "If You Clean It, You Keep It! 48 minutes" [ref=e228]:
+                  - /url: /watch?v=iFvIbaeyy8k&pp=ugUEEgJlbg%3D%3D
+                  - text: If You Clean It, You Keep It!
+              - generic [ref=e230]:
+                - group [ref=e231]:
+                  - generic [ref=e232]:
+                    - text: Stay Wild
+                    - img [ref=e235]
+                - group [ref=e236]:
+                  - generic [ref=e237]: 53M views
+                  - generic [ref=e238]: •
+                  - generic [ref=e239]: 11 months ago
+            - button "More actions" [ref=e242]
+        - generic [ref=e249] [cursor=pointer]:
+          - link [ref=e250]:
+            - /url: /watch?v=yMkj6j9UAaM
+            - generic [ref=e257]: 23:11
+          - generic [ref=e259]:
+            - generic [ref=e260]:
+              - heading "中國真實失業率逼近40%，然後呢？牛馬人生、靈活就業能一直維持嗎？（文昭談古論今1694期） 23 minutes" [level=3] [ref=e261]:
+                - link "中國真實失業率逼近40%，然後呢？牛馬人生、靈活就業能一直維持嗎？（文昭談古論今1694期） 23 minutes" [ref=e262]:
+                  - /url: /watch?v=yMkj6j9UAaM
+                  - text: 中國真實失業率逼近40%，然後呢？牛馬人生、靈活就業能一直維持嗎？（文昭談古論今1694期）
+              - generic [ref=e264]:
+                - group [ref=e265]:
+                  - generic [ref=e266]:
+                    - text: 文昭談古論今 -Wen Zhao Official
+                    - img [ref=e269]
+                - group [ref=e270]:
+                  - generic [ref=e271]: 408K views
+                  - generic [ref=e272]: •
+                  - generic [ref=e273]: 2 days ago
+                - group [ref=e274]:
+                  - generic [ref=e278]: New
+            - button "More actions" [ref=e281]
+        - generic [ref=e288] [cursor=pointer]:
+          - link [ref=e289]:
+            - /url: /watch?v=SYyY4mX7O3s
+            - generic [ref=e296]: 31:07
+          - generic [ref=e298]:
+            - generic [ref=e299]:
+              - heading "牛马没有下一代谁最着急||人口问题将产生雪崩效应 31 minutes" [level=3] [ref=e300]:
+                - link "牛马没有下一代谁最着急||人口问题将产生雪崩效应 31 minutes" [ref=e301]:
+                  - /url: /watch?v=SYyY4mX7O3s
+                  - text: 牛马没有下一代谁最着急||人口问题将产生雪崩效应
+              - generic [ref=e303]:
+                - group [ref=e304]:
+                  - generic [ref=e305]: 躺平叔带你了解真正的中国
+                - group [ref=e306]:
+                  - generic [ref=e307]: 5.9K views
+                  - generic [ref=e308]: •
+                  - generic [ref=e309]: 4 hours ago
+                - group [ref=e310]:
+                  - generic [ref=e314]: New
+            - button "More actions" [ref=e317]
+        - generic [ref=e324] [cursor=pointer]:
+          - link [ref=e325]:
+            - /url: /watch?v=jkHVUxiA3uE
+            - generic [ref=e332]: 44:25
+          - generic [ref=e334]:
+            - generic [ref=e335]:
+              - heading "电商原罪 法不责辉：小董为何稳如老狗 44 minutes" [level=3] [ref=e336]:
+                - link "电商原罪 法不责辉：小董为何稳如老狗 44 minutes" [ref=e337]:
+                  - /url: /watch?v=jkHVUxiA3uE
+                  - text: 电商原罪 法不责辉：小董为何稳如老狗
+              - generic [ref=e339]:
+                - group [ref=e340]:
+                  - generic [ref=e341]: 老梁
+                - group [ref=e342]:
+                  - generic [ref=e343]: 291K views
+                  - generic [ref=e344]: •
+                  - generic [ref=e345]: 4 days ago
+                - group [ref=e346]:
+                  - generic [ref=e350]: New
+            - button "More actions" [ref=e353]

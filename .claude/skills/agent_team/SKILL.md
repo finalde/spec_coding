@@ -13,9 +13,34 @@ You are now the **Agent Team Orchestrator**. You directly spawn and coordinate a
 
 1. Parse the task from `$ARGUMENTS`
 2. Derive `{task_name}` (snake_case, short)
-3. Create audit directory: `.audit/adhoc_agents/{YYYY-MM-DD}/{task_name}/`
+3. Create two directories:
+   - **User-facing deliverable:** `reports/{YYYY-MM-DD}/{task_name}/` — top-level repo folder, **git-tracked**. This is what the user consumes (playbooks, recommendations, code, decks).
+   - **Internal pipeline data:** `.audit/adhoc_agents/{YYYY-MM-DD}/{task_name}/` — interview/, research/, validation/, findings_report.md. `.audit/` is gitignored.
 4. Read `.claude/agents/agent_team__orchestrator.md` for detailed workflow
 5. Execute the pipeline: Interview → Research → Execution → Validation → Feedback Loop → Self-Evolution
+
+## Output location convention — MANDATORY
+
+| Artifact | Location |
+|---|---|
+| Primary user deliverable (playbook, recommendations, idea deck, code project) | `reports/{date}/{task_name}/` |
+| interview/requirements.md + perspective files | `.audit/adhoc_agents/{date}/{task_name}/interview/` |
+| research/dossier.md + angle files | `.audit/adhoc_agents/{date}/{task_name}/research/` |
+| validation/report.md | `.audit/adhoc_agents/{date}/{task_name}/validation/` |
+| findings_report.md | `.audit/adhoc_agents/{date}/{task_name}/` |
+| Self-evolution log | `.audit/self_evolving/{date}_{task_name}.md` |
+| Prompt history entry | `.audit/prompt_history/{date}.md` |
+
+Rationale: users want one clean folder (`reports/`) that contains ONLY the finished artifact they can copy/forward. Process exhaust (interviews, research dossiers, validation noise, self-evolution) belongs separately so it doesn't clutter the handoff.
+
+## Content-quality bar — MANDATORY
+
+Every primary deliverable under `reports/` must be:
+
+1. **100% explicit** — every step specifies the exact URL, exact settings, exact text to paste. No "pick whatever works." No "depending on your setup." If a value varies, state the decision criterion inline ("if X, use Y; else use Z").
+2. **Copy-paste ready** — code blocks, prompts, templates all work verbatim. Placeholders use `{angle-brackets}` or are explicitly labeled as such.
+3. **MVP-first** — lead with the minimum viable path. Nice-to-haves go to an appendix or a "Fallback shortcuts" section. If the user says "build the first MVP asap," cut everything not on the critical path to shipping.
+4. **Time-budgeted** — every major step has a wall-time estimate. Sequence has a cumulative total so the user knows when they'll finish.
 
 ## Pipeline Summary
 
@@ -35,8 +60,9 @@ PHASE 2: RESEARCH
 PHASE 3: EXECUTION
   → Read requirements + dossier
   → Write execution plan
-  → Spawn executor agents (coders, writers, etc.)
-  → Write: execution/report.md
+  → For copy-paste operational docs (playbook, SOP, script): ORCHESTRATOR writes directly — subagents tend to abstract/editorialize
+  → For code projects, multi-file artifacts: spawn executor agents
+  → Write: reports/{date}/{task_name}/{deliverable}.md (not under adhoc_agents/)
 
 PHASE 4: VALIDATION
   → Read all artifacts

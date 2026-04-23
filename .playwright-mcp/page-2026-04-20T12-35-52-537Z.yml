@@ -1,0 +1,160 @@
+- generic [ref=e54]:
+  - banner [ref=e33]:
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - button "Guide" [ref=e38] [cursor=pointer]:
+          - generic [ref=e56]:
+            - img
+        - link "YouTube Home" [ref=e57] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e62]:
+            - img
+        - button "Skip navigation" [ref=e66] [cursor=pointer]:
+          - generic [ref=e67]: Skip navigation
+      - generic [ref=e41]:
+        - search [ref=e42]:
+          - generic [ref=e43]:
+            - combobox "Search" [expanded] [ref=e71]
+            - button "Search" [ref=e47] [cursor=pointer]:
+              - generic [ref=e73]:
+                - img
+        - generic [ref=e75]:
+          - button "Search with your voice" [ref=e77] [cursor=pointer]
+          - tooltip "tooltip"
+  - main [ref=e84]:
+    - generic [ref=e85]:
+      - generic [ref=e87]:
+        - generic [ref=e94]:
+          - generic [ref=e95]: Sign in to confirm you’re not a bot
+          - generic [ref=e96]:
+            - text: This helps protect our community.
+            - link "Learn more" [ref=e97] [cursor=pointer]:
+              - /url: https://support.google.com/youtube/answer/3037019#zippy=%2Ccheck-that-youre-signed-into-youtube
+          - link "Sign in" [ref=e101] [cursor=pointer]:
+            - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fwatch%253Fv%253Dpn-TnSypKN8&hl=en
+            - generic [ref=e102]: Sign in
+        - generic [ref=e106]:
+          - generic [ref=e108]:
+            - heading "😮 A Fluffy Goat Goes In… A Wool Avalanche Comes Out 🦾✨" [level=1] [ref=e110]
+            - generic [ref=e111]:
+              - generic [ref=e112]:
+                - generic [ref=e113]:
+                  - link [ref=e114] [cursor=pointer]:
+                    - /url: /@future_farm_ai
+                  - generic [ref=e116]:
+                    - generic "FutureFarm AI" [ref=e120]:
+                      - link "FutureFarm AI" [ref=e121] [cursor=pointer]:
+                        - /url: /@future_farm_ai
+                    - generic "54.1 thousand subscribers" [ref=e122]: 54.1K subscribers
+                - generic [ref=e126]:
+                  - button "Subscribe to FutureFarm AI." [ref=e128] [cursor=pointer]:
+                    - generic [ref=e129]: Subscribe
+                  - generic:
+                    - generic:
+                      - generic:
+                        - img
+                    - generic:
+                      - img
+              - generic [ref=e136]:
+                - generic [ref=e137]:
+                  - generic [ref=e141]:
+                    - button "like this video along with 127,982 other people" [ref=e145] [cursor=pointer]:
+                      - generic [ref=e148]: 127K
+                    - button "Dislike this video" [ref=e155] [cursor=pointer]
+                  - button "Share" [ref=e163] [cursor=pointer]:
+                    - generic [ref=e166]: Share
+                - button "More actions" [ref=e171] [cursor=pointer]
+            - generic [ref=e179] [cursor=pointer]:
+              - generic [ref=e180]:
+                - generic [ref=e182]:
+                  - text: 40M views 3 months ago
+                  - link "#AIVideo" [ref=e183]:
+                    - /url: /hashtag/aivideo
+                  - link "#FutureTech" [ref=e184]:
+                    - /url: /hashtag/futuretech
+                  - link "#ViralShorts" [ref=e185]:
+                    - /url: /hashtag/viralshorts
+                - tooltip "tooltip"
+              - generic [ref=e186]:
+                - generic [ref=e187]:
+                  - generic [ref=e190]: Calm farm. Strange tech. 👀 One fluffy goat enters the machine — seconds later, a waterfall of white wool pours out everywhere. 💨🐐
+                  - generic: …
+                - button "...more" [ref=e191]
+          - text: •
+      - generic [ref=e198]:
+        - generic [ref=e200] [cursor=pointer]:
+          - link [ref=e201]:
+            - /url: /watch?v=v0S375xGhzI&pp=ugUEEgJlbg%3D%3D
+            - generic [ref=e208]: 12:05
+          - generic [ref=e210]:
+            - generic [ref=e211]:
+              - heading "Stop Frying Eggs! Here’s the 5-Star Hotel Secret to Perfect Poached Eggs! | Top DIY 12 minutes, 5 seconds" [level=3] [ref=e212]:
+                - link "Stop Frying Eggs! Here’s the 5-Star Hotel Secret to Perfect Poached Eggs! | Top DIY 12 minutes, 5 seconds" [ref=e213]:
+                  - /url: /watch?v=v0S375xGhzI&pp=ugUEEgJlbg%3D%3D
+                  - text: Stop Frying Eggs! Here’s the 5-Star Hotel Secret to Perfect Poached Eggs! | Top DIY
+              - generic [ref=e215]:
+                - group [ref=e216]:
+                  - generic [ref=e217]: Top DIY
+                - group [ref=e218]:
+                  - generic [ref=e219]: 840K views
+                  - generic [ref=e220]: •
+                  - generic [ref=e221]: 2 weeks ago
+            - button "More actions" [ref=e224]
+        - generic [ref=e231] [cursor=pointer]:
+          - link [ref=e232]:
+            - /url: /watch?v=aFHFTDEY_rQ
+            - generic [ref=e239]: 10:06
+          - generic [ref=e241]:
+            - generic [ref=e242]:
+              - heading "Overdramatic Parrots Who Deserve an Oscar 😂 Funny Parrot Videos 2026 10 minutes, 6 seconds" [level=3] [ref=e243]:
+                - link "Overdramatic Parrots Who Deserve an Oscar 😂 Funny Parrot Videos 2026 10 minutes, 6 seconds" [ref=e244]:
+                  - /url: /watch?v=aFHFTDEY_rQ
+                  - text: Overdramatic Parrots Who Deserve an Oscar 😂 Funny Parrot Videos 2026
+              - generic [ref=e246]:
+                - group [ref=e247]:
+                  - generic [ref=e248]: Funniest Animals Show
+                - group [ref=e249]:
+                  - generic [ref=e250]: 4.7M views
+                  - generic [ref=e251]: •
+                  - generic [ref=e252]: 2 weeks ago
+            - button "More actions" [ref=e255]
+        - generic [ref=e262] [cursor=pointer]:
+          - link [ref=e263]:
+            - /url: /watch?v=-OcrU_mSH5w
+            - generic [ref=e270]: 22:49
+          - generic [ref=e272]:
+            - generic [ref=e273]:
+              - heading "特朗普正等伊朗温和派消息||胡锡进突然宣布中国赢麻了 22 minutes" [level=3] [ref=e274]:
+                - link "特朗普正等伊朗温和派消息||胡锡进突然宣布中国赢麻了 22 minutes" [ref=e275]:
+                  - /url: /watch?v=-OcrU_mSH5w
+                  - text: 特朗普正等伊朗温和派消息||胡锡进突然宣布中国赢麻了
+              - generic [ref=e277]:
+                - group [ref=e278]:
+                  - generic [ref=e279]: 躺平叔带你了解真正的中国
+                - group [ref=e280]:
+                  - generic [ref=e281]: 1.3K views
+                  - generic [ref=e282]: •
+                  - generic [ref=e283]: 1 hour ago
+                - group [ref=e284]:
+                  - generic [ref=e288]: New
+            - button "More actions" [ref=e291]
+        - generic [ref=e298] [cursor=pointer]:
+          - link [ref=e299]:
+            - /url: /watch?v=ica_XUCihBw
+            - generic [ref=e306]: 1:14:00
+          - generic [ref=e308]:
+            - generic [ref=e309]:
+              - heading "Rain and Birdsong to Rest Your Mind ~ Gain Mental Clarity in Minutes – Unlock Inner Peace Now 🌧️🍃#16 1 hour, 14 minutes" [level=3] [ref=e310]:
+                - link "Rain and Birdsong to Rest Your Mind ~ Gain Mental Clarity in Minutes – Unlock Inner Peace Now 🌧️🍃#16 1 hour, 14 minutes" [ref=e311]:
+                  - /url: /watch?v=ica_XUCihBw
+                  - text: Rain and Birdsong to Rest Your Mind ~ Gain Mental Clarity in Minutes – Unlock Inner Peace Now 🌧️🍃#16
+              - generic [ref=e313]:
+                - group [ref=e314]:
+                  - generic [ref=e315]: CuddlePaws TV and 2 more
+                - group [ref=e316]:
+                  - generic [ref=e317]: 16K views
+                  - generic [ref=e318]: •
+                  - generic [ref=e319]: 2 days ago
+                - group [ref=e320]:
+                  - generic [ref=e324]: New
+            - button "More actions" [ref=e327]

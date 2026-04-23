@@ -1,0 +1,272 @@
+- generic [ref=e58]:
+  - banner [ref=e41]:
+    - generic [ref=e43]:
+      - generic [ref=e44]:
+        - button "Guide" [ref=e46] [cursor=pointer]:
+          - generic [ref=e60]:
+            - img
+        - link "YouTube Home" [ref=e61] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e66]:
+            - img
+        - button "Skip navigation" [ref=e70] [cursor=pointer]:
+          - generic [ref=e71]: Skip navigation
+      - generic [ref=e49]:
+        - search [ref=e50]:
+          - generic [ref=e51]:
+            - combobox "Search" [expanded] [ref=e75]
+            - button "Search" [ref=e55] [cursor=pointer]:
+              - generic [ref=e77]:
+                - img
+        - generic [ref=e79]:
+          - button "Search with your voice" [ref=e81] [cursor=pointer]
+          - tooltip "tooltip"
+  - main [ref=e88]:
+    - generic [ref=e89]:
+      - generic [ref=e91]:
+        - generic [ref=e98]:
+          - generic [ref=e99]: Sign in to confirm you’re not a bot
+          - generic [ref=e100]:
+            - text: This helps protect our community.
+            - link "Learn more" [ref=e101] [cursor=pointer]:
+              - /url: https://support.google.com/youtube/answer/3037019#zippy=%2Ccheck-that-youre-signed-into-youtube
+          - link "Sign in" [ref=e105] [cursor=pointer]:
+            - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fwatch%253Fv%253DQpRHpze2wKU&hl=en
+            - generic [ref=e106]: Sign in
+        - generic [ref=e110]:
+          - generic [ref=e112]:
+            - 'heading "part 4.🌺🚩 har har mahadev 😱😲🙏🌺 AI video #shortvideo #viral #reels #foryou #trending #shorts #aivideo" [level=1] [ref=e114]':
+              - 'generic "part 4.🌺🚩 har har mahadev 😱😲🙏🌺 AI video #shortvideo #viral #reels #foryou #trending #shorts #aivideo" [ref=e115]':
+                - text: part 4.🌺🚩 har har mahadev 😱😲🙏🌺 AI video
+                - link "#shortvideo" [ref=e116] [cursor=pointer]:
+                  - /url: /hashtag/shortvideo
+                - link "#viral" [ref=e117] [cursor=pointer]:
+                  - /url: /hashtag/viral
+                - link "#reels" [ref=e118] [cursor=pointer]:
+                  - /url: /hashtag/reels
+                - link "#foryou" [ref=e119] [cursor=pointer]:
+                  - /url: /hashtag/foryou
+                - link "#trending" [ref=e120] [cursor=pointer]:
+                  - /url: /hashtag/trending
+                - link "#shorts" [ref=e121] [cursor=pointer]:
+                  - /url: /hashtag/shorts
+                - link "#aivideo" [ref=e122] [cursor=pointer]:
+                  - /url: /hashtag/aivideo
+            - generic [ref=e123]:
+              - generic [ref=e124]:
+                - generic [ref=e125]:
+                  - link [ref=e126] [cursor=pointer]:
+                    - /url: /@RaviMehta-q1p
+                  - generic [ref=e128]:
+                    - generic "Ravi Mehta" [ref=e132]:
+                      - link "Ravi Mehta" [ref=e133] [cursor=pointer]:
+                        - /url: /@RaviMehta-q1p
+                    - generic "44.4 thousand subscribers" [ref=e134]: 44.4K subscribers
+                - generic [ref=e138]:
+                  - button "Subscribe to Ravi Mehta." [ref=e140] [cursor=pointer]:
+                    - generic [ref=e141]: Subscribe
+                  - generic:
+                    - generic:
+                      - generic:
+                        - img
+                    - generic:
+                      - img
+              - generic [ref=e148]:
+                - generic [ref=e149]:
+                  - generic [ref=e153]:
+                    - button "like this video along with 132,280 other people" [ref=e157] [cursor=pointer]:
+                      - generic [ref=e160]: 132K
+                    - button "Dislike this video" [ref=e167] [cursor=pointer]
+                  - button "Share" [ref=e175] [cursor=pointer]:
+                    - generic [ref=e178]: Share
+                - button "More actions" [ref=e183] [cursor=pointer]
+            - generic [ref=e191] [cursor=pointer]:
+              - generic [ref=e192]:
+                - generic [ref=e194]: 7.6M views 9 days ago
+                - tooltip "tooltip"
+              - text: No description has been added to this video.
+              - button "...more" [ref=e197]
+          - text: •
+      - generic [ref=e204]:
+        - generic [ref=e206] [cursor=pointer]:
+          - link [ref=e207]:
+            - /url: /watch?v=K3wbaLI-mkI
+            - generic [ref=e214]: 2:00:00
+          - generic [ref=e216]:
+            - generic [ref=e217]:
+              - heading "Vintage Floral Free Tv Art Wallpaper Screensaver Home Decor Samsung Oil Painting Digital Wildflower 2 hours" [level=3] [ref=e218]:
+                - link "Vintage Floral Free Tv Art Wallpaper Screensaver Home Decor Samsung Oil Painting Digital Wildflower 2 hours" [ref=e219]:
+                  - /url: /watch?v=K3wbaLI-mkI
+                  - text: Vintage Floral Free Tv Art Wallpaper Screensaver Home Decor Samsung Oil Painting Digital Wildflower
+              - generic [ref=e221]:
+                - group [ref=e222]:
+                  - generic [ref=e223]: LunaSkyeTvArt
+                - group [ref=e224]:
+                  - generic [ref=e225]: 1.8M views
+                  - generic [ref=e226]: •
+                  - generic [ref=e227]: 2 years ago
+            - button "More actions" [ref=e230]
+        - generic [ref=e237] [cursor=pointer]:
+          - link [ref=e238]:
+            - /url: /watch?v=C9Un_uVFUSs
+            - generic [ref=e245]: 25:13
+          - generic [ref=e247]:
+            - generic [ref=e248]:
+              - heading "北京大爺：習近平不是人！高志凱被印度狠人懟成大傻X！鄭麗文與習握手後，民調降至倒數！深圳搶市民十萬電動車賣非洲！（老北京茶館/第1610集/2026/04/18） 25 minutes" [level=3] [ref=e249]:
+                - link "北京大爺：習近平不是人！高志凱被印度狠人懟成大傻X！鄭麗文與習握手後，民調降至倒數！深圳搶市民十萬電動車賣非洲！（老北京茶館/第1610集/2026/04/18） 25 minutes" [ref=e250]:
+                  - /url: /watch?v=C9Un_uVFUSs
+                  - text: 北京大爺：習近平不是人！高志凱被印度狠人懟成大傻X！鄭麗文與習握手後，民調降至倒數！深圳搶市民十萬電動車賣非洲！（老北京茶館/第1610集/2026/04/18）
+              - generic [ref=e252]:
+                - group [ref=e253]:
+                  - generic [ref=e254]: 老北京茶館 - 幽默時政
+                - group [ref=e255]:
+                  - generic [ref=e256]: 100K views
+                  - generic [ref=e257]: •
+                  - generic [ref=e258]: 1 day ago
+                - group [ref=e259]:
+                  - generic [ref=e263]: New
+            - button "More actions" [ref=e266]
+        - generic [ref=e273] [cursor=pointer]:
+          - link [ref=e274]:
+            - /url: /watch?v=-j8WOAHw5d4&pp=ugUHEgVlbi1VUw%3D%3D
+            - generic [ref=e281]: 23:59
+          - generic [ref=e283]:
+            - generic [ref=e284]:
+              - heading "I Met 7 People Who Shouldn’t Exist! 23 minutes" [level=3] [ref=e285]:
+                - link "I Met 7 People Who Shouldn’t Exist! 23 minutes" [ref=e286]:
+                  - /url: /watch?v=-j8WOAHw5d4&pp=ugUHEgVlbi1VUw%3D%3D
+                  - text: I Met 7 People Who Shouldn’t Exist!
+              - generic [ref=e288]:
+                - group [ref=e289]:
+                  - generic [ref=e290]:
+                    - text: Stokes Twins
+                    - img [ref=e293]
+                - group [ref=e294]:
+                  - generic [ref=e295]: 142M views
+                  - generic [ref=e296]: •
+                  - generic [ref=e297]: 1 year ago
+            - button "More actions" [ref=e300]
+        - generic [ref=e307] [cursor=pointer]:
+          - link [ref=e308]:
+            - /url: /watch?v=cA9kJqKCmrM
+            - generic [ref=e315]: 40:14
+          - generic [ref=e317]:
+            - generic [ref=e318]:
+              - heading "Ch. 1733：伊朗高層分裂 主和兩派內鬥 外長勾美叛國？川普先轟船試沙煲｜風雲快訊｜2026/04/20 40 minutes" [level=3] [ref=e319]:
+                - link "Ch. 1733：伊朗高層分裂 主和兩派內鬥 外長勾美叛國？川普先轟船試沙煲｜風雲快訊｜2026/04/20 40 minutes" [ref=e320]:
+                  - /url: /watch?v=cA9kJqKCmrM
+                  - text: Ch. 1733：伊朗高層分裂 主和兩派內鬥 外長勾美叛國？川普先轟船試沙煲｜風雲快訊｜2026/04/20
+              - generic [ref=e322]:
+                - group [ref=e323]:
+                  - generic [ref=e324]: 風雲谷 Whirling Clouds Valley
+                - group [ref=e325]:
+                  - generic [ref=e326]: 94K views
+                  - generic [ref=e327]: •
+                  - generic [ref=e328]: 8 hours ago
+                - group [ref=e329]:
+                  - generic [ref=e333]: New
+            - button "More actions" [ref=e336]
+        - generic [ref=e343] [cursor=pointer]:
+          - link [ref=e344]:
+            - /url: /watch?v=KCH6xlWC_Lk
+            - generic [ref=e351]: 2:15:20
+          - generic [ref=e353]:
+            - generic [ref=e354]:
+              - heading "Raghava Lawrence Horror Hindi Dubbed Movie | Kanchana (कंचना) | R. Sarathkumar 2 hours, 15 minutes" [level=3] [ref=e355]:
+                - link "Raghava Lawrence Horror Hindi Dubbed Movie | Kanchana (कंचना) | R. Sarathkumar 2 hours, 15 minutes" [ref=e356]:
+                  - /url: /watch?v=KCH6xlWC_Lk
+                  - text: Raghava Lawrence Horror Hindi Dubbed Movie | Kanchana (कंचना) | R. Sarathkumar
+              - generic [ref=e358]:
+                - group [ref=e359]:
+                  - generic [ref=e360]:
+                    - text: Goldmines
+                    - img [ref=e363]
+                - group [ref=e364]:
+                  - generic [ref=e365]: 1.7M views
+                  - generic [ref=e366]: •
+                  - generic [ref=e367]: 3 weeks ago
+            - button "More actions" [ref=e370]
+        - generic [ref=e377] [cursor=pointer]:
+          - link [ref=e378]:
+            - /url: /watch?v=6tMpjNnakUI
+            - generic [ref=e385]: 8:02
+          - generic [ref=e387]:
+            - generic [ref=e388]:
+              - heading "King Cobra - World's Deadliest Venom Milking! 8 minutes, 2 seconds" [level=3] [ref=e389]:
+                - link "King Cobra - World's Deadliest Venom Milking! 8 minutes, 2 seconds" [ref=e390]:
+                  - /url: /watch?v=6tMpjNnakUI
+                  - text: King Cobra - World's Deadliest Venom Milking!
+              - generic [ref=e392]:
+                - group [ref=e393]:
+                  - generic [ref=e394]:
+                    - text: Brave Wilderness
+                    - img [ref=e397]
+                - group [ref=e398]:
+                  - generic [ref=e399]: 59K views
+                  - generic [ref=e400]: •
+                  - generic [ref=e401]: 1 day ago
+                - group [ref=e402]:
+                  - generic [ref=e406]: New
+            - button "More actions" [ref=e409]
+        - generic [ref=e416] [cursor=pointer]:
+          - link [ref=e417]:
+            - /url: /watch?v=SsHApJPmJYQ
+            - generic [ref=e424]: 29:22
+          - generic [ref=e426]:
+            - generic [ref=e427]:
+              - heading "十万亿的住房公积金被盯上了：“住房全生命周期”养护，定点给住房公积金抽血；为什么李桥铭、沈金龙等人被取消人大代表资格，而张又侠、刘振立还在 29 minutes" [level=3] [ref=e428]:
+                - link "十万亿的住房公积金被盯上了：“住房全生命周期”养护，定点给住房公积金抽血；为什么李桥铭、沈金龙等人被取消人大代表资格，而张又侠、刘振立还在 29 minutes" [ref=e429]:
+                  - /url: /watch?v=SsHApJPmJYQ
+                  - text: 十万亿的住房公积金被盯上了：“住房全生命周期”养护，定点给住房公积金抽血；为什么李桥铭、沈金龙等人被取消人大代表资格，而张又侠、刘振立还在
+              - generic [ref=e431]:
+                - group [ref=e432]:
+                  - generic [ref=e433]: 五岳散人
+                - group [ref=e434]:
+                  - generic [ref=e435]: 64K views
+                  - generic [ref=e436]: •
+                  - generic [ref=e437]: 9 hours ago
+                - group [ref=e438]:
+                  - generic [ref=e442]: New
+            - button "More actions" [ref=e445]
+        - generic [ref=e452] [cursor=pointer]:
+          - link [ref=e453]:
+            - /url: /watch?v=7X9nEF-lKSs
+            - generic [ref=e460]: 40:56
+          - generic [ref=e462]:
+            - generic [ref=e463]:
+              - heading "SWIMMING IN A SHARK INFESTED POOL.. 40 minutes" [level=3] [ref=e464]:
+                - link "SWIMMING IN A SHARK INFESTED POOL.. 40 minutes" [ref=e465]:
+                  - /url: /watch?v=7X9nEF-lKSs
+                  - text: SWIMMING IN A SHARK INFESTED POOL..
+              - generic [ref=e467]:
+                - group [ref=e468]:
+                  - generic [ref=e469]:
+                    - text: Foltyn
+                    - img [ref=e472]
+                - group [ref=e473]:
+                  - generic [ref=e474]: 1.7M views
+                  - generic [ref=e475]: •
+                  - generic [ref=e476]: 4 days ago
+                - group [ref=e477]:
+                  - generic [ref=e481]: New
+            - button "More actions" [ref=e484]
+        - generic [ref=e491] [cursor=pointer]:
+          - link [ref=e492]:
+            - /url: /watch?v=uk_q38-v5sg
+            - generic [ref=e499]: 37:47
+          - generic [ref=e501]:
+            - generic [ref=e502]:
+              - heading "中国治安，即将严重恶化！400年前的人间惨剧，会再次轮回吗？ 37 minutes" [level=3] [ref=e503]:
+                - link "中国治安，即将严重恶化！400年前的人间惨剧，会再次轮回吗？ 37 minutes" [ref=e504]:
+                  - /url: /watch?v=uk_q38-v5sg
+                  - text: 中国治安，即将严重恶化！400年前的人间惨剧，会再次轮回吗？
+              - generic [ref=e506]:
+                - group [ref=e507]:
+                  - generic [ref=e508]: VEXILLA潮時務所
+                - group [ref=e509]:
+                  - generic [ref=e510]: 22K views
+                  - generic [ref=e511]: •
+                  - generic [ref=e512]: 8 hours ago
+                - group [ref=e513]:
+                  - generic [ref=e517]: New
+            - button "More actions" [ref=e520]

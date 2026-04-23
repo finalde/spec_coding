@@ -1,0 +1,729 @@
+- generic [ref=e2]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Guide" [active] [ref=e9] [cursor=pointer]:
+          - generic [ref=e12]:
+            - img
+        - link "YouTube Home" [ref=e14] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e19]:
+            - img
+        - button "Skip navigation" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Skip navigation
+      - generic [ref=e28]:
+        - search [ref=e29]:
+          - generic [ref=e30]:
+            - generic [ref=e31]:
+              - combobox "Search" [expanded] [ref=e33]: veo 3
+              - button "Clear search query" [ref=e35] [cursor=pointer]:
+                - generic [ref=e38]:
+                  - img
+            - button "Search" [ref=e42] [cursor=pointer]:
+              - generic [ref=e45]:
+                - img
+        - generic [ref=e47]:
+          - button "Search with your voice" [ref=e49] [cursor=pointer]:
+            - generic [ref=e53]:
+              - img
+          - tooltip "tooltip"
+      - generic [ref=e58]:
+        - button "Settings" [ref=e63] [cursor=pointer]:
+          - generic [ref=e66]:
+            - img
+        - link "Sign in" [ref=e69] [cursor=pointer]:
+          - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252Fresults%253Fsearch_query%253Dveo%252B3%2526sp%253DCAMSBAgEEAEYAQ%2525253D%2525253D&hl=en&ec=65620
+          - generic [ref=e73]:
+            - img
+          - generic [ref=e74]: Sign in
+  - navigation [ref=e78]:
+    - generic [ref=e79]:
+      - link "Home" [ref=e81] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e84]:
+          - img
+        - generic [ref=e85]: Home
+      - link "Shorts" [ref=e87] [cursor=pointer]:
+        - /url: /shorts/
+        - generic [ref=e90]:
+          - img
+        - generic [ref=e91]: Shorts
+      - link "Subscriptions" [ref=e93] [cursor=pointer]:
+        - /url: /feed/subscriptions
+        - generic [ref=e96]:
+          - img
+        - generic [ref=e97]: Subscriptions
+      - link "You" [ref=e99] [cursor=pointer]:
+        - /url: /feed/you
+        - generic [ref=e102]:
+          - img
+        - generic [ref=e103]: You
+  - generic [ref=e104]:
+    - main [ref=e105]:
+      - generic [ref=e106]:
+        - generic [ref=e108]:
+          - tablist [ref=e113]:
+            - tab "All" [selected] [ref=e117] [cursor=pointer]:
+              - generic [ref=e119]: All
+            - tab "Shorts" [ref=e126] [cursor=pointer]:
+              - generic [ref=e128]: Shorts
+            - tab "Unwatched" [ref=e135] [cursor=pointer]:
+              - generic [ref=e137]: Unwatched
+            - tab "Watched" [ref=e144] [cursor=pointer]:
+              - generic [ref=e146]: Watched
+            - tab "Videos" [ref=e153] [cursor=pointer]:
+              - generic [ref=e155]: Videos
+            - tab "Recently uploaded" [ref=e162] [cursor=pointer]:
+              - generic [ref=e164]: Recently uploaded
+            - tab "Live" [ref=e171] [cursor=pointer]:
+              - generic [ref=e173]: Live
+          - generic [ref=e178]:
+            - button "Search filters" [ref=e180] [cursor=pointer]:
+              - generic [ref=e181]: Filters
+              - generic [ref=e185]:
+                - img
+            - tooltip "tooltip"
+        - generic [ref=e194]:
+          - generic [ref=e196]:
+            - link [ref=e198] [cursor=pointer]:
+              - /url: /watch?v=P_XjzpoctNI&pp=ygUFdmVvIDM%3D
+              - img [ref=e200]
+              - img [ref=e203]:
+                - generic [ref=e204]: 8:20
+              - generic:
+                - generic: Now playing
+                - generic:
+                  - img
+            - generic [ref=e205] [cursor=pointer]:
+              - generic [ref=e206]:
+                - generic [ref=e207]:
+                  - heading "🔥How to Create AI Videos FREE with FLOW AI Video Generator | AI se Video Kaise Banaye | Ritika AI 8 minutes, 20 seconds" [level=3] [ref=e208]:
+                    - link "🔥How to Create AI Videos FREE with FLOW AI Video Generator | AI se Video Kaise Banaye | Ritika AI 8 minutes, 20 seconds" [ref=e209]:
+                      - /url: /watch?v=P_XjzpoctNI&pp=ygUFdmVvIDM%3D
+                      - text: 🔥How to Create AI Videos FREE with FLOW AI Video Generator | AI se Video Kaise Banaye | Ritika AI
+                  - button "Action menu" [ref=e213]:
+                    - generic [ref=e216]:
+                      - img
+                - generic [ref=e219]:
+                  - generic [ref=e220]: 135K views
+                  - generic [ref=e221]: •3 weeks ago
+              - generic [ref=e222]:
+                - link "Go to channel Learn AI with Ritika" [ref=e223]:
+                  - /url: /@LearnAIwithRitika
+                - link "Learn AI with Ritika" [ref=e229]:
+                  - /url: /@LearnAIwithRitika
+              - generic [ref=e230]:
+                - generic [ref=e231]: I need JSON prompt to convert this image into a video clip using Veo 3 where I want you to describe the main character's actions, ...
+                - tooltip "tooltip"
+              - generic [ref=e234]:
+                - generic [ref=e235]:
+                  - generic [ref=e239]: 22 chapters
+                  - button "AI Video | AI Video Monetisation | Sound Platform | Script | Images | Image Generation | Image Settings | 2nd Scene Image Generation | Image to Video | Video Generation Prompts | Video Generation | Video Settings | 1st scene Video Clip | Extend Video Clip | Change Video Camera Position | Sound Design | Epidemic Sound Login | Music Selection | Trim Music File | Find Similar Music Tracks | Sound Effects | AI Video Monetisation Rules" [ref=e240]
+                - button "More" [ref=e245]:
+                  - generic [ref=e249]:
+                    - img
+          - generic [ref=e254]:
+            - link [ref=e256] [cursor=pointer]:
+              - /url: /watch?v=U1h5cSjI3b0&pp=ygUFdmVvIDM%3D
+              - img [ref=e258]
+              - img [ref=e261]:
+                - generic [ref=e262]: 9:46
+              - generic:
+                - generic: Now playing
+                - generic:
+                  - img
+            - generic [ref=e263] [cursor=pointer]:
+              - generic [ref=e264]:
+                - generic [ref=e265]:
+                  - heading "Google Vids, Veo 3.1 Released for Free | Now Anyone Can Create AI Videos 9 minutes, 46 seconds" [level=3] [ref=e266]:
+                    - link "Google Vids, Veo 3.1 Released for Free | Now Anyone Can Create AI Videos 9 minutes, 46 seconds" [ref=e267]:
+                      - /url: /watch?v=U1h5cSjI3b0&pp=ygUFdmVvIDM%3D
+                      - text: Google Vids, Veo 3.1 Released for Free | Now Anyone Can Create AI Videos
+                  - button "Action menu" [ref=e271]:
+                    - generic [ref=e274]:
+                      - img
+                - generic [ref=e277]:
+                  - generic [ref=e278]: 104K views
+                  - generic [ref=e279]: •2 weeks ago
+              - generic [ref=e280]:
+                - link "Go to channel Play with AI Lab" [ref=e281]:
+                  - /url: /@PlayWithAI%EB%9E%A9
+                - link "Play with AI Lab" [ref=e287]:
+                  - /url: /@PlayWithAI%EB%9E%A9
+              - generic [ref=e288]:
+                - text: "#GoogleVids #Veo3_1 #AIVideoCreation #FreeAITools #VideoEditing With the free release of Google Vids and Veo 3.1, AI video ..."
+                - tooltip "tooltip"
+              - img "Closed captions" [ref=e293]:
+                - generic [ref=e294]: CC
+              - generic [ref=e297]:
+                - generic [ref=e298]:
+                  - generic [ref=e299]:
+                    - generic [ref=e302]:
+                      - img
+                    - generic [ref=e303]: Summary
+                  - button "Play with AI Lab이 구글 워크스페이스 내 AI 영상 편집 도구인 구글 비즈의 주요 기능을 상세히 소개합니다. 텍스트 프롬프트를 활용한 고품질 영상 생성부터 아바타 활용, 배경 음악 및 이미지 생성, 템플릿 편집 방법까지 누구나 쉽게 고퀄리티 영상을 제작할 수 있는 실무 과정을 단계별로 설명합니다." [ref=e304]
+                  - text: ·
+                - button "More" [ref=e309]:
+                  - generic [ref=e313]:
+                    - img
+          - generic [ref=e318]:
+            - link [ref=e320] [cursor=pointer]:
+              - /url: /watch?v=AYiY-cmNSjk&t=207s&pp=ygUFdmVvIDM%3D
+              - img [ref=e322]
+              - img [ref=e327]:
+                - generic [ref=e328]: 20:19
+              - generic:
+                - generic: Now playing
+                - generic:
+                  - img
+              - generic [ref=e329]:
+                - generic [ref=e336]: 3:27
+                - generic [ref=e342]: 20:19
+            - generic [ref=e343] [cursor=pointer]:
+              - generic [ref=e344]:
+                - generic [ref=e345]:
+                  - 'heading "GEMINI 4 + VEO 4: Google I/O 2026 Just Shocked Everyone 20 minutes" [level=3] [ref=e346]':
+                    - 'link "GEMINI 4 + VEO 4: Google I/O 2026 Just Shocked Everyone 20 minutes" [ref=e347]':
+                      - /url: /watch?v=AYiY-cmNSjk&t=207s&pp=ygUFdmVvIDM%3D
+                      - text: "GEMINI 4 + VEO 4: Google I/O 2026 Just Shocked Everyone"
+                  - button "Action menu" [ref=e351]:
+                    - generic [ref=e354]:
+                      - img
+                - generic [ref=e357]:
+                  - generic [ref=e358]: 86K views
+                  - generic [ref=e359]: •7 days ago
+              - generic [ref=e360]:
+                - link "Go to channel AI Master" [ref=e361]:
+                  - /url: /@iamAImaster
+                - generic [ref=e363]:
+                  - link "AI Master" [ref=e367]:
+                    - /url: /@iamAImaster
+                  - img "Verified" [ref=e372]:
+                    - generic [ref=e375]:
+                      - img
+              - generic [ref=e376]:
+                - text: sponsored Check out the Google AI Professional Certificate here- https://imp.i384100.net/n4nam6 Become an AI Master ...
+                - tooltip "tooltip"
+              - img "4K" [ref=e381]:
+                - generic [ref=e382]: 4K
+              - generic [ref=e385]:
+                - generic [ref=e386]:
+                  - generic [ref=e390]: Matching chapter
+                  - button "3:27 Veo 4 and the Video Revolution" [ref=e391]
+                - button "More" [ref=e396]:
+                  - generic [ref=e400]:
+                    - img
+          - generic [ref=e405]:
+            - link [ref=e407] [cursor=pointer]:
+              - /url: /watch?v=JjPtJcqwhqg&pp=ygUFdmVvIDM%3D
+            - generic [ref=e409] [cursor=pointer]:
+              - generic [ref=e410]:
+                - generic [ref=e411]:
+                  - heading "Гайд на БЕСПЛАТНЫЙ Claude, Gemini и GPT. Omniroute | Kiro AI 16 minutes" [level=3] [ref=e412]:
+                    - link "Гайд на БЕСПЛАТНЫЙ Claude, Gemini и GPT. Omniroute | Kiro AI 16 minutes" [ref=e413]:
+                      - /url: /watch?v=JjPtJcqwhqg&pp=ygUFdmVvIDM%3D
+                      - text: Гайд на БЕСПЛАТНЫЙ Claude, Gemini и GPT. Omniroute | Kiro AI
+                  - button "Action menu" [ref=e417]:
+                    - generic [ref=e420]:
+                      - img
+                - generic [ref=e423]:
+                  - generic [ref=e424]: 83K views
+                  - generic [ref=e425]: •3 weeks ago
+              - generic [ref=e426]:
+                - link "Go to channel Asati" [ref=e427]:
+                  - /url: /@Asati_shill
+                - link "Asati" [ref=e433]:
+                  - /url: /@Asati_shill
+              - generic [ref=e434]:
+                - generic [ref=e435]: ... Claude бесплатно,Как не платить за ИИ,Бесплатное генерация фото,Бесплатная генерация видео,Veo 3 бесплатно,Flow ...
+                - tooltip "tooltip"
+              - img "4K" [ref=e440]:
+                - generic [ref=e441]: 4K
+              - generic [ref=e444]:
+                - generic [ref=e445]:
+                  - generic [ref=e449]: 11 chapters
+                  - button "Салямчик | Способы получения аккаунтов | Покупаем акки GPT | Opencode для использования GPT | Как смотреть лимиты Chat GPT | ADS Power дал джазику | Беплатный Claude, установка Omniroute | Покупаем акки для Gemini, Opus | Скачиваем антигравити, используем один аккаунт | Как использовать несколько аккаунтов Antigravity | Люблю целую чмафки лафки" [ref=e450]
+                - button "More" [ref=e455]:
+                  - generic [ref=e459]:
+                    - img
+          - generic [ref=e464]:
+            - link [ref=e466] [cursor=pointer]:
+              - /url: /watch?v=ayaPyqfI4RU&pp=ygUFdmVvIDM%3D
+            - generic [ref=e468] [cursor=pointer]:
+              - generic [ref=e469]:
+                - generic [ref=e470]:
+                  - heading "MTF man TRANSFORMED into BRIDESMAID by his SISTER 11 minutes, 36 seconds" [level=3] [ref=e471]:
+                    - link "MTF man TRANSFORMED into BRIDESMAID by his SISTER 11 minutes, 36 seconds" [ref=e472]:
+                      - /url: /watch?v=ayaPyqfI4RU&pp=ygUFdmVvIDM%3D
+                      - text: MTF man TRANSFORMED into BRIDESMAID by his SISTER
+                  - button "Action menu" [ref=e476]:
+                    - generic [ref=e479]:
+                      - img
+                - generic [ref=e482]:
+                  - generic [ref=e483]: 78K views
+                  - generic [ref=e484]: •3 weeks ago
+              - generic [ref=e485]:
+                - link "Go to channel Sexy Transformations" [ref=e486]:
+                  - /url: /@sexytransformations
+                - link "Sexy Transformations" [ref=e491]:
+                  - /url: /@sexytransformations
+              - generic [ref=e492]:
+                - generic [ref=e493]: "... xxx Please join my Patreon: https://www.patreon.com/c/SexyTransformations #shapeshifting #ai #transformation #veo3 #mtf."
+                - tooltip "tooltip"
+          - generic [ref=e495]:
+            - link [ref=e497] [cursor=pointer]:
+              - /url: /watch?v=vYJqyZGTeik&pp=ygUFdmVvIDM%3D
+            - generic [ref=e499] [cursor=pointer]:
+              - generic [ref=e500]:
+                - generic [ref=e501]:
+                  - heading "3 AI Alternatives to Grok for Creating Free Videos 22 minutes" [level=3] [ref=e502]:
+                    - link "3 AI Alternatives to Grok for Creating Free Videos 22 minutes" [ref=e503]:
+                      - /url: /watch?v=vYJqyZGTeik&pp=ygUFdmVvIDM%3D
+                      - text: 3 AI Alternatives to Grok for Creating Free Videos
+                  - button "Action menu" [ref=e507]:
+                    - generic [ref=e510]:
+                      - img
+                - generic [ref=e513]:
+                  - generic [ref=e514]: 78K views
+                  - generic [ref=e515]: •4 weeks ago
+              - generic [ref=e516]:
+                - link "Go to channel Arte y Animacion Academy" [ref=e517]:
+                  - /url: /@ArteyAnimacion
+                - link "Arte y Animacion Academy" [ref=e522]:
+                  - /url: /@ArteyAnimacion
+              - generic [ref=e523]:
+                - text: In this video, I'll show you different ways to create free videos with artificial intelligence. I'll share simple and ...
+                - tooltip "tooltip"
+          - generic [ref=e525]:
+            - link [ref=e527] [cursor=pointer]:
+              - /url: /watch?v=6bt8iQctcog&pp=ygUFdmVvIDM%3D
+            - generic [ref=e529] [cursor=pointer]:
+              - generic [ref=e530]:
+                - generic [ref=e531]:
+                  - heading "AI News - Gemma 4, Veo 3.1 Lite, OpenAI's new image model, Claude code leak, Typecast, Grok Quali... 28 minutes" [level=3] [ref=e532]:
+                    - link "AI News - Gemma 4, Veo 3.1 Lite, OpenAI's new image model, Claude code leak, Typecast, Grok Quali... 28 minutes" [ref=e533]:
+                      - /url: /watch?v=6bt8iQctcog&pp=ygUFdmVvIDM%3D
+                      - text: AI News - Gemma 4, Veo 3.1 Lite, OpenAI's new image model, Claude code leak, Typecast, Grok Quali...
+                  - button "Action menu" [ref=e537]:
+                    - generic [ref=e540]:
+                      - img
+                - generic [ref=e543]:
+                  - generic [ref=e544]: 62K views
+                  - generic [ref=e545]: •2 weeks ago
+              - generic [ref=e546]:
+                - link "Go to channel 조코딩 JoCoding" [ref=e547]:
+                  - /url: /@jocoding
+                - generic [ref=e548]:
+                  - link "조코딩 JoCoding" [ref=e552]:
+                    - /url: /@jocoding
+                  - img "Verified" [ref=e557]:
+                    - generic [ref=e560]:
+                      - img
+              - generic [ref=e561]:
+                - text: "🎤 AI Dubbing is Typecast 👉🏻 Try it now: https://tycs.io/4diJzLz April Limited! Sign up and get the TTS Monetization ..."
+                - tooltip "tooltip"
+              - generic [ref=e564]:
+                - generic [ref=e565]:
+                  - generic [ref=e569]: 28 chapters
+                  - button "구글, Gemma 4 공개 | 구글, Veo3.1 Lite 출시 | 구글, AI Pro 구독자 대상 드라이브 용량 증량 | 오픈AI, 새 이미지 모델 테스트 중? | Grok, Quality Mode 추가 | 타입캐스트 소개 | 오픈소스 영상 편집 툴 등장 | Claude Code 강제 오픈소스화 | 유출 소스 기반 프로젝트 등장 | 앤트로픽, 오픈클로 연결 중단 공식화 | Claude Cowork & Claude Code Desktop 윈도우도 지원 시작 | Codex를 Claude Code에 연결하는 법 | 오픈AI, TBPN 인수 | MS 신모델 3종 공개 | Microsoft Copilot 광고 삽입 논란 | PikaLabs, PikaStream1.0 출시 | 넷플릭스, VOID 객체 삭제 기술 발표 | Qwen3.5-Omni 발표 | Wan2.7-Image 및 Wan2.7-Video 발표 | GLM-5V-Turbo | LLM을 활용하여 개인 지식저장소 구축하기 | 에이전트용 디자인 정석 파일 등장 | 한국인을 위한 K-스킬 모음집 | 무료 안드로이드용 SMS 게이트웨이 | 배낭형 로봇팔 등장 | 조코딩 기사 인터뷰 | 프로덕트 소개 | VVIP 감사인사" [ref=e570]
+                - button "More" [ref=e575]:
+                  - generic [ref=e579]:
+                    - img
+          - generic [ref=e584]:
+            - link [ref=e586] [cursor=pointer]:
+              - /url: /watch?v=Nsf75cVwSOM&pp=ygUFdmVvIDM%3D
+            - generic [ref=e588] [cursor=pointer]:
+              - generic [ref=e589]:
+                - generic [ref=e590]:
+                  - heading "How to create videos with VEO 3 for free and unlimited (no credits needed) 11 minutes, 32 seconds" [level=3] [ref=e591]:
+                    - link "How to create videos with VEO 3 for free and unlimited (no credits needed) 11 minutes, 32 seconds" [ref=e592]:
+                      - /url: /watch?v=Nsf75cVwSOM&pp=ygUFdmVvIDM%3D
+                      - text: How to create videos with VEO 3 for free and unlimited (no credits needed)
+                  - button "Action menu" [ref=e596]:
+                    - generic [ref=e599]:
+                      - img
+                - generic [ref=e602]:
+                  - generic [ref=e603]: 61K views
+                  - generic [ref=e604]: •3 weeks ago
+              - generic [ref=e605]:
+                - link "Go to channel Se Mexa" [ref=e606]:
+                  - /url: /@semexabr
+                - link "Se Mexa" [ref=e611]:
+                  - /url: /@semexabr
+              - generic [ref=e612]:
+                - text: I discovered how to use Google's VEO 3 100% free and unlimited with a new method to generate unlimited videos. Learn how to ...
+                - tooltip "tooltip"
+              - generic [ref=e615]:
+                - generic [ref=e616]:
+                  - generic [ref=e617]:
+                    - generic [ref=e620]:
+                      - img
+                    - generic [ref=e621]: Summary
+                  - button "Se Mexa apresenta uma ferramenta experimental do Google que permite criar aplicativos personalizados para geração de conteúdo. O processo envolve a utilização de prompts específicos e imagens de referência para desenvolver a aplicação." [ref=e622]
+                  - text: ·
+                - button "More" [ref=e627]:
+                  - generic [ref=e631]:
+                    - img
+          - generic [ref=e636]:
+            - link [ref=e638] [cursor=pointer]:
+              - /url: /watch?v=IE6-sgmMIB8&t=391s&pp=ygUFdmVvIDM%3D
+            - generic [ref=e640] [cursor=pointer]:
+              - generic [ref=e641]:
+                - generic [ref=e642]:
+                  - heading "The New Way To Create Insanely Realistic AI Videos 19 minutes" [level=3] [ref=e643]:
+                    - link "The New Way To Create Insanely Realistic AI Videos 19 minutes" [ref=e644]:
+                      - /url: /watch?v=IE6-sgmMIB8&t=391s&pp=ygUFdmVvIDM%3D
+                      - text: The New Way To Create Insanely Realistic AI Videos
+                  - button "Action menu" [ref=e648]:
+                    - generic [ref=e651]:
+                      - img
+                - generic [ref=e654]:
+                  - generic [ref=e655]: 60K views
+                  - generic [ref=e656]: •3 weeks ago
+              - generic [ref=e657]:
+                - link "Go to channel Wholesale Ted" [ref=e658]:
+                  - /url: /@WholesaleTed
+                - generic [ref=e659]:
+                  - link "Wholesale Ted" [ref=e663]:
+                    - /url: /@WholesaleTed
+                  - img "Verified" [ref=e668]:
+                    - generic [ref=e671]:
+                      - img
+              - generic [ref=e672]:
+                - text: How to create ultra realistic AI videos step-by-step, using the latest version of Google's all-in-one content creation tool, Flow.
+                - tooltip "tooltip"
+              - generic [ref=e675]:
+                - generic [ref=e676]:
+                  - generic [ref=e680]: Matching chapter
+                  - button "6:31 How To Create AI Videod With VEO (Frame To Video)" [ref=e681]
+                - button "More" [ref=e686]:
+                  - generic [ref=e690]:
+                    - img
+          - generic [ref=e695]:
+            - link [ref=e697] [cursor=pointer]:
+              - /url: /watch?v=62BTAjxZ9u0&pp=ygUFdmVvIDPSBwkJ0woBhyohjO8%3D
+            - generic [ref=e699] [cursor=pointer]:
+              - generic [ref=e700]:
+                - generic [ref=e701]:
+                  - heading "VEO 3 FREE Wapas Aa Gaya! 😍 Unlimited AI Videos Banao (No Subscription) 2026 12 minutes, 5 seconds" [level=3] [ref=e702]:
+                    - link "VEO 3 FREE Wapas Aa Gaya! 😍 Unlimited AI Videos Banao (No Subscription) 2026 12 minutes, 5 seconds" [ref=e703]:
+                      - /url: /watch?v=62BTAjxZ9u0&pp=ygUFdmVvIDPSBwkJ0woBhyohjO8%3D
+                      - text: VEO 3 FREE Wapas Aa Gaya! 😍 Unlimited AI Videos Banao (No Subscription) 2026
+                  - button "Action menu" [ref=e707]:
+                    - generic [ref=e710]:
+                      - img
+                - generic [ref=e713]:
+                  - generic [ref=e714]: 58K views
+                  - generic [ref=e715]: •2 weeks ago
+              - generic [ref=e716]:
+                - link "Go to channel Tech Gyan GT" [ref=e717]:
+                  - /url: /@TechGyanGT
+                - link "Tech Gyan GT" [ref=e722]:
+                  - /url: /@TechGyanGT
+              - generic [ref=e723]:
+                - text: VEO 3 FREE is back! Now create unlimited AI videos without a subscription—using Google Opal, from your phone or laptop ...
+                - tooltip "tooltip"
+              - img "4K" [ref=e728]:
+                - generic [ref=e729]: 4K
+              - generic [ref=e732]:
+                - generic [ref=e733]:
+                  - generic [ref=e737]: 6 chapters
+                  - button "Introduction | Google Opal kya hai? | Step 1 - Account setup | VEO 3 se video generate karna | Results & Output | Free daily video generation tips" [ref=e738]
+                - button "More" [ref=e743]:
+                  - generic [ref=e747]:
+                    - img
+          - generic [ref=e752]:
+            - link [ref=e754] [cursor=pointer]:
+              - /url: /watch?v=viLj8Z4ehzU&pp=ygUFdmVvIDM%3D
+            - generic [ref=e756] [cursor=pointer]:
+              - generic [ref=e757]:
+                - generic [ref=e758]:
+                  - heading "How To Get Google Veo 3 FREE Unlimited |Veo 3 Free Kese Use Kare | Veo 3 Free Unlimited 4 minutes, 57 seconds" [level=3] [ref=e759]:
+                    - link "How To Get Google Veo 3 FREE Unlimited |Veo 3 Free Kese Use Kare | Veo 3 Free Unlimited 4 minutes, 57 seconds" [ref=e760]:
+                      - /url: /watch?v=viLj8Z4ehzU&pp=ygUFdmVvIDM%3D
+                      - text: How To Get Google Veo 3 FREE Unlimited |Veo 3 Free Kese Use Kare | Veo 3 Free Unlimited
+                  - button "Action menu" [ref=e764]:
+                    - generic [ref=e767]:
+                      - img
+                - generic [ref=e770]:
+                  - generic [ref=e771]: 48K views
+                  - generic [ref=e772]: •4 weeks ago
+              - generic [ref=e773]:
+                - link "Go to channel Creative Ali 2.0" [ref=e774]:
+                  - /url: /@CreativeAli2.0
+                - link "Creative Ali 2.0" [ref=e779]:
+                  - /url: /@CreativeAli2.0
+              - generic [ref=e780]:
+                - generic [ref=e781]: Creative Ali 2.0 In This Video:- ‎How To Get Google Veo 3 FREE Unlimited |Veo 3 Free Kese Use Kare | Veo 3 Free Unlimited ...
+                - tooltip "tooltip"
+              - generic [ref=e784]:
+                - generic [ref=e785]:
+                  - generic [ref=e786]:
+                    - generic [ref=e789]:
+                      - img
+                    - generic [ref=e790]: Summary
+                  - button "Creative Ali 2.0 نے Google Veo 3 کو بغیر کسی حد کے استعمال کرنے کا طریقہ بتایا ہے۔ یہ پروسیس آپ کو ٹیکسٹ یا تصویر کے ذریعے بغیر کریڈٹ ختم ہونے کے ڈر سے لامحدود ویڈیوز بنانے کی اجازت دیتا ہے۔" [ref=e791]
+                  - text: ·
+                - button "More" [ref=e796]:
+                  - generic [ref=e800]:
+                    - img
+          - generic [ref=e805]:
+            - link [ref=e807] [cursor=pointer]:
+              - /url: /watch?v=GJ3aGQxO1Fk&pp=ygUFdmVvIDPSBwkJ0woBhyohjO8%3D
+            - generic [ref=e809] [cursor=pointer]:
+              - generic [ref=e810]:
+                - generic [ref=e811]:
+                  - heading "Google Video Generator is now available to free users! Google Vids, which allows you to use Veo 3... 17 minutes" [level=3] [ref=e812]:
+                    - link "Google Video Generator is now available to free users! Google Vids, which allows you to use Veo 3... 17 minutes" [ref=e813]:
+                      - /url: /watch?v=GJ3aGQxO1Fk&pp=ygUFdmVvIDPSBwkJ0woBhyohjO8%3D
+                      - text: Google Video Generator is now available to free users! Google Vids, which allows you to use Veo 3...
+                  - button "Action menu" [ref=e817]:
+                    - generic [ref=e820]:
+                      - img
+                - generic [ref=e823]:
+                  - generic [ref=e824]: 46K views
+                  - generic [ref=e825]: •2 weeks ago
+              - generic [ref=e826]:
+                - link "Go to channel 橋本佳代 生成AIクリエイター【Google生成AIとCanvaデザイン】" [ref=e827]:
+                  - /url: /@design-kayo
+                - link "橋本佳代 生成AIクリエイター【Google生成AIとCanvaデザイン】" [ref=e832]:
+                  - /url: /@design-kayo
+              - generic [ref=e833]:
+                - text: Google's video generation AI is free! Veo 3.1 is available with a free account! Utilize video generation AI with Google Vids ...
+                - tooltip "tooltip"
+          - generic [ref=e835]:
+            - link [ref=e837] [cursor=pointer]:
+              - /url: /watch?v=E1y7fLWLI0s&t=606s&pp=ygUFdmVvIDPSBwkJ0woBhyohjO8%3D
+            - generic [ref=e839] [cursor=pointer]:
+              - generic [ref=e840]:
+                - generic [ref=e841]:
+                  - 'heading "Google AI Studio 2.0 Tutorial: How to Use All Google AI Tools for FREE 17 minutes" [level=3] [ref=e842]':
+                    - 'link "Google AI Studio 2.0 Tutorial: How to Use All Google AI Tools for FREE 17 minutes" [ref=e843]':
+                      - /url: /watch?v=E1y7fLWLI0s&t=606s&pp=ygUFdmVvIDPSBwkJ0woBhyohjO8%3D
+                      - text: "Google AI Studio 2.0 Tutorial: How to Use All Google AI Tools for FREE"
+                  - button "Action menu" [ref=e847]:
+                    - generic [ref=e850]:
+                      - img
+                - generic [ref=e853]:
+                  - generic [ref=e854]: 44K views
+                  - generic [ref=e855]: •2 weeks ago
+              - generic [ref=e856]:
+                - link "Go to channel AI Master" [ref=e857]:
+                  - /url: /@iamAImaster
+                - generic [ref=e858]:
+                  - link "AI Master" [ref=e862]:
+                    - /url: /@iamAImaster
+                  - img "Verified" [ref=e867]:
+                    - generic [ref=e870]:
+                      - img
+              - generic [ref=e871]:
+                - text: sponsored Get your 30% off the Chatty paid plan! https://partners.avada.io/i/a/JK7OH Become an AI Master – All-in-one AI ...
+                - tooltip "tooltip"
+              - img "4K" [ref=e876]:
+                - generic [ref=e877]: 4K
+              - generic [ref=e880]:
+                - generic [ref=e881]:
+                  - generic [ref=e885]: Matching chapter
+                  - 'button "10:06 Content Creation: Veo 3.1 & Nano Banana Pro" [ref=e886]'
+                - button "More" [ref=e891]:
+                  - generic [ref=e895]:
+                    - img
+          - generic [ref=e900]:
+            - link [ref=e902] [cursor=pointer]:
+              - /url: /watch?v=BGN0ZAKqR1w&pp=ygUFdmVvIDM%3D
+            - generic [ref=e904] [cursor=pointer]:
+              - generic [ref=e905]:
+                - generic [ref=e906]:
+                  - 'heading "The LATEST AI Video Generators Ranked: Who Does Anime BEST in 2026? (Seedance 2, Kling, Grok, Sora) 14 minutes, 52 seconds" [level=3] [ref=e907]':
+                    - 'link "The LATEST AI Video Generators Ranked: Who Does Anime BEST in 2026? (Seedance 2, Kling, Grok, Sora) 14 minutes, 52 seconds" [ref=e908]':
+                      - /url: /watch?v=BGN0ZAKqR1w&pp=ygUFdmVvIDM%3D
+                      - text: "The LATEST AI Video Generators Ranked: Who Does Anime BEST in 2026? (Seedance 2, Kling, Grok, Sora)"
+                  - button "Action menu" [ref=e912]:
+                    - generic [ref=e915]:
+                      - img
+                - generic [ref=e918]:
+                  - generic [ref=e919]: 40K views
+                  - generic [ref=e920]: •4 weeks ago
+              - generic [ref=e921]:
+                - link "Go to channel Noble Goose" [ref=e922]:
+                  - /url: /@NobleGooseAnime
+                - link "Noble Goose" [ref=e927]:
+                  - /url: /@NobleGooseAnime
+              - generic [ref=e928]:
+                - generic [ref=e929]: "... Scenes → https://youtu.be/lokREkx_-uo #aianime #aivideogenerator #seedance2 #kling3 #veo3 #sora2 #grok #Vidu #hailuoai ..."
+                - tooltip "tooltip"
+          - generic [ref=e931]:
+            - link [ref=e933] [cursor=pointer]:
+              - /url: /watch?v=ixH_QDfaUY0&pp=ygUFdmVvIDM%3D
+            - generic [ref=e935] [cursor=pointer]:
+              - generic [ref=e936]:
+                - generic [ref=e937]:
+                  - heading "🔥 How to Create FREE and UNLIMITED VIRAL Videos with VEO 3.1 (Method 2026) 11 minutes, 44 seconds" [level=3] [ref=e938]:
+                    - link "🔥 How to Create FREE and UNLIMITED VIRAL Videos with VEO 3.1 (Method 2026) 11 minutes, 44 seconds" [ref=e939]:
+                      - /url: /watch?v=ixH_QDfaUY0&pp=ygUFdmVvIDM%3D
+                      - text: 🔥 How to Create FREE and UNLIMITED VIRAL Videos with VEO 3.1 (Method 2026)
+                  - button "Action menu" [ref=e943]:
+                    - generic [ref=e946]:
+                      - img
+                - generic [ref=e949]:
+                  - generic [ref=e950]: 40K views
+                  - generic [ref=e951]: •3 weeks ago
+              - generic [ref=e952]:
+                - link "Go to channel Edwin Arenas" [ref=e953]:
+                  - /url: /@EdwinFernandoArenas
+                - link "Edwin Arenas" [ref=e958]:
+                  - /url: /@EdwinFernandoArenas
+              - generic [ref=e959]:
+                - text: In this video, I'll show you step-by-step how to create viral videos for social media completely free and without limits using ...
+                - tooltip "tooltip"
+              - generic [ref=e960]:
+                - link "2 minutes, 48 seconds ... para que <b>veo tres</b> me cree un video es un celular humanizado con brazos y pies que diga en español latino ¿quieres aprender&nbsp;..." [ref=e961]:
+                  - /url: /watch?v=ixH_QDfaUY0&t=168s
+                  - text: 2:48
+                  - generic [ref=e962]: ... para que veo tres me cree un video es un celular humanizado con brazos y pies que diga en español latino ¿quieres aprender ...
+                - tooltip "tooltip"
+          - generic [ref=e964]:
+            - link [ref=e966] [cursor=pointer]:
+              - /url: /watch?v=fmV0mp6aXpM&pp=ygUFdmVvIDM%3D
+            - generic [ref=e968] [cursor=pointer]:
+              - generic [ref=e969]:
+                - generic [ref=e970]:
+                  - heading "Google VEO 3 Is FREE Again! Create Unlimited AI Videos Now | 100% Working Method 13 minutes, 35 seconds" [level=3] [ref=e971]:
+                    - link "Google VEO 3 Is FREE Again! Create Unlimited AI Videos Now | 100% Working Method 13 minutes, 35 seconds" [ref=e972]:
+                      - /url: /watch?v=fmV0mp6aXpM&pp=ygUFdmVvIDM%3D
+                      - text: Google VEO 3 Is FREE Again! Create Unlimited AI Videos Now | 100% Working Method
+                  - button "Action menu" [ref=e976]:
+                    - generic [ref=e979]:
+                      - img
+                - generic [ref=e982]:
+                  - generic [ref=e983]: 36K views
+                  - generic [ref=e984]: •8 days ago
+              - generic [ref=e985]:
+                - link "Go to channel Automation Xpert" [ref=e986]:
+                  - /url: /@AutomationXpertz
+                - link "Automation Xpert" [ref=e991]:
+                  - /url: /@AutomationXpertz
+              - generic [ref=e992]:
+                - generic [ref=e993]: Google VEO 3 Is FREE Again! You can now create unlimited AI videos using VEO 3 — completely FREE No limits.
+                - tooltip "tooltip"
+              - generic [ref=e996]:
+                - generic [ref=e997]:
+                  - generic [ref=e998]:
+                    - generic [ref=e1001]:
+                      - img
+                    - generic [ref=e1002]: Summary
+                  - button "Automation Xpert demonstrates step-by-step methods to access Google VEO 3 for free using trial accounts and alternative platforms like Gemini Gen. The guide covers generating cinematic trailers, UGC-style ads, and complete animated stories by utilizing specific prompt-crafting workflows with AI tools and video editors." [ref=e1003]
+                  - text: ·
+                - button "More" [ref=e1008]:
+                  - generic [ref=e1012]:
+                    - img
+          - generic [ref=e1017]:
+            - link [ref=e1019] [cursor=pointer]:
+              - /url: /watch?v=stRsoMNUlGM&pp=ygUFdmVvIDM%3D
+            - generic [ref=e1021] [cursor=pointer]:
+              - generic [ref=e1022]:
+                - generic [ref=e1023]:
+                  - heading "I'm still generating in Grok for FREE! The secret site gives free access to Grok, Kling, Veo, and... 14 minutes, 15 seconds" [level=3] [ref=e1024]:
+                    - link "I'm still generating in Grok for FREE! The secret site gives free access to Grok, Kling, Veo, and... 14 minutes, 15 seconds" [ref=e1025]:
+                      - /url: /watch?v=stRsoMNUlGM&pp=ygUFdmVvIDM%3D
+                      - text: I'm still generating in Grok for FREE! The secret site gives free access to Grok, Kling, Veo, and...
+                  - button "Action menu" [ref=e1029]:
+                    - generic [ref=e1032]:
+                      - img
+                - generic [ref=e1035]:
+                  - generic [ref=e1036]: 35K views
+                  - generic [ref=e1037]: •2 weeks ago
+              - generic [ref=e1038]:
+                - link "Go to channel SeTka Project" [ref=e1039]:
+                  - /url: /@SeTkaProjectMusic
+                - link "SeTka Project" [ref=e1044]:
+                  - /url: /@SeTkaProjectMusic
+              - generic [ref=e1045]:
+                - text: Do you miss Grok and its free video generation? Do you think access has been completely blocked? No. In this video, I show ...
+                - tooltip "tooltip"
+          - generic [ref=e1047]:
+            - link [ref=e1049] [cursor=pointer]:
+              - /url: /watch?v=QdJqJgxa_wM&pp=ygUFdmVvIDM%3D
+            - generic [ref=e1051] [cursor=pointer]:
+              - generic [ref=e1052]:
+                - generic [ref=e1053]:
+                  - heading "What REALLY Happens at a British Caravan Park 😂 | AI Comedy (Veo 3) 2 minutes, 17 seconds" [level=3] [ref=e1054]:
+                    - link "What REALLY Happens at a British Caravan Park 😂 | AI Comedy (Veo 3) 2 minutes, 17 seconds" [ref=e1055]:
+                      - /url: /watch?v=QdJqJgxa_wM&pp=ygUFdmVvIDM%3D
+                      - text: What REALLY Happens at a British Caravan Park 😂 | AI Comedy (Veo 3)
+                  - button "Action menu" [ref=e1059]:
+                    - generic [ref=e1062]:
+                      - img
+                - generic [ref=e1065]:
+                  - generic [ref=e1066]: 34K views
+                  - generic [ref=e1067]: •3 weeks ago
+              - generic [ref=e1068]:
+                - link "Go to channel Artificial LOLs" [ref=e1069]:
+                  - /url: /@ArtificialLoLs1
+                - link "Artificial LOLs" [ref=e1074]:
+                  - /url: /@ArtificialLoLs1
+              - generic [ref=e1075]:
+                - text: We went to a typical British caravan park for a day… and we're still recovering. Meet the locals, survive the facilities, and ...
+                - tooltip "tooltip"
+          - generic [ref=e1077]:
+            - link [ref=e1079] [cursor=pointer]:
+              - /url: /watch?v=wAPlCBWR1OI&pp=ygUFdmVvIDM%3D
+            - generic [ref=e1081] [cursor=pointer]:
+              - generic [ref=e1082]:
+                - generic [ref=e1083]:
+                  - heading "How to Use Grok AI and VEO3 for FREE and UNLIMITED | Best Dark Channel Niches that Monetize Fast 24 minutes" [level=3] [ref=e1084]:
+                    - link "How to Use Grok AI and VEO3 for FREE and UNLIMITED | Best Dark Channel Niches that Monetize Fast 24 minutes" [ref=e1085]:
+                      - /url: /watch?v=wAPlCBWR1OI&pp=ygUFdmVvIDM%3D
+                      - text: How to Use Grok AI and VEO3 for FREE and UNLIMITED | Best Dark Channel Niches that Monetize Fast
+                  - button "Action menu" [ref=e1089]:
+                    - generic [ref=e1092]:
+                      - img
+                - generic [ref=e1095]:
+                  - generic [ref=e1096]: 33K views
+                  - generic [ref=e1097]: •3 weeks ago
+              - generic [ref=e1098]:
+                - link "Go to channel Jon Fortuna IA" [ref=e1099]:
+                  - /url: /@JonFortunaIA
+                - link "Jon Fortuna IA" [ref=e1104]:
+                  - /url: /@JonFortunaIA
+              - generic [ref=e1105]:
+                - text: "🔥 VIP CLASS ► https://darkacademy.com.br/evento ✅ School: Dark Academy ► https://darkacademy.com.br/escola ► PROMPTS ..."
+                - tooltip "tooltip"
+              - generic [ref=e1108]:
+                - generic [ref=e1109]:
+                  - generic [ref=e1110]:
+                    - generic [ref=e1113]:
+                      - img
+                    - generic [ref=e1114]: Summary
+                  - button "Jon Fortuna explica como usar ferramentas avançadas de inteligência artificial para criar vídeos cinematográficos em canais Dark sem aparecer. A demonstração inclui o uso de prompts específicos para gerar roteiros e imagens, além de técnicas para remover marcas d'água e editar o conteúdo final no CapCut." [ref=e1115]
+                  - text: ·
+                - button "More" [ref=e1120]:
+                  - generic [ref=e1124]:
+                    - img
+          - generic [ref=e1129]:
+            - link [ref=e1131] [cursor=pointer]:
+              - /url: /watch?v=Kf_ZCXkOlXY&pp=ygUFdmVvIDM%3D
+            - generic [ref=e1133] [cursor=pointer]:
+              - generic [ref=e1134]:
+                - generic [ref=e1135]:
+                  - heading "Cách làm VIDEO AI VEO 3.1 TỰ ĐỘNG đồng nhất nhân vật KIẾM TIỀN ĐA KÊNH từ A-Z mới nhất năm 2026 31 minutes" [level=3] [ref=e1136]:
+                    - link "Cách làm VIDEO AI VEO 3.1 TỰ ĐỘNG đồng nhất nhân vật KIẾM TIỀN ĐA KÊNH từ A-Z mới nhất năm 2026 31 minutes" [ref=e1137]:
+                      - /url: /watch?v=Kf_ZCXkOlXY&pp=ygUFdmVvIDM%3D
+                      - text: Cách làm VIDEO AI VEO 3.1 TỰ ĐỘNG đồng nhất nhân vật KIẾM TIỀN ĐA KÊNH từ A-Z mới nhất năm 2026
+                  - button "Action menu" [ref=e1141]:
+                    - generic [ref=e1144]:
+                      - img
+                - generic [ref=e1147]:
+                  - generic [ref=e1148]: 29K views
+                  - generic [ref=e1149]: •3 weeks ago
+              - generic [ref=e1150]:
+                - link "Go to channel Hồ Mạnh Thắng Official" [ref=e1151]:
+                  - /url: /@homanhthangofficial
+                - link "Hồ Mạnh Thắng Official" [ref=e1156]:
+                  - /url: /@homanhthangofficial
+              - generic [ref=e1157]:
+                - generic [ref=e1158]: "... TikTok Giải Trí: https://www.tiktok.com/@homanhthang.family #homanhthang #kiemtien #videoAI #kiemtienAI #videoAI #veo3."
+                - tooltip "tooltip"
+              - img "4K" [ref=e1163]:
+                - generic [ref=e1164]: 4K
+    - text: •

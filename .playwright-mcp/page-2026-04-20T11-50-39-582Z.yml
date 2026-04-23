@@ -1,0 +1,146 @@
+- generic [ref=e2]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Guide" [active] [ref=e9] [cursor=pointer]
+        - generic [ref=e11]:
+          - link:
+            - /url: /
+            - generic:
+              - generic:
+                - img
+      - search [ref=e13]:
+        - generic [ref=e14]:
+          - generic [ref=e15]:
+            - combobox [expanded] [ref=e17]: ai video generated
+            - button [ref=e19] [cursor=pointer]
+          - button "Search" [ref=e24] [cursor=pointer]
+  - navigation [ref=e31]
+  - main [ref=e33]:
+    - generic [ref=e34]:
+      - generic [ref=e36]:
+        - generic [ref=e39]:
+          - tablist [ref=e41]:
+            - tab "All" [selected] [ref=e45] [cursor=pointer]:
+              - generic [ref=e47]: All
+            - tab "Shorts" [ref=e54] [cursor=pointer]:
+              - generic [ref=e56]: Shorts
+            - tab "Unwatched" [ref=e63] [cursor=pointer]:
+              - generic [ref=e65]: Unwatched
+            - tab "Watched" [ref=e72] [cursor=pointer]:
+              - generic [ref=e74]: Watched
+            - tab "Videos" [ref=e81] [cursor=pointer]:
+              - generic [ref=e83]: Videos
+            - tab "Recently uploaded" [ref=e90] [cursor=pointer]:
+              - generic [ref=e92]: Recently uploaded
+            - tab "Live" [ref=e99] [cursor=pointer]:
+              - generic [ref=e101]: Live
+          - button "Next" [ref=e109] [cursor=pointer]
+        - generic [ref=e116]:
+          - button "Search filters" [ref=e118] [cursor=pointer]:
+            - generic [ref=e119]: Filters
+          - tooltip "tooltip"
+      - generic [ref=e130]:
+        - generic [ref=e132]:
+          - link [ref=e134] [cursor=pointer]:
+            - /url: /watch?v=TJce3H7b_Ec&list=RDTJce3H7b_Ec&start_radio=1&pp=ygUSYWkgdmlkZW8gZ2VuZXJhdGVkoAcB
+          - generic [ref=e136] [cursor=pointer]:
+            - generic [ref=e137]:
+              - generic [ref=e138]:
+                - 'heading "Trump AI Video: Iran Embassy Mocks Trump With Animated Hormuz Video 1 minute, 7 seconds" [level=3] [ref=e139]':
+                  - 'link "Trump AI Video: Iran Embassy Mocks Trump With Animated Hormuz Video 1 minute, 7 seconds" [ref=e140]':
+                    - /url: /watch?v=TJce3H7b_Ec&list=RDTJce3H7b_Ec&start_radio=1&pp=ygUSYWkgdmlkZW8gZ2VuZXJhdGVkoAcB
+                    - text: "Trump AI Video: Iran Embassy Mocks Trump With Animated Hormuz Video"
+                - button "Action menu" [ref=e144]
+              - generic [ref=e148]:
+                - generic [ref=e149]: 2.3M views
+                - generic [ref=e150]: •6 days ago
+            - generic [ref=e151]:
+              - link "Go to channel NDTV" [ref=e152]:
+                - /url: /@NDTV
+              - generic [ref=e153]:
+                - link "NDTV" [ref=e157]:
+                  - /url: /@NDTV
+                - img "Verified" [ref=e162]
+            - generic [ref=e164]:
+              - generic [ref=e165]: The Iranian Embassy in South Africa has posted an animated video of US President Donald Trump singing about a “blockade” in ...
+              - tooltip "tooltip"
+            - img "New" [ref=e170]:
+              - generic [ref=e171]: New
+        - generic [ref=e173]:
+          - link [ref=e175] [cursor=pointer]:
+            - /url: /watch?v=RM0-ArTi6bk&list=RDRM0-ArTi6bk&start_radio=1&pp=ygUSYWkgdmlkZW8gZ2VuZXJhdGVkoAcB
+          - generic [ref=e177] [cursor=pointer]:
+            - generic [ref=e178]:
+              - generic [ref=e179]:
+                - heading "😳 TRUMP AS JESUS?! IRAN DROPPED ANOTHER LEGO VIDEO 🤯🧱🔥 2 minutes, 49 seconds" [level=3] [ref=e180]:
+                  - link "😳 TRUMP AS JESUS?! IRAN DROPPED ANOTHER LEGO VIDEO 🤯🧱🔥 2 minutes, 49 seconds" [ref=e181]:
+                    - /url: /watch?v=RM0-ArTi6bk&list=RDRM0-ArTi6bk&start_radio=1&pp=ygUSYWkgdmlkZW8gZ2VuZXJhdGVkoAcB
+                    - text: 😳 TRUMP AS JESUS?! IRAN DROPPED ANOTHER LEGO VIDEO 🤯🧱🔥
+                - button "Action menu" [ref=e185]
+              - generic [ref=e189]:
+                - generic [ref=e190]: 617K views
+                - generic [ref=e191]: •5 days ago
+            - generic [ref=e192]:
+              - link "Go to channel Military Lego ai" [ref=e193]:
+                - /url: /@militarylegoai
+              - link "Military Lego ai" [ref=e198]:
+                - /url: /@militarylegoai
+            - generic [ref=e199]:
+              - text: "lego #trump #pope #viral #shorts ⸻ A shocking LEGO cinematic scene where power, money, and belief collide! Trump vs Pope ..."
+              - tooltip "tooltip"
+            - generic [ref=e201]:
+              - img "New" [ref=e204]:
+                - generic [ref=e205]: New
+              - img "4K" [ref=e208]:
+                - generic [ref=e209]: 4K
+        - generic [ref=e211]:
+          - link [ref=e213] [cursor=pointer]:
+            - /url: /watch?v=KRQW3npd6AU&list=RDKRQW3npd6AU&start_radio=1&pp=ygUSYWkgdmlkZW8gZ2VuZXJhdGVkoAcB
+          - generic [ref=e215] [cursor=pointer]:
+            - generic [ref=e216]:
+              - generic [ref=e217]:
+                - heading "“Trump As Jesus?” 😭🔥 Iran Drops ANOTHER Viral LEGO Diss 2 minutes, 28 seconds" [level=3] [ref=e218]:
+                  - link "“Trump As Jesus?” 😭🔥 Iran Drops ANOTHER Viral LEGO Diss 2 minutes, 28 seconds" [ref=e219]:
+                    - /url: /watch?v=KRQW3npd6AU&list=RDKRQW3npd6AU&start_radio=1&pp=ygUSYWkgdmlkZW8gZ2VuZXJhdGVkoAcB
+                    - text: “Trump As Jesus?” 😭🔥 Iran Drops ANOTHER Viral LEGO Diss
+                - button "Action menu" [ref=e223]
+              - generic [ref=e227]:
+                - generic [ref=e228]: 590K views
+                - generic [ref=e229]: •5 days ago
+            - generic [ref=e230]:
+              - link "Go to channel Sophmara" [ref=e231]:
+                - /url: /@Sophmara_FanMadeMusic
+              - link "Sophmara" [ref=e236]:
+                - /url: /@Sophmara_FanMadeMusic
+            - generic [ref=e237]:
+              - generic [ref=e238]: Trump As Jesus?… Iran Drops ANOTHER LEGO Diss Video A viral moment turned into a full-blown meme war.
+              - tooltip "tooltip"
+            - img "New" [ref=e243]:
+              - generic [ref=e244]: New
+        - generic [ref=e246]:
+          - link [ref=e248] [cursor=pointer]:
+            - /url: /watch?v=40hnw76WNWA&pp=ygUSYWkgdmlkZW8gZ2VuZXJhdGVk
+          - generic [ref=e250] [cursor=pointer]:
+            - generic [ref=e251]:
+              - generic [ref=e252]:
+                - heading "'SENT TO HELL!', Iran Hits Back At Trump With Jesus Resembling Avatar In AI Video | Middle East War 3 minutes, 1 second" [level=3] [ref=e253]:
+                  - link "'SENT TO HELL!', Iran Hits Back At Trump With Jesus Resembling Avatar In AI Video | Middle East War 3 minutes, 1 second" [ref=e254]:
+                    - /url: /watch?v=40hnw76WNWA&pp=ygUSYWkgdmlkZW8gZ2VuZXJhdGVk
+                    - text: "'SENT TO HELL!', Iran Hits Back At Trump With Jesus Resembling Avatar In AI Video | Middle East War"
+                - button "Action menu" [ref=e258]
+              - generic [ref=e262]:
+                - generic [ref=e263]: 382K views
+                - generic [ref=e264]: •4 days ago
+            - generic [ref=e265]:
+              - link "Go to channel MIRROR NOW" [ref=e266]:
+                - /url: /@mirrornow
+              - generic [ref=e267]:
+                - link "MIRROR NOW" [ref=e271]:
+                  - /url: /@mirrornow
+                - img "Verified" [ref=e276]
+            - generic [ref=e278]:
+              - generic [ref=e279]: Iran responds to Donald Trump's AI-generated Jesus-like image with a viral AI video showing a dramatic confrontation.
+              - tooltip "tooltip"
+            - img "New" [ref=e284]:
+              - generic [ref=e285]: New

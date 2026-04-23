@@ -68,10 +68,11 @@ This repository demonstrates how Claude Code components work together:
 ## Claude component naming
 
 - All repo-owned skills must use a prefix.
-- Use `common-...` for reusable cross-domain skills such as project scaffolding, skill authoring, meetings, and general YouTube metadata work.
-- Use `video_generation-...` for skills and agents that exist specifically to support AI video planning, prompt packaging, continuity control, or Seedance-oriented workflows.
+- Use `common__...` for reusable cross-domain skills such as project scaffolding, skill authoring, meetings, and general YouTube metadata work.
+- Use `video_generation__...` for skills and agents that exist specifically to support AI video planning, prompt packaging, continuity control, or Seedance-oriented workflows.
+- The delimiter between prefix and name is **`__` (double underscore)**, not single-hyphen. Single-hyphen names (`video_generation-…`) are deprecated.
 - Prefer a small number of broader, composable skills over many tiny overlapping ones. If two skills are routinely used back-to-back by default, consider merging them.
-- Treat legacy unprefixed video skills as deprecated. Future work should use the prefixed names documented in `.claude/README.md`.
+- Treat legacy unprefixed or single-hyphen video skills as deprecated. Future work should use the `__`-delimited names documented in `.claude/README.md`.
 
 ## Global rules for this repo
 
@@ -99,13 +100,19 @@ This repository demonstrates how Claude Code components work together:
   - narration / voiceover timing
   - edit / assembly notes
 - Do not claim that prompts will guarantee perfect identity consistency. Instead, explicitly call out drift risks and provide reinforcement language or fallback strategies.
-- The canonical video workflow is:
-  - `video_generation-reference-scout`
-  - `video_generation-preproduction`
-  - `video_generation-storyboard-master`
-  - `video_generation-seedance-packager`
-  - `video_generation-continuity-director`
-  - `video_generation-assembly-planner`
+- The canonical 短剧 series workflow is an **8-stage chain** rooted at a single `series/{name}/` directory:
+  1. `video_generation__reference-scout` — trend + gap侦察
+  2. `video_generation__preproduction` — locks the four series bibles (character / scene / style / voice) + `anchor_registry.md`
+  3. `video_generation__serial-novelist` — writes one Chinese 短剧 episode (900–1200 字) with the 4-column beat sheet; **outline cap = rolling 3–5 episodes**, never pre-plan past that
+  4. `video_generation__storyboard-master` — expands the beat sheet into a production storyboard with 15 s snapshot stubs
+  5. `video_generation__seedance-packager` — emits per-clip Seedance 2.0 prompts + snapshot prompts + generation manifest
+  6. `video_generation__continuity-director` (agent) — fail-closed gate; **downstream skills must refuse to run on any episode whose `status.md.ep_{NNN} != continuity_passed`**
+  7. Human-in-the-loop: run Seedance for clips + snapshots, render TTS VO, pick BGM
+  8. `video_generation__clip-stitcher` — ffmpeg + CapCut bundle + 多平台导出 (抖音 / 快手 / TikTok / YT Shorts ×2 ≤60 s parts)
+- `video_generation__series-factory` is the composite orchestrator that walks stages 1–6 and 8 automatically, pausing at stage 7 for human media generation.
+- All series artifacts live under `series/{name}/` with the canonical subtree: `research/` · `bibles/` · `episodes/` · `prompts/ep_{NNN:03d}/` · `clips/ep_{NNN:03d}/` · `audio/ep_{NNN:03d}/` · `assembly/` · `status.md`. No cross-series sharing.
+- **Verbatim-substring rule** is load-bearing: any 20–40 字 `复用片段` locked in the bibles must appear byte-exact as a contiguous substring in every downstream prompt that declares the corresponding anchor. `continuity-director` enforces this with byte-exact grep; it never rewrites prompts, only flags FAIL.
+- Hard-burn **中文** subtitles (Noto Sans SC) into the master, keep the `.srt` as a soft-sub backup.
 
 ## External APIs — known issues
 
@@ -129,7 +136,14 @@ This repository demonstrates how Claude Code components work together:
 ## YouTube analysis rules
 
 - Only analyze **publicly accessible** YouTube data.
-- If the user asks to “scrape” content, use the project MCP server (`youtube`) when available; otherwise fall back to `yt-dlp` in the shell. If MCP is unavailable and `yt-dlp` fails, use `WebSearch` as a final fallback.
+- **Metadata extraction path (in order, as of 2026-04-20):**
+  1. **Playwright MCP on `/watch?v=<ID>`** — primary path. Navigate → wait 3s → `document.body.innerText` → regex for title/channel/views/likes/"N weeks ago". `ytInitialPlayerResponse` is frequently empty; prefer `innerText`.
+  2. Project MCP server (`youtube`) when available.
+  3. `yt-dlp` — expect bot-check failure in 2026 across all `player_client` variants unless you have a signed-in cookie jar. Do not retry — move on.
+  4. `WebSearch` as last-resort fallback for discovery (never for metadata).
+- **WebFetch on YouTube returns only footer markup** — unusable for metadata. Do not attempt more than once per task.
+- **`/shorts/<ID>` URLs are bot-walled harder than `/watch?v=<ID>`.** For any Short, pivot to the `/watch?v=<ID>` form before extracting.
+- **Hashtag landing page beats search for AI-Shorts discovery.** `https://www.youtube.com/hashtag/<tag>/shorts` returns candidates already sorted by popularity; search queries with `&sp=CAMS...` "past month + sort by views" filters returned 0 ≥1M AI hits in the 2026-04-20 run.
 - Keep outputs structured and skimmable:
   - a short executive summary
   - a table of sampled videos
@@ -139,6 +153,8 @@ This repository demonstrates how Claude Code components work together:
 ## Quick start (what to try in Claude Code)
 
 - Run the skill directly:
-  - `common-youtube-info` for fast public YouTube metadata work
-- Or ask naturally and let Claude delegate to the `youtube-researcher` subagent:
-  - “Use `video_generation-youtube-researcher` to analyze this channel and suggest 10 next video ideas: https://www.youtube.com/@SomeChannel”
+  - `common__youtube-info` for fast public YouTube metadata work
+  - `video_generation__series-factory` to run the 8-stage 短剧 chain end-to-end on a `series/{name}/`
+- Or ask naturally and let Claude delegate to a subagent:
+  - "Use `video_generation__youtube-researcher` to analyze this channel and suggest 10 next video ideas: https://www.youtube.com/@SomeChannel"
+  - "Run `video_generation__continuity-director` on `series/战神归来/ep_003` before I hit Seedance."

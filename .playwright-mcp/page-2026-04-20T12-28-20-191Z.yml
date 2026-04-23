@@ -1,0 +1,618 @@
+- generic [ref=e2]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Guide" [active] [ref=e9] [cursor=pointer]:
+          - generic [ref=e12]:
+            - img
+        - link "YouTube Home" [ref=e14] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e19]:
+            - img
+        - button "Skip navigation" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: Skip navigation
+      - generic [ref=e28]:
+        - search [ref=e29]:
+          - generic [ref=e30]:
+            - generic [ref=e31]:
+              - combobox "Search" [expanded] [ref=e33]: "#aicat #shorts"
+              - button "Clear search query" [ref=e35] [cursor=pointer]:
+                - generic [ref=e38]:
+                  - img
+            - button "Search" [ref=e42] [cursor=pointer]:
+              - generic [ref=e45]:
+                - img
+        - generic [ref=e47]:
+          - button "Search with your voice" [ref=e49] [cursor=pointer]:
+            - generic [ref=e53]:
+              - img
+          - tooltip "tooltip"
+      - generic [ref=e58]:
+        - button "Settings" [ref=e63] [cursor=pointer]:
+          - generic [ref=e66]:
+            - img
+        - link "Sign in" [ref=e69] [cursor=pointer]:
+          - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252Fresults%253Fsearch_query%253D%252523aicat%252B%252523shorts%2526sp%253DEgIYAQ%2525253D%2525253D&hl=en&ec=65620
+          - generic [ref=e73]:
+            - img
+          - generic [ref=e74]: Sign in
+  - navigation [ref=e78]:
+    - generic [ref=e79]:
+      - link "Home" [ref=e81] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e84]:
+          - img
+        - generic [ref=e85]: Home
+      - link "Shorts" [ref=e87] [cursor=pointer]:
+        - /url: /shorts/
+        - generic [ref=e90]:
+          - img
+        - generic [ref=e91]: Shorts
+      - link "Subscriptions" [ref=e93] [cursor=pointer]:
+        - /url: /feed/subscriptions
+        - generic [ref=e96]:
+          - img
+        - generic [ref=e97]: Subscriptions
+      - link "You" [ref=e99] [cursor=pointer]:
+        - /url: /feed/you
+        - generic [ref=e102]:
+          - img
+        - generic [ref=e103]: You
+  - generic [ref=e104]:
+    - main [ref=e105]:
+      - generic [ref=e106]:
+        - generic [ref=e108]:
+          - tablist [ref=e113]:
+            - tab "All" [selected] [ref=e117] [cursor=pointer]:
+              - generic [ref=e119]: All
+            - tab "Shorts" [ref=e126] [cursor=pointer]:
+              - generic [ref=e128]: Shorts
+            - tab "Unwatched" [ref=e135] [cursor=pointer]:
+              - generic [ref=e137]: Unwatched
+            - tab "Watched" [ref=e144] [cursor=pointer]:
+              - generic [ref=e146]: Watched
+            - tab "Videos" [ref=e153] [cursor=pointer]:
+              - generic [ref=e155]: Videos
+            - tab "Recently uploaded" [ref=e162] [cursor=pointer]:
+              - generic [ref=e164]: Recently uploaded
+            - tab "Live" [ref=e171] [cursor=pointer]:
+              - generic [ref=e173]: Live
+          - generic [ref=e178]:
+            - button "Search filters" [ref=e180] [cursor=pointer]:
+              - generic [ref=e181]: Filters
+              - generic [ref=e185]:
+                - img
+            - tooltip "tooltip"
+        - generic [ref=e194]:
+          - generic [ref=e195]:
+            - generic [ref=e198]:
+              - img [ref=e200]:
+                - generic [ref=e202]:
+                  - img
+              - heading "Shorts" [level=2] [ref=e205]
+            - generic [ref=e207]:
+              - generic [ref=e210]:
+                - link [ref=e211] [cursor=pointer]:
+                  - /url: /shorts/zqzkc2nx8G8
+                - generic [ref=e215] [cursor=pointer]:
+                  - 'link "She only wants HIS MONEY… 😈💸#shorts #viralvideo #ai #aicat #fyp" [ref=e216]':
+                    - /url: /shorts/zqzkc2nx8G8
+                  - generic [ref=e217]: 12M views
+                - button "More actions" [ref=e219] [cursor=pointer]:
+                  - generic [ref=e223]:
+                    - img
+              - generic [ref=e229]:
+                - link [ref=e230] [cursor=pointer]:
+                  - /url: /shorts/6X-5GXnxzSI
+                - generic [ref=e234] [cursor=pointer]:
+                  - 'link "AI meow meow meow #ai #aicat #animated #kitten" [ref=e235]':
+                    - /url: /shorts/6X-5GXnxzSI
+                  - generic [ref=e236]: 14M views
+                - button "More actions" [ref=e238] [cursor=pointer]:
+                  - generic [ref=e242]:
+                    - img
+              - generic [ref=e248]:
+                - link [ref=e249] [cursor=pointer]:
+                  - /url: /shorts/eGb-QMaKGO0
+                  - img [ref=e254]:
+                    - generic [ref=e255]: New
+                - generic [ref=e256] [cursor=pointer]:
+                  - 'link "poor cat #aicat #ai #cat #shorts" [ref=e257]':
+                    - /url: /shorts/eGb-QMaKGO0
+                  - generic [ref=e258]: 974 views
+                - button "More actions" [ref=e260] [cursor=pointer]:
+                  - generic [ref=e264]:
+                    - img
+              - generic [ref=e270]:
+                - link [ref=e271] [cursor=pointer]:
+                  - /url: /shorts/otOmXbO7NzI
+                  - img [ref=e276]:
+                    - generic [ref=e277]: New
+                - generic [ref=e278] [cursor=pointer]:
+                  - 'link "Beach today: Cat dance show only! 🐱💃🌊😂”vibes!#shorts #viral #trending #youtubeshorts" [ref=e279]':
+                    - /url: /shorts/otOmXbO7NzI
+                  - generic [ref=e280]: 313 views
+                - button "More actions" [ref=e282] [cursor=pointer]:
+                  - generic [ref=e286]:
+                    - img
+              - generic [ref=e292]:
+                - link [ref=e293] [cursor=pointer]:
+                  - /url: /shorts/g2wDrTr3lT0
+                - generic [ref=e297] [cursor=pointer]:
+                  - 'link "This cow is smart #catstory #aicat #cuteanimal" [ref=e298]':
+                    - /url: /shorts/g2wDrTr3lT0
+                  - generic [ref=e299]: 21M views
+                - button "More actions" [ref=e301] [cursor=pointer]:
+                  - generic [ref=e305]:
+                    - img
+            - button "Show more" [ref=e312] [cursor=pointer]:
+              - generic [ref=e313]: Show more
+              - generic [ref=e317]:
+                - img
+          - generic [ref=e322]:
+            - link [ref=e324] [cursor=pointer]:
+              - /url: /shorts/66DbAL-Fp94
+              - img [ref=e326]
+              - img [ref=e329]:
+                - generic [ref=e332]:
+                  - img
+                - generic [ref=e333]: SHORTS
+              - generic:
+                - generic: Now playing
+                - generic:
+                  - img
+            - generic [ref=e334] [cursor=pointer]:
+              - generic [ref=e335]:
+                - generic [ref=e336]:
+                  - 'heading "The little cat peed in its pants #funny #ai #aicat #shorts #blwaistory by CRAZY AI STORY 111,553,298 views 10 months ago 19 seconds - play Short" [level=3] [ref=e337]':
+                    - 'link "The little cat peed in its pants #funny #ai #aicat #shorts #blwaistory by CRAZY AI STORY 111,553,298 views 10 months ago 19 seconds - play Short" [ref=e338]':
+                      - /url: /shorts/66DbAL-Fp94
+                      - text: "The little cat peed in its pants #funny #ai #aicat #shorts #blwaistory"
+                  - button "Action menu" [ref=e342]:
+                    - generic [ref=e345]:
+                      - img
+                - generic [ref=e348]:
+                  - generic [ref=e349]: 111M views
+                  - generic [ref=e350]: •10 months ago
+              - generic [ref=e351]:
+                - link "Go to channel CRAZY AI STORY" [ref=e352]:
+                  - /url: /@CRAZYAISTORY-14ry
+                - link "CRAZY AI STORY" [ref=e358]:
+                  - /url: /@CRAZYAISTORY-14ry
+              - generic [ref=e359]:
+                - text: "The little cat peed in its pants #funny #ai #aicat #shorts #blwaistory \"Please, everyone, support me! I want to keep ..."
+                - tooltip "tooltip"
+          - generic [ref=e361]:
+            - link [ref=e363] [cursor=pointer]:
+              - /url: /shorts/0P3rbxQQtz4
+            - generic [ref=e365] [cursor=pointer]:
+              - generic [ref=e366]:
+                - generic [ref=e367]:
+                  - 'heading "The child did not lose his father #aicat #catshorts #cat #catvideos #funny #cute #shorts by Kitty DailyTales 6,542,871 views 8 months ago 1 minute - play Short" [level=3] [ref=e368]':
+                    - 'link "The child did not lose his father #aicat #catshorts #cat #catvideos #funny #cute #shorts by Kitty DailyTales 6,542,871 views 8 months ago 1 minute - play Short" [ref=e369]':
+                      - /url: /shorts/0P3rbxQQtz4
+                      - text: "The child did not lose his father #aicat #catshorts #cat #catvideos #funny #cute #shorts"
+                  - button "Action menu" [ref=e373]:
+                    - generic [ref=e376]:
+                      - img
+                - generic [ref=e379]:
+                  - generic [ref=e380]: 6.5M views
+                  - generic [ref=e381]: •8 months ago
+              - generic [ref=e382]:
+                - link "Go to channel Kitty DailyTales" [ref=e383]:
+                  - /url: /@KittyDailyTales
+                - link "Kitty DailyTales" [ref=e389]:
+                  - /url: /@KittyDailyTales
+          - generic [ref=e390]:
+            - generic [ref=e393]:
+              - img [ref=e395]:
+                - generic [ref=e397]:
+                  - img
+              - heading "Shorts" [level=2] [ref=e400]
+            - generic [ref=e402]:
+              - generic [ref=e405]:
+                - link [ref=e406] [cursor=pointer]:
+                  - /url: /shorts/188QuVZTLI8
+                - generic [ref=e410] [cursor=pointer]:
+                  - 'link "Cut cat crying 😭 #aicat #cute #shorts" [ref=e411]':
+                    - /url: /shorts/188QuVZTLI8
+                  - generic [ref=e412]: 889K views
+                - button "More actions" [ref=e414] [cursor=pointer]:
+                  - generic [ref=e418]:
+                    - img
+              - generic [ref=e424]:
+                - link [ref=e425] [cursor=pointer]:
+                  - /url: /shorts/695ooU1rVGs
+                - generic [ref=e429] [cursor=pointer]:
+                  - 'link "Ai animated Cat funny video #animals #funnycat #cow #cat #shorts #cartoon #aicat #cartoonvideo" [ref=e430]':
+                    - /url: /shorts/695ooU1rVGs
+                  - generic [ref=e431]: 9.9K views
+                - button "More actions" [ref=e433] [cursor=pointer]:
+                  - generic [ref=e437]:
+                    - img
+              - generic [ref=e443]:
+                - link [ref=e444] [cursor=pointer]:
+                  - /url: /shorts/pd5ewb_bU3A
+                  - img [ref=e449]:
+                    - generic [ref=e450]: New
+                - generic [ref=e451] [cursor=pointer]:
+                  - 'link "Cat Attacked The Rooster funny video ai #shorts #ai #aicat #usa #aicatshorts" [ref=e452]':
+                    - /url: /shorts/pd5ewb_bU3A
+                  - generic [ref=e453]: 65 views
+                - button "More actions" [ref=e455] [cursor=pointer]:
+                  - generic [ref=e459]:
+                    - img
+              - generic [ref=e465]:
+                - link [ref=e466] [cursor=pointer]:
+                  - /url: /shorts/JMeJ2ZEd4qA
+                - generic [ref=e470] [cursor=pointer]:
+                  - 'link "Fat Orange Cat and Shrimp Friend #cat #aicat #fatcat #orangecat #cat2025 #animals" [ref=e471]':
+                    - /url: /shorts/JMeJ2ZEd4qA
+                  - generic [ref=e472]: 2.7M views
+                - button "More actions" [ref=e474] [cursor=pointer]:
+                  - generic [ref=e478]:
+                    - img
+              - generic [ref=e484]:
+                - link [ref=e485] [cursor=pointer]:
+                  - /url: /shorts/Mlk4ji3W_UA
+                  - img [ref=e490]:
+                    - generic [ref=e491]: New
+                - generic [ref=e492] [cursor=pointer]:
+                  - 'link "#comedy #funny #funnymoments #shorts #cat #aicat #ai" [ref=e493]':
+                    - /url: /shorts/Mlk4ji3W_UA
+                  - generic [ref=e494]: 1.6K views
+                - button "More actions" [ref=e496] [cursor=pointer]:
+                  - generic [ref=e500]:
+                    - img
+            - button "Show more" [ref=e507] [cursor=pointer]:
+              - generic [ref=e508]: Show more
+              - generic [ref=e512]:
+                - img
+          - generic [ref=e517]:
+            - link [ref=e519] [cursor=pointer]:
+              - /url: /shorts/wCOzvRQHHcg
+            - generic [ref=e521] [cursor=pointer]:
+              - generic [ref=e522]:
+                - generic [ref=e523]:
+                  - 'heading "The puppy destroyed poor kitten''s plan #aicat #shorts #aicatstories #aicatshorts by Cat gif 12,531 views 6 months ago 18 seconds - play Short" [level=3] [ref=e524]':
+                    - 'link "The puppy destroyed poor kitten''s plan #aicat #shorts #aicatstories #aicatshorts by Cat gif 12,531 views 6 months ago 18 seconds - play Short" [ref=e525]':
+                      - /url: /shorts/wCOzvRQHHcg
+                      - text: "The puppy destroyed poor kitten's plan #aicat #shorts #aicatstories #aicatshorts"
+                  - button "Action menu" [ref=e529]:
+                    - generic [ref=e532]:
+                      - img
+                - generic [ref=e535]:
+                  - generic [ref=e536]: 12K views
+                  - generic [ref=e537]: •6 months ago
+              - generic [ref=e538]:
+                - link "Go to channel Cat gif" [ref=e539]:
+                  - /url: /@Catgif30
+                - link "Cat gif" [ref=e544]:
+                  - /url: /@Catgif30
+          - generic [ref=e546]:
+            - link [ref=e548] [cursor=pointer]:
+              - /url: /shorts/LYs0jW2MWWw
+            - generic [ref=e550] [cursor=pointer]:
+              - generic [ref=e551]:
+                - generic [ref=e552]:
+                  - 'heading "cat animation video #cat #kitten #shorts #ai #aicat #shortvideo #usa #usacats by Ai Byte Studio 3,989,872 views 1 year ago 1 minute - play Short" [level=3] [ref=e553]':
+                    - 'link "cat animation video #cat #kitten #shorts #ai #aicat #shortvideo #usa #usacats by Ai Byte Studio 3,989,872 views 1 year ago 1 minute - play Short" [ref=e554]':
+                      - /url: /shorts/LYs0jW2MWWw
+                      - text: "cat animation video #cat #kitten #shorts #ai #aicat #shortvideo #usa #usacats"
+                  - button "Action menu" [ref=e558]:
+                    - generic [ref=e561]:
+                      - img
+                - generic [ref=e564]:
+                  - generic [ref=e565]: 3.9M views
+                  - generic [ref=e566]: •1 year ago
+              - generic [ref=e567]:
+                - link "Go to channel Ai Byte Studio" [ref=e568]:
+                  - /url: /@AiByteStudio-572
+                - generic [ref=e569]:
+                  - link "Ai Byte Studio" [ref=e573]:
+                    - /url: /@AiByteStudio-572
+                  - img "Verified" [ref=e578]:
+                    - generic [ref=e581]:
+                      - img
+              - generic [ref=e582]:
+                - generic [ref=e583]: "cat animation video #cat #kitten #shorts #ai #aicat #shortvideo #usa #usacats."
+                - tooltip "tooltip"
+          - generic [ref=e585]:
+            - link [ref=e587] [cursor=pointer]:
+              - /url: /shorts/B2qyU0jNkQI
+            - generic [ref=e589] [cursor=pointer]:
+              - generic [ref=e590]:
+                - generic [ref=e591]:
+                  - 'heading "Kitten in the Mixer #cat #ai #cats #aicat #shorts #story #cute #cutecat #anime #cartoon #fun #pets by Cute Cat 361,740 views 9 months ago 59 seconds - play Short" [level=3] [ref=e592]':
+                    - 'link "Kitten in the Mixer #cat #ai #cats #aicat #shorts #story #cute #cutecat #anime #cartoon #fun #pets by Cute Cat 361,740 views 9 months ago 59 seconds - play Short" [ref=e593]':
+                      - /url: /shorts/B2qyU0jNkQI
+                      - text: "Kitten in the Mixer #cat #ai #cats #aicat #shorts #story #cute #cutecat #anime #cartoon #fun #pets"
+                  - button "Action menu" [ref=e597]:
+                    - generic [ref=e600]:
+                      - img
+                - generic [ref=e603]:
+                  - generic [ref=e604]: 361K views
+                  - generic [ref=e605]: •9 months ago
+              - generic [ref=e606]:
+                - link "Go to channel Cute Cat" [ref=e607]:
+                  - /url: /@CuteCat.50
+                - generic [ref=e608]:
+                  - link "Cute Cat" [ref=e612]:
+                    - /url: /@CuteCat.50
+                  - img "Verified" [ref=e617]:
+                    - generic [ref=e620]:
+                      - img
+              - generic [ref=e621]:
+                - generic [ref=e622]: "Kitten in the Mixer #cat #ai #cats #aicat #shorts #story #cute #cutecat #anime #cartoon #fun #pets."
+                - tooltip "tooltip"
+          - generic [ref=e624]:
+            - link [ref=e626] [cursor=pointer]:
+              - /url: /shorts/QgtRHSIQ4V8
+            - generic [ref=e628] [cursor=pointer]:
+              - generic [ref=e629]:
+                - generic [ref=e630]:
+                  - 'heading "Little kitten become fighter #aicat #shorts #youtubeshorts #cat #kitten #midjourney by AI Cat Journey 2,225 views 1 year ago 25 seconds - play Short" [level=3] [ref=e631]':
+                    - 'link "Little kitten become fighter #aicat #shorts #youtubeshorts #cat #kitten #midjourney by AI Cat Journey 2,225 views 1 year ago 25 seconds - play Short" [ref=e632]':
+                      - /url: /shorts/QgtRHSIQ4V8
+                      - text: "Little kitten become fighter #aicat #shorts #youtubeshorts #cat #kitten #midjourney"
+                  - button "Action menu" [ref=e636]:
+                    - generic [ref=e639]:
+                      - img
+                - generic [ref=e642]:
+                  - generic [ref=e643]: 2.2K views
+                  - generic [ref=e644]: •1 year ago
+              - generic [ref=e645]:
+                - link "Go to channel AI Cat Journey" [ref=e646]:
+                  - /url: /@AICat_Journey
+                - link "AI Cat Journey" [ref=e651]:
+                  - /url: /@AICat_Journey
+          - generic [ref=e653]:
+            - link [ref=e655] [cursor=pointer]:
+              - /url: /shorts/w9dAnMF3bZU
+            - generic [ref=e657] [cursor=pointer]:
+              - generic [ref=e658]:
+                - generic [ref=e659]:
+                  - 'heading "AI meow meow meow #ai #aicat #animated #kitten by Cute Cats Ai 6,727,905 views 6 months ago 6 seconds - play Short" [level=3] [ref=e660]':
+                    - 'link "AI meow meow meow #ai #aicat #animated #kitten by Cute Cats Ai 6,727,905 views 6 months ago 6 seconds - play Short" [ref=e661]':
+                      - /url: /shorts/w9dAnMF3bZU
+                      - text: "AI meow meow meow #ai #aicat #animated #kitten"
+                  - button "Action menu" [ref=e665]:
+                    - generic [ref=e668]:
+                      - img
+                - generic [ref=e671]:
+                  - generic [ref=e672]: 6.7M views
+                  - generic [ref=e673]: •6 months ago
+              - generic [ref=e674]:
+                - link "Go to channel Cute Cats Ai" [ref=e675]:
+                  - /url: /@MafizulRahman-v1h
+                - link "Cute Cats Ai" [ref=e680]:
+                  - /url: /@MafizulRahman-v1h
+              - generic [ref=e681]:
+                - generic [ref=e682]: "AI meow meow meow #ai #aicat #animated #kitten Meow meow #meow #kitten #AI Cat Videos #Animated Cats #Funny Cat ..."
+                - tooltip "tooltip"
+          - generic [ref=e684]:
+            - link [ref=e686] [cursor=pointer]:
+              - /url: /shorts/WNg8vqOjim4
+            - generic [ref=e688] [cursor=pointer]:
+              - generic [ref=e689]:
+                - generic [ref=e690]:
+                  - 'heading "#aicat #catshorts #cat #catvideos #funny #cute #shorts #kitten by Cloud Cat TV 182,064 views 8 months ago 59 seconds - play Short" [level=3] [ref=e691]':
+                    - 'link "#aicat #catshorts #cat #catvideos #funny #cute #shorts #kitten by Cloud Cat TV 182,064 views 8 months ago 59 seconds - play Short" [ref=e692]':
+                      - /url: /shorts/WNg8vqOjim4
+                      - text: "#aicat #catshorts #cat #catvideos #funny #cute #shorts #kitten"
+                  - button "Action menu" [ref=e696]:
+                    - generic [ref=e699]:
+                      - img
+                - generic [ref=e702]:
+                  - generic [ref=e703]: 182K views
+                  - generic [ref=e704]: •8 months ago
+              - generic [ref=e705]:
+                - link "Go to channel Cloud Cat TV" [ref=e706]:
+                  - /url: /@CloudCatTV
+                - link "Cloud Cat TV" [ref=e711]:
+                  - /url: /@CloudCatTV
+          - generic [ref=e713]:
+            - link [ref=e715] [cursor=pointer]:
+              - /url: /shorts/UbBXYRWQoQ8
+            - generic [ref=e717] [cursor=pointer]:
+              - generic [ref=e718]:
+                - generic [ref=e719]:
+                  - 'heading "Happy birthday to you cat #happybirthday #shortsfeed #viral #cute #aicat #shorts #kitten #tiktok by AInimals 65,743 views 8 months ago 8 seconds - play Short" [level=3] [ref=e720]':
+                    - 'link "Happy birthday to you cat #happybirthday #shortsfeed #viral #cute #aicat #shorts #kitten #tiktok by AInimals 65,743 views 8 months ago 8 seconds - play Short" [ref=e721]':
+                      - /url: /shorts/UbBXYRWQoQ8
+                      - text: "Happy birthday to you cat #happybirthday #shortsfeed #viral #cute #aicat #shorts #kitten #tiktok"
+                  - button "Action menu" [ref=e725]:
+                    - generic [ref=e728]:
+                      - img
+                - generic [ref=e731]:
+                  - generic [ref=e732]: 65K views
+                  - generic [ref=e733]: •8 months ago
+              - generic [ref=e734]:
+                - link "Go to channel AInimals" [ref=e735]:
+                  - /url: /@AInimals-002
+                - link "AInimals" [ref=e740]:
+                  - /url: /@AInimals-002
+          - generic [ref=e742]:
+            - link [ref=e744] [cursor=pointer]:
+              - /url: /shorts/ncY6A78r61s
+            - generic [ref=e746] [cursor=pointer]:
+              - generic [ref=e747]:
+                - generic [ref=e748]:
+                  - 'heading "sunbathe😎#cat #aicat #shorts by R & K CHANEL 13,623 views 1 year ago 9 seconds - play Short" [level=3] [ref=e749]':
+                    - 'link "sunbathe😎#cat #aicat #shorts by R & K CHANEL 13,623 views 1 year ago 9 seconds - play Short" [ref=e750]':
+                      - /url: /shorts/ncY6A78r61s
+                      - text: "sunbathe😎#cat #aicat #shorts"
+                  - button "Action menu" [ref=e754]:
+                    - generic [ref=e757]:
+                      - img
+                - generic [ref=e760]:
+                  - generic [ref=e761]: 13K views
+                  - generic [ref=e762]: •1 year ago
+              - generic [ref=e763]:
+                - link "Go to channel R & K CHANEL" [ref=e764]:
+                  - /url: /@RKCHANEL1988
+                - link "R & K CHANEL" [ref=e769]:
+                  - /url: /@RKCHANEL1988
+              - generic [ref=e770]:
+                - text: In this video I only provide entertainment, I hope you all can enjoy it. and don't forget to like and subscribe to this channel so that ...
+                - tooltip "tooltip"
+          - generic [ref=e772]:
+            - link [ref=e774] [cursor=pointer]:
+              - /url: /shorts/bOCEdyjavL8
+            - generic [ref=e776] [cursor=pointer]:
+              - generic [ref=e777]:
+                - generic [ref=e778]:
+                  - 'heading "AWW! Mama Cat Shares Arancini With Baby! #AICat #Shorts by Soggy Pixel 332,634 views 5 months ago 8 seconds - play Short" [level=3] [ref=e779]':
+                    - 'link "AWW! Mama Cat Shares Arancini With Baby! #AICat #Shorts by Soggy Pixel 332,634 views 5 months ago 8 seconds - play Short" [ref=e780]':
+                      - /url: /shorts/bOCEdyjavL8
+                      - text: "AWW! Mama Cat Shares Arancini With Baby! #AICat #Shorts"
+                  - button "Action menu" [ref=e784]:
+                    - generic [ref=e787]:
+                      - img
+                - generic [ref=e790]:
+                  - generic [ref=e791]: 332K views
+                  - generic [ref=e792]: •5 months ago
+              - generic [ref=e793]:
+                - link "Go to channel Soggy Pixel" [ref=e794]:
+                  - /url: /@SoggyPixel69
+                - link "Soggy Pixel" [ref=e799]:
+                  - /url: /@SoggyPixel69
+              - generic [ref=e800]:
+                - text: "The cutest AI cat mom and baby trying to share a piece of Arancini! Who gets the last bite? #cutecat #catlovers #catshorts ..."
+                - tooltip "tooltip"
+          - generic [ref=e802]:
+            - link [ref=e804] [cursor=pointer]:
+              - /url: /shorts/ILlQHNprwQg
+            - generic [ref=e806] [cursor=pointer]:
+              - generic [ref=e807]:
+                - generic [ref=e808]:
+                  - 'heading "Kitten Just One Drop... #cat #aicat #shorts by Catycat 28,609 views 10 months ago 6 seconds - play Short" [level=3] [ref=e809]':
+                    - 'link "Kitten Just One Drop... #cat #aicat #shorts by Catycat 28,609 views 10 months ago 6 seconds - play Short" [ref=e810]':
+                      - /url: /shorts/ILlQHNprwQg
+                      - text: "Kitten Just One Drop... #cat #aicat #shorts"
+                  - button "Action menu" [ref=e814]:
+                    - generic [ref=e817]:
+                      - img
+                - generic [ref=e820]:
+                  - generic [ref=e821]: 28K views
+                  - generic [ref=e822]: •10 months ago
+              - generic [ref=e823]:
+                - link "Go to channel Catycat" [ref=e824]:
+                  - /url: /@catycat999
+                - link "Catycat" [ref=e829]:
+                  - /url: /@catycat999
+              - generic [ref=e830]:
+                - generic [ref=e831]: "Kitten Just One Drop... #cat #aicat #shorts Hello! Welcome to our channel: CatyCat! We bring you cool stories about Cat ..."
+                - tooltip "tooltip"
+          - generic [ref=e833]:
+            - link [ref=e835] [cursor=pointer]:
+              - /url: /shorts/dW4Ei0G6w04
+            - generic [ref=e837] [cursor=pointer]:
+              - generic [ref=e838]:
+                - generic [ref=e839]:
+                  - 'heading "Cat driving luxury car | A Cat''s Luxurious Life #cat #aicat #shorts #shortsfeed by Sophia Bell 128,086 views 8 months ago 9 seconds - play Short" [level=3] [ref=e840]':
+                    - 'link "Cat driving luxury car | A Cat''s Luxurious Life #cat #aicat #shorts #shortsfeed by Sophia Bell 128,086 views 8 months ago 9 seconds - play Short" [ref=e841]':
+                      - /url: /shorts/dW4Ei0G6w04
+                      - text: "Cat driving luxury car | A Cat's Luxurious Life #cat #aicat #shorts #shortsfeed"
+                  - button "Action menu" [ref=e845]:
+                    - generic [ref=e848]:
+                      - img
+                - generic [ref=e851]:
+                  - generic [ref=e852]: 128K views
+                  - generic [ref=e853]: •8 months ago
+              - generic [ref=e854]:
+                - link "Go to channel Sophia Bell" [ref=e855]:
+                  - /url: /@SophiaBell-1
+                - link "Sophia Bell" [ref=e860]:
+                  - /url: /@SophiaBell-1
+              - generic [ref=e861]:
+                - generic [ref=e862]: "Cat driving luxury car | A Cat's Luxurious Life #cat #aicat #shorts #shortsfeed the white fluffy cat living her best life in style!"
+                - tooltip "tooltip"
+          - generic [ref=e864]:
+            - link [ref=e866] [cursor=pointer]:
+              - /url: /shorts/o07ADwLUoUU
+            - generic [ref=e868] [cursor=pointer]:
+              - generic [ref=e869]:
+                - generic [ref=e870]:
+                  - 'heading "Prankster Cat Becomes a Helper🐱🏠✨ #shorts #cat #aicat #kitten #cute #memes #funny by AI Animalfantasy 9,765,407 views 1 year ago 1 minute - play Short" [level=3] [ref=e871]':
+                    - 'link "Prankster Cat Becomes a Helper🐱🏠✨ #shorts #cat #aicat #kitten #cute #memes #funny by AI Animalfantasy 9,765,407 views 1 year ago 1 minute - play Short" [ref=e872]':
+                      - /url: /shorts/o07ADwLUoUU
+                      - text: "Prankster Cat Becomes a Helper🐱🏠✨ #shorts #cat #aicat #kitten #cute #memes #funny"
+                  - button "Action menu" [ref=e876]:
+                    - generic [ref=e879]:
+                      - img
+                - generic [ref=e882]:
+                  - generic [ref=e883]: 9.7M views
+                  - generic [ref=e884]: •1 year ago
+              - generic [ref=e885]:
+                - link "Go to channel AI Animalfantasy" [ref=e886]:
+                  - /url: /@ai_animalfantasy
+                - link "AI Animalfantasy" [ref=e891]:
+                  - /url: /@ai_animalfantasy
+          - generic [ref=e893]:
+            - link [ref=e895] [cursor=pointer]:
+              - /url: /shorts/F9OAzNReZJQ
+            - generic [ref=e897] [cursor=pointer]:
+              - generic [ref=e898]:
+                - generic [ref=e899]:
+                  - 'heading "Evil Professor vs a Black Cat🙀😼 #cat #catvideos #aicat #shorts by United States of Cats 12,833 views 1 year ago 17 seconds - play Short" [level=3] [ref=e900]':
+                    - 'link "Evil Professor vs a Black Cat🙀😼 #cat #catvideos #aicat #shorts by United States of Cats 12,833 views 1 year ago 17 seconds - play Short" [ref=e901]':
+                      - /url: /shorts/F9OAzNReZJQ
+                      - text: "Evil Professor vs a Black Cat🙀😼 #cat #catvideos #aicat #shorts"
+                  - button "Action menu" [ref=e905]:
+                    - generic [ref=e908]:
+                      - img
+                - generic [ref=e911]:
+                  - generic [ref=e912]: 12K views
+                  - generic [ref=e913]: •1 year ago
+              - generic [ref=e914]:
+                - link "Go to channel United States of Cats" [ref=e915]:
+                  - /url: /@UnitedStatesofCats
+                - link "United States of Cats" [ref=e920]:
+                  - /url: /@UnitedStatesofCats
+          - generic [ref=e922]:
+            - link [ref=e924] [cursor=pointer]:
+              - /url: /shorts/wPD5ZBeJJBQ
+            - generic [ref=e926] [cursor=pointer]:
+              - generic [ref=e927]:
+                - generic [ref=e928]:
+                  - 'heading "Different cat edits #cuteanimal #aicat #shorts by Cat edits 12,992 views 1 year ago 21 seconds - play Short" [level=3] [ref=e929]':
+                    - 'link "Different cat edits #cuteanimal #aicat #shorts by Cat edits 12,992 views 1 year ago 21 seconds - play Short" [ref=e930]':
+                      - /url: /shorts/wPD5ZBeJJBQ
+                      - text: "Different cat edits #cuteanimal #aicat #shorts"
+                  - button "Action menu" [ref=e934]:
+                    - generic [ref=e937]:
+                      - img
+                - generic [ref=e940]:
+                  - generic [ref=e941]: 12K views
+                  - generic [ref=e942]: •1 year ago
+              - generic [ref=e943]:
+                - link "Go to channel Cat edits" [ref=e944]:
+                  - /url: /@AiAction-o4s
+                - link "Cat edits" [ref=e949]:
+                  - /url: /@AiAction-o4s
+              - generic [ref=e950]:
+                - generic [ref=e951]: "Different cat edits #cuteanimal #aicat #shorts."
+                - tooltip "tooltip"
+          - generic [ref=e953]:
+            - link [ref=e955] [cursor=pointer]:
+              - /url: /shorts/6dHZf8EheWc
+            - generic [ref=e957] [cursor=pointer]:
+              - generic [ref=e958]:
+                - generic [ref=e959]:
+                  - 'heading "The cat #cat #kittten #cuteanimal #cartoon #cutekittten #aicat #shorts #aicatshorts by Cat Story 5,996 views 1 year ago 17 seconds - play Short" [level=3] [ref=e960]':
+                    - 'link "The cat #cat #kittten #cuteanimal #cartoon #cutekittten #aicat #shorts #aicatshorts by Cat Story 5,996 views 1 year ago 17 seconds - play Short" [ref=e961]':
+                      - /url: /shorts/6dHZf8EheWc
+                      - text: "The cat #cat #kittten #cuteanimal #cartoon #cutekittten #aicat #shorts #aicatshorts"
+                  - button "Action menu" [ref=e965]:
+                    - generic [ref=e968]:
+                      - img
+                - generic [ref=e971]:
+                  - generic [ref=e972]: 5.9K views
+                  - generic [ref=e973]: •1 year ago
+              - generic [ref=e974]:
+                - link "Go to channel Cat Story" [ref=e975]:
+                  - /url: /@catstory8175
+                - link "Cat Story" [ref=e980]:
+                  - /url: /@catstory8175
+    - text: •

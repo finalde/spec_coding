@@ -210,5 +210,7 @@ __marimo__/
 !.claude/
 !.claude/**
 
-# Agent team audit trail (local runtime artifacts)
+# Agent team audit trail (local runtime artifacts — interview, research,
+# validation, findings, self-evolution logs). Not committed.
+# NOTE: primary user deliverables live under top-level /reports/ and ARE tracked.
 .audit/
