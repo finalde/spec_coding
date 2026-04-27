@@ -1,5 +1,0 @@
-- generic [active] [ref=e1]:
-  - generic "YouTube Video Player" [ref=e5]:
-    - button "Play" [ref=e9] [cursor=pointer]:
-      - img
-  - img [ref=e33]
