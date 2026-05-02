@@ -1,410 +1,188 @@
-# Angle: Markdown link resolution patterns
+# Angle — Markdown link resolution patterns
 
-Scope: how spec_driven's reader/editor should classify, resolve, and render the
-links it encounters in artifacts under `specs/{type}/{name}/` and
-`projects/{name}/`. The reader is a localhost FastAPI + React app, so relative
-paths between artifacts (e.g. `../findings/dossier.md` from inside
-`final_specs/spec.md`) must resolve in-app, not point at the filesystem URL bar.
+Research angle: how the spec_driven viewer should classify, resolve, validate, and render links inside rendered markdown — covering external, anchor, internal-relative, and broken cases — with explicit attention to OS portability (Windows case-insensitive vs Linux case-sensitive), URL encoding, sandbox-traversal escape, GFM heading-slug rules, and the asymmetry between markdown `[text](url)` and raw HTML `<a href>`.
 
-The web has two decades of prior art for this problem (every static-site
-generator solves a version of it). This angle distills the relevant behavior
-of five comparators — MkDocs, Docusaurus, GFM/GitHub, Obsidian, OWASP — and
-ends with concrete recommendations for the spec_driven link classifier.
+Compared against five comparators: MkDocs validation config, Docusaurus `onBrokenLinks`/`onBrokenAnchors`, GitHub Flavored Markdown heading-id algorithm (github-slugger), Obsidian's wiki-link vs markdown-link rules, and OWASP path-traversal guidance.
 
-## 1. Link classification: the four buckets
+Read-zero: only `revised_prompt.md` and `interview/qa.md` consulted; no prior findings.
 
-Every `<a href>` produced from rendered markdown falls into one of four
-buckets. The order in which a classifier checks them is load-bearing because
-classification is the side effect that decides whether the click goes to the
-browser, to an in-app router, to a scroll behavior, or to a "muted span" with
-no navigation at all.
+---
 
-The four buckets, in the order spec_driven should evaluate them:
+## 1. Why this matters for spec_driven
 
-1. **Same-file anchor** — `href` starts with `#`. No path component, just a
-   fragment. Click should scroll, not navigate.
-2. **External** — absolute URL with a scheme the browser handles
-   (`http`, `https`, `mailto`, `tel`). Click opens in a new tab; never
-   intercepted by the in-app router.
-3. **Internal-app** — relative path or root-relative path that, after
-   normalization, points to another file inside the project tree the app
-   serves. Click goes through the app router.
-4. **Broken** — anything that looks like a relative reference but doesn't
-   resolve to a known artifact, plus anchors whose fragment doesn't exist on
-   the target page. Rendered as a muted span (never an `<a>`).
+The spec_driven viewer renders markdown documents that link to one another constantly: `final_specs/spec.md` references `findings/dossier.md`, `validation/strategy.md` references `acceptance_criteria.md`, `qa.md` references `interview/promoted.md`. The interview answers also locked in:
 
-This is the same shape MkDocs landed on. Its 1.5+ validation tree splits link
-problems into `links.not_found` (bucket 4 for paths) and `links.anchors`
-(bucket 4 for fragments), each with its own severity dial
-([MkDocs validation config](https://www.mkdocs.org/user-guide/configuration/)).
-Docusaurus made the same split: `onBrokenLinks` for paths and
-`onBrokenAnchors` for fragments
-([Docusaurus config](https://docusaurus.io/docs/api/docusaurus-config)).
-The split matters because the two failure modes have very different signal
-strengths — a broken path is almost always a real bug, whereas a broken
-anchor is much more often a stale slug after a heading rename.
+- a strict path sandbox ("Resolve + reject if outside repo", `realpath`-based, case-insensitive comparison on Windows),
+- a write-extension whitelist matching the read whitelist (`.md`, `.yaml`, `.yml`, `.json`, `.jsonl`, `.txt`),
+- last-write-wins semantics with no `If-Match` guard,
+- a missing-artifact empty state (`"Not yet generated — paste this prompt to produce it"`).
 
-### CommonMark/GFM does not classify, it just parses
+Link rendering is the single feature that touches all of these at once: a link inside `spec.md` may be external (open in new tab), an anchor (scroll within the same file), an internal-relative pointer to another tracked file (navigate inside the app), or broken (the target file is missing, the extension is outside the whitelist, the path escapes the sandbox, or the anchor doesn't exist). Every one of these branches has a known-bad failure mode: navigating to a 404, leaking a sandbox-escape attempt as a real `file://` request, scrolling to a stale anchor, or — worst — rendering an `<a href>` that points outside the app and lets the user click out of the sandbox without warning.
 
-Worth noting up front: the GFM spec itself does not say anything about how
-href values should be resolved or classified — it's a parsing spec, not a
-rendering spec. There's no slug rule, no path-resolution rule, no anchor
-existence check
-([GFM spec](https://github.github.com/gfm/)). Every renderer (GitHub.com,
-MkDocs, Docusaurus, Obsidian, react-markdown) implements its own classifier
-on top of the parser. Whatever spec_driven does is its own contract; we
-should pick one and document it.
+This angle answers: how should the viewer classify each link, where should the classification happen (markdown-AST stage vs DOM stage), what should each class render as, and how should the answer change between Windows (where `Spec.md` and `spec.md` are the same file) and Linux (where they aren't)?
 
-## 2. Same-file anchors and the GFM kebab-case slug rule
+## 2. Link classification — the four-class model
 
-The convention every modern markdown reader follows for heading anchors is
-GitHub's slug algorithm — applied at render time, not part of the GFM spec
-([GFM spec](https://github.github.com/gfm/),
-[GitHub heading anchors gist](https://gist.github.com/asabaylus/3071099)).
-The rules:
+Every link inside a rendered artifact falls into exactly one of:
 
-- Letters lower-cased.
-- Spaces replaced with `-`.
-- Other punctuation (`.`, `,`, `?`, `!`, `:`, `;`, `(`, `)`, `[`, `]`,
-  quotes, backticks) stripped.
-- Other whitespace runs collapsed.
-- Duplicates within the same document get a `-1`, `-2`, … suffix in
-  document order.
+1. **External** — `http://`, `https://`, `mailto:`, `ftp://`, or any URL with an explicit scheme that isn't the app's own. Render as `<a target="_blank" rel="noopener noreferrer">`.
+2. **Anchor-only** — `#some-heading`, no path. Resolve against the *current* document. Click smooth-scrolls to the heading element; URL hash updates so the link is shareable.
+3. **Internal-relative** — a path with no scheme, e.g. `../findings/dossier.md`, `./acceptance_criteria.md`, `interview/qa.md`. Resolve against the *current document's directory*, then join to the repo root, then re-classify against the sandbox. May carry a `#anchor` suffix.
+4. **Broken** — anything that fails resolution: file does not exist, extension outside whitelist, resolved path escapes the sandbox, anchor not found in target document, or the link itself is malformed (unrecognized scheme, empty href).
 
-So `## Validation strategy: BDD scenarios` becomes
-`#validation-strategy-bdd-scenarios`. `## Step 2: Run!` becomes `#step-2-run`.
-A second `## Notes` becomes `#notes-1`.
+The ordering matters and is the **single most load-bearing decision** for this feature. The classifier MUST run in this exact order, because the cases are not mutually exclusive at the syntactic level. Concretely:
 
-The GFM spec is silent on whether non-ASCII letters should survive. GitHub's
-own behavior preserves them (the slug for `## Café` is `#café`), but some
-renderers strip them. spec_driven's artifacts are all-English by convention,
-so this corner shouldn't bite us, but the classifier should not assume
-ASCII-only when computing slugs — Python's `re.sub(r"[^\w\s-]", "")` with the
-default Unicode-aware `\w` matches GitHub's behavior closely enough.
+- **Scheme check first.** If `URL.parse(href)` yields a non-empty `protocol` and the protocol is not the app's own (the dev server's `http://localhost:5173` should NOT be treated as external just because it has a scheme — check the `host` too), it's external. This rejects `javascript:` automatically by listing the *allowed* schemes (`http`, `https`, `mailto`) rather than blocking known-bad ones.
+- **Anchor-only second.** `href.startsWith("#")` and no other characters before the `#`. Resolve later against the live DOM, not the markdown AST.
+- **Internal-relative third.** Otherwise treat as a path; split off any `#anchor` suffix; resolve relative to the current file's directory using a pure-string POSIX-style join (the markdown is on-disk in repo paths — never use the browser's `URL` constructor against `file://`, which differs between Chrome and Firefox on Windows).
+- **Broken last.** Any failure in steps 1–3 demotes the link to broken. Critically, broken is an *outcome class*, not a syntactic class — the same `[link](foo.md)` is internal-relative-resolved on a Linux box where `Foo.md` does not exist, and resolves cleanly on a Windows box where the case-insensitive lookup matches.
 
-### Anchor scroll behavior
+This four-class model is the same one MkDocs uses internally (`validation.links.not_found`, `validation.links.absolute_links`, `validation.links.unrecognized_links`, `validation.links.anchors`) and the same one Docusaurus splits across (`onBrokenLinks`, `onBrokenAnchors`, `onBrokenMarkdownLinks`). The split-by-failure-mode pattern is industry-standard.
 
-Two common pitfalls:
+## 3. Anchor handling — the GFM kebab-case slug
 
-- **Sticky headers** swallow the scroll target. If the header is 64px tall,
-  `element.scrollIntoView()` lands the heading under the header. Use
-  `scrollIntoView({ block: "start" })` plus CSS `scroll-margin-top: 64px`
-  on heading nodes, or explicitly subtract the header height in the scroll
-  call.
-- **Anchor on the same page that's already mounted** vs. **anchor on a page
-  not yet loaded**. A SPA must defer the scroll until after the target
-  route's content has rendered. React-router's `useEffect` keyed on
-  `pathname + hash` is the standard pattern.
+The viewer SHOULD slug headings the same way GitHub does so that links written by humans who are used to GFM "just work". The empirical algorithm (`github-slugger`, the npm package GitHub itself relies on) does the following:
 
-Docusaurus's `onBrokenAnchors` defaults to `warn`, not `throw`, precisely
-because anchor staleness is so common — and it ships with a known-bug
-caveat that the validator can produce false positives for plugin-registered
-anchors ([Docusaurus config](https://docusaurus.io/docs/api/docusaurus-config)).
-spec_driven should treat a missing anchor the same way: render the link as a
-broken muted span, but don't fail the page load.
+1. Lowercase the heading text after stripping markdown formatting (`**bold**` → `bold`).
+2. Remove all characters that are not letters, digits, hyphens, underscores, or whitespace. Notably:
+   - Punctuation (`.`, `,`, `?`, `!`, `:`, `;`, `(`, `)`, `[`, `]`, `/`, `\`, `'`, `"`) is stripped.
+   - Emoji are stripped entirely (`😄 emoji` → `-emoji`, leaving a leading hyphen which then gets collapsed).
+   - Accented letters in Latin scripts are kept (`café` → `café`), not normalized to ASCII. Cyrillic and CJK survive as-is in lowercase form.
+3. Collapse consecutive whitespace into a single hyphen, replace remaining whitespace with hyphens.
+4. **Do NOT trim leading/trailing hyphens.** This is a frequent point of confusion: a heading like `## ?Question` slugs to `question` (the leading `?` strips, then there is nothing to trim because the hyphen never gets inserted), but `## 😄 Question` slugs to `-question` with a leading hyphen because the emoji strip leaves a space-then-text pattern.
+5. Disambiguate duplicates by appending `-1`, `-2`, `-3` in document order. The first occurrence keeps the bare slug. The slugger is *stateful per document*; rendering must reset state between documents.
 
-## 3. External links
+The viewer's anchor map MUST be built at render time by walking the rendered DOM, not the raw markdown AST, because user-authored raw HTML headings (`<h2 id="custom">`) override the slugged ID. This is the markdown-vs-HTML asymmetry: a `## Foo` heading slugs to `foo`, but `<h2 id="my-custom-id">Foo</h2>` becomes `my-custom-id` and the slug `foo` does NOT exist. Both forms must be queryable from the anchor resolver. The cheapest implementation is to render headings via a custom `react-markdown` `h1`/`h2`/`h3`/… component that injects `id={slug(text)}` AND respects any pre-existing `id` from inline HTML (rendered by `rehype-raw` if HTML is enabled).
 
-Easy bucket. Match by scheme: anything that parses with a scheme in
-{`http`, `https`, `mailto`, `tel`} is external. Everything else is either
-relative or `javascript:` (which we drop entirely as a sanitizer step;
-react-markdown does this by default via its built-in href filter
-([react-markdown](https://github.com/remarkjs/react-markdown))).
+Smooth-scroll on anchor click: prefer `element.scrollIntoView({behavior: "smooth", block: "start"})`. Update `window.location.hash` AFTER the scroll starts so back/forward navigation works. Offset for any sticky header by adding `scroll-margin-top` to the heading elements rather than computing offsets in JS — purely CSS, survives layout changes.
 
-The CommonMark spec does maintain a whitelist of URI schemes recognized
-inside `<...>` autolinks
-([CommonMark autolink discussion](https://talk.commonmark.org/t/what-is-the-point-of-limiting-uri-schemes-in-autolinks/555)),
-but for our purposes the simpler four-scheme allowlist plus a
-`javascript:`/`data:` block is enough.
+## 4. Broken-link rendering — the muted-span rule
 
-External links should always open in `target="_blank"` with
-`rel="noopener noreferrer"`. The reader is on `localhost`, so leaking the
-referrer doesn't matter much, but `noopener` prevents the opened page from
-hijacking `window.opener`.
+Once a link is classified as broken, what does the viewer render? Two options:
 
-## 4. Internal-app links: the resolution pipeline
+- **Option A:** still render an `<a href>`, but with a class that paints it red/strikethrough. Click does nothing (preventDefault) or pops a tooltip "target not found".
+- **Option B:** render a `<span>` (or `<a>` with `role="link" aria-disabled="true"`) styled muted/strikethrough, with a `title` attribute explaining the failure. NO `href` attribute at all.
 
-This is the bucket where most of the design lives. Steps:
+Option B is the correct choice and the recommendations below codify it as the **"muted span never `<a>`" rule**. Reasoning:
 
-1. **Strip the fragment**. Split `href` on the first `#`; keep the path side
-   and the fragment side as separate strings.
-2. **URL-decode once.** `%20` → space, `%2e` → `.`, etc. This is the
-   "canonical form before validation" rule from
-   [OWASP Input Validation](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html)
-   and the corresponding warning in
-   [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal):
-   web containers do exactly one decode pass on percent-encoding, and
-   double-decoding is the classic bypass for naïve filters that decode
-   *after* validating. Decode once; never decode twice.
-3. **Resolve relative to the source artifact**. If the source file is
-   `specs/development/spec_driven/final_specs/spec.md` and the link is
-   `../findings/dossier.md`, the resolved path is
-   `specs/development/spec_driven/findings/dossier.md`. Use `posixpath.normpath`
-   (or browser-side `URL` resolution with a synthetic base) — never string
-   concatenation.
-4. **Verify no-escape**. After normalization, the resolved path MUST start
-   with the project root the API is allowed to serve. If the user wrote
-   `../../../../etc/passwd`, the normalized result is outside the root and
-   the link gets bucketed as broken (and the API endpoint that would serve
-   it must independently re-check this — the classifier is UX, not the
-   security boundary).
-5. **Existence check**. Look up the resolved path in an index of known
-   artifacts. If it exists, it's an internal-app link with a router target.
-   If not, it's broken.
-6. **Anchor existence check** (only if the path side resolved). Run the
-   target file through the same slug extractor that built the source
-   document's TOC, then check whether the link's fragment is in that set.
-   Missing fragment → broken-anchor. Empty fragment (just a path) → no
-   anchor check needed.
+1. **No accidental click-through.** With Option A, a misclick (or middle-click "open in new tab") still issues a navigation. On a broken internal-relative link, the navigation hits the dev server or, worse, escapes to `file://` in some browsers. Rendering as `<span>` makes click physically impossible — the browser's link-click affordances simply don't engage.
+2. **No leaked sandbox path.** The `<a href>` of a broken-because-it-escapes-sandbox link, if rendered, would expose the attempted-escape path in the page source. With Option B the path is only present in a `data-attempted-href` attribute or a tooltip, which is not crawlable as a link.
+3. **Screen-reader semantics.** A `<span>` with `aria-label="broken link to foo.md — target not found"` reads as plain text, not as a link, which matches the user's actual experience (the link doesn't go anywhere).
+4. **Accessibility-tree clarity.** `<a>` without `href` is technically valid HTML5 and renders as a non-interactive element, but assistive tech behavior is inconsistent across versions. Plain `<span>` is unambiguous.
 
-MkDocs follows essentially the same pipeline but as a build-time pass:
-`validation.links.unrecognized_links` catches step-3 failures
-("malformed relative paths"), `validation.links.not_found` is step 5,
-`validation.links.anchors` is step 6, and
-`validation.links.absolute_links: relative_to_docs` lets `/foo/bar.md` be
-treated as relative to the docs root rather than as an absolute server URL
-([MkDocs validation config](https://www.mkdocs.org/user-guide/configuration/)).
-spec_driven should follow the same convention: a link starting with `/`
-should resolve relative to the served root, not be treated as an external
-link.
-
-### Markdown vs HTML link asymmetry
-
-Markdown link `[a](path)` and a literal HTML `<a href="path">` lower-cased
-into the rendered output should classify identically. They almost always
-do, but there's one subtle case: react-markdown's default sanitizer (rehype)
-will pass through HTML hrefs but apply slightly different filtering than
-markdown links. The cleanest pattern is to register the same custom
-component for both `a` (HTML) and `link` (markdown link AST node) so a
-single classifier runs once, regardless of source syntax. This is the
-react-markdown idiom — pass `components={{ a: MyLink }}` and the same
-component renders both
-([react-markdown docs](https://github.com/remarkjs/react-markdown)).
+The visual: muted foreground (e.g. `color: var(--text-muted)` ≈ 45% opacity), strikethrough on the visible text, a small icon prefix (e.g. `⚠`, `🔗⃠`, or a lucide-react `link-2-off` icon), and `cursor: not-allowed`. Hover reveals the failure reason in a `title` attribute. Optional: a "click to regenerate" affordance if the broken-link target is a known stage artifact (the viewer already mounts the regen panel for missing artifacts per the qa.md "empty state + regen panel mounted" decision; broken links to missing stage files can deep-link into that flow).
 
 ## 5. Edge cases
 
-### URL encoding, decode-once
+### 5.1 URL encoding
 
-Already covered in step 2 above, but worth restating the guarantee. The
-classifier MUST decode percent-encoding exactly once before path resolution
-and existence checks. It MUST NOT decode the result of the resolved path a
-second time before the no-escape check. OWASP's path-traversal page makes
-this explicit: "URL encoding or even double URL encoding of the `../`
-characters can sometimes bypass sanitization, resulting in `../` and
-`%2e%2e%2f` respectively. Double URL-encoding the input will bypass
-defenses that only URL-decode once" — the defense is to decode once and
-then validate, never decode after validating
-([OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal)).
+Markdown link targets may be percent-encoded: `[Q&A](interview%2Fqa.md)` or `[α](alpha.md)` (browser may encode the α as `%CE%B1`). The classifier MUST `decodeURIComponent` once before resolving against the filesystem, then compare the decoded path against the on-disk name. Double-encoded inputs are a known traversal vector (see §5.4) — decode exactly once, then refuse if the result still contains `%`.
 
-### Case sensitivity Linux vs Windows
+### 5.2 Case sensitivity (Linux vs Windows)
 
-The hardest cross-platform corner. On Linux the filesystem is case-sensitive
-by default; on Windows (NTFS, FAT32, exFAT) it is case-insensitive but
-case-preserving — `Document.txt` and `document.txt` are the same file, but
-the OS remembers which one you originally typed
-([Microsoft case sensitivity](https://learn.microsoft.com/en-us/windows/wsl/case-sensitivity)).
-NTFS does support per-directory case-sensitivity since Windows 10 build
-17107, but it's off by default and almost no one enables it.
+This is the single largest portability footgun in the project. The viewer's repo will be developed on Windows (interview answers fixed `case-insensitive comparison on Windows`), but artifacts will be authored to land in a repo that may be cloned on Linux/macOS by other contributors and CI. A link that resolves on Windows because `Spec.md` ≈ `spec.md` will return 404 on Linux.
 
-The implication for spec_driven: a link `../FINDINGS/dossier.md` written by
-a user on Windows will silently resolve in their local FS but break for a
-Linux user pulling the same repo. The VS Code markdown language service ran
-into exactly this issue and punted: their stance, paraphrased, was "paths
-on Windows are case insensitive; however this library makes a lot of
-assumptions about paths being case sensitive — we should figure out what
-to do about this (if anything)"
-([vscode-markdown-languageservice #106](https://github.com/microsoft/vscode-markdown-languageservice/issues/106)).
-Obsidian made the opposite call: wikilinks AND markdown links match
-filenames case-insensitively across all platforms, and when the user
-highlights existing text and converts it to a link, the text is rewritten
-to match the canonical case of the target file
-([Obsidian case sensitivity](https://forum.obsidian.md/t/case-sensitivity/52331)).
+Empirically: NTFS and APFS (default) treat names case-insensitively but case-preservingly — `spec.md` and `Spec.md` collide. ext4 (default Linux) treats them as distinct. Windows 10+ allows per-directory case-sensitivity opt-in for WSL interop, but the default git checkout on Windows is case-insensitive. macOS APFS can be configured case-sensitive but it isn't by default and many macOS apps break.
 
-For spec_driven, the right call is **case-sensitive resolution by default,
-with a "did you mean" hint** when a case-insensitive match exists but the
-case-sensitive lookup failed. This catches the Windows-author / Linux-CI
-class of bug without silently papering over typos. (See recommendation 5
-below.)
+Defense:
 
-### Traversal escape
+1. **Resolve with `realpath`** (or `pathlib.Path.resolve()` in Python, `fs.realpathSync.native` in Node) — this returns the on-disk casing, not the requested casing.
+2. **Compare resolved-canonical against the requested path with a strict (byte-for-byte) string comparison.** If they differ in case, treat the link as broken-because-case-mismatch. Render a distinct warning ("link spelling does not match on-disk file: `Spec.md` vs `spec.md` — fix link text for Linux portability") rather than silently following.
+3. The interview answer "case-insensitive comparison on Windows" governs the *sandbox boundary check* (does the resolved path stay inside the repo root?) — for that comparison, case-insensitive is correct because Windows itself is. But for the *link-validity check inside the rendered viewer*, strict case-match SHOULD win, with the warning exposing the latent Linux-incompatibility to the author.
 
-Already covered: after `posixpath.normpath` normalizes `..` and `.`, assert
-the result is `startswith(allowed_root + os.sep)`. The classifier treats a
-fail as broken. The API endpoint that serves the file MUST re-check
-independently — never trust the classifier as a security boundary.
+This is the **Windows case-mismatch** recommendation in §6.
 
-### GFM kebab-case slug rule, in code
+### 5.3 Markdown vs HTML link asymmetry
 
-Reproducible algorithm spec_driven needs to ship in BOTH the renderer (to
-build the TOC) and the validator (to check link fragments):
+GFM allows raw HTML inside markdown documents. The viewer's render pipeline (likely `react-markdown` + `remark-gfm` + `rehype-raw`) will render both. Concrete asymmetries:
 
-```
-slug = heading_text.lower()
-slug = re.sub(r"[^\w\s-]", "", slug, flags=re.UNICODE)
-slug = re.sub(r"[\s]+", "-", slug).strip("-")
-# duplicate handling: if slug already used in this doc, append "-N"
-```
+- `[text](url)` is parsed by the markdown parser; `url` may NOT contain unencoded spaces or angle brackets unless wrapped in `<>`.
+- `<a href="url">text</a>` is parsed by the HTML parser; `url` is whatever the HTML attribute parser accepts.
+- `[text](url "title")` supports title text; `<a href="url" title="title">` supports the same but via a different attribute slot.
+- Raw HTML can include `<a href="javascript:...">` — react-markdown by default strips `javascript:` URLs in markdown links via `remark`'s urlTransform but NOT in raw HTML unless `rehype-raw` is paired with `rehype-sanitize`. **This is a real XSS vector** if the viewer ever renders untrusted markdown. For spec_driven the markdown is author-trusted (the user's own files), but the same render pipeline serves any file in the exposed tree, which means the threat model is "operator types `<a href="javascript:fetch('/etc/passwd')">click</a>` into their own file" — non-zero impact only if a follow-up adds untrusted-author rendering. Document the assumption.
 
-This matches GitHub's behavior closely enough for our artifacts
-([GFM heading anchors](https://gist.github.com/asabaylus/3071099)). It
-does NOT match Docusaurus's slug algorithm exactly (Docusaurus uses
-github-slugger which preserves a few more characters), but for the
-all-English headings in our specs the divergence doesn't bite.
+The classifier MUST run uniformly across markdown-link and HTML-link AST nodes. The cheapest implementation is to do classification at the rehype stage (after raw HTML has been parsed into hast nodes) rather than at the remark stage (before HTML expansion).
 
-### Markdown vs HTML link asymmetry, redux
+### 5.4 Path-traversal escape (OWASP)
 
-One non-obvious case: an HTML `<a href="./foo.md#bar">` written literally
-inside markdown is parsed and rendered, and our classifier sees the same
-href string a `[link](./foo.md#bar)` would produce. Good. BUT: if a user
-writes raw HTML `<a name="manual-anchor"></a>` to create a manual anchor
-target, our slug-extractor (which only walks heading nodes) won't pick it
-up, and a link to `#manual-anchor` will be classified as a broken anchor.
-Two ways to handle: either also walk for `id=`/`name=` attributes when
-building the anchor set, or document that manual anchors are not
-supported. spec_driven should support manual anchors — they're useful for
-deep-linking into long sections — so the slug extractor should walk the
-full HAST and collect every `id` attribute, not just heading IDs.
+A link with a target like `../../../../../etc/passwd` or `..\\..\\..\\windows\\system32\\drivers\\etc\\hosts` must be classified broken, not followed. OWASP's defense pattern:
 
-## 6. Broken-link rendering: the "muted span never `<a>`" rule
+1. **Construct the candidate full path** by joining the repo root with the link target. Never split user input around the root.
+2. **Normalize** (`os.path.normpath` + `realpath`) to resolve `..`, `.`, redundant separators, and symlinks.
+3. **Validate** that the resolved path starts with the repo root (`startsWith` check on the canonical bytes). On Windows compare case-insensitively; on Linux strictly.
+4. **Reject everything else.** Encode the rejection as a broken link with reason "outside sandbox".
 
-Critical UX rule, from the user's brief: a broken link must NOT render as
-an `<a>` element at all. It renders as a `<span>` with muted styling and
-(ideally) a tooltip or hover-state explaining why it's broken
-("file not found", "anchor #foo not present in target.md"). No href, no
-click handler, no underline-on-hover.
+Critical: do step 2 BEFORE step 3. A naïve `if "../" in target: reject` is bypassed by URL-encoded `..%2F`, double-encoded `..%252F`, Unicode-overlong-encoded variants, and Windows backslash variants `..\` (which `normpath` resolves on Windows but not on POSIX, hence the language-specific normalization choice matters). The OWASP cheat sheet's primary guidance — *normalize then validate, never sanitize* — is exactly the pattern to follow here.
 
-Why this rule exists:
+The viewer SHOULD treat traversal-rejected links as a *louder* class of broken than missing-target broken: same muted-span rendering, but the tooltip says "target outside repo sandbox" rather than "target not found", and the failure should be logged to the audit stream (the existing `events.jsonl` could grow a `validation.link.escape_attempt` event type) so authors notice if their templates accidentally generate escape paths.
 
-- An `<a>` with an href that 404s in the in-app router is a worse UX than
-  a visibly-dead span. The user clicks, the router thrashes, the user
-  blames the app.
-- Right-click → copy-link on a broken `<a>` copies a URL the user will
-  paste into a chat asking "why is this 404'ing" — and there's no
-  in-document signal that the original link was already known-broken.
-- Screen readers announce `<a>` as "link". Announcing a broken link as
-  "link" is a lie. A `<span role="text" aria-label="broken link: ...">` is
-  honest.
+### 5.5 GFM heading-id vs explicit-anchor
 
-Docusaurus and MkDocs both surface broken links at build time and either
-fail the build or warn loudly; neither has an in-app rendering for a
-known-broken link because their output is static. spec_driven is a live
-viewer over a moving filesystem — links can break between page loads —
-so the in-app contract matters more.
+GFM allows authors to write `## My Heading {#custom-id}` (in some flavors) to override the slug. GitHub itself does NOT support the `{#custom-id}` extension — only the implicit slug — but `remark-gfm` + `remark-attr` can. Pandoc and MkDocs do support it natively. The viewer should pick one:
 
-## 7. Recommendations for spec_driven's link classifier
+- **Strict GFM (recommended for spec_driven):** only the implicit slug is honored. Authors who need a stable anchor write inline `<h2 id="custom">My Heading</h2>` raw HTML.
+- **Extended GFM:** also accept `{#id}` via `remark-attr`. Adds a dependency and a third path through the anchor map.
 
-These are the concrete decisions the implementation should make. Numbered
-so they can be referenced by spec section.
+Strict GFM is fewer moving parts and matches the GitHub-rendered view that authors see when they push to GitHub. Recommendation locks this in.
 
-1. **Decision order (single classifier, runs on every rendered link):**
-   1. If `href` starts with `#` → bucket 1 (same-file anchor). Verify the
-      slug exists in the current document's anchor set; if not, render
-      muted span.
-   2. Else if `href` parses with scheme in {`http`, `https`, `mailto`,
-      `tel`} → bucket 2 (external). Render as `<a target="_blank"
-      rel="noopener noreferrer">`.
-   3. Else if `href` matches `/javascript:|^data:/i` → drop the `<a>`
-      entirely; render the link text as a muted span.
-   4. Else treat as bucket 3/4 candidate. Strip fragment, decode percent
-      exactly once, normpath relative to source artifact, assert
-      result is inside the served root, check existence in artifact index,
-      check anchor existence on target. Any failure → bucket 4 (broken,
-      muted span).
+## 6. Comparator summary
 
-2. **Anchor scrolling**: target the anchor with `scrollIntoView({ block:
-   "start" })` and `scroll-margin-top: <header-height>px` on every heading
-   node. For anchors on the SAME route, scroll on click. For anchors on a
-   different route, register the scroll-on-hash effect after the target
-   route mounts — keyed on `pathname + hash` so back/forward works.
+| Comparator | Broken-link policy | Broken-anchor policy | Default | Notes |
+|---|---|---|---|---|
+| **MkDocs** | `validation.links.not_found` = `info` / `warn` / `ignore`; default `warn`; `--strict` flag promotes warns to errors | `validation.links.anchors` = same enum; default `info` | Build-time fail under `--strict`; otherwise log only | Also splits `absolute_links`, `unrecognized_links` |
+| **Docusaurus** | `onBrokenLinks` = `ignore` / `log` / `warn` / `throw`; default `throw` | `onBrokenAnchors` = same enum; default `warn` | Build-time fail by default for paths, log-only for anchors | `onBrokenMarkdownLinks` deprecated v3.9 → `siteConfig.markdown.hooks.onBrokenMarkdownLinks` |
+| **GFM (github-slugger)** | n/a (GitHub renders broken internal links as plain styled text) | Slugged at render time; duplicates suffix `-1`, `-2`; emoji stripped; accented kept | n/a | `github-slugger` is the de facto reference impl |
+| **Obsidian** | Wiki-link `[[Foo]]` to nonexistent file renders as a *placeholder link* in a different colour; clicking creates the file. Markdown link `[text](foo.md)` to nonexistent file renders as a normal link that 404s on click | Anchors via `[[Note#Heading]]` and block refs `[[Note^block]]` | Wiki-link "create on click" UX is Obsidian-specific | Wiki-links support backlinks; markdown links do not. Resolution is case-insensitive, file extensions are usually omitted in wiki-links |
+| **OWASP path-traversal cheat sheet** | "Normalize then validate against allowed root; do not sanitize" | n/a | Reject on resolved-path-outside-root | Use indexes/whitelists where possible; `realpath` then `startsWith(root)` |
 
-3. **Broken-link visual contract**:
-   - Element: `<span>`, never `<a>`.
-   - Class: `link-broken` with muted color (e.g., `color: var(--text-muted)`),
-     dotted underline.
-   - `title` attribute (tooltip): `"Broken link: <reason>. Resolved path:
-     <normalized path or anchor>."`
-   - `aria-label`: same content.
-   - Cursor: `cursor: not-allowed`.
-   - Copy-paste behavior: text is selectable; the underlying href string
-     is NOT in the DOM, so right-click → copy-link is unavailable by
-     construction. This is a feature.
+Two takeaways:
 
-4. **The "muted span never `<a>`" rule, restated as a hard invariant**: any
-   code path in the renderer that produces an `<a>` element MUST have run
-   the classifier and gotten back bucket 1, 2, or 3. Bucket 4 produces a
-   `<span>`. There is no fallback that renders `<a href="...">` without
-   classification — if the classifier crashes, the link renders as plain
-   text with no element wrapping at all.
+- **Default-to-warn is industry-standard** for anchors (Docusaurus, MkDocs). For path links the trend is to fail harder (Docusaurus default `throw`). spec_driven's viewer should *render-warn* (muted span) rather than *fail-build* because there's no build step — the markdown is rendered live.
+- **Obsidian's "create on click" UX is interesting but out of scope.** The interview answer locked "edit existing only — `PUT /api/file` requires the path to already exist", which forecloses click-to-create. A broken-link click could *deep-link to the regen panel* instead, which is the closest spec_driven analogue.
 
-5. **Windows case-sensitivity handling**: resolution is case-sensitive by
-   default (Linux semantics). Authoring is on Windows where the
-   filesystem won't reject mismatched case, so the classifier additionally
-   maintains a case-folded index. When a case-sensitive lookup fails but
-   a case-folded match exists, the link is still classified as broken
-   (preserving the strict default), but the broken-link tooltip includes
-   `"Did you mean: <correctly-cased path>?"`. This catches the
-   Windows-author / Linux-CI class of bug without silently fixing it.
+## 7. Recommendations
 
-6. **Decode-once invariant**: percent-decoding happens exactly once,
-   between fragment-strip and normpath. The classifier MUST NOT call
-   `decodeURIComponent` (or `urllib.parse.unquote`) on the result of
-   normpath, on the result of the existence check, or anywhere downstream.
-   A unit test should assert that an href like `..%2f..%2fetc%2fpasswd`
-   classifies as broken (after one decode it's `../../etc/passwd`,
-   normpath escapes the root, no-escape check fails) while
-   `..%252fetc` classifies as broken via the existence check (after one
-   decode it's `..%2fetc`, which is a literal filename and won't be
-   found).
+1. **Fixed classification order.** Implement link classification as a single pure function `classifyLink(href, currentDocPath, sandboxRoot, anchorMap) → {kind: "external"|"anchor"|"internal"|"broken", reason?, resolvedPath?}` that evaluates in the order: scheme → bare-anchor → internal-relative → broken. No fallthrough; every input lands in exactly one bucket.
 
-7. **Bucket-4 split for telemetry / future authoring tooling**: even
-   though both render as muted spans, internally distinguish
-   `BROKEN_PATH` from `BROKEN_ANCHOR`. This mirrors the
-   `onBrokenLinks`/`onBrokenAnchors` split in Docusaurus and lets a
-   future "fix all broken links" tool offer different remedies for each.
-   The split also lets us downgrade `BROKEN_ANCHOR` from "blocking" to
-   "warning" if it turns out heading renames are common enough to be noisy.
+2. **Anchor scrolling via `scrollIntoView` + `scroll-margin-top`.** Use the native smooth-scroll API; size the offset for any sticky header in CSS (`scroll-margin-top: 4rem` on heading elements). Update `window.location.hash` after scroll starts so the URL is shareable and back/forward work. Build the anchor map at render time by querying the rendered DOM (`document.querySelectorAll("h1[id], h2[id], …")`), not by re-walking the markdown AST — this captures both GFM-slugged and inline-HTML-`id` cases uniformly.
 
-8. **Slug extraction walks the entire HAST, not just headings**. Collect
-   every `id` attribute the rendered tree produces — heading auto-IDs
-   plus any literal `<a id="...">` or `<div id="...">` written by the
-   author. This avoids false-positive broken-anchor flags on artifacts
-   that use manual anchors for deep-linking inside long sections.
+3. **Broken-link visual: muted span with strikethrough + warning icon + tooltip.** Foreground at ~45% opacity, line-through, leading icon, `cursor: not-allowed`, `title` attribute carrying the failure reason. Distinct sub-styles for `not-found`, `outside-sandbox`, `case-mismatch`, and `bad-anchor` so authors can scan for problems visually.
+
+4. **"Muted span never `<a>`" rule.** Broken links MUST render as `<span>` (or `<a>` without `href`), never as `<a href="...">`. This forecloses misclicks, middle-click navigation, and accidental sandbox-escape leaks. Encode the attempted target in `data-attempted-href` for inspector debugging only.
+
+5. **Windows case-mismatch warning, not silent follow.** Resolve with `realpath`; compare resolved canonical name byte-for-byte against the link's spelling; if they differ only in case, render as broken-with-reason `case-mismatch` so the author fixes the link before a Linux contributor or CI box hits a 404. Do NOT silently follow on Windows just because the OS would.
+
+6. **Normalize-then-validate for traversal defense, with audit logging.** Use Python's `pathlib.Path.resolve(strict=False)` server-side and `path.posix.normalize` + `startsWith(repoRoot)` client-side. On rejection, fire a `validation.link.escape_attempt` event into the existing `events.jsonl` audit stream. Reject double-encoded, mixed-slash, and absolute-path variants uniformly via the resolve→compare flow rather than ad-hoc string filters.
+
+7. **Strict GFM slug, no `{#custom-id}` extension.** Use `github-slugger` directly for heading IDs. Authors needing a stable custom anchor write inline `<h2 id="custom">…</h2>` raw HTML, which the rehype stage picks up. This keeps anchor behavior identical to what authors see when the same markdown is rendered on GitHub, removes one rendering dependency, and avoids the duplicate-anchor disambiguation problem when both `{#id}` and `## Heading` exist.
+
+8. **Internal-relative click navigates inside the app, never `<a href>` to the file.** When an internal-relative link resolves to an in-sandbox tracked file, render an `<a href="#">` whose `onClick` calls the app router (`navigate(viewerPath(resolved))`) and `event.preventDefault()`s. This keeps the SPA contract intact, preserves browser back/forward via the router, and prevents the dev server from being asked for the raw `.md` (which would either 404 or — worse on a misconfigured prod build — serve the file as `text/plain` and skip the viewer entirely). External and `mailto:` links are the *only* cases where a real `href` is rendered.
 
 ## Open questions / not researched
 
-- **Slug algorithm divergence with code-fence headings**: GitHub treats
-  `## \`code\` heading` differently from Docusaurus's github-slugger;
-  we haven't audited which our artifacts use in practice.
-- **Image links**. This angle covered `<a>` only. `<img>` href resolution
-  follows similar rules but with different security considerations
-  (no scheme allowlist needed, but `data:` URLs deserve a size cap).
-  Out of scope here.
-- **Link rewriting on artifact rename**. If `findings/dossier.md` is
-  renamed, do we rewrite incoming links across the project tree, or just
-  let them break and rely on the muted-span signal? Not researched.
-- **WikiLink-style `[[...]]` syntax**. Obsidian users may paste these
-  in; do we support them at all? If yes, do we follow Obsidian's
-  case-insensitive normalized-match rule, or our own? Not researched —
-  recommend rejecting the syntax until we have a use case.
-- **Link checker as a CI gate**. MkDocs and Docusaurus both can fail the
-  build on broken links. spec_driven could expose the same as a
-  one-shot CLI. Not researched here.
-- **Cross-project links** — e.g., a spec_driven artifact linking to a
-  different project's spec. We don't currently scope link resolution
-  beyond the one project's tree; whether we should is an open product
-  question.
+- **Custom anchor extensions in spec_driven's own templates.** Whether the spec compilation template ever emits `{#id}` or relies purely on natural slugs is undetermined without reading prior `final_specs/spec.md` (forbidden by read-zero). Stage 4 should standardise.
+- **Wiki-link `[[…]]` syntax.** The viewer uses GFM, which does not support wiki-links. Whether authors will *want* `[[other_file]]` ergonomics (Obsidian-style) is a UX question for a follow-up, not this pass.
+- **Image links vs file links.** This angle covers `<a>` rendering only. Image src resolution (`![alt](path.png)`) follows the same classification but renders a broken-image placeholder rather than a muted span — out of scope for this angle.
+- **Link rewriting on save.** The interview locked "regex parse, re-emit whole file" for qa.md but no one asked whether other-file edits should auto-rewrite stale links (e.g., when a heading is renamed, should existing anchor links update?). Conservative default: do not. Flag for stage 5 if it matters.
+- **Performance of building the anchor map per render.** `document.querySelectorAll` on a 50-heading document is sub-millisecond; on a 5000-heading document (unlikely for spec artifacts) it might matter. Not measured.
+- **Internationalisation of slugs.** `github-slugger` keeps non-ASCII letters, but Obsidian's slug strips them. Whether spec_driven artifacts will ever contain non-Latin headings is undetermined; current artifacts are English-only.
 
 ## Sources
 
-- [MkDocs Configuration — validation](https://www.mkdocs.org/user-guide/configuration/)
-- [Docusaurus Configuration — onBrokenLinks / onBrokenAnchors](https://docusaurus.io/docs/api/docusaurus-config)
+- [MkDocs Configuration — validation.links options](https://www.mkdocs.org/user-guide/configuration/)
+- [MkDocs Link Validation overview (DeepWiki)](https://deepwiki.com/mkdocs-ng/mkdocs/3.5-link-validation)
+- [Docusaurus docusaurus.config.js — onBrokenLinks/onBrokenAnchors](https://docusaurus.io/docs/api/docusaurus-config)
+- [Docusaurus PR #9528 — adding onBrokenAnchors](https://github.com/facebook/docusaurus/pull/9528)
+- [github-slugger (Flet/github-slugger) — heading slug algorithm](https://github.com/Flet/github-slugger)
+- [GitHub anchor heading reference gist (asabaylus)](https://gist.github.com/asabaylus/3071099)
 - [GitHub Flavored Markdown Spec](https://github.github.com/gfm/)
-- [GitHub heading anchors algorithm (asabaylus gist)](https://gist.github.com/asabaylus/3071099)
-- [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal)
-- [OWASP Input Validation Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html)
-- [Microsoft Learn — Case Sensitivity (Windows / WSL / NTFS)](https://learn.microsoft.com/en-us/windows/wsl/case-sensitivity)
-- [Obsidian Forum — Case sensitivity discussion](https://forum.obsidian.md/t/case-sensitivity/52331)
-- [Obsidian wikilink rules (dhpwd gist)](https://gist.github.com/dhpwd/9bb86c53b69cb63e09ccca42e3bf924c)
-- [vscode-markdown-languageservice issue #106 — case sensitivity](https://github.com/microsoft/vscode-markdown-languageservice/issues/106)
-- [react-markdown — components prop and href filtering](https://github.com/remarkjs/react-markdown)
-- [CommonMark autolink URI scheme allowlist discussion](https://talk.commonmark.org/t/what-is-the-point-of-limiting-uri-schemes-in-autolinks/555)
+- [Obsidian forum — GFM kebab-case heading-slug feature request](https://forum.obsidian.md/t/support-gfm-style-kebab-case-heading-slug-anchor-targets/30350)
+- [Obsidian forum — Wiki-link vs Markdown link support](https://forum.obsidian.md/t/wikilink-vs-markdown-the-latter-suffers-from-lack-of-support/86920)
+- [Obsidian forum — non-existing file linkage behavior](https://forum.obsidian.md/t/internal-inks-use-wikilinks-instead-of-markdown-links-for-non-existing-files/61795)
+- [OWASP — Path Traversal attack overview](https://owasp.org/www-community/attacks/Path_Traversal)
+- [OWASP Cheat Sheet Series root](https://cheatsheetseries.owasp.org/)
+- [PortSwigger Web Security Academy — Path Traversal](https://portswigger.net/web-security/file-path-traversal)
+- [Microsoft Learn — WSL Case Sensitivity](https://learn.microsoft.com/en-us/windows/wsl/case-sensitivity)
+- [Microsoft DevBlogs — Per-directory case sensitivity and WSL](https://devblogs.microsoft.com/commandline/per-directory-case-sensitivity-and-wsl/)
+- [LWN — Filesystems and case-insensitivity](https://lwn.net/Articles/772960/)
+- [remarkjs/react-markdown — custom component rendering of links](https://github.com/remarkjs/react-markdown)

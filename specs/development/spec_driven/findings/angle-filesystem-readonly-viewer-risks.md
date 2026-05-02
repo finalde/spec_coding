@@ -1,168 +1,267 @@
-# Filesystem read-only viewer risks (and the editing path)
+# Angle — filesystem viewer/editor risks
 
-spec_driven is a localhost FastAPI app that walks `specs/{task_type}/{task_name}/` per request, reads files via `GET /api/file?path=...`, and writes them back via `PUT /api/file`. Even bound to `127.0.0.1`, every request that takes a path from the client and resolves it against the filesystem is a path-traversal API. This dossier covers the seven failure modes the design has to survive: race conditions, path traversal, symlinks, encoding/binary detection, permissions, atomic-write semantics, and stale-tree UX. It closes with concrete recommendations for the `safe_resolve` helper, symlink policy, write path, error mapping, and size ceiling.
+Stage 3 / Research — angle file.
+Run: spec_driven-20260503-fullregen
+Author: parent-spawned researcher-filesystem-risks (autonomous mode)
+Inputs read: `user_input/revised_prompt.md`, `interview/qa.md`. Prior findings explicitly NOT read.
 
-## 1. Path traversal — the case study is in our own dependency tree
+This angle covers the security and correctness considerations for a localhost-only FastAPI + React app that **reads and writes** plain files under a fixed sandbox root (the `spec_coding` repo). It treats the viewer/editor scope of `spec_driven` as the unit of analysis: an `exposed tree` of allow-listed paths, a body cap, a write whitelist of extensions, and a last-write-wins write contract.
 
-FastAPI sits on Starlette, and Starlette's own `StaticFiles` shipped CVE-2023-29159 — a path-traversal bug that affected versions `>=0.13.5,<0.27.0`. The advisory is direct about the cause: `StaticFiles` validated the requested path against the configured directory using `os.path.commonprefix()`, which "works a character at a time, it does not treat the arguments as paths" ([Kludex/starlette GHSA-v5gw-mw7f-84px](https://github.com/Kludex/starlette/security/advisories/GHSA-v5gw-mw7f-84px), [NVD CVE-2023-29159](https://nvd.nist.gov/vuln/detail/CVE-2023-29159)). A request like `GET /static/../static1.txt` resolved to `./static1.txt`; `commonprefix(["./static1.txt", "./static"])` returns `./static`, which the check happily accepted as "inside the static dir." The fix was to switch to `os.path.commonpath()`, which compares path components rather than characters.
+Two design choices are locked by the interview and must be honored verbatim:
 
-This bug is not unique. Seth Larson catalogues `os.path.commonprefix()` as a 35-year footgun and points at three more incarnations: pip's wheel-unpack path-traversal (CVE-2026-1703), dbt-common's `safe_extract` ([GitLab CVE-2026-29790](https://advisories.gitlab.com/pkg/pypi/dbt-common/CVE-2026-29790/)), and a Trellix-led mitigation campaign for the tarfile CVE-2007-4559 that propagated the same broken `is_within_directory()` to over 61,000 downstream pull requests ([Larson, "Deprecate confusing APIs like os.path.commonprefix()"](https://sethmlarson.dev/deprecate-confusing-apis-like-os-path-commonprefix)). The wrong-vs-right pattern is worth pinning to the wall:
+1. **Last-write-wins** on `PUT /api/file` — no `If-Match`/`If-Unmodified-Since`, no mtime guard, no 409 conflict path. The editor's buffer overwrites whatever is on disk.
+2. **10 MB body cap** on both `GET /api/file` and `PUT /api/file` — the AC tests 10 MB exactly (200) and 10 MB + 1 byte (413).
 
-```python
-# WRONG — character-level, allows /tmp/packages/ vs /tmp/packagesevil/
-prefix = os.path.commonprefix([abs_directory, abs_target])
-return prefix == abs_directory
-
-# RIGHT — component-level
-return os.path.commonpath([abs_directory, abs_target]) == abs_directory
-```
-
-OWASP's own guidance does not name `commonpath` directly but lands at the same place: "validate the user's input by only accepting known good — do not sanitize the data," "surround the user-supplied path component with application-controlled path code," and "normalize the input before using in file IO APIs," with explicit pointers to `realpath()` (PHP), `Path.normalize()` (Java), and `Path.GetFullPath()` (.NET) as the canonicalization primitives ([OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal)).
-
-For Python the canonical primitive is `pathlib.Path.resolve()`, which the standard library docs describe as "Make the path absolute, resolving any symlinks. … `..` components are also eliminated (this is the only method to do so)" ([Python pathlib docs](https://docs.python.org/3/library/pathlib.html)). The companion check is `Path.is_relative_to(base)` or, when you need the suffix back, `Path.relative_to(base)`. Critically, **`is_relative_to` is string-based** — "this method is string-based; it neither accesses the filesystem nor treats `..` segments specially" — so it is only safe **after** `resolve()` has done the canonicalization. Salvatore Security's preventing-directory-traversal-in-Python writeup arrives at the same shape (`DOCUMENT_ROOT.resolve() not in requested_path.resolve().parents`) and flags the obvious caveat: `resolve()` follows symlinks, so the check is only as strong as your symlink policy ([Salvatore Security](https://salvatoresecurity.com/preventing-directory-traversal-vulnerabilities-in-python/)).
-
-### Double-decode is the other classic miss
-
-The OWASP double-encoding page is explicit that "by using double encoding it's possible to bypass security filters that only decode user input once" ([OWASP Double Encoding](https://owasp.org/www-community/Double_Encoding)), and CVE-2026-21726 in Grafana Loki is a current example: the original sanitiser decoded once and validated, the file-access layer decoded again, and `%252e%252e%252f` slipped through ([SentinelOne CVE-2026-21726](https://www.sentinelone.com/vulnerability-database/cve-2026-21726/)). FastAPI/Starlette already URL-decodes path and query arguments once before they reach the handler. As long as spec_driven's `safe_resolve` operates on the already-decoded string and **does not decode again**, the double-decode class is closed. Equally important: do not write your own ad-hoc decoder before validation. Take the string as Starlette hands it to you, feed it to `Path()`, then `resolve()`.
-
-### `pathlib.Path.resolve(strict=False)` semantics — the read vs write asymmetry
-
-The docs say "If a path doesn't exist or a symlink loop is encountered, and strict is True, OSError is raised. If strict is False, the path is resolved as far as possible and any remainder is appended without checking whether it exists" ([Python pathlib docs](https://docs.python.org/3/library/pathlib.html)). This matters for the editing path: `PUT /api/file` may target a file that does not exist yet (creating a new draft section). Using `resolve(strict=True)` would `FileNotFoundError` on every legitimate create; `resolve(strict=False)` resolves the parent that does exist and appends the trailing leaf — exactly what a "create-or-overwrite" handler needs. For the read path, `strict=True` is fine and gives you a clean 404 mapping for free.
-
-## 2. Symlinks — the policy decision spec_driven cannot dodge
-
-`resolve()` follows symlinks. If `specs/development/foo/findings/dossier.md` is a symlink to `/etc/passwd`, an authenticated `safe_resolve` based purely on `resolve() + is_relative_to(base)` returns `/etc/passwd` and `is_relative_to(specs/)` is False, so traversal is denied — but only because the link target falls outside. A symlink to `/Users/dalu/secrets/api_key.txt` placed inside the project tree by an attacker who already has write access to one subdirectory escapes the canonical base check the same way: the resolved target is outside, the check fails, the read is denied — only if and when `resolve()` actually walks the link. If we resolve **the parent** rather than the full path (a common mistake when you want `resolve(strict=False)` for the create case), a symlink at the leaf can let the underlying `open()` follow the link past the base.
-
-The web-server world has settled on three knobs:
-
-- **nginx `disable_symlinks`** has four modes: `off` (default — links allowed), `on` (deny if any path component is a link), `if_not_owner` (deny only when link and target have different owners — the SymLinksIfOwnerMatch behaviour), and `from=$prefix` (skip checking some leading prefix). It is implemented on top of `openat()` / `fstatat()` and is therefore "only available on systems that have the `openat()` and `fstatat()` interfaces … modern versions of FreeBSD, Linux, and Solaris" ([nginx docs](https://nginx.org/en/docs/http/ngx_http_core_module.html#disable_symlinks)). Notably it does not work on Windows.
-- **Plesk** ships a "Restrict the ability to follow symbolic links" checkbox per subscription, layered on Apache's `SymLinksIfOwnerMatch` and nginx's `disable_symlinks`. Plesk's own docs flag that `SymLinksIfOwnerMatch` "leaves a time-of-check to time-of-use race condition vulnerability" and that deeper protection requires kernel-level mechanisms like CloudLinux SecureLinks or grsecurity ([Plesk symlinks vulnerability mitigation](https://docs.plesk.com/en-US/obsidian/administrator-guide/plesk-administration/securing-plesk/mitigating-the-symlinks-vulnerability.79045/)).
-- **Dufs** (sigoden/dufs) defaults to **denying** symlink targets outside the served root and exposes `--allow-symlink` / `DUFS_ALLOW_SYMLINK=true` to opt in ([Dufs README](https://github.com/sigoden/dufs)).
-
-For a localhost dev tool serving the user's own `specs/` tree, the simplest correct policy is **deny any path whose `resolve()` differs from its lexical normalisation** — i.e., reject if the resolved real path is not byte-identical to a non-following lexical normalisation that uses `os.path.normpath()` followed by `os.path.realpath()` and an equality check, **or** simpler, after `resolve()` re-check `is_relative_to(base.resolve())` *and* walk each parent and assert none of them is a symlink (`Path.is_symlink()`) when iterating from base downward. This matches Dufs's default and avoids the `if_not_owner` race that Plesk warns about.
-
-## 3. Encoding and binary detection — do not MIME-sniff
-
-The viewer needs to decide: is this file something we render in the editor (text + monospace), or an opaque binary we offer for download? The intuitive move is to MIME-sniff. The intuitive move is wrong.
-
-The WHATWG MIME Sniffing Standard exists precisely because browsers historically disagreed on how to guess content types from bytes ([WHATWG MIME Sniffing](https://mimesniff.spec.whatwg.org/)), and MDN's media-types primer is blunt: "file extensions are not used to determine the supplied MIME type … because they are unreliable and easily spoofed" ([MDN MIME types](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types)). Worse, charset sniffing has been used to **bypass** browser security (the canonical example: CSS / JSONP files reinterpreted as scripts via UTF-7 BOM injection — see Wikipedia's [Content sniffing](https://en.wikipedia.org/wiki/Content_sniffing) write-up).
-
-`chardet` is more honest but still probabilistic. The FAQ says it "achieves 99.3% accuracy on its test suite," but also that "very short strings (under a few hundred bytes) may require additional data for reliable results" and that callers should "try `detect_all()` if the top result is wrong" ([chardet FAQ](https://chardet.readthedocs.io/en/latest/faq.html)). It returns `None` when "the data appears to be binary rather than text … contains null bytes or a high proportion of control characters." That last sentence is the actual signal we need.
-
-The concrete, unambiguous binary check (no probabilistic step) the WHATWG spec uses is: **a byte is a "binary data byte" if it is in `0x00..0x08`, `0x0B`, `0x0E..0x1A`, or `0x1C..0x1F`** ([WHATWG MIME Sniffing §3](https://mimesniff.spec.whatwg.org/)). Read the first 4 KB; if any byte is in those ranges, treat it as binary, refuse to render in the editor, return a small JSON envelope `{is_binary: true, size: N}` plus a download link. For files that pass that check, default to UTF-8 decode and only fall back to chardet on `UnicodeDecodeError`. Do **not** use a Python `mimetypes.guess_type()` answer to drive editor vs download — that goes by extension and lies.
-
-## 4. Permissions, EAFP, and the structured error envelope
-
-Localhost-only does not mean "no errors." The user may rename a file in another tab, `chmod 000` it, or delete the parent. The CERT secure-coding rule for filesystem access is "FIO45-C: avoid TOCTOU race conditions" — checks (`os.path.exists`, `os.access`) before use are racy because the world can change between check and open ([CERT FIO45-C](https://wiki.sei.cmu.edu/confluence/display/c/FIO45-C.+Avoid+TOCTOU+race+conditions+while+accessing+files)). Apple's secure-coding guide makes the same point: the only reliable path is EAFP — "easier to ask forgiveness than permission" — try the operation and translate the OSError to the right HTTP code.
-
-The mapping spec_driven should commit to:
-
-| `OSError.errno` | HTTP | meaning |
-| --- | --- | --- |
-| `ENOENT` (2) | 404 | file or parent gone |
-| `ENOTDIR` (20) | 404 | a path component is a regular file |
-| `EISDIR` (21) | 400 | client asked for a file, target is a directory |
-| `EACCES` (13), `EPERM` (1) | 403 | filesystem-level permission |
-| `ELOOP` (40) | 400 | symlink loop (or our policy denied the link) |
-| `ENAMETOOLONG` (36) | 414 | URI/path too long |
-| `EXDEV` (18) | 500 | cross-device on the rename — internal bug |
-| `ENOSPC` (28), `EDQUOT` (122) | 507 | disk full / quota |
-| anything else | 500 | unexpected; log full traceback server-side |
-
-Combined with a base-resolution failure (`safe_resolve` raising), which is its own 400 ("path escapes base"), this gives the frontend a small, finite vocabulary to render reasonably.
-
-## 5. Atomic write — `tempfile.mkstemp` + `os.replace`
-
-The standard idiom for crash-safe in-place file replacement in Python is:
-
-1. `mkstemp(dir=target.parent)` — same directory so the rename stays on one filesystem.
-2. Write payload to the temp fd, `os.fsync(fd)`, close.
-3. `os.replace(temp_path, target)`.
-4. On any exception, `os.unlink(temp_path)` to avoid temp-file litter.
-
-[ActiveState recipe 579097](https://code.activestate.com/recipes/579097-safely-and-atomically-write-to-a-file/) and the [python-atomicwrites library](https://github.com/untitaker/python-atomicwrites) both codify this; the discuss.python.org thread "Adding atomicwrite in stdlib" ([discuss.python.org/t/adding-atomicwrite-in-stdlib/11899](https://discuss.python.org/t/adding-atomicwrite-in-stdlib/11899)) catalogues the same shape with the `fsync` step explicit. The `fsync` is the part most "atomic write" tutorials drop and the part that matters when the box loses power between the rename and the write hitting platters.
-
-### POSIX vs Windows asymmetry
-
-The big footgun: `os.replace`/`os.rename` is **not** uniformly atomic across platforms.
-
-- **POSIX** `rename(2)` is atomic, including overwrite of an existing destination on the same filesystem ([POSIX rename](https://pubs.opengroup.org/onlinepubs/9699919799/functions/rename.html)).
-- **Windows**: `os.replace` lowers to `MoveFileEx(MOVEFILE_REPLACE_EXISTING)`, which Microsoft's docs do **not** guarantee atomic. The golang-nuts thread "windows: ReplaceFile vs MoveFileEx" ([Google Groups](https://groups.google.com/g/golang-nuts/c/JFvnLx246uM)) and the LWN article "Atomic rename in Windows" ([lwn.net/Articles/682988](https://lwn.net/Articles/682988/)) both land on the same conclusion: `ReplaceFile()` is the closer match because its requirement that "the backup file, replaced file, and replacement file must all reside on the same volume" is what makes the operation atomic, and `SetFileInformationByHandle(..., FileRenameInfoEx, ..., FILE_RENAME_FLAG_POSIX_SEMANTICS)` is the modern way to get true POSIX-style replace on Windows 10+.
-- The Python issue tracker has been aware of this since [bpo-8828 "Atomic function to rename a file"](https://bugs.python.org/issue8828); the `os.replace` docstring promises overwrite, not atomicity, on Windows.
-- Cross-filesystem `rename` on POSIX returns `EXDEV` and `os.replace` does **not** fall back to copy+delete ([zetcode os.replace](https://zetcode.com/python/os-replace/)). Putting the temp file in the same directory as the target makes this irrelevant.
-
-**Practical implication for spec_driven:** on Linux/macOS the `mkstemp + fsync + os.replace` pattern gives a strong "old file or new file, never half-written" guarantee. On Windows, the same code yields "almost always one or the other," and a hard power-loss in the middle of the rename can corrupt. For a localhost dev tool that's an acceptable failure mode — the user can `git diff` and re-save — but it should be documented, not silently assumed.
-
-## 6. Stale-tree UX — what the sidebar should show
-
-The sidebar lists the spec tree, the user clicks a file, the editor loads it. Between the listing and the click, the file may have been renamed, deleted, or had its permissions changed by another process (a `git checkout`, an editor save in IDE, the agent_team pipeline writing a new artifact). LWN's "Filesystem notification, part 2" ([LWN Articles/605128](https://lwn.net/Articles/605128/)) walks through the inotify race: "if you scan a directory adding watches for subdirectories first, then add a watch for the parent directory, and a new subdirectory is created between these two steps, no watch will be created for that directory." A web tool that pre-builds a tree snapshot and serves stale paths from it inherits the same race plus a network round-trip.
-
-The cleanest design, and what the current spec calls for ("scans `specs/` per request"), avoids inotify entirely: every `GET /api/tree` call walks the filesystem fresh, and every `GET /api/file` resolves the path against the live filesystem. There is no cache to invalidate. The cost is one stat-walk per refresh; for a `specs/` tree of a few hundred files on local disk this is sub-10 ms and irrelevant. **Do not introduce a watcher.** It would add a layer of bugs (dropped events on macOS FSEvents under heavy churn, kqueue limits on BSD, polling fallback semantics on Windows) for a problem that does not exist.
-
-For the per-file UX, the right shape is: editor open does a fresh GET; if the file has been modified since the version the client holds (compare `mtime_ns` returned in the GET response), refuse the next PUT with a 409 Conflict and surface "the file changed on disk — reload?" This is the `If-Unmodified-Since` pattern minus the HTTP-date precision loss.
-
-## 7. The 2 MB ceiling
-
-Even with all of the above right, an unbounded read is a memory-exhaustion vector. Symlink-protected, traversal-safe, atomic-write-correct — none of that helps if a curious user clicks `package-lock.json` (8 MB) and the response object stalls the browser. A hard ceiling at **2 MB** for both read and write: above that, return `413 Payload Too Large` on PUT and a `{is_binary: false, too_large: true, size: N}` envelope on GET so the frontend can show "file is too large to edit in the browser" with a download link. 2 MB covers every spec/markdown/yaml/json/python file the pipeline produces; anything bigger is by definition not a hand-edited artifact.
+The rest of this document examines what actually goes wrong with file-serving sandboxes, lines up the relevant comparators, then lands on 6 concrete recommendations.
 
 ---
 
-## Recommendations for spec_driven
+## 1. Path traversal — the first thing every reviewer will look at
 
-1. **`safe_resolve(path: str, base: Path) -> Path`**: build with `Path((base / path).resolve(strict=False))`, then assert `resolved.is_relative_to(base.resolve())`. Use `resolve(strict=False)` so create-new-file works on the write path and let the subsequent `open()` raise `FileNotFoundError` (mapped to 404) when reading a non-existent path. Never use `os.path.commonprefix` and never mix in `os.path.commonpath` either — `pathlib.is_relative_to` is the component-aware check. Do not URL-decode the path again inside the helper; trust Starlette's single decode.
+Path traversal (CWE-22, "dot-dot-slash", "directory climbing") is the single most common file-server bug. OWASP's community page describes it as a class of attacks where the attacker reads or writes files outside the intended directory by injecting `..`, absolute paths, encoded variants, or other path operators into a request that reaches a filesystem API. The OWASP-recommended primary defense is **avoid passing user-supplied input to filesystem APIs altogether** — and when that is impossible, validate the *resolved absolute path* against an allow-listed root rather than scanning the input string for `..`.
 
-2. **Symlink policy: deny.** After `safe_resolve` produces the resolved path, walk parents from `base` to leaf and reject if any segment satisfies `Path.is_symlink()`. This matches Dufs's default and avoids the `SymLinksIfOwnerMatch` TOCTOU race Plesk warns about. Document this in the spec; if a user genuinely needs symlinks inside `specs/`, they must opt in via a config flag and accept the localhost-only risk.
+For `spec_driven` the user-supplied input is the path component of `GET/PUT /api/file?path=…`. The path *must* go to the filesystem, so OWASP's "avoid" rule cannot apply — the validation strategy has to be airtight.
 
-3. **Atomic write via `tempfile.mkstemp` + `os.fsync` + `os.replace`**, with the temp file in the **same directory** as the target so the rename stays single-filesystem. Wrap in `try/except` that `os.unlink`s the temp on failure. Document that on Windows the atomicity is "best-effort" because `os.replace` lowers to `MoveFileEx`, not `ReplaceFile`/`FileRenameInfoEx`.
+### 1a. The Starlette comparator (CVE-2023-29159)
 
-4. **EAFP read with structured 4xx mapping.** No `os.path.exists` or `os.access` pre-checks. `try: open(...)` and translate `OSError.errno` per the table in §4. Return `{error: {code: "ENOENT", http: 404, message: "..."}}`; never leak full server paths in the message — only the user-supplied relative path.
+CVE-2023-29159 is the canonical recent example of a sandbox that *thought* it was safe and was not. Starlette's `StaticFiles` validated that a requested path was inside the configured root using `os.path.commonprefix([full_path, directory])`. With a directory `./static` and a request like `/static/../static1.txt`:
 
-5. **Binary detection by null-byte scan**, not MIME sniffing and not chardet. Read first 4096 bytes; if any byte is in WHATWG's binary-byte set (`0x00..0x08`, `0x0B`, `0x0E..0x1A`, `0x1C..0x1F`), treat as binary, return `{is_binary: true}` with no body. For text files, attempt UTF-8 decode first; on `UnicodeDecodeError` retry with `latin-1` and flag `{encoding: "latin-1", lossy: true}` so the frontend can warn before the user accidentally normalises a non-UTF-8 file to UTF-8 on save.
+- `full_path` resolved to `./static1.txt` (sibling of `static`).
+- `os.path.commonprefix(["./static1.txt", "./static"])` returned `"./static"` — a string-prefix match.
+- Starlette concluded "in the directory" and served `./static1.txt`.
 
-6. **2 MB hard ceiling** on both GET and PUT. On GET, `os.path.getsize` first (cheap, one syscall) and return `{too_large: true, size: N}` rather than streaming. On PUT, check `Content-Length` and reject with 413 before reading the body.
+Affected: `>= 0.13.5, < 0.27.0`. Fix in 0.27.0: replace `commonprefix` with `os.path.commonpath`, which compares **path segments** rather than characters. This is a one-line change with very large blast radius — every Starlette/FastAPI-derivative app served unauthenticated file disclosure for two years.
 
-7. **No filesystem watcher.** Every API call re-walks the relevant subtree. Return `mtime_ns` on every GET; require it back on PUT and 409 on mismatch — closes the lost-update window without a watcher's bugs.
+### 1b. The `os.path.commonprefix` anti-pattern more broadly
 
-8. **Single canonical resolver in `libs/safe_path.py`.** All four routes (`/api/tree`, `/api/file` GET, `/api/file` PUT, `/api/regen-prompt`) call it; no per-route ad-hoc string manipulation. Unit-test it against the OWASP/PortSwigger payload list (`../`, `..%2f`, `%252e%252e%252f`, `....//`, absolute paths, NUL bytes, Windows backslashes, symlink targets) and the Starlette CVE-2023-29159 reproducer specifically — `/static1.txt` against base `/static/` must be denied.
+Seth Larson's writeup ("Deprecate confusing APIs like `os.path.commonprefix()`") and the GitLab Advisory DB enumerate a non-trivial list of CVEs caused by the same mistake:
+
+- **CVE-2026-1703 (pip)** — wheel-unpacking path traversal via an `is_within_directory()` helper built on `commonprefix`.
+- **CVE-2026-29790 (dbt-common)** — same pattern, same outcome.
+- **CVE-2026-35592 (pyload-ng)** — `_safe_extractall` checked tar entries with `commonprefix`; a sibling directory like `/tmp/packagesevil/` slips through when the target is `/tmp/packages`.
+- **SecureDrop (2013)** — early example, traced to the same misuse.
+- **The Trellix-campaign 2022 fixes** for CVE-2007-4559 — over 61,000 PRs across the ecosystem proposed an `is_within_directory()` helper using `commonprefix`, *propagating the bug*.
+
+The takeaway is unambiguous: **never use `os.path.commonprefix` for security decisions.** Use `os.path.commonpath`, or — better for our stack — `pathlib.Path.is_relative_to(root)` after `Path.resolve()`. The viewer's path validator must avoid both `commonprefix` and naive substring/`startswith` checks, both of which fail for `./root` vs `./rootevil`.
+
+### 1c. Other anti-patterns to avoid
+
+- **Double-decoding.** A request handler that URL-decodes once at the framework boundary and then again inside the file route can let `%252e%252e%252f` through. FastAPI/Starlette decode once; the viewer code must not decode again. Reject paths that contain `%` after framework decoding — they have no legitimate use here.
+- **Whitelisting "safe characters" instead of resolving.** Banning `..` is brittle: encoded variants (`%2e%2e`, `%c0%ae`, NULL injection `..%00`), Windows alternate separators (`\..\`), and Unicode normalization tricks all bypass character-class filters. The only robust check is "resolve to an absolute path, then verify it's inside the root." This is the OWASP-blessed form for languages that have a `realpath` equivalent.
+- **MIME sniffing for routing decisions.** Content-sniffing (browsers' fallback when `Content-Type` is missing or wrong) is a known XSS vector, mitigated by `X-Content-Type-Options: nosniff`. The viewer should set that header on every response. More importantly, the viewer **must not** decide what to render based on sniffing the file's bytes — extension-based dispatch (`.md` → markdown, `.json` → highlighted, `.yaml` → highlighted) is both safer and matches the user's expectations. Sniffing was historically the source of a long tail of "renders a `.txt` as HTML and runs script" bugs.
+
+---
+
+## 2. Symlinks — the second thing every reviewer will look at
+
+Symlinks are how path validation that "looked correct" gets bypassed. The classic move: an attacker (or a careless developer) creates a symlink inside the root that points outside it; a naive validator sees the link is under the root and serves whatever it points to. This is the reason production file servers ship dedicated symlink controls.
+
+### 2a. nginx `disable_symlinks`
+
+nginx's `disable_symlinks` directive is the comparator most relevant to `spec_driven`'s threat model. Three values:
+
+- `off` (default) — follow symlinks freely.
+- `on` — return 403 if **any component** of the requested URI is a symlink.
+- `if_not_owner` — 403 only if the link and its target have different owners (shared-hosting model).
+
+It also takes a `from=` parameter to skip the check for a leading prefix. nginx documents that this directive is only available on systems with `openat()` and `fstatat()` (modern Linux/FreeBSD/Solaris) — Windows lacks this support and the directive is a no-op there per ticket #637. The lesson: symlink checks need atomic openat-style primitives to be race-free, and Windows simply doesn't offer the same surface.
+
+### 2b. Dufs `--allow-symlink` and Plesk
+
+Dufs (sigoden/dufs), a popular small file server, takes the opposite default: symlinks outside the root are **disallowed unless** `--allow-symlink` (or `DUFS_ALLOW_SYMLINK=true`) is set. Same reasoning, opposite knob orientation — and it's defaulted safe.
+
+Plesk's "Restricting the Ability to Follow Symbolic Links" KB documents the equivalent for both Apache (`SymlinksIfOwnerMatch`) and nginx (`disable_symlinks if_not_owner`), framed as a hardening step on shared hosting where multiple users share a filesystem. The `if_not_owner` mode is the explicit answer to symlink-as-privilege-escalation between tenants.
+
+### 2c. Why `pathlib.Path.resolve()` + `is_relative_to` is enough for our threat model
+
+`spec_driven` runs as a **single user, on localhost**, against the user's own checkout. The threat model is not "malicious tenant tries to escape jail"; it's "developer's tooling accidentally writes outside the repo, or follows a stray symlink and serves something the user did not realize was exposed." That maps cleanly to a Python-side check:
+
+```python
+def safe_resolve(repo_root: Path, request_path: str) -> Path:
+    candidate = (repo_root / request_path).resolve(strict=False)
+    if not candidate.is_relative_to(repo_root.resolve(strict=True)):
+        raise HTTPException(status_code=403, detail="path outside repo")
+    return candidate
+```
+
+`Path.resolve()` follows symlinks and canonicalizes `..`. `is_relative_to` (Python 3.9+) does the segment-aware containment check that `commonprefix` does not. This combination is the OWASP-recommended approach in Python form, and it's what the FastAPI ecosystem moved to after Starlette CVE-2023-29159.
+
+Caveats worth recording in the spec:
+
+- **Symlink loops.** CPython issue #109187 documents that `resolve()` historically mishandles symlink loops. Modern Python raises `OSError`; we should let that propagate as 500 rather than catch-and-retry.
+- **`strict=False` quirk.** When the path doesn't exist, `resolve(strict=False)` resolves what it can and tacks the rest on without symlink-checking the missing components. For `PUT /api/file` against a nonexistent path that's fine — we already reject creation per the interview ("edit existing only"). For paranoid hardening, resolve the parent with `strict=True` and append the basename.
+- **Windows case sensitivity.** NTFS is case-insensitive by default. `Path.resolve()` returns the canonical case for paths that exist; for comparison, casefold both sides on Windows or rely on `Path.is_relative_to` which uses the platform-native comparator.
+- **Non-availability of `openat` on Windows.** We accept the Python-level race window (TOCTOU) — see §3 — because the threat model does not include a hostile process on the same box. nginx ticket #637 is the documented prior art that says Windows simply cannot offer the same race-free guarantee.
+
+### 2d. Symlink policy for the viewer
+
+Match nginx's `disable_symlinks on` posture: **if any component of the resolved path is a symlink, refuse with 403.** Implementation: walk parts after `resolve()` and check `Path.is_symlink()` on each ancestor up to the repo root, OR reject if `path.resolve() != path.absolute()` (a coarser but simpler check). The repo `spec_coding` is unlikely to contain intentional symlinks; the cost of the strict policy is near zero and the value is bypass resistance.
+
+---
+
+## 3. Race conditions — TOCTOU on read, on write, and on the tree walker
+
+TOCTOU (Time-of-Check / Time-of-Use, CWE-367) is the bug pattern where a program checks a property of a filesystem object at time T and acts on it at time T+ε, and the property changes in between. Classic web example: a download endpoint validates that the requested filename resolves into the allowed directory, then opens the file by name; an attacker swaps a symlink between the check and the open. Wikipedia and the CERT "FIO45-C" page enumerate this class; PortSwigger's race-conditions academy adapts it to web settings.
+
+For `spec_driven` the relevant TOCTOUs are:
+
+1. **Path validation race.** `safe_resolve` returns a `Path`, but we then open by name in a separate syscall. A concurrent symlink swap could mean the validated path and the opened file diverge. **Mitigation in our threat model: accept the race window**, document it, and rely on the symlink-rejection policy to make the exploitable variant trivially small. The user is the only writer to the repo; nginx would tell us to use `openat` here, and Python doesn't expose that conveniently. (CPython has `os.open` with `O_NOFOLLOW`, which could be added if a stronger guarantee is wanted.)
+2. **Editor vs CLI race on writes.** Two writers overlapping: the user's browser editor `PUT /api/file` and the user's terminal `vim`. The interview locks the resolution: **last-write-wins, no 409, no mtime guard.** That moves the conflict-detection burden to the user (it's their hand on both keyboards) and removes a whole class of false-positive 409s that would have shown up because the page sat open for an hour.
+3. **Stale tree UX.** Sidebar fetches `/api/tree` once at load. The user creates a file in another shell. The sidebar still shows the old tree. This is a freshness issue, not a race; the spec's interview answer ("Empty state + regen panel mounted" for missing files) implicitly handles part of it. We should add: a manual refresh control on the sidebar, and re-fetch on focus / on every navigation.
+4. **Stale buffer on open.** A user opens a file, walks away, comes back, the file changed on disk. They Save and overwrite. By design (interview answer): **this is fine.** That's what last-write-wins means. The dot/asterisk dirty indicator and the "warn on nav while dirty" pattern (interview answer) cover the user-error case where they forgot they were dirty; they do not cover external concurrent edits, and **by design we are not covering external concurrent edits.**
+
+The general defense pattern from CERT FIO45-C is **EAFP not LBYL** — "easier to ask forgiveness than permission." Don't `os.path.exists()` then `open()`; just `open()` and catch `FileNotFoundError` / `PermissionError` / `IsADirectoryError`, mapping each to a structured 4xx. This is the Python-idiomatic form anyway and removes the inner race.
+
+---
+
+## 4. Atomic-write semantics for the editor
+
+The write path needs to be **atomic** in the sense that another reader (the user's editor in another tab, or a CLI process, or the sidebar walker) never sees a half-written file. The standard pattern, well-documented in `tempfile` docs, the Python `os.replace` ZetCode guide, the python-atomicwrites library, and Alex Chan's "Atomic, cross-filesystem moves in Python":
+
+```python
+fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.", suffix=".tmp")
+try:
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, target)
+except Exception:
+    Path(tmp).unlink(missing_ok=True)
+    raise
+```
+
+Three points that often go wrong:
+
+1. **Same directory for the tempfile.** `os.replace` is only atomic on the same filesystem. `tempfile.mkstemp(dir=target.parent, …)` guarantees that.
+2. **Close the fd before `os.replace` on Windows.** A common mistake is leaving the temp file open and then renaming — fails with `PermissionError` on Windows because of share-mode locking. Using `os.fdopen` inside a `with` block closes it deterministically.
+3. **`os.fsync` before `os.replace`.** On crash, you want either the old contents or the new contents — never partial. `fsync` on the temp + atomic rename gives that on POSIX.
+
+### 4a. POSIX rename vs Windows MoveFileEx
+
+`os.replace` is `rename(2)` on POSIX and `MoveFileEx` (with `MOVEFILE_REPLACE_EXISTING`) on Windows. POSIX `rename(2)` is atomic across the metadata layer; the destination either points at the old inode or the new one, never at a partially-written file. Windows is messier:
+
+- LWN's "Atomic rename in Windows" (2016) and the Go issue #8914 ("os: make Rename atomic on Windows") both note that `MoveFileEx` is **not strictly atomic**: NTFS may have to free the destination's allocation, and very large files can exceed a single transaction, leading to a window where both source and target exist with the target partially truncated on crash.
+- Windows 10 build 1601+ added `FileRenameInfoEx` with `FILE_RENAME_FLAG_POSIX_SEMANTICS`, which gives proper atomic semantics. Rust's stdlib (`std::fs::rename`, PR #131072) uses this when available and falls back to `FileRenameInfo`/`MoveFileEx` otherwise.
+- Python's `os.replace` does NOT use `FileRenameInfoEx` as of CPython 3.13 — it uses `MoveFileEx` with replace-existing.
+
+For `spec_driven` the practical impact is bounded: max body 10 MB, single-disk write, modern NTFS. Crash-during-rename leaving a half-truncated target is theoretically possible on Windows but vanishingly rare for files at this size. We accept the residual risk and document that `os.replace` is "atomic enough" for this single-user localhost editor; if a future user reports a crash with half-truncated files, switching to `python-atomicwrites` (which handles fsync, permissions, and the Windows nuances) is a one-line dependency add.
+
+### 4b. Permissions on the new file
+
+`tempfile.mkstemp` creates files with mode `0600` by default, which is **stricter than the user's umask** for the original file. On `os.replace`, the new file inherits that mode and the original mode is lost. Two options:
+
+- Capture `target.stat().st_mode` before write, `os.chmod(tmp, mode)` before `os.replace`. Preserves Unix permissions correctly.
+- On Windows it doesn't matter — ACLs are inherited from the parent, not the source file.
+
+For markdown/JSON/YAML files in a developer's repo this is usually a no-op, but the spec should call it out so reviewers don't ask.
+
+---
+
+## 5. Encoding and binary detection
+
+The exposed-tree extension whitelist (`.md, .yaml, .yml, .json, .jsonl, .txt`) is the strongest gate here. All six are textual; binary detection is a defense-in-depth concern, not a primary control.
+
+### 5a. UTF-8 default, with BOM tolerance
+
+Modern Python (3.x) opens text files with `open(path, encoding='utf-8')` cleanly. The wrinkles:
+
+- **UTF-8 BOM (EF BB BF).** A non-trivial number of Windows tools (Notepad, older PowerShell, older VS) write UTF-8 with BOM. `encoding='utf-8'` will pass the BOM through as a literal `﻿` character at file start, which round-trips into the editor and back. Use `encoding='utf-8-sig'` for reads (strips the BOM if present) and `encoding='utf-8'` for writes (does not add one). Per chardet's docs and the BOM Wikipedia entry, BOM detection is the very first stage in any encoding-detection pipeline because it's deterministic.
+- **UTF-16.** PowerShell 5.1's default `Out-File` is UTF-16 LE with BOM (per the project's `CLAUDE.md` note). If the user has any tool in the chain that emits UTF-16, opening with `utf-8` raises `UnicodeDecodeError`. We should: try `utf-8-sig` first, fall back to detecting `\xff\xfe` / `\xfe\xff` and reading `utf-16`, otherwise reject with 415.
+- **Non-text bytes.** If a `.md` file somehow contains nulls or invalid UTF-8 sequences, treat it as binary and refuse to render. The chardet-recommended heuristic is "presence of null bytes ⇒ binary" plus "high proportion of control chars ⇒ binary." `binaryornot` packages this in pure Python.
+
+We do *not* need `chardet` as a dependency — the whitelist plus `utf-8-sig` plus an explicit rejection on `UnicodeDecodeError` handles every realistic case.
+
+### 5b. CRLF vs LF round-trip
+
+Markdown and YAML round-trips through a textarea on a browser running on Windows can introduce `\r\n` where the original file had `\n`, causing every save to look like a giant whitespace diff to git. Two stable resolutions:
+
+- Server-side: normalize EOL to the file's existing convention on write (sniff from the original; default LF if empty).
+- Client-side: have the editor normalize on submit.
+
+Recommending server-side normalization because it's the more durable layer and there's only one server.
+
+---
+
+## 6. The 10 MB body cap (locked)
+
+The cap applies to both `GET /api/file` (response body) and `PUT /api/file` (request body). Locked at 10 MB. Implementation notes:
+
+- FastAPI/Starlette doesn't enforce request size by default. Apply `Content-Length` check on `PUT` *before* reading the body; reject 413 if missing or > 10 MB. For chunked uploads, count bytes as they stream and abort early.
+- For `GET` the cap is `target.stat().st_size > 10*1024*1024` ⇒ 413.
+- The interview AC tests **10 MB exactly = 200, 10 MB + 1 byte = 413**. That's `<=` semantics, not `<`. The spec must encode this exactly.
+
+The cap is generous for our use case (markdown is rarely > 1 MB; JSON dossiers might reach low single MB) and exists primarily to prevent OOM if a user accidentally points the editor at a 4 GB log file via a follow-up that leaks a path.
+
+---
+
+## 7. Last-write-wins write contract — the load-bearing decision
+
+The user's pin: `PUT /api/file` always overwrites, no `If-Match`, no mtime guard, no 409. This is the unusual choice and worth justifying explicitly because reviewers will challenge it.
+
+**Why it's correct here:**
+
+1. **Single user, localhost.** No simultaneous remote actors. The "concurrent writer" is the same human at the same desk.
+2. **Cost of the conflict UX is high.** mtime/ETag-guarded PUTs require a 409 path, a "reload?" modal, a merge UX, or a force-overwrite affordance. All of those add code and decision points to a tool whose virtue is being a thin window onto plain files.
+3. **The detection benefit is small.** mtime guards catch the case where the file changed under the editor — but the user is the one who changed it. They will either remember (and accept the overwrite) or not (and the dirty-indicator/warn-on-nav UX from the interview already nags them when the *editor* has unsaved changes).
+4. **Git is the durable conflict layer.** Every file under `specs/` is committed. If the editor stomps on a CLI edit, `git diff` and `git reflog` are one command away. The viewer/editor doesn't need to reinvent CAS on top.
+5. **Validation is testable.** The interview's AC explicitly says: concurrent CLI writes during an editor session do NOT trigger 409; the final-write-wins outcome is the editor's buffer. That's a one-line `assert response.status_code == 200`.
+
+The justification belongs in the final spec under the FR for `PUT /api/file` and again in `validation/security.md` so it doesn't get re-litigated by future readers.
+
+---
+
+## 8. Recommendations (action items for stages 4 + 5 + 6)
+
+1. **`safe_resolve(repo_root, request_path)` helper.** `Path.resolve(strict=False)` then `is_relative_to(root.resolve(strict=True))`. Reject with 403 on miss. Rejects null bytes (`\0`), drive letters mid-path, and absolute inputs (`Path("/etc/passwd")` makes `(root / "/etc/passwd")` collapse to `/etc/passwd`, which `is_relative_to` correctly fails). Unit-tested with: `..` / `%2e%2e` / `/etc/passwd` / `c:\windows\system32` / `root_evil` / `..%00something` / a symlink that points outside.
+2. **Symlink policy: refuse if any path component is a symlink.** Match nginx `disable_symlinks on`. Implementation: walk `path.parents` from the candidate up to `repo_root`, `is_symlink()` on each; or check `path.resolve() == path.absolute().resolve(strict=False)` after canonicalization. Document in `security.md` that this is a stricter posture than nginx's default-off and a strict-er one than Dufs's default (which allows internal symlinks).
+3. **Atomic write via `tempfile.mkstemp(dir=target.parent) + os.fsync + os.replace`.** Preserve the original file's mode via `os.chmod(tmp, original_stat.st_mode)` before `os.replace`. Document the Windows non-strict-atomicity caveat (`MoveFileEx` semantics; LWN/Go-issue-8914) and the optional `python-atomicwrites` upgrade path.
+4. **EAFP read with structured 4xx.** `try: open(...)` catching `FileNotFoundError → 404`, `PermissionError → 403`, `IsADirectoryError → 400`, `UnicodeDecodeError → 415`. No pre-check `os.path.exists()` — eliminates an inner TOCTOU per CERT FIO45-C and matches the Pythonic idiom.
+5. **10 MB cap, enforced both directions, AC at the boundary.** `Content-Length` precheck on `PUT` (reject before reading body); `st_size` check on `GET`. AC tests: 10 MB body → 200; 10 MB + 1 byte → 413.
+6. **Last-write-wins, justified explicitly.** No `If-Match`, no mtime header on response, no 409 path. Spec FR notes the rationale (single user / localhost / git is the conflict layer). Validation security doc includes the explicit test: concurrent CLI write during editor session, editor Save returns 200 and the editor buffer wins.
+7. **`X-Content-Type-Options: nosniff` + extension-based dispatch on the frontend.** Never sniff bytes to decide rendering; always switch on extension. Reject any extension outside the whitelist (`.md`, `.yaml`, `.yml`, `.json`, `.jsonl`, `.txt`) with 415. This is the cheap defense against the "render markdown as HTML and run `<script>`" class of bug if the markdown renderer ever sanitizes incompletely.
+8. **UTF-8-sig on read, UTF-8 (no BOM) on write, EOL preservation server-side.** Tolerates BOM-prefixed files from Windows tooling without round-tripping the BOM into a noisy diff. Detect file's existing line-ending convention and preserve on write so editor saves don't add CRLF noise on Windows.
+
+---
+
+## Sources
+
+- [Starlette has Path Traversal vulnerability in StaticFiles · CVE-2023-29159 · GitHub Advisory Database](https://github.com/advisories/GHSA-v5gw-mw7f-84px)
+- [CVE-2023-29159 Detail — NVD](https://nvd.nist.gov/vuln/detail/CVE-2023-29159)
+- [Path Traversal · OWASP Foundation](https://owasp.org/www-community/attacks/Path_Traversal)
+- [What is path traversal, and how to prevent it? · PortSwigger Web Security Academy](https://portswigger.net/web-security/file-path-traversal)
+- [Deprecate confusing APIs like "os.path.commonprefix()" — Seth M. Larson](https://sethmlarson.dev/deprecate-confusing-apis-like-os-path-commonprefix)
+- [dbt-common's commonprefix() doesn't protect against path traversal — GitLab Advisory Database (CVE-2026-29790)](https://advisories.gitlab.com/pkg/pypi/dbt-common/CVE-2026-29790/)
+- [pyload-ng UnTar._safe_extractall commonprefix bypass — GitLab Advisory Database (CVE-2026-35592)](https://advisories.gitlab.com/pkg/pypi/pyload-ng/CVE-2026-35592/)
+- [pathlib — Object-oriented filesystem paths · Python docs](https://docs.python.org/3/library/pathlib.html)
+- [pathlib.Path.resolve() mishandles symlink loops · CPython issue #109187](https://github.com/python/cpython/issues/109187)
+- [nginx `disable_symlinks` — O'Reilly excerpt, Nginx HTTP Server, Fourth Edition](https://www.oreilly.com/library/view/nginx-http-server/9781788623551/e1c22cbb-8229-4025-bff9-426c0086f41c.xhtml)
+- [nginx ticket #637 — `disable_symlinks` doesn't work on Windows](https://trac.nginx.org/nginx/ticket/637)
+- [Apache and Nginx Settings — Restricting the Ability to Follow Symbolic Links · Plesk KB](https://www.plesk.com/kb/docs/apache-and-nginx-settings-restricting-the-ability-to-follow-symbolic-links-2/)
+- [sigoden/dufs — README & flags (`--allow-symlink`)](https://github.com/sigoden/dufs)
+- [Time-of-check to time-of-use — Wikipedia](https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use)
+- [CWE-367: Time-of-check Time-of-use (TOCTOU) Race Condition](https://cwe.mitre.org/data/definitions/367.html)
+- [FIO45-C. Avoid TOCTOU race conditions while accessing files · CERT Secure Coding](https://wiki.sei.cmu.edu/confluence/display/c/FIO45-C.+Avoid+TOCTOU+race+conditions+while+accessing+files)
+- [Race conditions · PortSwigger Web Security Academy](https://portswigger.net/web-security/race-conditions)
+- [tempfile — Generate temporary files and directories · Python docs](https://docs.python.org/3/library/tempfile.html)
+- [Python `os.replace` Function — ZetCode](https://zetcode.com/python/os-replace/)
+- [Atomic, cross-filesystem moves in Python — Alex Chan](https://alexwlchan.net/2019/atomic-cross-filesystem-moves-in-python/)
+- [python-atomicwrites](https://github.com/untitaker/python-atomicwrites)
+- [os: make Rename atomic on Windows · Go issue #8914](https://github.com/golang/go/issues/8914)
+- [Atomic rename in Windows · LWN.net](https://lwn.net/Articles/682988/)
+- [Win: Use POSIX rename semantics for `std::fs::rename` if available · Rust PR #131072](https://github.com/rust-lang/rust/pull/131072)
+- [MIME type verification · MDN Web Docs — Practical implementation guides](https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/MIME_types)
+- [Exploiting MIME Sniffing · Beyond XSS](https://aszx87410.github.io/beyond-xss/en/ch5/mime-sniffing/)
+- [chardet — How It Works (BOM detection, UTF-8 validation, binary detection)](https://chardet.readthedocs.io/en/latest/how-it-works.html)
+- [Byte order mark — Wikipedia](https://en.wikipedia.org/wiki/Byte_order_mark)
+- [binaryornot — pure Python binary-vs-text detection](https://github.com/audreyfeldroy/binaryornot/blob/master/binaryornot/helpers.py)
 
 ---
 
 ## Open questions / not researched
 
-- Whether Windows-host users of spec_driven will hit the `ReplaceFile` vs `MoveFileEx` distinction in practice (we suspect not for hand-edits, but did not measure).
-- Whether `aiofiles` adds atomicity guarantees on top of `os.replace` (the FastAPI ecosystem's default async file lib); we assumed not.
-- Macro performance of "re-walk every request" for users with huge `projects/` trees alongside `specs/`. A polling cache (5-second TTL) might be needed at scale; not characterised.
-- How `pathlib.Path.is_relative_to` behaves on Windows when one path is `C:\specs` and the other has been symlinked through a junction point — Windows reparse points are a separate animal from POSIX symlinks.
-- Whether `chardet`'s `None`-on-binary signal is reliable enough to replace the explicit byte-range check, or whether the byte-range check is strictly superior (we recommended the latter conservatively).
-
-## Sources
-
-- [GHSA-v5gw-mw7f-84px — Starlette path-traversal in StaticFiles](https://github.com/Kludex/starlette/security/advisories/GHSA-v5gw-mw7f-84px)
-- [NVD CVE-2023-29159](https://nvd.nist.gov/vuln/detail/CVE-2023-29159)
-- [Snyk SNYK-PYTHON-STARLETTE-5538332](https://security.snyk.io/vuln/SNYK-PYTHON-STARLETTE-5538332)
-- [Seth Larson, "Deprecate confusing APIs like os.path.commonprefix()"](https://sethmlarson.dev/deprecate-confusing-apis-like-os-path-commonprefix)
-- [GitLab CVE-2026-29790 — dbt-common safe_extract](https://advisories.gitlab.com/pkg/pypi/dbt-common/CVE-2026-29790/)
-- [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal)
-- [OWASP Double Encoding](https://owasp.org/www-community/Double_Encoding)
-- [PortSwigger Web Security Academy — file path traversal](https://portswigger.net/web-security/file-path-traversal)
-- [SentinelOne CVE-2026-21726 (Grafana Loki double-decode)](https://www.sentinelone.com/vulnerability-database/cve-2026-21726/)
-- [Python pathlib documentation](https://docs.python.org/3/library/pathlib.html)
-- [Salvatore Security — Preventing Directory Traversal in Python](https://salvatoresecurity.com/preventing-directory-traversal-vulnerabilities-in-python/)
-- [nginx disable_symlinks directive](https://nginx.org/en/docs/http/ngx_http_core_module.html#disable_symlinks)
-- [Plesk — Mitigating the symlinks vulnerability](https://docs.plesk.com/en-US/obsidian/administrator-guide/plesk-administration/securing-plesk/mitigating-the-symlinks-vulnerability.79045/)
-- [Dufs README — sigoden/dufs](https://github.com/sigoden/dufs)
-- [WHATWG MIME Sniffing Standard](https://mimesniff.spec.whatwg.org/)
-- [MDN — MIME types (HTTP)](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types)
-- [Wikipedia — Content sniffing](https://en.wikipedia.org/wiki/Content_sniffing)
-- [chardet FAQ](https://chardet.readthedocs.io/en/latest/faq.html)
-- [CERT FIO45-C — Avoid TOCTOU races](https://wiki.sei.cmu.edu/confluence/display/c/FIO45-C.+Avoid+TOCTOU+race+conditions+while+accessing+files)
-- [Apple Secure Coding Guide — Race Conditions and Secure File Operations](https://developer.apple.com/library/archive/documentation/Security/Conceptual/SecureCodingGuide/Articles/RaceConditions.html)
-- [LWN — Filesystem notification, part 2 (inotify)](https://lwn.net/Articles/605128/)
-- [LWN — Atomic rename in Windows](https://lwn.net/Articles/682988/)
-- [golang-nuts — windows: ReplaceFile vs MoveFileEx](https://groups.google.com/g/golang-nuts/c/JFvnLx246uM)
-- [bpo-8828 — Atomic function to rename a file](https://bugs.python.org/issue8828)
-- [ActiveState recipe 579097 — Safely and atomically write to a file](https://code.activestate.com/recipes/579097-safely-and-atomically-write-to-a-file/)
-- [python-atomicwrites](https://github.com/untitaker/python-atomicwrites)
-- [discuss.python.org — Adding atomicwrite in stdlib](https://discuss.python.org/t/adding-atomicwrite-in-stdlib/11899)
-- [zetcode — Python os.replace](https://zetcode.com/python/os-replace/)
-- [POSIX rename(2)](https://pubs.opengroup.org/onlinepubs/9699919799/functions/rename.html)
+- **Windows `FileRenameInfoEx` adoption in CPython.** Whether a future CPython release will switch `os.replace` to use `FILE_RENAME_FLAG_POSIX_SEMANTICS` (matching what Rust did in PR #131072) was not researched. If/when it does, the Windows non-strict-atomicity caveat in §4a can be dropped.
+- **`O_NOFOLLOW` / `openat` ergonomics in Python.** A stricter symlink-race posture than `Path.resolve()` exists via `os.open(O_NOFOLLOW)` plus a directory-fd-anchored open, but the ergonomic and cross-platform cost wasn't surveyed. Acceptable for our threat model; revisit if a multi-user or remote scenario emerges.
+- **Browser-side guard on file size before upload.** The 10 MB cap is server-enforced; whether the editor should also pre-check via `Blob.size` and refuse early was not researched (UX call, not a security one).
+- **Diff/merge UI for last-write-wins escape hatch.** Whether a future "the file changed under you, here's a diff before you save" non-blocking notice would add value (without becoming a 409) is out of scope for this angle; it would be a UX research angle, not a security one.
+- **CSRF / same-origin posture.** The localhost-only model implies same-origin, but whether the API needs explicit CSRF tokens or `SameSite=Strict` cookies for the editor was not researched here — covered in a separate angle (browser-attack-surface) if one is run.
