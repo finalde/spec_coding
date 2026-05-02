@@ -226,24 +226,32 @@ Assertions:
 
 ---
 
-## SYS-10 — No write endpoints
+## SYS-10 — Sanctioned mutation surface only (revised by follow-up 001)
 
 - Components exercised: backend HTTP, FastAPI routing.
-- Spec refs: NFR-6.
+- Spec refs: NFR-6, FR-14a, FR-14b, FR-14c.
 
 Setup:
 1. `make run` is up.
+2. A scratch fixture file `specs/development/spec_driven/user_input/_sys10_scratch.md` exists with content `"original"`.
 
 Action:
-1. `curl.exe -sS -o NUL -w "%{http_code}\n" -X POST "http://127.0.0.1:8765/api/file" -H "Content-Type: application/json" -d '{"path":"foo.md","contents":"x"}'`.
-2. `curl.exe -sS -o NUL -w "%{http_code}\n" -X PUT "http://127.0.0.1:8765/api/tree" -H "Content-Type: application/json" -d '{}'`.
-3. `curl.exe -sS -o NUL -w "%{http_code}\n" -X DELETE "http://127.0.0.1:8765/api/file?path=foo.md"`.
-4. `curl.exe -sS -o NUL -w "%{http_code}\n" -X PATCH "http://127.0.0.1:8765/api/file?path=foo.md"`.
+1. `curl -X POST http://127.0.0.1:8765/api/file -H "Content-Type: application/json" -d '{"path":"foo.md","text":"x"}'` (POST is rejected — only PUT writes).
+2. `curl -X PUT http://127.0.0.1:8765/api/tree` (writes to /api/tree are not allowed).
+3. `curl -X DELETE 'http://127.0.0.1:8765/api/file?path=foo.md'`.
+4. `curl -X PATCH 'http://127.0.0.1:8765/api/file?path=foo.md'`.
+5. `curl -X PUT http://127.0.0.1:8765/api/file -H "Content-Type: application/json" -d '{"path":"specs/development/spec_driven/user_input/_sys10_scratch.md","text":"round-trip"}'`.
+6. `curl 'http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/user_input/_sys10_scratch.md'`.
+7. `curl -X POST http://127.0.0.1:8765/api/regen-prompt -H "Content-Type: application/json" -d '{"project_type":"development","project_name":"spec_driven","stages":["interview"],"modules":{},"autonomous":true}'`.
+8. Restore the scratch file to `"original"`.
 
 Assertions:
-1. Steps 1–4 each return status `405` (Method Not Allowed).
-2. None of the responses contain the string `internal server error`.
-3. Filesystem is unchanged after these calls (verify by `git status` showing no new/modified files under `EXPOSED_TREE`).
+1. Steps 1–4 each return status `405`.
+2. Step 5 returns `200` and the response body has `"ok": true`.
+3. Step 6 returns the new content `"round-trip"`.
+4. Step 7 returns `200` and the body's `prompt` starts with `# EXECUTION MODE: AUTONOMOUS`.
+5. None of the responses contain the string `internal server error`.
+6. After step 8, `git status` shows no modified files under `EXPOSED_TREE` other than the scratch fixture (which has been restored).
 
 ---
 

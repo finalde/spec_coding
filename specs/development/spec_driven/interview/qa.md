@@ -24,7 +24,7 @@ Run: spec_driven-20260502-141813
 - A: Highlighted (Recommended) — client-side syntax highlighting (Shiki) plus line numbers.
 
 **Q:** Implicit out-of-scope items from the prompt — confirm v1 excludes them?
-- A: Confirm all out (Recommended) — v1 has NO authentication/multi-user, search, file-watch, auto-refresh, run controls, editing, deletes, or uploads.
+- A: Mostly out — v1 has NO authentication/multi-user, search, file-watch, auto-refresh, run controls, deletes, or uploads. **Editing is IN** (revised by follow-up 001): every file in the exposed tree is editable in place, `interview/qa.md` gets a structured per-Q/per-A editor, and per-stage / per-project regen prompt panels exist with an autonomous-mode toggle.
 
 ### discovery-data-model
 

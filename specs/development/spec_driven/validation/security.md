@@ -313,13 +313,15 @@ All probes assume the backend is running on `http://127.0.0.1:8765` (the FR-12 d
   curl -i -X HEAD 'http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/final_specs/spec.md'
   ```
 
-- **Expected behavior.**
-  - POST/PUT/PATCH/DELETE on `/api/file` and `/api/tree`: 405 `Method Not Allowed`. Response includes `Allow: GET` header (FastAPI default).
-  - OPTIONS: 200/204 with `Allow: GET` (or `Allow: GET, HEAD`); never `Allow: GET, POST, …` listing a write verb.
+- **Expected behavior (revised by follow-up 001).**
+  - `PUT /api/file` is now a sanctioned mutation endpoint and accepts `{path, text}` JSON bodies. With a valid sandboxed path it returns 200 and writes (atomic temp+rename). The probe should validate the file is restored after the test or use a scratch file.
+  - `POST /api/regen-prompt` is a sanctioned read-only endpoint and returns 200 with the assembled prompt body.
+  - `POST /api/file`, `PATCH /api/file`, `DELETE /api/file`, `POST /api/tree`, `POST /api/upload`: 405 `Method Not Allowed` (no upload, no delete, no patch in v1).
+  - OPTIONS: 200/204 with an `Allow` header listing only the methods registered for the path.
   - HEAD: either 200 with empty body and same headers as GET, or 405. Both acceptable.
   - Phantom endpoints: 404.
-- **Pass criterion.** No write verb on any endpoint returns 200, 201, 202, or 204 (other than OPTIONS preflight). The `Allow` header (when present) lists only `GET`, `HEAD`, `OPTIONS`. No filesystem mutation is observed in the repo after the probe sequence (verify with `git status` post-probe).
-- **Spec refs.** NFR-6.
+- **Pass criterion.** Only `GET`, `PUT`, and `POST` verbs return success codes, and only on the three known routes (`/api/tree`, `/api/file`, `/api/regen-prompt`). `DELETE`, `PATCH`, and uploads must 405. After the probe set, the repo's pre-probe `git status` matches the post-probe `git status` (the PUT probe operates on a scratch fixture file or restores the original).
+- **Spec refs.** NFR-6, FR-14a, FR-14c.
 - **Fixture.** None.
 - **Platform.** all.
 

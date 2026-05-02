@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchFile } from "../api";
 import { CodeView } from "../markdown/code";
 import { JsonlView } from "../markdown/jsonl";
 import { MarkdownView } from "../markdown/renderer";
 import type { FileResponse } from "../types";
 import { Breadcrumb } from "./Breadcrumb";
+import { Editor } from "./Editor";
+import { QaView } from "./QaView";
+import { RegeneratePanel } from "./RegeneratePanel";
 
 export interface ReaderProps {
   filePath: string;
@@ -18,10 +21,12 @@ export function Reader({ filePath, exposedPaths, onRequestRefresh }: ReaderProps
     | { status: "ok"; data: FileResponse }
     | { status: "error"; httpStatus: number; error: string; kind?: string }
   >({ status: "loading" });
+  const [editing, setEditing] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
+    setEditing(false);
     (async () => {
       const result = await fetchFile(filePath);
       if (cancelled) return;
@@ -41,9 +46,35 @@ export function Reader({ filePath, exposedPaths, onRequestRefresh }: ReaderProps
     };
   }, [filePath]);
 
+  const projectContext = useMemo(() => deriveProjectContext(filePath), [filePath]);
+
+  const onSaved = (newText: string): void => {
+    setState((prev) =>
+      prev.status === "ok"
+        ? { status: "ok", data: { ...prev.data, text: newText, bytes: new Blob([newText]).size } }
+        : prev,
+    );
+  };
+
   return (
     <main className="reader">
       <Breadcrumb filePath={filePath} />
+      {state.status === "ok" && (
+        <div className="reader-actions">
+          {!editing && (
+            <button type="button" className="editor-button" onClick={() => setEditing(true)}>
+              ✎ Edit
+            </button>
+          )}
+        </div>
+      )}
+      {projectContext && state.status === "ok" && !editing && (
+        <RegeneratePanel
+          projectType={projectContext.projectType}
+          projectName={projectContext.projectName}
+          stageHint={projectContext.stageHint}
+        />
+      )}
       {state.status === "loading" && <div className="reader-loading">Loading…</div>}
       {state.status === "error" && (
         <ErrorView
@@ -55,7 +86,16 @@ export function Reader({ filePath, exposedPaths, onRequestRefresh }: ReaderProps
       )}
       {state.status === "ok" && (
         <div className="reader-content">
-          <RenderedFile data={state.data} exposedPaths={exposedPaths} />
+          {editing ? (
+            <Editor
+              filePath={state.data.path}
+              initialText={state.data.text}
+              onSaved={onSaved}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+            <RenderedFile data={state.data} exposedPaths={exposedPaths} />
+          )}
         </div>
       )}
     </main>
@@ -69,6 +109,9 @@ function RenderedFile({
   data: FileResponse;
   exposedPaths: ReadonlySet<string>;
 }): JSX.Element {
+  if (data.extension === ".md" && isQaFile(data.path)) {
+    return <QaView source={data.text} filePath={data.path} />;
+  }
   if (data.extension === ".md") {
     return <MarkdownView source={data.text} sourcePath={data.path} exposedPaths={exposedPaths} />;
   }
@@ -76,6 +119,25 @@ function RenderedFile({
     return <JsonlView source={data.text} />;
   }
   return <CodeView source={data.text} extension={data.extension} />;
+}
+
+function isQaFile(path: string): boolean {
+  return path.endsWith("/interview/qa.md") || path === "interview/qa.md";
+}
+
+interface ProjectContext {
+  projectType: string;
+  projectName: string;
+  stageHint?: string;
+}
+
+function deriveProjectContext(filePath: string): ProjectContext | null {
+  const parts = filePath.split("/").filter((s) => s !== "");
+  if (parts[0] !== "specs" || parts.length < 3) return null;
+  const projectType = parts[1];
+  const projectName = parts[2];
+  const stageHint = parts[3];
+  return { projectType, projectName, stageHint };
 }
 
 function ErrorView({

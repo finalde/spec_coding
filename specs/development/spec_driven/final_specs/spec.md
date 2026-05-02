@@ -10,15 +10,16 @@ Inputs:
 
 ## Goal
 
-Build `spec_driven`, the inaugural project of the `spec_coding` monorepo: a **readonly, single-user, localhost FastAPI + React viewer** for the artifacts produced by the spec-driven workflow itself. The viewer surfaces a fixed "exposed tree" — `CLAUDE.md`, `.claude/agents/*.md`, `.claude/skills/**/SKILL.md`, and the per-project five-stage subfolders under `specs/{task_type}/{task_name}/` — and lets the user browse, render markdown with Shiki-highlighted code, and click through internal cross-links between artifacts. The deliverable's first dogfood is itself: a user opens the app, sees `Projects/development/spec_driven/`'s own pipeline output (revised_prompt → qa → dossier → spec → validation strategy), and can navigate every artifact this very spec describes how to render.
+Build `spec_driven`, the inaugural project of the `spec_coding` monorepo: a **single-user, localhost FastAPI + React viewer/editor** for the artifacts produced by the spec-driven workflow itself. The viewer surfaces a fixed "exposed tree" — `CLAUDE.md`, `.claude/agents/*.md`, `.claude/skills/**/SKILL.md`, and the per-project five-stage subfolders under `specs/{task_type}/{task_name}/` — and lets the user browse, render markdown with Shiki-highlighted code, click through internal cross-links between artifacts, **edit any of those files in place**, and **assemble copy-paste regeneration prompts** at per-stage and per-project granularity (with an autonomous-mode toggle). The deliverable's first dogfood is itself: a user opens the app, sees `Projects/development/spec_driven/`'s own pipeline output (revised_prompt → qa → dossier → spec → validation strategy), navigates every artifact this very spec describes how to render, and can edit any of them. **Editing scope was added by follow-up 001** (the original revised prompt called the viewer readonly).
 
 ## Out of scope (v1)
 
-Hard non-goals, all confirmed in `qa.md`:
+Hard non-goals (refreshed by follow-up 001):
 
 - Authentication, multi-user, sessions, or any access control.
-- Editing, creating, deleting, uploading, or otherwise mutating any file.
-- A "run" or "trigger pipeline" UI control of any kind.
+- Creating new files, deleting files, uploading files (only **editing existing files in the exposed tree** is in scope).
+- A "run" or "trigger pipeline" UI control of any kind. Regeneration is exposed as **copy-paste prompts** that the user pastes into Claude Code CLI; the webapp does not invoke the model itself.
+- Diff / version history beyond what git already provides.
 - Search across artifacts (full-text, semantic, or keyword).
 - Filesystem watching, auto-refresh, server-sent events, or WebSocket pushes.
 - A second example project bundled with v1 (multi-project rendering is verified by component tests using fixture data).
@@ -101,6 +102,14 @@ Each requirement is testable. Numbered for traceability into `validation/`.
 
 **FR-14.** The README at `projects/spec_driven/README.md` documents installation (`uv sync` + `npm install` from `projects/spec_driven/frontend/`), the two `make` targets, and the default URL.
 
+### Backend — editing & regeneration (added by follow-up 001)
+
+**FR-14a.** `PUT /api/file` accepts `{path: str, text: str}` and writes `text` back to the resolved path. The handler MUST reuse the same checks as `GET /api/file` (single `safe_resolve` call, `is_symlink` rejection, `EXPOSED_TREE` membership, allowed extension, 2 MB cap on the **encoded** payload, NUL-byte rejection) before writing. The write MUST be atomic-replace: write to a sibling temp file in the same directory, then `os.replace()` onto the target. On failure, the temp file is removed and the original is left untouched. Error mapping mirrors `GET /api/file` (400 / 403 / 404 / 413 / 415); a generic `OSError` during write is 500 `write_failed`.
+
+**FR-14b.** `GET /api/stages?project_type=&project_name=` returns the canonical six-stage definition with each stage's id, label, folder, invocation hint, and module list (id / label / relative_path / description). The list is hard-coded server-side from a single source of truth so the frontend never has to know stage names.
+
+**FR-14c.** `POST /api/regen-prompt` accepts `{project_type, project_name, stages: string[], modules: {stage_id: string[]}, autonomous: bool}` and returns `{prompt: string}`. The prompt MUST: (a) open with `# EXECUTION MODE: AUTONOMOUS` or `# EXECUTION MODE: INTERACTIVE`; (b) inline the current `revised_prompt.md` (or fall back to `raw_prompt.md` if no revised exists); (c) list every `user_input/follow_ups/*.md` by relative path; (d) for each selected stage, include the stage's invocation hint and the in-scope module paths; (e) state the four constraints (CLAUDE.md, canonical paths, manager-spawn contract, no-AskUserQuestion in autonomous mode). The endpoint reads the filesystem at request time — no caching.
+
 ### Frontend — routing
 
 **FR-15.** URL is the source of truth for current selection. Routes:
@@ -178,6 +187,18 @@ Each segment except the last is a clickable `<a>` that navigates to that node (f
 
 **FR-39.** Sidebar expand/collapse animates with a single 100–150ms ease (CSS transition on `height` or `max-height`), gated by `@media (prefers-reduced-motion: reduce) { transition: none }` so users with reduced-motion preference get instant state changes. No other animations in v1.
 
+### Frontend — editing & regeneration (added by follow-up 001)
+
+**FR-40.** Every file in the main pane shows a ✎ Edit button that toggles the file from rendered view to a textarea editor. The editor MUST: (a) show Save / Discard / Close-editor controls; (b) disable Save when there are no unsaved changes; (c) flag "Unsaved changes" until Save succeeds; (d) accept Ctrl+S / Cmd+S as the Save shortcut; (e) call `PUT /api/file` with `{path, text}` and surface the structured error message on failure. Save success updates the in-memory file content but stays in editor mode (closing is an explicit user action).
+
+**FR-41.** When the active file's path matches `*/interview/qa.md`, the rendered view is the **structured Q/A view** instead of generic markdown: parse the document into rounds (`## Round N`), categories (`### {category}`), and Q/A pairs (`**Q:**` paragraph followed by `- A:` bullet) and render them as discrete blocks. Question blocks use a distinct background tint, answer blocks use another, the category gets a small badge above its block group. Each Q and each A has its own ✎ pencil that opens an inline editor scoped to that block; saving rewrites the whole `qa.md` file via `PUT /api/file` after splicing the edited block into the original text. Whole-file editing remains available via the file-level Edit toggle. If the file does not match the expected structure, fall back to generic markdown rendering with no error.
+
+**FR-42.** When the active file is inside a project's stage subfolder (`specs/{type}/{name}/{stage}/...`), the main pane shows a collapsible **Regenerate** panel above the file content. The panel has: (a) a list of module checkboxes derived from `GET /api/stages` for the file's stage (default all checked); (b) an "Autonomous mode" toggle whose state is persisted in `localStorage` under key `spec_driven.autonomous_mode.v1` (default: false); (c) a "Build prompt" button that calls `POST /api/regen-prompt` and renders the resulting text inside a `<details>` element with a "Copy to clipboard" button.
+
+**FR-43.** New route `/project/:type/:name` shows the project parent page. The page lists the six stages with their modules and exposes a single master Regenerate panel that lets the user select **any subset of stages and modules** (default: all). The "Build prompt" button calls `POST /api/regen-prompt` once with the selection and the autonomous flag and shows the assembled prompt with a Copy button. Sidebar entries for projects link to this page; the existing per-file routes still work.
+
+**FR-44.** The autonomous-mode toggle is the same value across the per-stage panel and the project parent page. Editing it in either location updates `localStorage` and re-renders both. The default is **interactive** (toggle off) so accidental autonomous regenerations are not the path of least resistance.
+
 ## Non-functional requirements
 
 ### Performance
@@ -190,7 +211,7 @@ Each segment except the last is a clickable `<a>` that navigates to that node (f
 
 - **NFR-4.** All file-touching endpoints use `safe_resolve` (FR-5, FR-6). Direct filesystem access bypassing `safe_resolve` is a code-review-blocking issue.
 - **NFR-5.** Symlinks are never followed (FR-4) and never serve content (FR-5.2). The behavior is enforced even if the symlink points to a file inside `EXPOSED_TREE` — symlink-as-source is still rejected, since the symlink itself is not a normal file.
-- **NFR-6.** No write endpoints exist. The HTTP API exposes only `GET` methods.
+- **NFR-6.** Write endpoint exists (`PUT /api/file`, added by follow-up 001) and inherits the same sandbox/extension/size checks as the read endpoint. `POST /api/regen-prompt` is read-only with respect to the filesystem (it only reads). No `DELETE`, no upload, no create-new-file endpoints.
 - **NFR-7.** No authentication; localhost-only deployment is the security model. The README states this explicitly. The default Uvicorn bind address is `127.0.0.1`, NOT `0.0.0.0`.
 - **NFR-8.** No CORS configuration is needed (single-origin); explicitly DO NOT enable `allow_origins=["*"]`.
 

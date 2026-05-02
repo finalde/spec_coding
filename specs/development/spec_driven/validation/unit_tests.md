@@ -599,11 +599,11 @@ Unit under test: the file-read endpoint handler `GET /api/file?path=<rel>`. Each
 - Edge cases handled: FR-5.1 ValueError catch; AC-7.
 - Spec refs: FR-5.1, AC-7.
 
-### 8.11 `file_read__only_get_method_supported`
-- Inputs: `POST /api/file?path=CLAUDE.md`.
-- Expected output: HTTP 405 Method Not Allowed.
-- Edge cases handled: NFR-6 — only GET endpoints exist; routing surface check.
-- Spec refs: NFR-6.
+### 8.11 `file_read__write_endpoints_are_put_only` (revised by follow-up 001)
+- Inputs: `POST /api/file?path=CLAUDE.md`, `DELETE /api/file?path=CLAUDE.md`, `PATCH /api/file?path=CLAUDE.md`.
+- Expected output: each returns HTTP 405 Method Not Allowed. `PUT /api/file` with a valid body returns 200; `POST /api/regen-prompt` with a valid body returns 200.
+- Edge cases handled: NFR-6 — only the sanctioned mutation endpoints exist (PUT for file write, POST for regen-prompt); no DELETE, no upload, no PATCH; routing surface check.
+- Spec refs: NFR-6, FR-14a, FR-14c.
 
 ---
 

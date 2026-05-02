@@ -163,6 +163,7 @@ function TreeItem({
     );
   }
   if (isFolder) {
+    const projectMatch = matchProjectPath(node.path);
     return (
       <li role="treeitem" aria-level={level} aria-expanded={isOpen} className="tree-row">
         <button
@@ -174,6 +175,15 @@ function TreeItem({
           <span aria-hidden="true">{isOpen ? "▾" : "▸"}</span>
           <span className="tree-label">{node.name}</span>
         </button>
+        {projectMatch && (
+          <Link
+            to={`/project/${projectMatch.projectType}/${projectMatch.projectName}`}
+            className="tree-project-link"
+            title={`Open the project page (master regen panel) for ${projectMatch.projectName}`}
+          >
+            ↗ project page
+          </Link>
+        )}
         {isOpen && node.children && (
           <ul role="group" className="tree-group">
             {node.children.map((c) => (
@@ -230,6 +240,14 @@ function FileLink({
       {truncated}
     </Link>
   );
+}
+
+function matchProjectPath(path: string): { projectType: string; projectName: string } | null {
+  const parts = path.split("/");
+  if (parts.length === 3 && parts[0] === "specs") {
+    return { projectType: parts[1], projectName: parts[2] };
+  }
+  return null;
 }
 
 function truncateFileName(name: string, max = 40): string {

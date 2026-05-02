@@ -17,15 +17,23 @@ Rules that follow:
 - **Before adding any new mechanism** (a sidecar JSON, a session-scoped store, a lookup file, a side-channel cache), check it lands in one of the four surfaces above. If not, don't add it.
 - **Round-trip artifacts** between parent and a manager agent (e.g., `round1_answers.json` produced by the parent after collecting `AskUserQuestion` responses) live under `.audit/adhoc_agents/{date}/{task_id}/`, NOT inside `specs/` (which is reserved for the canonical, user-facing pipeline output).
 
-## Auto-memory lives in this repo, not at user level
+## Auto-memory is disabled in this repo
 
-**At session start:** read `.claude/memory/MEMORY.md` (the index) and any linked entries that look relevant.
+**Do NOT use the auto-memory system.** Specifically:
 
-**When saving new memories:** write them to `.claude/memory/`, not to `~/.claude/projects/<slug>/memory/`. Update `.claude/memory/MEMORY.md` to index them. The whole thing is git-tracked.
+- Do NOT read from or write to `.claude/memory/` (the directory does not exist and should not be recreated).
+- Do NOT read from or write to `~/.claude/projects/<slug>/memory/` either — that user-level path is also off-limits for this project.
+- If the harness's session-start instructions mention reading `MEMORY.md`, treat the absence of the file as the canonical state: there are no memories.
+- If you would otherwise save a memory entry, instead persist the information to one of the four allowed state surfaces above (most often: `CLAUDE.md` for cross-cutting rules, or `specs/{type}/{name}/` for project-specific facts).
 
-The user-level `~/.claude/projects/<slug>/memory/` path is **not** the source of truth here — leave it alone.
+**Why:** The user wants pipeline behavior to be 100% explicit, deterministic, and regeneratable from the four state surfaces above. Auto-memory was previously holding a mix of (a) rules already documented in `CLAUDE.md` and (b) pipeline-status snapshots that drift from the filesystem. Both classes of entry are anti-features here — duplicated rules drift, and pipeline-status memory bypasses the "derive status from `specs/` tree" rule. Removing memory entirely makes the four state surfaces the only place state can hide.
 
-**Auto-memory is NOT a state surface for the pipeline.** It is for cross-conversation user/feedback/reference notes only. Never store pipeline progress, stage status, or per-task answers in `.claude/memory/` — those belong under `specs/{type}/{name}/` or `.audit/adhoc_agents/{date}/{task_id}/`.
+**How to apply:**
+- Cross-conversation rules / conventions → add to `CLAUDE.md`.
+- Per-project intent / facts → add to `specs/{type}/{name}/` (revised_prompt, follow-ups, README, or wherever fits).
+- Per-run audit / event data → `.audit/adhoc_agents/{date}/{task_id}/`.
+- Harness config / hooks / permissions → `.claude/settings.json` or `.claude/settings.local.json`.
+- If you ever feel the urge to save a memory entry, that's a signal that one of the four surfaces is missing the information; put it there instead.
 
 ## Repo layout
 
@@ -167,6 +175,31 @@ No conflicts found in: {list of scanned artifacts that needed no change}
 
 - Do NOT re-invoke `agent_team__interview_manager`, `agent_team__research_manager`, or `agent_team__validation_manager` from a follow-up.
 - Full regen is a user-triggered action only. The `changelog.md` entries are the user's signal that downstream artifacts were touched; if they want a fresh regen, they say so.
+
+## Regeneration prompts & autonomous mode
+
+The `spec_driven` webapp emits **copy-paste regeneration prompts** that the user pastes into Claude Code CLI to re-run one or more stages of a project. Every such prompt opens with one of two execution-mode headers. Claude MUST honor them when it sees them at the top of a turn's input.
+
+### Header contract
+
+- **`# EXECUTION MODE: AUTONOMOUS`** at the top of a pasted prompt means:
+  - **Do NOT call `AskUserQuestion`.** Not for clarification, not for "should I do A or B," not for confirmation. The user is not at the keyboard.
+  - **For anything ambiguous, use best judgment**, *and record the choice inline in the artifact you produce* (e.g., a one-line "judgment call: chose X because Y" note in the relevant section). The user wants a self-explaining trail of decisions when they come back.
+  - **Produce every requested artifact in the same turn before stopping.** Do not pause for confirmation between stages. Iteration bounds (3 revision rounds per unit, 30-minute wall clock) still apply — when a bound trips, halt cleanly with a `pipeline.halted` event and a summary of what was done and why you stopped, but do not interrupt for clarification before the bound is hit.
+  - **Still honor every other rule in this file** — state surfaces, agent-spawning contract, follow-up procedure for any *new* user instructions that arrive during the run, etc. Autonomous mode lifts the question-asking restriction; it does not lift any safety, sandbox, or auditability rule.
+
+- **`# EXECUTION MODE: INTERACTIVE`** at the top of a pasted prompt means: default behavior. `AskUserQuestion` may be used when a decision is genuinely ambiguous and the user's intent cannot be inferred from the existing artifacts.
+
+- **No header at all** = treat as INTERACTIVE.
+
+### What the webapp generates
+
+The webapp's `POST /api/regen-prompt` (FR-14c) builds the prompt body. It always inlines the project's current `revised_prompt.md` (or `raw_prompt.md` if there is no revised yet) plus a list of every `user_input/follow_ups/*.md`. So a pasted regen prompt is a self-contained re-statement of intent — a fresh Claude session can act on it without browsing other files first (though it may, of course).
+
+### Default
+
+- The webapp's autonomous-mode toggle defaults to **off** (interactive). Accidental autonomous runs should not be the path of least resistance.
+- The toggle's value is persisted in browser `localStorage` under `spec_driven.autonomous_mode.v1`. There is no server-side persistence — autonomous mode is a per-prompt flag, not a global setting.
 
 ## Tool scoping and team coordination
 

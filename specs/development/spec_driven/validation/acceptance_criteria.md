@@ -263,19 +263,19 @@ And the response does NOT include `Access-Control-Allow-Origin: http://evil.exam
 And the FastAPI app source contains no `CORSMiddleware` registration with `allow_origins=["*"]`
 Spec refs: NFR-8
 
-### Scenario: AC-23 (NFR-6) — no write endpoints (POST/PUT/PATCH/DELETE return 405)
+### Scenario: AC-23 (NFR-6) — only sanctioned mutation endpoints exist (revised by follow-up 001)
 Given the backend FastAPI app is running
-When an HTTP client issues `POST /api/file?path=specs/development/spec_driven/final_specs/spec.md` with any body
-Then the response status is `405`
-When an HTTP client issues `PUT /api/file?path=specs/development/spec_driven/final_specs/spec.md` with any body
-Then the response status is `405`
-When an HTTP client issues `PATCH /api/file?path=specs/development/spec_driven/final_specs/spec.md` with any body
+When an HTTP client issues `PATCH /api/file` with any body
 Then the response status is `405`
 When an HTTP client issues `DELETE /api/file?path=specs/development/spec_driven/final_specs/spec.md`
 Then the response status is `405`
 When an HTTP client issues `POST /api/tree` with any body
 Then the response status is `405`
-And the FastAPI app source registers ONLY `GET` route handlers under `/api/`
-Spec refs: NFR-6
+When an HTTP client issues `PUT /api/file` with body `{"path": "specs/development/spec_driven/final_specs/spec.md", "text": "round-trip"}`
+Then the response status is `200` and the file content equals `round-trip`
+When an HTTP client issues `POST /api/regen-prompt` with body `{"project_type":"development","project_name":"spec_driven","stages":["interview"],"modules":{},"autonomous":false}`
+Then the response status is `200` and the body's `prompt` field is a non-empty string starting with `# EXECUTION MODE: INTERACTIVE`
+And the FastAPI app source registers ONLY `GET`, `PUT`, and `POST` route handlers under `/api/` (no `PATCH`, `DELETE`, or upload endpoints)
+Spec refs: NFR-6, FR-14a, FR-14b, FR-14c
 
 End of acceptance criteria.

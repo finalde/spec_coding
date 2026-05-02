@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { fetchTree } from "./api";
+import { ProjectPage } from "./components/ProjectPage";
 import { Reader } from "./components/Reader";
 import { Sidebar } from "./components/Sidebar";
 import type { TreeNode, TreeResponse } from "./types";
@@ -43,6 +44,15 @@ export function AppRoutes(): JSX.Element {
           />
         }
       />
+      <Route
+        path="/project/:projectType/:projectName"
+        element={
+          <ProjectLayout
+            tree={tree}
+            onRefresh={onRefresh}
+          />
+        }
+      />
       <Route path="*" element={<DefaultRedirect tree={tree} />} />
     </Routes>
   );
@@ -64,6 +74,24 @@ function Layout({
     <div className="layout">
       <Sidebar tree={tree} onRefresh={onRefresh} selectedPath={filePath} />
       <Reader filePath={filePath} exposedPaths={exposedPaths} onRequestRefresh={onRefresh} />
+    </div>
+  );
+}
+
+function ProjectLayout({
+  tree,
+  onRefresh,
+}: {
+  tree: TreeResponse | null;
+  onRefresh: () => void;
+}): JSX.Element {
+  const params = useParams();
+  const projectType = params.projectType ?? "";
+  const projectName = params.projectName ?? "";
+  return (
+    <div className="layout">
+      <Sidebar tree={tree} onRefresh={onRefresh} selectedPath={null} />
+      <ProjectPage projectType={projectType} projectName={projectName} />
     </div>
   );
 }
