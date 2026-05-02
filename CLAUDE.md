@@ -222,23 +222,37 @@ When a regeneration prompt asks Claude to re-run one or more stages, the regener
 1. The current stage's *input* artifacts (the canonical outputs of the prior stages, used as inputs).
 2. `CLAUDE.md` and shared `.claude/` context (agent definitions, skill definitions).
 3. The user-input layer (`raw_prompt.md` + every `user_input/follow_ups/*.md`).
+4. **The current stage's `<stage>/promoted.md` sidecar**, when present (see "Pinned items survive regeneration" below).
 
 **Surgical edits to / preservation of prior outputs is forbidden during regeneration.** The prior file is not "the starting point you tweak" — it is "the thing you delete and rewrite from scratch." A regeneration that preserves prior text drifts away from the inputs and becomes a function of (input ∧ all previous runs), which defeats the point of the workflow.
 
 Per-stage delete-then-regenerate contract:
 
-| Stage being regenerated | Files to delete first | Inputs the new generation reads |
-|-------------------------|------------------------|---------------------------------|
-| 1 — Intake | (none — `revised_prompt.md` is rewritten in place from raw + follow-ups; this stage has no other prior outputs) | `user_input/raw_prompt.md`, every `user_input/follow_ups/*.md` |
-| 2 — Interview | `interview/qa.md` | `user_input/revised_prompt.md`, `CLAUDE.md`, `.claude/agents/agent_team__interview_manager.md` |
-| 3 — Research | every file under `findings/` (`dossier.md` + every `angle-*.md`) | `user_input/revised_prompt.md`, `interview/qa.md`, `CLAUDE.md`, `.claude/agents/agent_team__research_manager.md` |
-| 4 — Spec compilation | `final_specs/spec.md` | `user_input/revised_prompt.md`, `interview/qa.md`, `findings/dossier.md` (+ `findings/angle-*.md` if useful) |
-| 5 — Validation strategy | every file under `validation/` (`strategy.md`, `acceptance_criteria.md`, `bdd_scenarios.md`, `unit_tests.md`, `system_tests.md`, `security.md`, `performance.md`, `accessibility.md`, etc.) | `final_specs/spec.md`, `CLAUDE.md`, `.claude/agents/agent_team__validation_manager.md` |
-| 6 — Execution + streaming validation | the entire output project folder (`projects/{name}/` for `task_type=development`, or `ai_videos/{name}/` for `task_type=ai_video`) | `final_specs/spec.md`, every file under `validation/`, `CLAUDE.md` |
+| Stage being regenerated | Files to delete first | Files to preserve (NEVER delete) | Inputs the new generation reads |
+|-------------------------|------------------------|----------------------------------|---------------------------------|
+| 1 — Intake | (none — `revised_prompt.md` is rewritten in place from raw + follow-ups; this stage has no other prior outputs) | (n/a) | `user_input/raw_prompt.md`, every `user_input/follow_ups/*.md` |
+| 2 — Interview | `interview/qa.md` | `interview/promoted.md` | `user_input/revised_prompt.md`, `interview/promoted.md`, `CLAUDE.md`, `.claude/agents/agent_team__interview_manager.md`, `.claude/agent_refs/agent_team__interview_manager/*.md` |
+| 3 — Research | every file under `findings/` (`dossier.md` + every `angle-*.md`) **except `findings/promoted.md`** | `findings/promoted.md` | `user_input/revised_prompt.md`, `interview/qa.md`, `findings/promoted.md`, `CLAUDE.md`, `.claude/agents/agent_team__research_manager.md`, `.claude/agent_refs/agent_team__research_manager/*.md` |
+| 4 — Spec compilation | `final_specs/spec.md` | `final_specs/promoted.md` | `user_input/revised_prompt.md`, `interview/qa.md`, `findings/dossier.md` (+ `findings/angle-*.md` if useful), `final_specs/promoted.md` |
+| 5 — Validation strategy | every file under `validation/` (`strategy.md`, `acceptance_criteria.md`, `bdd_scenarios.md`, `unit_tests.md`, `system_tests.md`, `security.md`, `performance.md`, `accessibility.md`, etc.) **except `validation/promoted.md`** | `validation/promoted.md` | `final_specs/spec.md`, `validation/promoted.md`, `CLAUDE.md`, `.claude/agents/agent_team__validation_manager.md`, `.claude/agent_refs/agent_team__validation_manager/*.md` |
+| 6 — Execution + streaming validation | the entire output project folder (`projects/{name}/` for `task_type=development`, or `ai_videos/{name}/` for `task_type=ai_video`) | (no promoted.md in stage 6 — out of scope for v1) | `final_specs/spec.md`, every file under `validation/`, `CLAUDE.md` |
+
+### Pinned items survive regeneration
+
+Each spec-pipeline stage (interview, findings, final_specs, validation) supports a `promoted.md` sidecar in its stage folder. When the user pins (📌) an atomic item — a Q/A pair, a recommendation bullet, an FR-NN / NFR-NN / AC-NN / SYS-NN block — that pin is appended to `<stage>/promoted.md`. Pins are written by the spec_driven webapp's `POST /api/promote` endpoint and removed by `DELETE /api/promote`.
+
+Contract on regeneration:
+
+1. **`<stage>/promoted.md` is an INPUT, not an output.** It is NOT deleted by the read-zero contract. The Files-to-preserve column above is load-bearing.
+2. **Every pin in `<stage>/promoted.md` MUST appear verbatim in the regenerated artifact.** The regen agent reads the pinned content and inserts it at the natural location for its source-file/id metadata. Newly-generated content for a pinned slot is dropped (promoted always wins).
+3. **If a pin's natural insertion point no longer exists** (e.g., the pinned `AC-7` no longer appears among the regenerated ACs), the agent appends the pin verbatim to a `## Pinned items (orphaned)` section at the end of the originally-pinned source file. The pin is NEVER silently dropped.
+4. **Editing a pin updates `promoted.md` only.** The generated artifact is not touched until the next regeneration. The user accepts that the two versions can drift between regens; the drift is resolved by running stage N regen.
+5. **`<stage>/promoted.md` is itself viewable and editable** through the spec_driven webapp via the same path-sandbox as any other artifact. It is NOT a regen target — there is no `POST /api/regen-prompt` mode that rebuilds it.
+6. **Stage 6 (project code under `projects/{name}/`) does NOT support promotion in v1.** Out of scope. A `projects/{name}/promoted.md` would have a different granularity story (per file? per function?) and is deferred.
 
 Operational notes:
 
-- **Delete is a real `rm -rf`-equivalent action**, not a logical "treat as missing." After delete, the file MUST not exist on disk; regeneration writes the new file fresh. Stale bytes are how surgical-edit regen creeps back in.
+- **Delete is a real `rm -rf`-equivalent action**, not a logical "treat as missing." After delete, the file MUST not exist on disk; regeneration writes the new file fresh. Stale bytes are how surgical-edit regen creeps back in. Note: `<stage>/promoted.md` is in the Preserve column, not the Delete column — it must NOT be removed.
 - **Multi-stage regeneration is sequential.** When the regen prompt selects multiple stages, delete each stage's outputs at the moment that stage runs (after its inputs are confirmed present), not all up-front. Otherwise stage N+1 will be missing its inputs while stage N is being regenerated.
 - **Selective module regeneration.** If the regen prompt selects only some of a stage's modules (e.g., regenerate only `validation/security.md` and `validation/performance.md`), delete only those module files, not every file in the stage folder. The default in copy-paste prompts is "all modules selected" → delete the entire stage folder.
 - **`changelog.md` and `.audit/` are NOT regeneration outputs** — they are the audit log. They are never deleted as part of a regeneration; they are appended to with a new entry that records what got deleted and what got regenerated.

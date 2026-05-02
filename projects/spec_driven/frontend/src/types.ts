@@ -27,3 +27,14 @@ export interface FileError {
   error: string;
   kind?: string;
 }
+
+export interface Pin {
+  pin_id: string;
+  location: string;
+  body: string;
+}
+
+export interface PromotionsResponse {
+  stage_path: string;
+  pins: Pin[];
+}

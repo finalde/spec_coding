@@ -1,4 +1,10 @@
-import type { TreeResponse, FileResponse, FileError } from "./types";
+import type {
+  TreeResponse,
+  FileResponse,
+  FileError,
+  Pin,
+  PromotionsResponse,
+} from "./types";
 
 export async function fetchTree(): Promise<TreeResponse> {
   const res = await fetch("/api/tree", { headers: { Accept: "application/json" } });
@@ -132,4 +138,45 @@ export async function buildRegenPrompt(
     // keep default
   }
   throw new RegenPromptError(res.status, body);
+}
+
+export async function fetchPromotions(stagePath: string): Promise<PromotionsResponse> {
+  const res = await fetch(
+    `/api/promotions?stage_path=${encodeURIComponent(stagePath)}`,
+    { headers: { Accept: "application/json" } },
+  );
+  if (!res.ok) {
+    throw new Error(`promotions fetch failed: ${res.status}`);
+  }
+  return (await res.json()) as PromotionsResponse;
+}
+
+export async function addPromotion(
+  stagePath: string,
+  location: string,
+  body: string,
+): Promise<Pin> {
+  const res = await fetch("/api/promote", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ stage_path: stagePath, location, body }),
+  });
+  if (!res.ok) {
+    throw new Error(`promote failed: ${res.status}`);
+  }
+  return (await res.json()) as Pin;
+}
+
+export async function removePromotion(
+  stagePath: string,
+  pinId: string,
+): Promise<void> {
+  const res = await fetch("/api/promote", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ stage_path: stagePath, pin_id: pinId }),
+  });
+  if (!res.ok) {
+    throw new Error(`unpromote failed: ${res.status}`);
+  }
 }

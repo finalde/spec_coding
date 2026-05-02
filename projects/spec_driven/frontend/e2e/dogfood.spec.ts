@@ -127,6 +127,61 @@ test.describe("spec_driven dogfood", () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  test("pin a Q/A on qa.md and see it appear on the promoted.md page", async ({
+    page,
+    request,
+  }) => {
+    // Clean state: remove any pre-existing promoted.md so this test is hermetic.
+    // We do this by deleting any pre-existing pins via the API.
+    const stagePath = "specs/development/spec_driven/interview";
+    const existing = await request.get(
+      `/api/promotions?stage_path=${encodeURIComponent(stagePath)}`,
+    );
+    if (existing.ok()) {
+      const body = (await existing.json()) as {
+        pins: Array<{ pin_id: string }>;
+      };
+      for (const p of body.pins) {
+        await request.delete("/api/promote", {
+          data: { stage_path: stagePath, pin_id: p.pin_id },
+        });
+      }
+    }
+
+    // Open qa.md and pin the FIRST Q/A pair.
+    await page.goto("/file/specs/development/spec_driven/interview/qa.md");
+    const qaView = page.locator(".qa-view");
+    await expect(qaView).toBeVisible();
+    const firstPinToggle = page.locator(".pin-toggle").first();
+    await expect(firstPinToggle).toBeVisible();
+    // Click the toggle and wait for the on-state to take effect (the button
+    // gains aria-pressed="true").
+    await firstPinToggle.click();
+    await expect(firstPinToggle).toHaveAttribute("aria-pressed", "true", {
+      timeout: 5000,
+    });
+
+    // Navigate to the promoted.md page and confirm the pin appears.
+    await page.goto("/file/specs/development/spec_driven/interview/promoted.md");
+    const promotedView = page.locator(".promoted-view");
+    await expect(promotedView).toBeVisible();
+    const pinCard = page.locator(".promoted-pin-card").first();
+    await expect(pinCard).toBeVisible();
+    await expect(pinCard.locator(".promoted-pin-id")).toContainText(/^pin-\d+/);
+
+    // Unpin from the promoted page and confirm it disappears.
+    await pinCard.locator(".promoted-pin-unpin").click();
+    await expect(page.locator(".promoted-pin-card")).toHaveCount(0, {
+      timeout: 5000,
+    });
+
+    // Cleanup: ensure no stray pins linger for the next test run.
+    const after = await request.get(
+      `/api/promotions?stage_path=${encodeURIComponent(stagePath)}`,
+    );
+    expect(after.ok()).toBe(true);
+  });
+
   test("Sidebar walks the live /api/tree shape without errors", async ({ page }) => {
     // Smoke test that catches the children/projects/stages contract drift class.
     // If the backend regresses to emitting non-children descent fields, the tree

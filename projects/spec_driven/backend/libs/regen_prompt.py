@@ -245,6 +245,37 @@ def _list_followups(project_dir: Path) -> list[Path]:
     return sorted(files, key=lambda p: p.name)
 
 
+_PROMOTABLE_STAGE_FOLDERS: frozenset[str] = frozenset(
+    {"interview", "findings", "final_specs", "validation"}
+)
+
+
+def _collect_promoted_blocks(
+    project_dir: Path,
+    selected_defs: list[StageDef],
+) -> list[tuple[str, str]]:
+    """For each selected stage with a non-empty promoted.md, return
+    (stage_folder, file_text) tuples in stage order. Only the four
+    spec-pipeline stages support promotion; intake (user_input) and
+    stage 6 (execution) are skipped per CLAUDE.md."""
+    out: list[tuple[str, str]] = []
+    for stage in selected_defs:
+        folder = stage.folder
+        if folder not in _PROMOTABLE_STAGE_FOLDERS:
+            continue
+        promoted_path = project_dir / folder / "promoted.md"
+        if not promoted_path.is_file():
+            continue
+        try:
+            text = promoted_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not text.strip():
+            continue
+        out.append((folder, text))
+    return out
+
+
 def build_regen_prompt(
     project_type: str,
     project_name: str,
@@ -314,6 +345,34 @@ def build_regen_prompt(
                 parts.append(f"- **{module.label}** — `{target}` — {module.description}")
         parts.append("")
 
+    # Pinned items: inline every promoted.md whose stage is in the selected set.
+    promoted_blocks = _collect_promoted_blocks(project_dir, selected_defs)
+    if promoted_blocks:
+        parts.append("### Pinned items (MUST survive regeneration)")
+        parts.append("")
+        parts.append(
+            "The following items have been pinned by the user via the spec_driven "
+            "webapp. Each pin is an INPUT to this regeneration: it MUST appear "
+            "**verbatim** in the regenerated artifact. Promoted always wins — if "
+            "your generation would produce a different version of a pinned item, "
+            "discard the new version and use the pinned text instead. If a pinned "
+            "item's natural insertion point no longer exists in the regenerated "
+            "structure, append it to a `## Pinned items (orphaned)` section at "
+            "the end of the originally-pinned source file. NEVER silently drop a "
+            "pin. See CLAUDE.md → ## Regeneration prompts & autonomous mode → "
+            "### Regeneration semantics → ### Pinned items survive regeneration."
+        )
+        parts.append("")
+        for stage_folder, content in promoted_blocks:
+            parts.append(
+                f"#### From `specs/{project_type}/{project_name}/{stage_folder}/promoted.md`"
+            )
+            parts.append("")
+            parts.append("```markdown")
+            parts.append(content.rstrip())
+            parts.append("```")
+            parts.append("")
+
     parts.append("### Constraints")
     parts.append(
         "- Honor every rule in `CLAUDE.md`: state surfaces (CLAUDE.md, .claude/settings*, "
@@ -334,7 +393,9 @@ def build_regen_prompt(
         "generation reads only the inputs. Do not read prior `final_specs/spec.md`, "
         "prior `validation/*`, or any prior generated artifact in the stages being "
         "regenerated. Each stage starts from a clean slate so stale assumptions cannot "
-        "leak forward."
+        "leak forward. **Exception:** every `<stage>/promoted.md` is an INPUT, NOT an "
+        "output. Never delete `promoted.md`. Always read it before generating; its "
+        "pinned items must appear verbatim in the regenerated artifact."
     )
     parts.append(
         "- Emit `regen.delete.planned`, `regen.delete.completed`, and "

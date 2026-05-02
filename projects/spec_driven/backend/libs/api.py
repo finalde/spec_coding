@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from libs.file_reader import FileReadError, read_file
 from libs.file_writer import write_file
+from libs.promotions import add_promotion, list_promotions, remove_promotion
 from libs.regen_prompt import build_regen_prompt_result, list_stages
 from libs.tree_walker import build_tree
 
@@ -24,6 +25,17 @@ class RegenPromptBody(BaseModel):
     stages: list[str] = []
     modules: dict[str, list[str]] = {}
     autonomous: bool = False
+
+
+class PromoteBody(BaseModel):
+    stage_path: str
+    location: str
+    body: str
+
+
+class UnpromoteBody(BaseModel):
+    stage_path: str
+    pin_id: str
 
 
 def _err_response(exc: FileReadError) -> JSONResponse:
@@ -66,6 +78,45 @@ def build_app(repo_root: Path) -> FastAPI:
     @app.get("/api/stages")
     def get_stages(project_type: str, project_name: str) -> dict[str, object]:
         return list_stages(project_type, project_name)
+
+    @app.get("/api/promotions")
+    def get_promotions(stage_path: str) -> dict[str, object]:
+        try:
+            payload = list_promotions(stage_path, repo_root)
+        except FileReadError as exc:
+            raise _AsHttp(exc)
+        return {
+            "stage_path": payload.stage_path,
+            "pins": [
+                {"pin_id": p.pin_id, "location": p.location, "body": p.body}
+                for p in payload.pins
+            ],
+        }
+
+    @app.post("/api/promote")
+    def post_promote(body: PromoteBody) -> dict[str, object]:
+        try:
+            pin = add_promotion(
+                stage_path=body.stage_path,
+                location=body.location,
+                body=body.body,
+                repo_root=repo_root,
+            )
+        except FileReadError as exc:
+            raise _AsHttp(exc)
+        return {"pin_id": pin.pin_id, "location": pin.location, "body": pin.body}
+
+    @app.delete("/api/promote")
+    def delete_promote(body: UnpromoteBody) -> dict[str, object]:
+        try:
+            remove_promotion(
+                stage_path=body.stage_path,
+                pin_id=body.pin_id,
+                repo_root=repo_root,
+            )
+        except FileReadError as exc:
+            raise _AsHttp(exc)
+        return {"ok": True}
 
     @app.post("/api/regen-prompt")
     def post_regen(body: RegenPromptBody) -> dict[str, object]:

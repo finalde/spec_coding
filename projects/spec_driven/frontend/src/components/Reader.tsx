@@ -5,6 +5,9 @@ import { Breadcrumb } from "./Breadcrumb";
 import { Editor } from "./Editor";
 import { QaView, ParseError, parseQa } from "./QaView";
 import { MarkdownView } from "../markdown/renderer";
+import { PinnableMarkdownView } from "./PinnableMarkdownView";
+import { PromotedView } from "./PromotedView";
+import { stagePathFor } from "../promotions";
 import { CodeView } from "../markdown/code";
 import { JsonlView } from "../markdown/jsonl";
 import { RegeneratePanel } from "./RegeneratePanel";
@@ -188,6 +191,15 @@ function ReaderBody({
   }
   // Q/A path detection
   const isQa = file.path.endsWith("/interview/qa.md");
+  // Promoted-sidecar detection: any file named promoted.md inside a promotable stage.
+  const isPromoted =
+    file.path.endsWith("/promoted.md") && stagePathFor(file.path) !== null;
+  // Pinnable detection: any markdown file inside a promotable stage that is NOT promoted.md or qa.md.
+  const isPinnable =
+    isMarkdownExt(file.extension) &&
+    !isQa &&
+    !isPromoted &&
+    stagePathFor(file.path) !== null;
   return (
     <>
       <div className="reader-toolbar">
@@ -200,11 +212,19 @@ function ReaderBody({
           &#x270E; Edit
         </button>
       </div>
-      {isQa ? (
+      {isPromoted ? (
+        <PromotedView filePath={file.path} exposedPaths={exposedPaths} />
+      ) : isQa ? (
         <QaViewSafe
           source={file.text}
           filePath={file.path}
           onSaved={onSaved}
+          exposedPaths={exposedPaths}
+        />
+      ) : isPinnable ? (
+        <PinnableMarkdownView
+          source={file.text}
+          sourcePath={file.path}
           exposedPaths={exposedPaths}
         />
       ) : isMarkdownExt(file.extension) ? (

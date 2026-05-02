@@ -114,3 +114,73 @@ def test_read_zero_constraint_in_prompt(fake_repo: Path) -> None:
     assert "Read-zero" in prompt or "read-zero" in prompt
     assert "deletes prior outputs first" in prompt
     assert "reads only the inputs" in prompt
+
+
+def test_promoted_section_absent_when_no_pins(fake_repo: Path) -> None:
+    prompt = build_regen_prompt(
+        project_type="development",
+        project_name="spec_driven",
+        stage_ids=["interview"],
+        module_ids={},
+        autonomous=False,
+        repo_root=fake_repo,
+    )
+    assert "### Pinned items" not in prompt
+
+
+def test_promoted_section_inlined_when_pins_exist(fake_repo: Path) -> None:
+    from libs.promotions import add_promotion
+
+    add_promotion(
+        stage_path="specs/development/spec_driven/interview",
+        location="interview/qa.md / Round 1 / scope",
+        body="**Q:** Pinned question?\n- A: Pinned answer.",
+        repo_root=fake_repo,
+    )
+    prompt = build_regen_prompt(
+        project_type="development",
+        project_name="spec_driven",
+        stage_ids=["interview"],
+        module_ids={},
+        autonomous=False,
+        repo_root=fake_repo,
+    )
+    assert "### Pinned items (MUST survive regeneration)" in prompt
+    assert "Pinned question?" in prompt
+    assert "Pinned answer." in prompt
+    assert "promoted.md" in prompt
+    # The "promoted always wins" semantics must be stated.
+    assert "verbatim" in prompt
+    # Promoted.md is preserved (not deleted) by read-zero — the constraint must mention this.
+    assert "promoted.md` is an INPUT" in prompt or "promoted.md is an INPUT" in prompt
+
+
+def test_promoted_section_only_for_selected_stages(fake_repo: Path) -> None:
+    from libs.promotions import add_promotion
+
+    add_promotion(
+        stage_path="specs/development/spec_driven/interview",
+        location="interview/qa.md / x",
+        body="**Q:** x?\n- A: y",
+        repo_root=fake_repo,
+    )
+    # Selecting only spec_compilation should NOT inline the interview pin.
+    prompt = build_regen_prompt(
+        project_type="development",
+        project_name="spec_driven",
+        stage_ids=["spec_compilation"],
+        module_ids={},
+        autonomous=False,
+        repo_root=fake_repo,
+    )
+    assert "Pinned question" not in prompt or "x?" not in prompt
+    # And selecting interview SHOULD inline it.
+    prompt2 = build_regen_prompt(
+        project_type="development",
+        project_name="spec_driven",
+        stage_ids=["interview"],
+        module_ids={},
+        autonomous=False,
+        repo_root=fake_repo,
+    )
+    assert "x?" in prompt2

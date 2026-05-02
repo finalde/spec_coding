@@ -26,6 +26,16 @@ A sign-off pass that requires human eyes (visual contrast, focus visibility, mot
 
 Every level run MUST emit `validation.started`, `validation.pass` or `validation.issue.raised`, and (for issues) `exec.revision.applied` or `pipeline.halted` events to `.audit/adhoc_agents/{date}/{task_id}/events.jsonl`. A level that ran without audit events is treated as if it didn't run.
 
+### 6. Pinned items survive regeneration
+
+Every spec-pipeline stage (interview, findings, final_specs, validation) supports a `<stage>/promoted.md` sidecar containing user-pinned atomic items (Q/A pairs, FR-NN/AC-NN/SYS-NN blocks, recommendation bullets, etc.). Per `CLAUDE.md → ## Regeneration prompts & autonomous mode → ### Regeneration semantics → ### Pinned items survive regeneration`:
+
+- The validation team MUST add a "promotion preservation" check to every stage 5 strategy. The check verifies that **every pin in `<stage>/promoted.md` appears verbatim in the regenerated artifact**.
+- Severity for a missing pin: `critical`. Halts the work unit; reverting silent loss of user-pinned content is the highest-priority class of regression.
+- Severity for an out-of-place pin (in the artifact but at the wrong location, or under a `## Pinned items (orphaned)` section without justification): `blocker`. Standard 3-revision-round cap applies.
+- The check is implemented by parsing both `<stage>/promoted.md` (via the `parse_promoted_text` helper in `libs/promotions.py`) and the regenerated artifact, then asserting that every pin's body appears as a substring of the artifact, modulo whitespace normalization.
+- Stage 6 (project code under `projects/{name}/`) does NOT support promotion in v1; the validation team should NOT generate a promotion-preservation check for stage 6 regenerations.
+
 ## Standard severity policy
 
 | Class | Severity | Halt? |

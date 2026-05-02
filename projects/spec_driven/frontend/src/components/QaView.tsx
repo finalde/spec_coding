@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { saveFile } from "../api";
+import { stagePathFor, usePromotions } from "../promotions";
+import { PinToggle } from "./PinToggle";
 
 interface QaViewProps {
   parsed: ParseResult;
@@ -188,6 +190,8 @@ export function QaView({
 }: QaViewProps): JSX.Element {
   const [editing, setEditing] = useState<InlineEditState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const stagePath = stagePathFor(filePath);
+  const { isPinned, pin, unpin, error: pinError } = usePromotions(stagePath);
 
   const splice = async (
     start: number,
@@ -211,11 +215,14 @@ export function QaView({
     onSaved(newText);
   };
 
+  const composePinBody = (q: string, a: string): string =>
+    `**Q:** ${q}\n- A: ${a}`;
+
   return (
     <div className="qa-view">
-      {error && (
+      {(error || pinError) && (
         <div className="editor-error-banner" role="alert">
-          {error}
+          {error ?? pinError}
         </div>
       )}
       {parsed.rounds.map((round, rIdx) => (
@@ -229,8 +236,32 @@ export function QaView({
                 const aKey = `${rIdx}-${cIdx}-${pIdx}-a`;
                 const qEditing = editing?.key === qKey;
                 const aEditing = editing?.key === aKey;
+                const body = composePinBody(p.question, p.answer);
+                const matchedPin = stagePath ? isPinned(body) : null;
+                const location = `interview/qa.md / ${round.roundLabel} / ${cat.category}`;
                 return (
-                  <div key={pIdx} className="qa-pair">
+                  <div key={pIdx} className={`qa-pair${matchedPin ? " qa-pair-pinned" : ""}`}>
+                    {stagePath && (
+                      <div className="qa-pair-toolbar">
+                        <PinToggle
+                          pin={matchedPin}
+                          onPin={() => pin(location, body)}
+                          onUnpin={(id) => unpin(id)}
+                          ariaLabel={
+                            matchedPin
+                              ? `Unpin Q/A ${rIdx + 1}.${cIdx + 1}.${pIdx + 1}`
+                              : `Pin Q/A ${rIdx + 1}.${cIdx + 1}.${pIdx + 1}`
+                          }
+                        />
+                        {matchedPin && (
+                          <span className="qa-pair-pinned-label" title={matchedPin.location}>
+                            📌 pinned ({matchedPin.pin_id}) — edits to fields
+                            below modify the GENERATED file only; edit the
+                            pinned version on the promoted.md page.
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <QaBlock
                       text={p.question}
                       className="qa-question"
