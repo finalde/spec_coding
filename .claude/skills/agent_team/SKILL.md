@@ -15,6 +15,12 @@ You are driving a task through six stages. Persist every artifact so the user ca
 
 Build `task_id = "{task_name}-{YYYYMMDD-HHmmss}"` once at the start of the run. Use it for `.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/` paths.
 
+## Follow-up prompts (between full runs)
+
+This skill is the entry point for full pipeline runs. **Follow-up chat prompts that arrive between runs are handled by the ambient triage rule in `CLAUDE.md` § "Follow-up prompt handling"** — they persist to `user_input/follow_ups/`, auto-regenerate `revised_prompt.md`, surgically auto-update conflicting downstream artifacts, and log to `specs/{type}/{name}/changelog.md`. Those follow-up edits do NOT invoke this skill.
+
+When this skill IS invoked to resume or rerun a stage, read `changelog.md` first (if present) so you know which sections were already auto-patched from follow-ups; that context informs whether the user wants a true full regen or just to fill remaining gaps.
+
 ## Resuming
 
 If `specs/{task_type}/{task_name}/` already exists, ASK which stage to start from. Default to the first stage with missing artifacts. Each stage's "missing" check:

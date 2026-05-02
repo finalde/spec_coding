@@ -1,0 +1,3 @@
+- [spec_driven first-project status](project_spec_driven.md) — dogfood loop: spec_driven is the first project AND its job is to view its own pipeline artifacts; current run paused at Stage 2.
+- [agent_team state must be explicit](feedback_explicit_state.md) — no hidden state for spec_driven/agent_team; only CLAUDE.md, .claude/settings*, specs/, and .audit/ are allowed surfaces.
+- [follow-up prompt handling](feedback_followup_handling.md) — triage every chat prompt for spec-driven impact; persist to follow_ups/, auto-regen revised_prompt, surgical auto-update of downstreams, log to changelog.md, never auto-regen stages.
