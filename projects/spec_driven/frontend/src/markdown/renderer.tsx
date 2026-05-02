@@ -113,7 +113,7 @@ async function transformHtml(html: string, ctx: ClassifierContext): Promise<stri
     try {
       highlighted = await codeToHtml(decoded, {
         lang: lang || "text",
-        theme: "github-dark",
+        theme: "github-light",
       });
       highlighted = highlighted.replace("<pre", '<pre tabindex="0"');
     } catch {

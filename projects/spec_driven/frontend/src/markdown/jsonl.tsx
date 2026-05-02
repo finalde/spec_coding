@@ -34,7 +34,7 @@ export function JsonlView({ source }: { source: string }): JSX.Element {
         if (block.isJson) {
           try {
             const formatted = JSON.stringify(JSON.parse(block.raw), null, 2);
-            const html = await codeToHtml(formatted, { lang: "json", theme: "github-dark" });
+            const html = await codeToHtml(formatted, { lang: "json", theme: "github-light" });
             out.push(html.replace("<pre", '<pre tabindex="0"'));
             continue;
           } catch {

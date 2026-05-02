@@ -14,7 +14,7 @@ export function CodeView({ source, extension }: { source: string; extension: str
     let cancelled = false;
     (async () => {
       try {
-        const out = await codeToHtml(source, { lang, theme: "github-dark" });
+        const out = await codeToHtml(source, { lang, theme: "github-light" });
         if (!cancelled) setHtml(out.replace("<pre", '<pre tabindex="0"'));
       } catch {
         if (!cancelled) setHtml(`<pre tabindex="0"><code>${escape(source)}</code></pre>`);
