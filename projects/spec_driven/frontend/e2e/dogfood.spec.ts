@@ -56,22 +56,22 @@ test.describe("spec_driven dogfood", () => {
     await expect(readerHeading).toContainText(/Findings dossier/i);
   });
 
-  test("Settings section shows agent_refs subgroup with both validation playbooks", async ({
+  test("Settings section shows agent_refs subgroup with both validation refs", async ({
     page,
   }) => {
     await page.goto("/");
 
     // The Settings section is always expanded; the agent_refs subgroup
-    // appears as a fourth subgroup beneath CLAUDE.md / Agents / Skills.
+    // appears as a subgroup beneath CLAUDE.md / Skills / Playbooks.
     const refsHeader = page.getByRole("heading", { level: 3, name: "Agent refs" });
     await expect(refsHeader).toBeVisible();
 
-    // Both validation_manager files are clickable as direct sidebar leaves.
+    // Both validation refs files are clickable as direct sidebar leaves.
     const dev = page.locator(
-      'a[href="/file/.claude/agent_refs/agent_team__validation_manager/development.md"]',
+      'a[href="/file/.claude/agent_refs/validation/development.md"]',
     );
     const general = page.locator(
-      'a[href="/file/.claude/agent_refs/agent_team__validation_manager/general.md"]',
+      'a[href="/file/.claude/agent_refs/validation/general.md"]',
     );
     await expect(dev).toBeVisible();
     await expect(general).toBeVisible();
@@ -80,15 +80,36 @@ test.describe("spec_driven dogfood", () => {
   test("agent_refs file opens in the reader and shows its H1", async ({ page }) => {
     await page.goto("/");
     const dev = page.locator(
-      'a[href="/file/.claude/agent_refs/agent_team__validation_manager/development.md"]',
+      'a[href="/file/.claude/agent_refs/validation/development.md"]',
     );
     await dev.click();
 
     await expect(page).toHaveURL(
-      /\/file\/\.claude\/agent_refs\/agent_team__validation_manager\/development\.md/,
+      /\/file\/\.claude\/agent_refs\/validation\/development\.md/,
     );
     const readerHeading = page.locator("main").getByRole("heading", { level: 1 }).first();
     await expect(readerHeading).toContainText(/Validation playbook/i);
+  });
+
+  test("Playbooks subgroup is visible and the interview playbook opens", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const playbooksHeader = page.getByRole("heading", { level: 3, name: "Playbooks" });
+    await expect(playbooksHeader).toBeVisible();
+
+    const interview = page.locator(
+      'a[href="/file/.claude/skills/agent_team/playbooks/interview.md"]',
+    );
+    await expect(interview).toBeVisible();
+    await interview.click();
+
+    await expect(page).toHaveURL(
+      /\/file\/\.claude\/skills\/agent_team\/playbooks\/interview\.md/,
+    );
+    const readerHeading = page.locator("main").getByRole("heading", { level: 1 }).first();
+    await expect(readerHeading).toContainText(/Interview playbook/i);
   });
 
   test("opening qa.md renders the structured Q/A view (or markdown fallback) without blank page", async ({

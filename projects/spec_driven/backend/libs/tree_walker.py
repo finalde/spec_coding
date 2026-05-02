@@ -30,7 +30,7 @@ def build_tree(repo_root: Path) -> dict[str, object]:
 def _build_settings(repo_root: Path) -> dict[str, object]:
     return {
         "claude_md": _build_claude_md(repo_root),
-        "agents": _build_agents(repo_root),
+        "playbooks": _build_playbooks(repo_root),
         "skills": _build_skills(repo_root),
         "agent_refs": _build_agent_refs(repo_root),
     }
@@ -43,13 +43,13 @@ def _build_claude_md(repo_root: Path) -> list[dict[str, object]]:
     return []
 
 
-def _build_agents(repo_root: Path) -> list[dict[str, object]]:
-    agents_dir = repo_root / ".claude" / "agents"
-    if not agents_dir.is_dir():
+def _build_playbooks(repo_root: Path) -> list[dict[str, object]]:
+    playbooks_dir = repo_root / ".claude" / "skills" / "agent_team" / "playbooks"
+    if not playbooks_dir.is_dir():
         return []
     entries: list[dict[str, object]] = []
     try:
-        children = list(agents_dir.iterdir())
+        children = list(playbooks_dir.iterdir())
     except OSError:
         return []
     for child in sorted(children, key=lambda p: p.name.lower()):
@@ -59,7 +59,7 @@ def _build_agents(repo_root: Path) -> list[dict[str, object]]:
             continue
         if child.suffix != ".md":
             continue
-        rel = f".claude/agents/{child.name}"
+        rel = f".claude/skills/agent_team/playbooks/{child.name}"
         entries.append(_leaf(child.name, rel))
     return entries
 
@@ -70,14 +70,14 @@ def _build_agent_refs(repo_root: Path) -> list[dict[str, object]]:
         return []
     out: list[dict[str, object]] = []
     try:
-        manager_dirs = list(refs_dir.iterdir())
+        stage_dirs = list(refs_dir.iterdir())
     except OSError:
         return []
-    for manager_dir in sorted(manager_dirs, key=lambda p: p.name.lower()):
-        if _safe_is_symlink(manager_dir) or not manager_dir.is_dir():
+    for stage_dir in sorted(stage_dirs, key=lambda p: p.name.lower()):
+        if _safe_is_symlink(stage_dir) or not stage_dir.is_dir():
             continue
         try:
-            files = list(manager_dir.iterdir())
+            files = list(stage_dir.iterdir())
         except OSError:
             continue
         leaves: list[dict[str, object]] = []
@@ -86,12 +86,12 @@ def _build_agent_refs(repo_root: Path) -> list[dict[str, object]]:
                 continue
             if f.suffix.lower() != ".md":
                 continue
-            rel = f".claude/agent_refs/{manager_dir.name}/{f.name}"
+            rel = f".claude/agent_refs/{stage_dir.name}/{f.name}"
             leaves.append(_leaf(f.name, rel))
         out.append({
             "kind": "folder",
-            "name": manager_dir.name,
-            "path": f".claude/agent_refs/{manager_dir.name}",
+            "name": stage_dir.name,
+            "path": f".claude/agent_refs/{stage_dir.name}",
             "children": leaves,
         })
     return out

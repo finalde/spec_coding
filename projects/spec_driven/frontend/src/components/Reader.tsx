@@ -36,8 +36,8 @@ function collectAllPaths(tree: TreeResponse): Set<string> {
     }
   };
   walk(tree.settings.claude_md);
-  walk(tree.settings.agents);
   walk(tree.settings.skills);
+  walk(tree.settings.playbooks ?? []);
   walk(tree.projects);
   return out;
 }

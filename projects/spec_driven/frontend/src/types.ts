@@ -9,8 +9,8 @@ export interface TreeNode {
 export interface TreeResponse {
   settings: {
     claude_md: TreeNode[];
-    agents: TreeNode[];
     skills: TreeNode[];
+    playbooks?: TreeNode[];
     agent_refs?: TreeNode[];
   };
   projects: TreeNode[];

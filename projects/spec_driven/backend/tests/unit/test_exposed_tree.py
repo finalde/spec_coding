@@ -19,15 +19,22 @@ def test_claude_md_in_subdir_negative(fake_repo: Path) -> None:
     assert tree.is_inside(nested) is False
 
 
-def test_agents_canonical_md_positive(fake_repo: Path) -> None:
+def test_playbook_canonical_md_positive(fake_repo: Path) -> None:
     tree = ExposedTree(fake_repo)
-    p = fake_repo / ".claude" / "agents" / "agent_team__research_manager.md"
+    p = (
+        fake_repo
+        / ".claude"
+        / "skills"
+        / "agent_team"
+        / "playbooks"
+        / "research.md"
+    )
     assert tree.is_inside(p) is True
 
 
-def test_agents_yaml_negative(fake_repo: Path) -> None:
+def test_skills_yaml_negative(fake_repo: Path) -> None:
     tree = ExposedTree(fake_repo)
-    p = fake_repo / ".claude" / "agents" / "foo.yaml"
+    p = fake_repo / ".claude" / "skills" / "agent_team" / "config.yaml"
     p.write_text("x", encoding="utf-8")
     assert tree.is_inside(p) is False
 
@@ -38,11 +45,12 @@ def test_skills_canonical_positive(fake_repo: Path) -> None:
     assert tree.is_inside(p) is True
 
 
-def test_skills_other_md_negative(fake_repo: Path) -> None:
+def test_skills_other_md_positive(fake_repo: Path) -> None:
+    """Any .md under .claude/skills/ is exposed (not just SKILL.md)."""
     tree = ExposedTree(fake_repo)
     p = fake_repo / ".claude" / "skills" / "agent_team" / "README.md"
     p.write_text("x", encoding="utf-8")
-    assert tree.is_inside(p) is False
+    assert tree.is_inside(p) is True
 
 
 def test_specs_final_specs_md_positive(fake_repo: Path) -> None:

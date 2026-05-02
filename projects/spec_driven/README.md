@@ -3,7 +3,8 @@
 A single-user, localhost FastAPI + React viewer/editor for the artifacts produced
 by the spec-driven workflow itself. Browse, render, edit, and assemble
 copy-paste regeneration prompts for every artifact under the project's exposed
-tree (`CLAUDE.md`, `.claude/agents/*.md`, `.claude/skills/**/SKILL.md`, and the
+tree (`CLAUDE.md`, `.claude/skills/**/*.md` including stage playbooks under
+`.claude/skills/agent_team/playbooks/`, `.claude/agent_refs/**/*.md`, and the
 five-stage subfolders under `specs/{task_type}/{task_name}/`).
 
 ## Install

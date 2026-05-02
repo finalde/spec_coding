@@ -1,6 +1,6 @@
 # Validation playbook — task-type-agnostic
 
-This file is **required pre-reading** for `agent_team__validation_manager` on every run, regardless of `task_type`. It captures cross-task-type lessons.
+This file is **required pre-reading** for stages 5 (validation strategy) and 6 (runtime validation) on every run, regardless of `task_type`. It captures cross-task-type lessons. The parent (Claude in the `agent_team` skill) reads this before defining validation levels or validating a work unit. See also `.claude/skills/agent_team/playbooks/validation.md` for the procedural runbook.
 
 Per-task-type playbooks (`development.md`, `ai_video.md`, …) layer on top of this file with task-type-specific moves. When a rule appears in both a per-type file and this one, the per-type file wins.
 
@@ -12,7 +12,7 @@ Tests that mirror the implementation pass when the implementation is wrong in a 
 
 ### 2. Severity flows from blast radius, not from how-recently-it-broke
 
-A subtle XSS in a markdown renderer is `critical` even if it's never been exploited; a flaky test that breaks the cache cadence is `warning` even if it broke the build five times this week. The validation manager's job is to map issue → blast radius, not to weight by recency.
+A subtle XSS in a markdown renderer is `critical` even if it's never been exploited; a flaky test that breaks the cache cadence is `warning` even if it broke the build five times this week. The parent's job is to map issue → blast radius, not to weight by recency.
 
 ### 3. Skipping is a feature, not a failure
 
@@ -30,11 +30,11 @@ Every level run MUST emit `validation.started`, `validation.pass` or `validation
 
 Every spec-pipeline stage (interview, findings, final_specs, validation) supports a `<stage>/promoted.md` sidecar containing user-pinned atomic items (Q/A pairs, FR-NN/AC-NN/SYS-NN blocks, recommendation bullets, etc.). Per `CLAUDE.md → ## Regeneration prompts & autonomous mode → ### Regeneration semantics → ### Pinned items survive regeneration`:
 
-- The validation team MUST add a "promotion preservation" check to every stage 5 strategy. The check verifies that **every pin in `<stage>/promoted.md` appears verbatim in the regenerated artifact**.
+- The parent MUST add a "promotion preservation" check to every stage 5 strategy. The check verifies that **every pin in `<stage>/promoted.md` appears verbatim in the regenerated artifact**.
 - Severity for a missing pin: `critical`. Halts the work unit; reverting silent loss of user-pinned content is the highest-priority class of regression.
 - Severity for an out-of-place pin (in the artifact but at the wrong location, or under a `## Pinned items (orphaned)` section without justification): `blocker`. Standard 3-revision-round cap applies.
 - The check is implemented by parsing both `<stage>/promoted.md` (via the `parse_promoted_text` helper in `libs/promotions.py`) and the regenerated artifact, then asserting that every pin's body appears as a substring of the artifact, modulo whitespace normalization.
-- Stage 6 (project code under `projects/{name}/`) does NOT support promotion in v1; the validation team should NOT generate a promotion-preservation check for stage 6 regenerations.
+- Stage 6 (project code under `projects/{name}/`) does NOT support promotion in v1; the parent should NOT generate a promotion-preservation check for stage 6 regenerations.
 
 ## Standard severity policy
 

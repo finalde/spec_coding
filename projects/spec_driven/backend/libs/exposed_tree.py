@@ -30,17 +30,10 @@ class ExposedTree:
         if parts == ("CLAUDE.md",):
             return True
         if (
-            len(parts) == 3
-            and parts[0] == ".claude"
-            and parts[1] == "agents"
-            and parts[2].endswith(".md")
-        ):
-            return True
-        if (
             len(parts) >= 4
             and parts[0] == ".claude"
             and parts[1] == "skills"
-            and parts[-1] == "SKILL.md"
+            and parts[-1].endswith(".md")
         ):
             return True
         if (

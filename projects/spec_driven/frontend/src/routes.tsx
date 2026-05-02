@@ -26,8 +26,8 @@ function _walk(nodes: ReadonlyArray<TreeNode>, out: string[]): void {
 function flattenAllFiles(tree: TreeResponse): string[] {
   const out: string[] = [];
   _walk(tree.settings.claude_md, out);
-  _walk(tree.settings.agents, out);
   _walk(tree.settings.skills, out);
+  _walk(tree.settings.playbooks ?? [], out);
   _walk(tree.projects, out);
   return out;
 }

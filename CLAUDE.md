@@ -9,13 +9,13 @@ Everything in the spec_driven workflow / `agent_team` pipeline must live in one 
 1. **`CLAUDE.md`** — rules and conventions.
 2. **`.claude/settings.json`** and **`.claude/settings.local.json`** — harness configuration, hooks, permissions, environment.
 3. **`specs/{task_type}/{task_name}/`** — per-task pipeline artifacts (raw + revised prompt, qa.md, findings, spec.md, validation/*).
-4. **`.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/`** — runtime spawn logs (`spawns/{agent_id}/{prompt.md, output.md}`), `events.jsonl`, and any per-round answer JSONs that record the round-trip between parent and a manager agent.
+4. **`.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/`** — runtime spawn logs (`spawns/{worker_id}/{prompt.md, output.md}`), `events.jsonl`, and any per-round answer JSONs that record the round-trip between the parent and the user (e.g., interview answers between rounds).
 
 Rules that follow:
 
 - **Pipeline status is derived from the filesystem, not from memory.** "Stage N is paused / complete" is true iff Stage N's expected artifacts under `specs/{type}/{name}/` are missing / present. Resume logic must read the tree, never trust a memory entry.
 - **Before adding any new mechanism** (a sidecar JSON, a session-scoped store, a lookup file, a side-channel cache), check it lands in one of the four surfaces above. If not, don't add it.
-- **Round-trip artifacts** between parent and a manager agent (e.g., `round1_answers.json` produced by the parent after collecting `AskUserQuestion` responses) live under `.audit/adhoc_agents/{date}/{task_id}/`, NOT inside `specs/` (which is reserved for the canonical, user-facing pipeline output).
+- **Round-trip artifacts** between the parent and workers / the user (e.g., `round1_answers.json` produced by the parent after collecting `AskUserQuestion` responses, or aggregated per-worker outputs) live under `.audit/adhoc_agents/{date}/{task_id}/`, NOT inside `specs/` (which is reserved for the canonical, user-facing pipeline output).
 
 ## Auto-memory is disabled in this repo
 
@@ -44,13 +44,14 @@ spec_coding/
 ├── requirements.txt                       # mirror for pip fallback
 ├── README.md
 ├── .claude/
-│   ├── agents/
-│   │   ├── agent_team__interview_manager.md
-│   │   ├── agent_team__research_manager.md
-│   │   └── agent_team__validation_manager.md
-│   ├── memory/                            # project-scoped auto-memory
+│   ├── agent_refs/                        # accumulated institutional memory per stage
+│   │   ├── interview/{general.md, <task_type>.md}
+│   │   ├── research/{general.md, <task_type>.md}
+│   │   └── validation/{general.md, <task_type>.md}
 │   ├── skills/
-│   │   └── agent_team/SKILL.md            # pipeline orchestrator
+│   │   └── agent_team/
+│   │       ├── SKILL.md                   # pipeline orchestrator (parent-direct)
+│   │       └── playbooks/{interview.md, research.md, validation.md}
 │   └── settings.local.json
 ├── specs/                                 # persistence for the spec-driven workflow
 │   └── {task_type}/{task_name}/
@@ -67,10 +68,10 @@ spec_coding/
 │   └── {name}/{README.md, backend/, frontend/}   # or single-folder Python projects
 ├── ai_videos/                             # task_type=ai_video outputs
 │   └── {name}/...
-└── .audit/                                # gitignored — runtime logs from manager agents
+└── .audit/                                # gitignored — runtime logs from worker spawns
     └── adhoc_agents/{YYYY-MM-DD}/{task_id}/
         ├── events.jsonl                   # append-only event stream
-        └── spawns/{agent_id}/{prompt.md, output.md}
+        └── spawns/{worker_id}/{prompt.md, output.md}
 ```
 
 ## task_type enum
@@ -84,39 +85,42 @@ If the task type is unclear, **ask the user**. Do not invent new task types.
 
 ## The six-stage workflow
 
-1. **Intake** — `specs/{type}/{name}/user_input/`. User submits a raw prompt; Claude revises it (cleans grammar, expands abbreviations, surfaces implicit constraints — never invents requirements). No agent.
-2. **Interview** — `specs/{type}/{name}/interview/qa.md`. `agent_team__interview_manager` analyzes the use case, dynamically builds an interviewer team (one sub-agent per probe category), asks the user **multi-choice questions** via `AskUserQuestion`, and iterates until the team agrees the requirement is crystal clear.
-3. **Research** — `specs/{type}/{name}/findings/`. `agent_team__research_manager` identifies business/use-case research angles, dynamically builds a research team, runs them in parallel, and consolidates a `dossier.md`.
-4. **Spec compilation** — `specs/{type}/{name}/final_specs/spec.md`. Claude takes revised_prompt + qa.md + dossier.md and writes the spec directly. No agent.
-5. **Validation strategy** — `specs/{type}/{name}/validation/`. `agent_team__validation_manager` (strategy mode) builds a validation team that produces a multi-level plan: high-level acceptance criteria, BDD scenarios, system tests, unit tests, plus any non-functional checks the spec requires.
-6. **Execution + streaming validation** — outputs land under `projects/{name}/` or `ai_videos/{name}/`. Claude implements work units against the spec; for each unit, `agent_team__validation_manager` (runtime mode) validates the output against the strategy. Issues loop back as revisions, capped at 3 rounds per unit.
+There is no separate "manager" subagent layer. The parent (Claude in the `agent_team` skill) IS the manager at every stage — it reads the relevant playbook + agent_refs, decides team composition, spawns workers in parallel via the `Agent` tool, and synthesizes the outputs itself. The manager-subagent indirection that previously sat between the parent and the workers has been removed for parallelism, lower latency, and lower communication cost.
+
+1. **Intake** — `specs/{type}/{name}/user_input/`. The user submits a raw prompt; Claude revises it (cleans grammar, expands abbreviations, surfaces implicit constraints — never invents requirements). No workers.
+2. **Interview** — `specs/{type}/{name}/interview/qa.md`. Per `.claude/skills/agent_team/playbooks/interview.md`, Claude identifies probe categories, generates a multi-choice question pool (directly, or via parallel category workers when categories diverge), asks the user via `AskUserQuestion`, and iterates up to 3 rounds.
+3. **Research** — `specs/{type}/{name}/findings/`. Per `.claude/skills/agent_team/playbooks/research.md`, Claude identifies 3–6 business/use-case research angles, spawns one researcher worker per angle in parallel via `Agent`, and synthesizes `dossier.md`.
+4. **Spec compilation** — `specs/{type}/{name}/final_specs/spec.md`. Claude takes revised_prompt + qa.md + dossier.md and writes the spec directly. No workers.
+5. **Validation strategy** — `specs/{type}/{name}/validation/`. Per `.claude/skills/agent_team/playbooks/validation.md` (strategy mode), Claude decides which validation levels apply, spawns one level-specialist worker per level in parallel via `Agent`, and consolidates `strategy.md`.
+6. **Execution + streaming validation** — outputs land under `projects/{name}/` or `ai_videos/{name}/`. Claude implements work units against the spec; for each unit, per `.claude/skills/agent_team/playbooks/validation.md` (runtime mode), Claude spawns validators in parallel via `Agent` against the strategy. Issues loop back as revisions, capped at 3 rounds per unit.
 
 The skill `agent_team` is the single entry point and walks through all six stages. Users invoke it as `/agent_team` (or by asking for a spec-driven task).
 
-## Agent + skill naming
+## Skill + playbook naming
 
-- All repo-owned skills and agents use the `<prefix>__<name>` pattern with a **double underscore**.
+- All repo-owned skills use the `<prefix>__<name>` pattern with a **double underscore**.
 - The pipeline orchestrator skill is `agent_team` (no prefix — it's the top-level workflow).
-- Permanent agents live under `.claude/agents/` and follow `agent_team__<role>`. Only three exist:
-  - `agent_team__interview_manager`
-  - `agent_team__research_manager`
-  - `agent_team__validation_manager`
-- The dynamic sub-agents that managers spawn at runtime are NOT permanent agent files — they are general-purpose agents driven by manager-authored prompts, captured under `.audit/adhoc_agents/{date}/{task_id}/spawns/`.
+- Stage playbooks live under `.claude/skills/agent_team/playbooks/{interview,research,validation}.md`. They are NOT subagent definitions — they are procedural runbooks the parent reads inline at the start of each stage.
+- The `.claude/agents/` folder is reserved for any future permanent subagent definitions; it is currently empty because every spec-driven stage is parent-direct.
+- The workers the parent spawns at runtime (per-category interviewer workers, per-angle researcher workers, per-level validation workers, per-work-unit validators) are general-purpose subagents driven by playbook-defined prompts, captured under `.audit/adhoc_agents/{date}/{task_id}/spawns/`.
 - YAML frontmatter `description` field has a hard ceiling of **500 characters**.
 
-## Agent reference docs (`.claude/agent_refs/`)
+## Stage playbooks and reference docs
 
 A fifth state surface, layered on top of the four declared at the top of this file:
 
-5. **`.claude/agent_refs/<manager_name>/{general.md, <task_type>.md}`** — accumulated institutional memory each manager must consult before defining its team. One folder per permanent manager. `general.md` holds task-type-agnostic principles; `<task_type>.md` (e.g., `development.md`, `ai_video.md`) holds lessons learned from past runs of that task type.
+5. **Stage playbooks and refs** — per-stage procedural runbooks plus per-stage accumulated institutional memory. Two folders, intentionally separate:
+   - `.claude/skills/agent_team/playbooks/{interview,research,validation}.md` — the procedural runbook for each coordinated stage. The parent reads its stage's playbook before acting on that stage. These are the contract for what the parent does.
+   - `.claude/agent_refs/{interview,research,validation}/{general.md, <task_type>.md}` — accumulated institutional memory the parent must consult before deciding team composition. `general.md` holds task-type-agnostic principles; `<task_type>.md` (e.g., `development.md`, `ai_video.md`) holds lessons learned from past runs of that task type. These are what the parent has learned, not what it does.
 
 Rules:
 
-- Each permanent manager (`agent_team__interview_manager`, `agent_team__research_manager`, `agent_team__validation_manager`) MUST read `general.md` for its folder on every invocation, plus `<task_type>.md` when the file exists for the current task's type. The manager's output JSON includes a `pre_reading_consulted` array citing the absolute paths actually loaded; the parent verifies this against the spawn audit and treats a missing array as a critical failure.
-- Per-task-type rules **override** the agent file's defaults when they conflict. The agent file is the contract; the playbook is what the manager has *learned*. Different lifecycles.
-- Updates to these files are surgical (one new principle, one new severity row, one new "required validation move"). They cite the run id where the lesson surfaced. Wholesale rewrites are anti-patterns — the goal is to grow institutional memory, not to refactor it.
-- The `EXPOSED_TREE` of the spec_driven webapp includes `.claude/agent_refs/**/*.md`, so users can view and edit these alongside `CLAUDE.md` and the agent files via the same UX.
-- Why a separate folder, not appendices to the agent files: agent files are **what the manager does**; refs are **what the manager has learned**. As lessons accumulate, embedding everything in the agent file would balloon it past readability.
+- For each coordinated stage (2, 3, 5, 6), the parent MUST read both files BEFORE acting: the playbook for the stage AND `general.md` for the stage's folder under `agent_refs/`. When `<task_type>.md` exists for the current task's type under the same folder, that is also required reading.
+- The parent records the absolute paths it actually read in a `pre_reading_consulted` array on the run's first `events.jsonl` event for that stage (or per-work-unit `validation.started` event in stage 6). A missing or empty array is a critical failure — it means institutional memory wasn't loaded.
+- Per-task-type rules **override** the playbook's defaults when they conflict. The playbook is the contract; the refs are what has been *learned*. Different lifecycles.
+- Updates to ref files are surgical (one new principle, one new severity row, one new "required validation move"). They cite the run id where the lesson surfaced. Wholesale rewrites are anti-patterns — the goal is to grow institutional memory, not to refactor it.
+- The `EXPOSED_TREE` of the spec_driven webapp includes both `.claude/skills/agent_team/playbooks/*.md` and `.claude/agent_refs/**/*.md`, so users can view and edit them alongside `CLAUDE.md` via the same UX.
+- Why two folders, not one: playbooks are **what the parent does**; refs are **what the parent has learned**. As lessons accumulate, embedding everything in the playbook would balloon it past readability.
 
 ## Project rules (under `projects/`)
 
@@ -131,7 +135,7 @@ Rules:
 
 ## Event stream
 
-`.audit/adhoc_agents/{date}/{task_id}/events.jsonl` is append-only JSONL. The validation_manager (runtime mode) writes to it. Lines parse independently, atomic line-sized appends are safe, and the file doubles as the audit trail. Event types: `exec.unit.started`, `exec.unit.completed`, `validation.started`, `validation.issue.raised`, `validation.pass`, `exec.revision.applied`, `pipeline.halted`.
+`.audit/adhoc_agents/{date}/{task_id}/events.jsonl` is append-only JSONL. The parent writes to it during stage 6 runtime validation (and at the start of each coordinated stage to record `pre_reading_consulted`). Lines parse independently, atomic line-sized appends are safe, and the file doubles as the audit trail. Event types: `exec.unit.started`, `exec.unit.completed`, `validation.started`, `validation.issue.raised`, `validation.pass`, `validation.requires_manual_walkthrough`, `exec.revision.applied`, `pipeline.halted`, `regen.delete.planned`, `regen.delete.completed`, `regen.write.completed`.
 
 ## Follow-up prompt handling
 
@@ -187,7 +191,7 @@ No conflicts found in: {list of scanned artifacts that needed no change}
 
 ### 7. Never auto-trigger a full stage regeneration
 
-- Do NOT re-invoke `agent_team__interview_manager`, `agent_team__research_manager`, or `agent_team__validation_manager` from a follow-up.
+- Do NOT re-run stage 2, 3, or 5 in their full coordinated form (with worker spawns and team synthesis) from a follow-up. Surgical patches per the steps above are fine; full regeneration is not.
 - Full regen is a user-triggered action only. The `changelog.md` entries are the user's signal that downstream artifacts were touched; if they want a fresh regen, they say so.
 
 ## Regeneration prompts & autonomous mode
@@ -220,7 +224,7 @@ The webapp's `POST /api/regen-prompt` (FR-14c) builds the prompt body. It always
 When a regeneration prompt asks Claude to re-run one or more stages, the regenerated stage's prior outputs MUST be treated as deleted. The regenerated stage depends ONLY on:
 
 1. The current stage's *input* artifacts (the canonical outputs of the prior stages, used as inputs).
-2. `CLAUDE.md` and shared `.claude/` context (agent definitions, skill definitions).
+2. `CLAUDE.md` and shared `.claude/` context (skill definition, stage playbooks, agent_refs).
 3. The user-input layer (`raw_prompt.md` + every `user_input/follow_ups/*.md`).
 4. **The current stage's `<stage>/promoted.md` sidecar**, when present (see "Pinned items survive regeneration" below).
 
@@ -231,10 +235,10 @@ Per-stage delete-then-regenerate contract:
 | Stage being regenerated | Files to delete first | Files to preserve (NEVER delete) | Inputs the new generation reads |
 |-------------------------|------------------------|----------------------------------|---------------------------------|
 | 1 — Intake | (none — `revised_prompt.md` is rewritten in place from raw + follow-ups; this stage has no other prior outputs) | (n/a) | `user_input/raw_prompt.md`, every `user_input/follow_ups/*.md` |
-| 2 — Interview | `interview/qa.md` | `interview/promoted.md` | `user_input/revised_prompt.md`, `interview/promoted.md`, `CLAUDE.md`, `.claude/agents/agent_team__interview_manager.md`, `.claude/agent_refs/agent_team__interview_manager/*.md` |
-| 3 — Research | every file under `findings/` (`dossier.md` + every `angle-*.md`) **except `findings/promoted.md`** | `findings/promoted.md` | `user_input/revised_prompt.md`, `interview/qa.md`, `findings/promoted.md`, `CLAUDE.md`, `.claude/agents/agent_team__research_manager.md`, `.claude/agent_refs/agent_team__research_manager/*.md` |
+| 2 — Interview | `interview/qa.md` | `interview/promoted.md` | `user_input/revised_prompt.md`, `interview/promoted.md`, `CLAUDE.md`, `.claude/skills/agent_team/SKILL.md`, `.claude/skills/agent_team/playbooks/interview.md`, `.claude/agent_refs/interview/*.md` |
+| 3 — Research | every file under `findings/` (`dossier.md` + every `angle-*.md`) **except `findings/promoted.md`** | `findings/promoted.md` | `user_input/revised_prompt.md`, `interview/qa.md`, `findings/promoted.md`, `CLAUDE.md`, `.claude/skills/agent_team/SKILL.md`, `.claude/skills/agent_team/playbooks/research.md`, `.claude/agent_refs/research/*.md` |
 | 4 — Spec compilation | `final_specs/spec.md` | `final_specs/promoted.md` | `user_input/revised_prompt.md`, `interview/qa.md`, `findings/dossier.md` (+ `findings/angle-*.md` if useful), `final_specs/promoted.md` |
-| 5 — Validation strategy | every file under `validation/` (`strategy.md`, `acceptance_criteria.md`, `bdd_scenarios.md`, `unit_tests.md`, `system_tests.md`, `security.md`, `performance.md`, `accessibility.md`, etc.) **except `validation/promoted.md`** | `validation/promoted.md` | `final_specs/spec.md`, `validation/promoted.md`, `CLAUDE.md`, `.claude/agents/agent_team__validation_manager.md`, `.claude/agent_refs/agent_team__validation_manager/*.md` |
+| 5 — Validation strategy | every file under `validation/` (`strategy.md`, `acceptance_criteria.md`, `bdd_scenarios.md`, `unit_tests.md`, `system_tests.md`, `security.md`, `performance.md`, `accessibility.md`, etc.) **except `validation/promoted.md`** | `validation/promoted.md` | `final_specs/spec.md`, `validation/promoted.md`, `CLAUDE.md`, `.claude/skills/agent_team/SKILL.md`, `.claude/skills/agent_team/playbooks/validation.md`, `.claude/agent_refs/validation/*.md` |
 | 6 — Execution + streaming validation | the entire output project folder (`projects/{name}/` for `task_type=development`, or `ai_videos/{name}/` for `task_type=ai_video`) | (no promoted.md in stage 6 — out of scope for v1) | `final_specs/spec.md`, every file under `validation/`, `CLAUDE.md` |
 
 ### Pinned items survive regeneration
@@ -257,7 +261,7 @@ Operational notes:
 - **Selective module regeneration.** If the regen prompt selects only some of a stage's modules (e.g., regenerate only `validation/security.md` and `validation/performance.md`), delete only those module files, not every file in the stage folder. The default in copy-paste prompts is "all modules selected" → delete the entire stage folder.
 - **`changelog.md` and `.audit/` are NOT regeneration outputs** — they are the audit log. They are never deleted as part of a regeneration; they are appended to with a new entry that records what got deleted and what got regenerated.
 - **Project README and Makefile under `projects/{name}/`** are part of stage 6 outputs and ARE deleted along with the rest of the project folder. The new generation rebuilds them from the spec.
-- **Permanent agent files** (`.claude/agents/agent_team__*.md`) and **the `agent_team` skill** are NOT regeneration outputs — they are part of the harness/shared context. Never deleted by a project-scoped regeneration.
+- **The `agent_team` skill, its stage playbooks (`.claude/skills/agent_team/playbooks/*.md`), and the agent_refs (`.claude/agent_refs/*/*.md`)** are NOT regeneration outputs — they are part of the harness/shared context. Never deleted by a project-scoped regeneration.
 
 Why: surgical edits accumulate path-dependent decisions that diverge from the inputs. The user wants regeneration runs to be a pure function of inputs, so the regen output is a faithful test of "what would these inputs produce today." If the inputs are insufficient to reproduce a load-bearing prior decision, that's a signal the inputs need a follow-up — not a signal to copy the decision forward silently.
 
@@ -271,25 +275,25 @@ How to apply:
 
 Some tools in this harness are **deferred** — their schemas are not loaded at session start and calling them directly fails with `InputValidationError`. They appear by name in the session-start system reminder. To call one, first run `ToolSearch(query="select:<name>", max_results=1)` to load its schema.
 
-**Empirically established scoping (load-bearing for the manager agents):**
+**Empirically established scoping (load-bearing for the parent-direct workflow):**
 
-- **`AskUserQuestion`** is **parent-only**. Subagents return "no matching deferred tools found" when they ToolSearch for it. The `agent_team__interview_manager` handles this by emitting a JSON question pool back to the parent; the parent forwards questions via `AskUserQuestion` and re-invokes the manager with answers attached as input.
-- **`WebSearch` / `WebFetch`** load successfully **at first-level subagent scope** (verified 2026-05-02 inside the four research-angle workers). They also load at parent scope.
-- **The `Agent` (subagent-spawn) tool is parent-only.** Subagents do NOT have access to `Agent`; they cannot spawn further nested subagents. This is the most load-bearing finding for the manager pattern: a manager subagent CANNOT actually spawn its own "team" — only the parent can.
+- **`AskUserQuestion`** is **parent-only**. Subagents return "no matching deferred tools found" when they ToolSearch for it. This is precisely why stage 2 (interview) is parent-direct — only the parent can ask the user questions, so there is no value in sandwiching a manager subagent between the parent and the `AskUserQuestion` call.
+- **`WebSearch` / `WebFetch`** load successfully **at first-level subagent scope** (verified 2026-05-02 inside research-angle workers). They also load at parent scope, which lets the parent run an angle directly when a worker's deferred-tool load fails.
+- **The `Agent` (subagent-spawn) tool is parent-only.** Subagents do NOT have access to `Agent`; they cannot spawn further nested subagents. This is the load-bearing finding that drives the parent-direct model: only the parent can fan out workers in parallel, so the parent must own that responsibility for every coordinated stage.
 
-**Coordination model that follows from the above** (this is the canonical contract; the three permanent manager agents under `.claude/agents/` all follow it):
+**Coordination model (parent-direct):**
 
-1. **The parent is the spawner.** When a stage's manager describes "spawn a team," what actually happens is: the manager-subagent is invoked to *define* the team (angles, categories, validation levels), the parent receives that definition, and the parent calls `Agent` to spawn the workers — possibly in parallel — passing each worker its prompt template plus context paths.
-2. **Workers write their own outputs and audit files.** Each worker writes its artifact to the canonical `specs/{type}/{name}/` location AND its spawn audit (`prompt.md` + `output.md`) under `.audit/adhoc_agents/{date}/{task_id}/spawns/{worker_id}/`. No fabricated spawn folders.
-3. **The manager does synthesis.** After workers finish, the parent re-invokes the manager (or, if synthesis is mechanical enough, performs it directly) with the worker outputs attached or referenced by path. The manager produces the consolidated artifact (`qa.md`, `dossier.md`, `strategy.md`) and returns its absolute path.
-4. **Parent-direct execution** is allowed when the synthesis step is small or when the manager-subagent layer would just shuffle JSON without adding judgment. The manager file documents which steps the parent can elide.
+1. **The parent is the manager.** For each coordinated stage (2, 3, 5, 6), the parent reads the stage's playbook and agent_refs inline, decides team composition (categories / angles / validation levels), and spawns workers itself. There is no manager-subagent layer in between.
+2. **The parent spawns workers in parallel.** All workers for a stage are spawned in a single message with multiple `Agent` tool calls. This is the canonical way to maximize parallelism on this harness.
+3. **Workers write their own outputs and audit files.** Each worker writes its artifact to the canonical `specs/{type}/{name}/` location AND its spawn audit (`prompt.md` + `output.md`) under `.audit/adhoc_agents/{date}/{task_id}/spawns/{worker_id}/`. No fabricated spawn folders.
+4. **The parent does synthesis directly.** After workers finish, the parent reads the worker outputs and produces the consolidated artifact (`qa.md`, `dossier.md`, `strategy.md`) itself.
 
 **Universal rules for deferred tools and team coordination:**
 
-- No silent fallbacks. If a tool fails to load, the agent stops and returns a structured failure (`{status, missing, partial_results_if_any}`) — never paraphrases from training data, never invents citations, never dumps multi-choice questions as inline plaintext, never fabricates "subagent" outputs that the manager actually authored itself.
+- No silent fallbacks. If a tool fails to load, the parent (or the worker) stops and returns a structured failure (`{status, missing, partial_results_if_any}`) — never paraphrases from training data, never invents citations, never dumps multi-choice questions as inline plaintext, never fabricates worker outputs.
 - Plaintext-fallback for `AskUserQuestion` is explicitly forbidden — the multi-choice UX is a hard contract.
-- If a manager refers to "spawning a team" in its own prose, that's shorthand — the actual spawn is parent-driven per the model above. Manager files SHOULD make this explicit at the top.
-- If a new agent discovers a deferred-tool or scoping finding not listed here, update this section and patch the agent contract before proceeding.
+- The parent records `pre_reading_consulted` (absolute paths of playbook + agent_refs files it loaded) in the run's `events.jsonl` at the start of each coordinated stage. A missing array is a critical failure.
+- If a new finding about deferred-tool scoping or worker coordination surfaces, update this section before proceeding.
 
 ## Iteration bounds
 

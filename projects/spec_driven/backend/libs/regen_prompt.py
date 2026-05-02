@@ -63,9 +63,13 @@ STAGE_DEFS: tuple[StageDef, ...] = (
         label="Interview",
         folder="interview",
         invocation=(
-            "Stage 2 (Interview): spawn agent_team__interview_manager. The manager "
-            "defines an interviewer team; the parent runs the team and forwards "
-            "AskUserQuestion calls; consolidated output is interview/qa.md."
+            "Stage 2 (Interview): the parent reads "
+            ".claude/skills/agent_team/playbooks/interview.md plus "
+            ".claude/agent_refs/interview/general.md (and <task_type>.md if "
+            "present) and runs the stage parent-direct — picks probe categories, "
+            "generates the multi-choice question pool (directly or via parallel "
+            "category workers), calls AskUserQuestion, iterates up to 3 rounds, "
+            "and writes interview/qa.md."
         ),
         modules=(
             StageModule(
@@ -81,9 +85,13 @@ STAGE_DEFS: tuple[StageDef, ...] = (
         label="Research",
         folder="findings",
         invocation=(
-            "Stage 3 (Research): spawn agent_team__research_manager. The manager "
-            "defines research angles; the parent runs them in parallel; manager "
-            "synthesizes findings/dossier.md."
+            "Stage 3 (Research): the parent reads "
+            ".claude/skills/agent_team/playbooks/research.md plus "
+            ".claude/agent_refs/research/general.md (and <task_type>.md if "
+            "present) and runs the stage parent-direct — picks 3-6 angles, "
+            "spawns one researcher worker per angle in parallel via the Agent "
+            "tool (single message, multiple tool calls), then synthesizes "
+            "findings/dossier.md."
         ),
         modules=(
             StageModule(
@@ -122,9 +130,13 @@ STAGE_DEFS: tuple[StageDef, ...] = (
         label="Validation strategy",
         folder="validation",
         invocation=(
-            "Stage 5 (Validation strategy): spawn agent_team__validation_manager "
-            "in strategy mode. The manager defines validation levels; the parent "
-            "runs the team; manager synthesizes validation/strategy.md plus per-level files."
+            "Stage 5 (Validation strategy): the parent reads "
+            ".claude/skills/agent_team/playbooks/validation.md (strategy mode) "
+            "plus .claude/agent_refs/validation/general.md (and <task_type>.md "
+            "if present) and runs the stage parent-direct — picks the validation "
+            "levels that apply, spawns one level-specialist worker per level in "
+            "parallel via the Agent tool, then synthesizes validation/strategy.md "
+            "plus per-level files."
         ),
         modules=(
             StageModule(
@@ -171,9 +183,10 @@ STAGE_DEFS: tuple[StageDef, ...] = (
         folder="(projects)",
         invocation=(
             "Stage 6 (Execution + streaming validation): Claude implements work "
-            "units against the spec. For each unit, agent_team__validation_manager "
-            "(runtime mode) validates against the strategy. Issues loop back as "
-            "revisions, capped at 3 rounds per unit."
+            "units against the spec. For each unit, the parent runs the validation "
+            "playbook in runtime mode parent-direct — spawns validators in parallel "
+            "via the Agent tool against the strategy, applies severity policy, and "
+            "loops issues back as revisions, capped at 3 rounds per unit."
         ),
         modules=(
             StageModule(
@@ -376,17 +389,23 @@ def build_regen_prompt(
     parts.append("### Constraints")
     parts.append(
         "- Honor every rule in `CLAUDE.md`: state surfaces (CLAUDE.md, .claude/settings*, "
-        "specs/{type}/{name}/, .audit/...), agent naming (`agent_team__<role>`), "
-        "iteration bounds (3 revisions / 30 minutes per unit)."
+        "specs/{type}/{name}/, .audit/...), iteration bounds (3 revisions / 30 minutes "
+        "per unit)."
     )
     parts.append(
         "- Persist artifacts at canonical paths under "
         f"`specs/{project_type}/{project_name}/...`. No sidecar caches, no hidden state."
     )
     parts.append(
-        "- For stages 2 (interview), 3 (research), and 5 (validation strategy), spawn "
-        "the named manager agent per CLAUDE.md (`agent_team__interview_manager`, "
-        "`agent_team__research_manager`, `agent_team__validation_manager`)."
+        "- For stages 2 (interview), 3 (research), 5 (validation strategy), and 6 "
+        "(runtime validation), the parent runs the stage parent-direct: read the "
+        "matching playbook under `.claude/skills/agent_team/playbooks/{interview|"
+        "research|validation}.md` plus the matching `.claude/agent_refs/{interview|"
+        "research|validation}/{general.md, <task_type>.md}` BEFORE acting, then spawn "
+        "workers in parallel via the `Agent` tool (single message, multiple tool "
+        "calls). Record the absolute paths read in a `pre_reading_consulted` array "
+        "on the run's first event.jsonl entry for the stage. There is no separate "
+        "manager subagent — the parent IS the manager."
     )
     parts.append(
         "- **Read-zero contract**: regeneration deletes prior outputs first; new "

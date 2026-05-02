@@ -15,18 +15,28 @@ if str(BACKEND_ROOT) not in sys.path:
 def fake_repo(tmp_path: Path) -> Path:
     (tmp_path / "CLAUDE.md").write_text("# CLAUDE.md fake\n", encoding="utf-8")
 
-    agents_dir = tmp_path / ".claude" / "agents"
-    agents_dir.mkdir(parents=True)
-    (agents_dir / "agent_team__interview_manager.md").write_text(
-        "# interview manager\n", encoding="utf-8"
-    )
-    (agents_dir / "agent_team__research_manager.md").write_text(
-        "# research manager\n", encoding="utf-8"
-    )
-
     skills_dir = tmp_path / ".claude" / "skills" / "agent_team"
     skills_dir.mkdir(parents=True)
     (skills_dir / "SKILL.md").write_text("# agent_team skill\n", encoding="utf-8")
+
+    playbooks_dir = skills_dir / "playbooks"
+    playbooks_dir.mkdir(parents=True)
+    (playbooks_dir / "interview.md").write_text(
+        "# interview playbook\n", encoding="utf-8"
+    )
+    (playbooks_dir / "research.md").write_text(
+        "# research playbook\n", encoding="utf-8"
+    )
+
+    refs_dir = tmp_path / ".claude" / "agent_refs"
+    (refs_dir / "interview").mkdir(parents=True)
+    (refs_dir / "interview" / "general.md").write_text(
+        "# interview general\n", encoding="utf-8"
+    )
+    (refs_dir / "research").mkdir(parents=True)
+    (refs_dir / "research" / "general.md").write_text(
+        "# research general\n", encoding="utf-8"
+    )
 
     project = tmp_path / "specs" / "development" / "spec_driven"
 

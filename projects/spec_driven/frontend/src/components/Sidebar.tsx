@@ -134,8 +134,10 @@ function buildVisible(tree: TreeResponse, opts: BuildOpts): VisibleNode[] {
   };
 
   pushGroup("group:claude_md", "CLAUDE.md", tree.settings.claude_md);
-  pushGroup("group:agents", "Agents", tree.settings.agents);
   pushGroup("group:skills", "Skills", tree.settings.skills);
+  if (tree.settings.playbooks && tree.settings.playbooks.length > 0) {
+    pushGroup("group:playbooks", "Playbooks", tree.settings.playbooks);
+  }
   if (tree.settings.agent_refs && tree.settings.agent_refs.length > 0) {
     pushNestedGroup("group:agent_refs", "Agent refs", tree.settings.agent_refs);
   }
@@ -488,28 +490,6 @@ export function Sidebar({
         </ul>
       </div>
       <div className="sidebar-subgroup">
-        <h3 className="sidebar-subgroup-header">Agents</h3>
-        <ul className="sidebar-list">
-          {tree.settings.agents.map((f) => (
-            <li key={f.path}>
-              <Link
-                to={`/file/${encodeURI(f.path)}`}
-                className={
-                  selectedPath === f.path
-                    ? "sidebar-leaf sidebar-leaf-selected"
-                    : "sidebar-leaf"
-                }
-                title={f.name}
-              >
-                <span className="sidebar-leaf-text">
-                  {truncateFileName(f.name, 36)}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="sidebar-subgroup">
         <h3 className="sidebar-subgroup-header">Skills</h3>
         <ul className="sidebar-list">
           {tree.settings.skills.map((f) => (
@@ -531,6 +511,30 @@ export function Sidebar({
           ))}
         </ul>
       </div>
+      {tree.settings.playbooks && tree.settings.playbooks.length > 0 && (
+        <div className="sidebar-subgroup">
+          <h3 className="sidebar-subgroup-header">Playbooks</h3>
+          <ul className="sidebar-list">
+            {tree.settings.playbooks.map((f) => (
+              <li key={f.path}>
+                <Link
+                  to={`/file/${encodeURI(f.path)}`}
+                  className={
+                    selectedPath === f.path
+                      ? "sidebar-leaf sidebar-leaf-selected"
+                      : "sidebar-leaf"
+                  }
+                  title={f.name}
+                >
+                  <span className="sidebar-leaf-text">
+                    {truncateFileName(f.name, 36)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {tree.settings.agent_refs && tree.settings.agent_refs.length > 0 && (
         <div className="sidebar-subgroup">
           <h3 className="sidebar-subgroup-header">Agent refs</h3>

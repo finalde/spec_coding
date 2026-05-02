@@ -46,8 +46,10 @@ def test_embedded_nul_rejected(fake_repo: Path) -> None:
 
 
 def test_dotfile_inside_exposed_tree_resolves(fake_repo: Path) -> None:
-    out = safe_resolve(".claude/agents/agent_team__interview_manager.md", fake_repo)
-    assert out == Path(".claude/agents/agent_team__interview_manager.md")
+    out = safe_resolve(
+        ".claude/skills/agent_team/playbooks/interview.md", fake_repo
+    )
+    assert out == Path(".claude/skills/agent_team/playbooks/interview.md")
 
 
 def test_drive_letter_rejected(fake_repo: Path) -> None:

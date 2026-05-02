@@ -10,13 +10,13 @@ def test_basic_shape(fake_repo: Path) -> None:
     assert list(tree.keys()) == ["settings", "projects"]
     settings = tree["settings"]
     assert isinstance(settings, dict)
-    assert list(settings.keys()) == ["claude_md", "agents", "skills", "agent_refs"]
+    assert list(settings.keys()) == ["claude_md", "playbooks", "skills", "agent_refs"]
 
 
 def test_missing_folder_for_absent_stage(tmp_path: Path) -> None:
     (tmp_path / "CLAUDE.md").write_text("x", encoding="utf-8")
-    (tmp_path / ".claude" / "agents").mkdir(parents=True)
-    (tmp_path / ".claude" / "skills").mkdir(parents=True)
+    (tmp_path / ".claude" / "skills" / "agent_team" / "playbooks").mkdir(parents=True)
+    (tmp_path / ".claude" / "skills").mkdir(parents=True, exist_ok=True)
     project = tmp_path / "specs" / "development" / "spec_driven"
     (project / "user_input").mkdir(parents=True)
     (project / "user_input" / "raw_prompt.md").write_text("x", encoding="utf-8")

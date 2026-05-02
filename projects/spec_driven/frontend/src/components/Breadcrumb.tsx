@@ -18,11 +18,11 @@ function buildSegments(filePath: string): Segment[] {
       { label: "CLAUDE.md", href: null },
     ];
   }
-  if (filePath.startsWith(".claude/agents/")) {
+  if (filePath.startsWith(".claude/skills/agent_team/playbooks/")) {
     const filename = filePath.split("/").pop() ?? filePath;
     return [
       { label: "Settings", href: null },
-      { label: "Agents", href: null },
+      { label: "Playbooks", href: null },
       { label: filename, href: null },
     ];
   }
@@ -34,6 +34,16 @@ function buildSegments(filePath: string): Segment[] {
       { label: "Settings", href: null },
       { label: "Skills", href: null },
       { label: `${skillName}/${filename}`, href: null },
+    ];
+  }
+  if (filePath.startsWith(".claude/agent_refs/")) {
+    const parts = filePath.split("/");
+    const stage = parts[2] ?? "";
+    const filename = parts[parts.length - 1] ?? "";
+    return [
+      { label: "Settings", href: null },
+      { label: "Agent refs", href: null },
+      { label: `${stage}/${filename}`, href: null },
     ];
   }
   // Project paths: specs/{type}/{name}/{stage}/{filename...}
