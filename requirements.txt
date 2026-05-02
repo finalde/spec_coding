@@ -1,10 +1,5 @@
 # Monorepo Python dependencies (repo-level)
-# Add package groups from subprojects using nested -r includes.
+# Each project under projects/ owns its requirements.txt; add a -r line below
+# when introducing a new project.
 
--r tools/mcp_youtube/requirements.txt
--r tools/ollama_cursor_proxy/requirements.txt
--r projects/ralph_loop/requirements.txt
--e ./projects/ralph_loop
--r projects/trend_radar/requirements.txt
--r projects/char3d_gen/requirements.txt
-
+-r projects/spec_studio/requirements.txt

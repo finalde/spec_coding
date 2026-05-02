@@ -1,0 +1,21 @@
+[project]
+name = "spec_coding"
+version = "0.1.0"
+description = "Spec-coding workflow + spec_studio platform (FastAPI + React)"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.10",
+    "pyyaml>=6.0",
+    "sse-starlette>=2.2",
+    "claude-agent-sdk>=0.1.4",
+    "anyio>=4.7",
+]
+
+[tool.uv]
+package = false
+
+# `uv sync` reads from this file and reconciles the .venv. Per-project requirements.txt
+# files under projects/<name>/ remain as documentation aids but pyproject.toml is canonical.

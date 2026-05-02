@@ -206,9 +206,12 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Claude
+# Claude — track .claude/ and its content (agents, skills, memory) by default,
+# but exclude per-session ephemeral state and per-machine permission allowlists.
 !.claude/
 !.claude/**
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
 
 # Agent team audit trail (local runtime artifacts — interview, research,
 # validation, findings, self-evolution logs). Not committed.
