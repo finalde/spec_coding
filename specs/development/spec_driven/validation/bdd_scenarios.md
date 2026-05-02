@@ -372,8 +372,9 @@ Conventions used below:
     And the prompt opens with `# EXECUTION MODE: INTERACTIVE`
     And the prompt inlines `revised_prompt.md` (or `raw_prompt.md` if missing)
     And the `### Constraints` section includes the read-zero language (delete-then-regenerate)
-    And the assembled prompt is shown inside a `<details>` element with a "Copy to clipboard" button
-    And the breakdown line reads `1 stages selected, 0 follow-ups inlined, autonomous=false, X KB`
+    And the assembled prompt is rendered inline inside a bordered `regen-prompt-block` (no inner `<details>`)
+    And the prompt block has a header bar containing the title "Assembled prompt", a "Wrap" toggle (default checked), and a prominent **Copy** button (label "Copy")
+    And the breakdown line reads `1 stages selected, 0 follow-ups inlined, autonomous=false, X KB` in the actions row beside "Build prompt"
     And no warning banner is shown (response.warning is null)
 
   Scenario: Toggling Autonomous mode flips header and inserts the imperative line
@@ -394,14 +395,22 @@ Conventions used below:
     Given the assembled prompt's byte length would exceed 1048576
     When the user clicks "Build prompt"
     Then the response is `413 {"detail": {"kind": "too_large"}}`
-    And no `<details>` body is rendered
+    And the `regen-prompt-block` is not rendered
     And an error banner names the kind
 
-  Scenario: Copy-to-clipboard flips its label briefly
-    Given a prompt has been built
-    When the user clicks "Copy to clipboard"
+  Scenario: Copy flips its label briefly
+    Given a prompt has been built and the `regen-prompt-block` is visible
+    When the user clicks the **Copy** button in the prompt block's header bar
     Then the button label reads "Copied!" for ~1.5 seconds
     And the system clipboard contains the full prompt text
+
+  Scenario: Soft-wrap toggle controls prompt-body wrapping
+    Given a prompt has been built and the `regen-prompt-block` is visible
+    And the "Wrap" checkbox in the header bar is checked by default
+    Then the `<pre>` body has `white-space: pre-wrap` and long lines wrap inside the block
+    When the user unchecks the "Wrap" checkbox
+    Then the `<pre>` body switches to fixed-width with horizontal scroll for lines wider than the block
+    And the wrap state is NOT persisted to `localStorage`
 
 ---
 

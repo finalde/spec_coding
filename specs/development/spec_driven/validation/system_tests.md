@@ -598,7 +598,7 @@ Action:
 Assertions:
 1. Small case: response is 200, `warning === null`, `bytes` < 50_000, no warning banner in DOM. Breakdown line reads `{N} stages selected, {K} follow-ups inlined, autonomous=false, {bytes} KB`.
 2. Medium case: response is 200, `warning` is a non-empty string, `bytes` is in `[50_000, 1_048_576]`, prompt body is full-length (NOT truncated — assert character count of the returned `prompt` matches `bytes`). UI renders a muted warning banner reading `warning: {warning} — verify your selection before pasting`.
-3. Large case: response is **HTTP 413** with JSON body `{"detail": {"kind": "too_large", "bytes": <count>, ...}}`. UI surfaces the error inline; no prompt is opened in `<details>`.
+3. Large case: response is **HTTP 413** with JSON body `{"detail": {"kind": "too_large", "bytes": <count>, ...}}`. UI surfaces the error inline; the `regen-prompt-block` is not rendered.
 4. Across all cases, no 5xx; backend never silently truncates.
 
 Spec refs: FR-14c, FR-42(d)(e), AC-19.
@@ -618,7 +618,7 @@ Action:
 2. Toggle Autonomous ON.
 3. Select all six stages, default modules.
 4. Click "Build prompt".
-5. Expand the `<details>`, copy the assembled prompt, and inspect it.
+5. The assembled prompt renders inline inside the `regen-prompt-block`; click the **Copy** button in the header bar (or read the `<pre>` body directly) and inspect the prompt.
 6. Toggle Autonomous OFF and rebuild.
 7. Compare the two assembled prompts.
 

@@ -2,7 +2,7 @@
 
 Stage 1 output. Auto-regenerated from `raw_prompt.md` + every `user_input/follow_ups/*.md` in numerical order.
 
-Last regenerated: 2026-05-03 (autonomous full-pipeline regen with pin-001 preserved).
+Last regenerated: 2026-05-03 (follow-up 002 auto-regen — friendly regen-prompt copy UI).
 
 ---
 
@@ -50,7 +50,7 @@ The main pane renders the selected file (Markdown rendered as HTML; YAML/JSON sh
 
 ### Regeneration tooling (added by follow-up 001)
 
-- **Per-stage Regenerate panel** on every stage file: collapsible widget with module checkboxes (default all checked), an autonomous-mode toggle, and an expandable area showing the copy-paste prompt with a Copy button. The prompt is assembled server-side from the current `revised_prompt.md` + every `follow_ups/*.md`.
+- **Per-stage Regenerate panel** on every stage file: collapsible widget with module checkboxes (default all checked), an autonomous-mode toggle, and a "Build prompt" button. After build the assembled prompt is rendered inline inside a bordered block with a header bar carrying the title, a soft-wrap toggle, and a prominent **Copy** button (per follow-up 002 — no inner `<details>` to expand). The prompt is assembled server-side from the current `revised_prompt.md` + every `follow_ups/*.md`.
 - **Project parent page** at `/project/{type}/{name}` showing the stage map and a single master regen panel that builds one combined prompt across the chosen stages and modules.
 - The autonomous-mode toggle is persisted in `localStorage`. Default: off.
 

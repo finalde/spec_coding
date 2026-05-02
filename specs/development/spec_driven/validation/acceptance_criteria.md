@@ -307,8 +307,8 @@ And the user can select any subset of stages and modules
 And an `Autonomous mode` toggle persists in `localStorage["spec_driven.autonomous_mode.v1"]` and is the same value as on per-stage panels (synced via `storage` events for cross-tab and an in-process subscription for same-tab)
 When the user clicks `Build prompt`
 Then the frontend issues `POST http://localhost:8765/api/regen-prompt` with the chosen subset
-And on success the assembled prompt is rendered inside a `<details>` element with a `Copy to clipboard` button
-And a one-line breakdown reads `{N} stages selected, {K} follow-ups inlined, autonomous={true|false}, {bytes} KB`
+And on success the assembled prompt is rendered inline (no inner `<details>`) inside a bordered `regen-prompt-block` whose header bar carries the title, a "Wrap" soft-wrap toggle (default ON), and a prominent **Copy** button that flips its label to "Copied!" for ~1.5s on click
+And a one-line breakdown reads `{N} stages selected, {K} follow-ups inlined, autonomous={true|false}, {bytes} KB` in the actions row beside the `Build prompt` button
 And when the response carries a non-null `warning` a muted banner with class `regen-warning` reads `warning: {warning} — verify your selection before pasting`
 
 Spec refs: FR-14b, FR-14c, FR-43, FR-44, AC-22

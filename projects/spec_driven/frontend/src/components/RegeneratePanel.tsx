@@ -46,6 +46,7 @@ export function RegeneratePanel({
   const [response, setResponse] = useState<RegenPromptResponse | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [softWrap, setSoftWrap] = useState(true);
 
   useEffect(() => {
     const unsub = subscribeAutonomous(setAutonomous);
@@ -222,16 +223,7 @@ export function RegeneratePanel({
             {building ? "Building…" : "Build prompt"}
           </button>
           {response && (
-            <>
-              <button
-                type="button"
-                className="regen-copy-btn"
-                onClick={() => void onCopy()}
-              >
-                {copied ? "Copied!" : "Copy to clipboard"}
-              </button>
-              <span className="regen-summary-line">{summaryLine}</span>
-            </>
+            <span className="regen-summary-line">{summaryLine}</span>
           )}
         </div>
         {buildError && (
@@ -245,12 +237,37 @@ export function RegeneratePanel({
           </div>
         )}
         {response && (
-          <details className="regen-prompt-details">
-            <summary>View assembled prompt</summary>
-            <pre className="regen-prompt-pre" tabIndex={0}>
+          <div className="regen-prompt-block">
+            <div className="regen-prompt-header">
+              <span className="regen-prompt-title">Assembled prompt</span>
+              <label className="regen-wrap-toggle">
+                <input
+                  type="checkbox"
+                  checked={softWrap}
+                  onChange={(e) => setSoftWrap(e.target.checked)}
+                />{" "}
+                Wrap
+              </label>
+              <button
+                type="button"
+                className="regen-copy-btn-prominent"
+                onClick={() => void onCopy()}
+                aria-live="polite"
+              >
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <pre
+              className={
+                softWrap
+                  ? "regen-prompt-pre regen-prompt-pre--wrap"
+                  : "regen-prompt-pre"
+              }
+              tabIndex={0}
+            >
               {response.prompt}
             </pre>
-          </details>
+          </div>
         )}
       </div>
     </details>
