@@ -1,93 +1,121 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { saveFile } from "../api";
 
-export interface EditorProps {
+interface EditorProps {
   filePath: string;
   initialText: string;
-  onSaved: (newText: string) => void;
+  onSaved: (text: string) => void;
   onCancel: () => void;
 }
 
-export function Editor({ filePath, initialText, onSaved, onCancel }: EditorProps): JSX.Element {
-  const [text, setText] = useState<string>(initialText);
-  const [status, setStatus] = useState<
-    | { kind: "idle" }
-    | { kind: "saving" }
-    | { kind: "error"; message: string }
-    | { kind: "saved" }
-  >({ kind: "idle" });
-  const taRef = useRef<HTMLTextAreaElement>(null);
+type Status = "idle" | "saving" | "error" | "saved";
 
-  useEffect(() => {
-    setText(initialText);
-    setStatus({ kind: "idle" });
-  }, [initialText, filePath]);
+export function Editor({
+  filePath,
+  initialText,
+  onSaved,
+  onCancel,
+}: EditorProps): JSX.Element {
+  const [text, setText] = useState(initialText);
+  const [lastSavedText, setLastSavedText] = useState(initialText);
+  const [status, setStatus] = useState<Status>("idle");
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
 
-  useEffect(() => {
-    if (taRef.current) taRef.current.focus();
-  }, [filePath]);
+  const dirty = text !== lastSavedText;
 
-  const dirty = text !== initialText;
-
-  const onSave = async (): Promise<void> => {
-    setStatus({ kind: "saving" });
+  const doSave = useCallback(async (): Promise<void> => {
+    if (!dirty) return;
+    setStatus("saving");
     const result = await saveFile(filePath, text);
     if (result.ok) {
-      setStatus({ kind: "saved" });
+      setLastSavedText(text);
+      setStatus("saved");
+      setErrorBanner(null);
       onSaved(text);
     } else {
-      setStatus({ kind: "error", message: `${result.error.error}${result.error.kind ? ` (${result.error.kind})` : ""}` });
+      const errKind = result.error.kind ?? result.error.error ?? "save_failed";
+      setStatus("error");
+      setErrorBanner(`${result.status} ${errKind}`);
     }
-  };
+  }, [dirty, filePath, text, onSaved]);
 
-  const onDiscard = (): void => {
-    setText(initialText);
-    setStatus({ kind: "idle" });
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-      e.preventDefault();
-      void onSave();
-    }
-  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (dirty) {
+          void doSave();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [doSave, dirty]);
 
   return (
-    <div className="editor-pane">
-      <div className="editor-toolbar" role="toolbar" aria-label="Editor actions">
+    <div className="editor">
+      <div className="editor-toolbar">
+        <span className="editor-file-label">
+          {filePath}
+          {dirty && (
+            <span
+              className="editor-dirty-dot"
+              aria-label="Unsaved changes"
+              title="Unsaved changes"
+            />
+          )}
+        </span>
         <button
           type="button"
-          className="editor-button editor-save"
-          onClick={() => void onSave()}
-          disabled={!dirty || status.kind === "saving"}
+          className="editor-btn editor-save"
+          onClick={() => void doSave()}
+          disabled={!dirty || status === "saving"}
+          aria-label="Save"
         >
-          {status.kind === "saving" ? "Saving…" : "Save (Ctrl+S)"}
+          Save
         </button>
         <button
           type="button"
-          className="editor-button"
-          onClick={onDiscard}
-          disabled={!dirty || status.kind === "saving"}
+          className="editor-btn editor-discard"
+          onClick={() => {
+            setText(lastSavedText);
+            setStatus("idle");
+            setErrorBanner(null);
+          }}
+          disabled={!dirty}
+          aria-label="Discard changes"
         >
-          Discard changes
+          Discard
         </button>
-        <button type="button" className="editor-button editor-cancel" onClick={onCancel}>
+        <button
+          type="button"
+          className="editor-btn editor-close"
+          onClick={onCancel}
+          aria-label="Close editor"
+        >
           Close editor
         </button>
-        <span className="editor-status" aria-live="polite">
-          {status.kind === "error" && <span className="editor-status-error">Error: {status.message}</span>}
-          {status.kind === "saved" && !dirty && <span className="editor-status-ok">Saved.</span>}
-          {dirty && status.kind !== "error" && <span className="editor-status-dirty">Unsaved changes</span>}
+        <span className="editor-status" role="status" aria-live="polite">
+          {dirty
+            ? "Unsaved changes"
+            : status === "saved"
+              ? "Saved."
+              : ""}
         </span>
       </div>
+      {errorBanner && (
+        <div className="editor-error-banner" role="alert">
+          {errorBanner}
+        </div>
+      )}
       <textarea
         ref={taRef}
         className="editor-textarea"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKeyDown}
-        spellCheck={false}
         aria-label={`Edit ${filePath}`}
+        spellCheck={false}
       />
     </div>
   );

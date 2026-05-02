@@ -1,241 +1,258 @@
 import { useEffect, useMemo, useState } from "react";
-import { buildRegenPrompt, fetchStages, type StageDef } from "../api";
-import { loadAutonomous, saveAutonomous, subscribeAutonomous } from "../autonomousMode";
+import {
+  buildRegenPrompt,
+  fetchStages,
+  RegenPromptError,
+  RegenPromptResponse,
+  StageDef,
+  StagesResponse,
+} from "../api";
+import {
+  loadAutonomous,
+  saveAutonomous,
+  subscribeAutonomous,
+} from "../autonomousMode";
 
-export interface RegeneratePanelProps {
+interface RegeneratePanelProps {
   projectType: string;
   projectName: string;
   stageHint?: string;
+  // When true, shows ALL stages (project-level / master) regardless of stageHint.
+  showAll?: boolean;
 }
 
-const STAGE_FOLDER_TO_ID: Record<string, string> = {
-  user_input: "intake",
-  interview: "interview",
-  findings: "research",
-  final_specs: "spec",
-  validation: "validation_strategy",
-};
+interface ModuleSelection {
+  // stageId -> set of relative_path's that are checked
+  [stageId: string]: Set<string>;
+}
+
+function formatBytes(n: number): string {
+  const kb = n / 1024;
+  return `${kb.toLocaleString(undefined, { maximumFractionDigits: 1 })} KB`;
+}
 
 export function RegeneratePanel({
   projectType,
   projectName,
   stageHint,
+  showAll,
 }: RegeneratePanelProps): JSX.Element {
-  const [open, setOpen] = useState<boolean>(false);
-  const [stages, setStages] = useState<StageDef[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [stages, setStages] = useState<StagesResponse | null>(null);
+  const [stageError, setStageError] = useState<string | null>(null);
+  const [autonomous, setAutonomous] = useState(loadAutonomous());
+  const [selection, setSelection] = useState<ModuleSelection>({});
+  const [stageChecked, setStageChecked] = useState<Record<string, boolean>>({});
+  const [building, setBuilding] = useState(false);
+  const [response, setResponse] = useState<RegenPromptResponse | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeAutonomous(setAutonomous);
+    return unsub;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    setStages(null);
-    setLoadError(null);
     fetchStages(projectType, projectName)
-      .then((r) => {
-        if (!cancelled) setStages(r.stages);
+      .then((s) => {
+        if (cancelled) return;
+        setStages(s);
+        // Default: all checked
+        const sel: ModuleSelection = {};
+        const stCheck: Record<string, boolean> = {};
+        for (const st of s.stages) {
+          sel[st.id] = new Set(st.modules.map((m) => m.relative_path));
+          stCheck[st.id] = true;
+        }
+        setSelection(sel);
+        setStageChecked(stCheck);
       })
-      .catch((e) => {
-        if (!cancelled) setLoadError(String(e));
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setStageError(e instanceof Error ? e.message : "stages fetch failed");
       });
     return () => {
       cancelled = true;
     };
   }, [projectType, projectName]);
 
-  const stageId = stageHint ? STAGE_FOLDER_TO_ID[stageHint] : undefined;
-  const stage = useMemo(
-    () => (stages ? stages.find((s) => s.id === stageId) ?? null : null),
-    [stages, stageId],
-  );
+  const visibleStages: StageDef[] = useMemo(() => {
+    if (!stages) return [];
+    if (showAll) return stages.stages;
+    if (stageHint) {
+      const match = stages.stages.find(
+        (s) => s.folder === stageHint || s.id === stageHint,
+      );
+      return match ? [match] : stages.stages;
+    }
+    return stages.stages;
+  }, [stages, showAll, stageHint]);
 
-  if (!stage) {
-    return (
-      <details className="regen-panel" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary className="regen-summary">
-          <span className="regen-summary-title">Regenerate</span>
-          <span className="regen-summary-hint">
-            {loadError ? `(${loadError})` : "view the project page for whole-project regeneration"}
-          </span>
-        </summary>
-      </details>
-    );
-  }
-
-  return (
-    <details className="regen-panel" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-      <summary className="regen-summary">
-        <span className="regen-summary-title">Regenerate {stage.label}</span>
-        <span className="regen-summary-hint">— pick modules and copy-paste prompt</span>
-      </summary>
-      <RegenForm
-        projectType={projectType}
-        projectName={projectName}
-        stages={[stage]}
-        defaultSelected={Object.fromEntries([[stage.id, stage.modules.map((m) => m.id)]])}
-      />
-    </details>
-  );
-}
-
-export interface RegenFormProps {
-  projectType: string;
-  projectName: string;
-  stages: StageDef[];
-  defaultSelected: Record<string, string[]>;
-}
-
-export function RegenForm({
-  projectType,
-  projectName,
-  stages,
-  defaultSelected,
-}: RegenFormProps): JSX.Element {
-  const [selected, setSelected] = useState<Record<string, string[]>>(defaultSelected);
-  const [autonomous, setAutonomous] = useState<boolean>(() => loadAutonomous());
-  const [prompt, setPrompt] = useState<string | null>(null);
-  const [busy, setBusy] = useState<boolean>(false);
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
-
-  useEffect(() => {
-    return subscribeAutonomous((v) => setAutonomous(v));
-  }, []);
-
-  useEffect(() => {
-    setSelected(defaultSelected);
-    setPrompt(null);
-    setCopyState("idle");
-  }, [JSON.stringify(defaultSelected)]);
-
-  const toggleModule = (stageId: string, moduleId: string): void => {
-    setSelected((prev) => {
+  const toggleModule = (stageId: string, relPath: string): void => {
+    setSelection((prev) => {
       const cur = new Set(prev[stageId] ?? []);
-      if (cur.has(moduleId)) cur.delete(moduleId);
-      else cur.add(moduleId);
-      return { ...prev, [stageId]: Array.from(cur) };
+      if (cur.has(relPath)) cur.delete(relPath);
+      else cur.add(relPath);
+      return { ...prev, [stageId]: cur };
     });
   };
 
   const toggleStage = (stageId: string): void => {
-    setSelected((prev) => {
-      const has = (prev[stageId] ?? []).length > 0;
-      const stage = stages.find((s) => s.id === stageId);
-      return {
-        ...prev,
-        [stageId]: has ? [] : (stage ? stage.modules.map((m) => m.id) : []),
-      };
-    });
+    setStageChecked((prev) => ({ ...prev, [stageId]: !prev[stageId] }));
   };
 
-  const onAutonomousToggle = (v: boolean): void => {
+  const onAutonomousChange = (v: boolean): void => {
     setAutonomous(v);
     saveAutonomous(v);
   };
 
   const onBuild = async (): Promise<void> => {
-    setBusy(true);
-    setCopyState("idle");
+    if (!stages) return;
+    setBuilding(true);
+    setBuildError(null);
+    setResponse(null);
     try {
-      const stageIds = stages
-        .map((s) => s.id)
-        .filter((id) => (selected[id] ?? []).length > 0);
-      const text = await buildRegenPrompt({
+      const stageIds: string[] = [];
+      const modules: Record<string, string[]> = {};
+      for (const st of visibleStages) {
+        if (!stageChecked[st.id]) continue;
+        stageIds.push(st.id);
+        modules[st.id] = Array.from(selection[st.id] ?? []);
+      }
+      const r = await buildRegenPrompt({
         project_type: projectType,
         project_name: projectName,
         stages: stageIds,
-        modules: selected,
+        modules,
         autonomous,
       });
-      setPrompt(text);
+      setResponse(r);
     } catch (e) {
-      setPrompt(`(error: ${String(e)})`);
+      if (e instanceof RegenPromptError) {
+        setBuildError(`${e.status} ${e.body.kind ?? e.body.error ?? "error"}`);
+      } else {
+        setBuildError(e instanceof Error ? e.message : "build failed");
+      }
     } finally {
-      setBusy(false);
+      setBuilding(false);
     }
   };
 
   const onCopy = async (): Promise<void> => {
-    if (!prompt) return;
+    if (!response) return;
     try {
-      await navigator.clipboard.writeText(prompt);
-      setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1500);
+      await navigator.clipboard.writeText(response.prompt);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      setCopyState("error");
+      // ignore
     }
   };
 
+  if (stageError) {
+    return (
+      <div className="regen-panel regen-error" role="alert">
+        regen panel error: {stageError}
+      </div>
+    );
+  }
+  if (!stages) {
+    return <div className="regen-panel">Loading stages…</div>;
+  }
+
+  const summaryLine = response
+    ? `${response.selected_stages_count} ${response.selected_stages_count === 1 ? "stage" : "stages"} selected, ${response.follow_ups_count} ${response.follow_ups_count === 1 ? "follow-up" : "follow-ups"} inlined, autonomous=${response.autonomous}, ${formatBytes(response.bytes)}`
+    : "";
+
   return (
-    <div className="regen-form">
-      {stages.map((s) => (
-        <fieldset key={s.id} className="regen-stage">
-          <legend className="regen-stage-legend">
-            <label className="regen-stage-toggle">
-              <input
-                type="checkbox"
-                checked={(selected[s.id] ?? []).length > 0}
-                onChange={() => toggleStage(s.id)}
-              />
-              <strong>{s.label}</strong>
-            </label>
-          </legend>
-          <p className="regen-stage-invocation">{s.invocation}</p>
-          <ul className="regen-module-list">
-            {s.modules.map((m) => {
-              const checked = (selected[s.id] ?? []).includes(m.id);
-              return (
-                <li key={m.id} className="regen-module">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleModule(s.id, m.id)}
-                    />
-                    <code>{m.label}</code> — {m.description}
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        </fieldset>
-      ))}
-      <div className="regen-controls">
+    <details className="regen-panel">
+      <summary className="regen-panel-summary">Regenerate</summary>
+      <div className="regen-panel-body">
         <label className="regen-autonomous">
           <input
             type="checkbox"
             checked={autonomous}
-            onChange={(e) => onAutonomousToggle(e.target.checked)}
+            onChange={(e) => onAutonomousChange(e.target.checked)}
           />
-          <strong>Autonomous mode</strong>
-          <span className="regen-autonomous-hint">
-            (Claude won't ask questions — uses best judgment for unclear cases.)
-          </span>
+          Autonomous mode
         </label>
-        <button
-          type="button"
-          className="editor-button editor-save"
-          onClick={() => void onBuild()}
-          disabled={busy}
-        >
-          {busy ? "Building…" : "Build prompt"}
-        </button>
+        {visibleStages.map((st) => (
+          <fieldset key={st.id} className="regen-stage">
+            <legend className="regen-stage-legend">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={stageChecked[st.id] !== false}
+                  onChange={() => toggleStage(st.id)}
+                />{" "}
+                {st.label}
+              </label>
+              <span className="regen-stage-folder">{st.folder}</span>
+            </legend>
+            <ul className="regen-modules">
+              {st.modules.map((m) => {
+                const checked = selection[st.id]?.has(m.relative_path) ?? false;
+                return (
+                  <li key={m.relative_path}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleModule(st.id, m.relative_path)}
+                      />{" "}
+                      <span className="regen-module-label">{m.label}</span>{" "}
+                      <span className="regen-module-path">
+                        {m.relative_path}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </fieldset>
+        ))}
+        <div className="regen-actions">
+          <button
+            type="button"
+            className="regen-build-btn"
+            onClick={() => void onBuild()}
+            disabled={building}
+          >
+            {building ? "Building…" : "Build prompt"}
+          </button>
+          {response && (
+            <>
+              <button
+                type="button"
+                className="regen-copy-btn"
+                onClick={() => void onCopy()}
+              >
+                {copied ? "Copied!" : "Copy to clipboard"}
+              </button>
+              <span className="regen-summary-line">{summaryLine}</span>
+            </>
+          )}
+        </div>
+        {buildError && (
+          <div className="editor-error-banner" role="alert">
+            {buildError}
+          </div>
+        )}
+        {response?.warning && (
+          <div className="regen-warning" role="status">
+            warning: {response.warning} — verify your selection before pasting
+          </div>
+        )}
+        {response && (
+          <details className="regen-prompt-details">
+            <summary>View assembled prompt</summary>
+            <pre className="regen-prompt-pre" tabIndex={0}>
+              {response.prompt}
+            </pre>
+          </details>
+        )}
       </div>
-      {prompt !== null && (
-        <details className="regen-prompt-details" open>
-          <summary>
-            Copy-paste prompt ({prompt.length.toLocaleString()} chars)
-            <button
-              type="button"
-              className="editor-button regen-copy"
-              onClick={(e) => {
-                e.preventDefault();
-                void onCopy();
-              }}
-            >
-              {copyState === "copied" ? "Copied!" : copyState === "error" ? "Copy failed" : "Copy"}
-            </button>
-          </summary>
-          <pre className="regen-prompt-pre">{prompt}</pre>
-        </details>
-      )}
-    </div>
+    </details>
   );
 }

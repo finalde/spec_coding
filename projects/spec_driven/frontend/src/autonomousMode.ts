@@ -1,8 +1,16 @@
 const KEY = "spec_driven.autonomous_mode.v1";
+const SAME_TAB_EVENT = "spec_driven_autonomous_mode_changed";
+
+const sameTabBus = new EventTarget();
 
 export function loadAutonomous(): boolean {
   try {
-    return window.localStorage.getItem(KEY) === "true";
+    const raw = window.localStorage.getItem(KEY);
+    if (raw === null) {
+      return false;
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed === true;
   } catch {
     return false;
   }
@@ -10,20 +18,43 @@ export function loadAutonomous(): boolean {
 
 export function saveAutonomous(value: boolean): void {
   try {
-    window.localStorage.setItem(KEY, value ? "true" : "false");
-    window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { value } }));
+    window.localStorage.setItem(KEY, JSON.stringify(value));
   } catch {
-    // localStorage unavailable; silently ignore
+    // ignore quota/disabled storage
+  }
+  try {
+    sameTabBus.dispatchEvent(
+      new CustomEvent<boolean>(SAME_TAB_EVENT, { detail: value }),
+    );
+  } catch {
+    // ignore
   }
 }
 
-const EVENT_NAME = "spec_driven:autonomous-mode-changed";
-
-export function subscribeAutonomous(handler: (value: boolean) => void): () => void {
-  const listener = (e: Event): void => {
-    const detail = (e as CustomEvent<{ value: boolean }>).detail;
-    if (detail) handler(detail.value);
+export function subscribeAutonomous(cb: (v: boolean) => void): () => void {
+  const onStorage = (e: StorageEvent): void => {
+    if (e.key !== KEY) {
+      return;
+    }
+    if (e.newValue === null) {
+      cb(false);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(e.newValue) as unknown;
+      cb(parsed === true);
+    } catch {
+      cb(false);
+    }
   };
-  window.addEventListener(EVENT_NAME, listener);
-  return () => window.removeEventListener(EVENT_NAME, listener);
+  const onSameTab = (e: Event): void => {
+    const ce = e as CustomEvent<boolean>;
+    cb(ce.detail === true);
+  };
+  window.addEventListener("storage", onStorage);
+  sameTabBus.addEventListener(SAME_TAB_EVENT, onSameTab);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    sameTabBus.removeEventListener(SAME_TAB_EVENT, onSameTab);
+  };
 }

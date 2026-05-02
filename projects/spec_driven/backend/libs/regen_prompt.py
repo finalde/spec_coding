@@ -1,7 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+
+from libs.file_reader import FileReadError
+
+
+REGEN_WARN_BYTES: int = 50 * 1024
+REGEN_HARD_CEILING_BYTES: int = 1024 * 1024
+
+
+AUTONOMOUS_IMPERATIVE: str = (
+    "Do not call AskUserQuestion. For anything unclear, use your best judgment, "
+    "record the choice inline in the artifact, and keep going. Produce every "
+    "requested artifact below in this single turn before stopping."
+)
 
 
 @dataclass(frozen=True)
@@ -24,37 +37,54 @@ class StageDef:
 STAGE_DEFS: tuple[StageDef, ...] = (
     StageDef(
         id="intake",
-        label="1. Intake",
+        label="Intake",
         folder="user_input",
-        invocation="Re-revise the prompt: read raw_prompt.md plus every follow_ups/*.md in numeric order and rewrite revised_prompt.md to the canonical form.",
+        invocation=(
+            "Stage 1 (Intake): Claude reads raw_prompt.md and writes a cleaned "
+            "revised_prompt.md. No agent."
+        ),
         modules=(
+            StageModule(
+                id="raw_prompt",
+                label="raw_prompt.md",
+                relative_path="user_input/raw_prompt.md",
+                description="User's verbatim original prompt.",
+            ),
             StageModule(
                 id="revised_prompt",
                 label="revised_prompt.md",
                 relative_path="user_input/revised_prompt.md",
-                description="Canonical revised prompt = raw + every follow-up.",
+                description="Cleaned, expanded prompt; raw + every follow-up.",
             ),
         ),
     ),
     StageDef(
         id="interview",
-        label="2. Interview",
+        label="Interview",
         folder="interview",
-        invocation="Run the interview stage: invoke agent_team__interview_manager with the current revised_prompt.md and rewrite interview/qa.md.",
+        invocation=(
+            "Stage 2 (Interview): spawn agent_team__interview_manager. The manager "
+            "defines an interviewer team; the parent runs the team and forwards "
+            "AskUserQuestion calls; consolidated output is interview/qa.md."
+        ),
         modules=(
             StageModule(
                 id="qa",
                 label="qa.md",
                 relative_path="interview/qa.md",
-                description="Multi-round Q&A consolidated by the interview manager.",
+                description="Multi-round multi-choice interview transcript.",
             ),
         ),
     ),
     StageDef(
         id="research",
-        label="3. Research",
+        label="Research",
         folder="findings",
-        invocation="Run the research stage: invoke agent_team__research_manager with revised_prompt.md + qa.md and rewrite findings/dossier.md (and per-angle files).",
+        invocation=(
+            "Stage 3 (Research): spawn agent_team__research_manager. The manager "
+            "defines research angles; the parent runs them in parallel; manager "
+            "synthesizes findings/dossier.md."
+        ),
         modules=(
             StageModule(
                 id="dossier",
@@ -66,29 +96,36 @@ STAGE_DEFS: tuple[StageDef, ...] = (
                 id="angles",
                 label="angle-*.md",
                 relative_path="findings/",
-                description="Per-angle research notes.",
+                description="Per-angle research notes (one file per angle).",
             ),
         ),
     ),
     StageDef(
-        id="spec",
-        label="4. Spec compilation",
+        id="spec_compilation",
+        label="Spec compilation",
         folder="final_specs",
-        invocation="Compile the spec: read revised_prompt.md + qa.md + dossier.md and rewrite final_specs/spec.md.",
+        invocation=(
+            "Stage 4 (Spec compilation): Claude reads revised_prompt + qa + dossier "
+            "and writes final_specs/spec.md directly. No agent."
+        ),
         modules=(
             StageModule(
                 id="spec",
                 label="spec.md",
                 relative_path="final_specs/spec.md",
-                description="Canonical spec for the project.",
+                description="Canonical compiled specification.",
             ),
         ),
     ),
     StageDef(
         id="validation_strategy",
-        label="5. Validation strategy",
+        label="Validation strategy",
         folder="validation",
-        invocation="Run validation strategy: invoke agent_team__validation_manager (strategy mode) with spec.md and rewrite validation/strategy.md plus the per-level files.",
+        invocation=(
+            "Stage 5 (Validation strategy): spawn agent_team__validation_manager "
+            "in strategy mode. The manager defines validation levels; the parent "
+            "runs the team; manager synthesizes validation/strategy.md plus per-level files."
+        ),
         modules=(
             StageModule(
                 id="strategy",
@@ -100,27 +137,50 @@ STAGE_DEFS: tuple[StageDef, ...] = (
                 id="acceptance_criteria",
                 label="acceptance_criteria.md",
                 relative_path="validation/acceptance_criteria.md",
-                description="High-level acceptance criteria.",
+                description="Gherkin acceptance scenarios.",
             ),
             StageModule(
                 id="bdd_scenarios",
                 label="bdd_scenarios.md",
                 relative_path="validation/bdd_scenarios.md",
-                description="BDD scenarios.",
+                description="BDD scenario set.",
+            ),
+            StageModule(
+                id="system_tests",
+                label="system_tests.md",
+                relative_path="validation/system_tests.md",
+                description="System-level test descriptions.",
+            ),
+            StageModule(
+                id="unit_tests",
+                label="unit_tests.md",
+                relative_path="validation/unit_tests.md",
+                description="Unit-level test descriptions.",
+            ),
+            StageModule(
+                id="security",
+                label="security.md",
+                relative_path="validation/security.md",
+                description="Security probes and threat model.",
             ),
         ),
     ),
     StageDef(
         id="execution",
-        label="6. Execution + streaming validation",
-        folder="",
-        invocation="Run execution: implement work units against the spec and have agent_team__validation_manager (runtime mode) validate each unit. Outputs land under projects/{name}/ or ai_videos/{name}/.",
+        label="Execution",
+        folder="(projects)",
+        invocation=(
+            "Stage 6 (Execution + streaming validation): Claude implements work "
+            "units against the spec. For each unit, agent_team__validation_manager "
+            "(runtime mode) validates against the strategy. Issues loop back as "
+            "revisions, capped at 3 rounds per unit."
+        ),
         modules=(
             StageModule(
-                id="execution_outputs",
-                label="generated outputs",
-                relative_path="",
-                description="Code/tests/README under projects/{name}/ or ai_videos/{name}/.",
+                id="implementation",
+                label="implementation",
+                relative_path="(projects/{name}/...)",
+                description="Code, tests, README under projects/{name}/.",
             ),
         ),
     ),
@@ -128,155 +188,206 @@ STAGE_DEFS: tuple[StageDef, ...] = (
 
 
 @dataclass(frozen=True)
-class StagesPayload:
-    project_type: str
-    project_name: str
-    stages: tuple[StageDef, ...] = field(default_factory=lambda: STAGE_DEFS)
+class RegenPromptResult:
+    prompt: str
+    warning: str | None
+    selected_stages_count: int
+    follow_ups_count: int
+    autonomous: bool
 
 
 def list_stages(project_type: str, project_name: str) -> dict[str, object]:
+    stages: list[dict[str, object]] = []
+    for stage in STAGE_DEFS:
+        stages.append({
+            "id": stage.id,
+            "label": stage.label,
+            "folder": stage.folder,
+            "invocation": stage.invocation,
+            "modules": [
+                {
+                    "id": m.id,
+                    "label": m.label,
+                    "relative_path": m.relative_path,
+                    "description": m.description,
+                }
+                for m in stage.modules
+            ],
+        })
     return {
         "project_type": project_type,
         "project_name": project_name,
-        "stages": [
-            {
-                "id": s.id,
-                "label": s.label,
-                "folder": s.folder,
-                "invocation": s.invocation,
-                "modules": [
-                    {
-                        "id": m.id,
-                        "label": m.label,
-                        "relative_path": m.relative_path,
-                        "description": m.description,
-                    }
-                    for m in s.modules
-                ],
-            }
-            for s in STAGE_DEFS
-        ],
+        "stages": stages,
     }
 
 
-def _read_text(path: Path) -> str | None:
-    if not path.is_file():
-        return None
+def _project_dir(project_type: str, project_name: str, repo_root: Path) -> Path:
+    return repo_root / "specs" / project_type / project_name
+
+
+def _read_or_empty(path: Path) -> str:
     try:
-        return path.read_text(encoding="utf-8", errors="replace")
+        if path.exists() and path.is_file():
+            return path.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return None
+        return ""
+    return ""
 
 
 def _list_followups(project_dir: Path) -> list[Path]:
-    follow_dir = project_dir / "user_input" / "follow_ups"
-    if not follow_dir.is_dir():
+    fu_dir = project_dir / "user_input" / "follow_ups"
+    if not fu_dir.is_dir():
         return []
-    return sorted(p for p in follow_dir.iterdir() if p.is_file() and p.suffix.lower() == ".md")
+    try:
+        files = [p for p in fu_dir.iterdir() if p.is_file() and p.suffix.lower() == ".md"]
+    except OSError:
+        return []
+    return sorted(files, key=lambda p: p.name)
 
 
 def build_regen_prompt(
     project_type: str,
     project_name: str,
     stage_ids: list[str],
-    module_ids: dict[str, list[str]] | None,
+    module_ids: dict[str, list[str]],
     autonomous: bool,
     repo_root: Path,
 ) -> str:
-    project_dir = repo_root / "specs" / project_type / project_name
-    selected_stages = [s for s in STAGE_DEFS if s.id in stage_ids] if stage_ids else list(STAGE_DEFS)
-    if not selected_stages:
-        selected_stages = list(STAGE_DEFS)
+    project_dir = _project_dir(project_type, project_name, repo_root)
 
-    lines: list[str] = []
+    revised_path = project_dir / "user_input" / "revised_prompt.md"
+    raw_path = project_dir / "user_input" / "raw_prompt.md"
+    intent_text = _read_or_empty(revised_path)
+    intent_label = "user_input/revised_prompt.md"
+    if not intent_text:
+        intent_text = _read_or_empty(raw_path)
+        intent_label = "user_input/raw_prompt.md"
+
+    followups = _list_followups(project_dir)
+
+    parts: list[str] = []
     if autonomous:
-        lines.append("# EXECUTION MODE: AUTONOMOUS")
-        lines.append("")
-        lines.append(
-            "Do not call AskUserQuestion. For anything unclear, use your best judgment, "
-            "record the choice inline in the artifact, and keep going. Produce every requested "
-            "artifact below in this single turn before stopping."
-        )
-        lines.append("")
+        parts.append("# EXECUTION MODE: AUTONOMOUS")
+        parts.append("")
+        parts.append(AUTONOMOUS_IMPERATIVE)
     else:
-        lines.append("# EXECUTION MODE: INTERACTIVE")
-        lines.append("")
-        lines.append("You may use AskUserQuestion when a decision is genuinely ambiguous.")
-        lines.append("")
+        parts.append("# EXECUTION MODE: INTERACTIVE")
+    parts.append("")
+    parts.append(f"## Project: {project_type}/{project_name}")
+    parts.append(f"Project root: `specs/{project_type}/{project_name}/`")
+    parts.append("")
 
-    lines.append(f"## Project: {project_type}/{project_name}")
-    lines.append("")
-    lines.append(f"Project root: `specs/{project_type}/{project_name}/`")
-    lines.append("")
-
-    raw = _read_text(project_dir / "user_input" / "raw_prompt.md")
-    revised = _read_text(project_dir / "user_input" / "revised_prompt.md")
-    follow_ups = _list_followups(project_dir)
-
-    lines.append("### Current intent")
-    lines.append("")
-    if revised is not None:
-        lines.append("**revised_prompt.md** (current):")
-        lines.append("")
-        lines.append("```markdown")
-        lines.append(revised.rstrip("\n"))
-        lines.append("```")
-        lines.append("")
-    elif raw is not None:
-        lines.append("**raw_prompt.md** (no revised yet):")
-        lines.append("")
-        lines.append("```markdown")
-        lines.append(raw.rstrip("\n"))
-        lines.append("```")
-        lines.append("")
-    else:
-        lines.append("_No raw_prompt.md or revised_prompt.md found yet — gather intent from the user before regenerating._")
-        lines.append("")
-
-    if follow_ups:
-        lines.append(f"**Follow-ups ({len(follow_ups)})**:")
-        lines.append("")
-        for fp in follow_ups:
-            rel = fp.relative_to(repo_root).as_posix()
-            lines.append(f"- `{rel}`")
-        lines.append("")
-
-    lines.append("### Stages to regenerate")
-    lines.append("")
-    for stage in selected_stages:
-        lines.append(f"#### {stage.label}")
-        lines.append("")
-        lines.append(stage.invocation)
-        lines.append("")
-        chosen_modules = module_ids.get(stage.id) if module_ids else None
-        modules_for_stage = (
-            [m for m in stage.modules if m.id in chosen_modules]
-            if chosen_modules
-            else list(stage.modules)
-        )
-        if not modules_for_stage:
-            modules_for_stage = list(stage.modules)
-        lines.append("Artifacts in scope:")
-        for m in modules_for_stage:
-            target = (
-                f"specs/{project_type}/{project_name}/{m.relative_path}"
-                if m.relative_path
-                else f"projects/{project_name}/ (or ai_videos/{project_name}/)"
+    parts.append("### Current intent")
+    parts.append(f"Inlined from `{intent_label}`:")
+    parts.append("")
+    parts.append("```markdown")
+    parts.append(intent_text if intent_text else "(no intent file present)")
+    parts.append("```")
+    parts.append("")
+    parts.append("Follow-ups in numerical order:")
+    if followups:
+        for f in followups:
+            parts.append(
+                f"- `specs/{project_type}/{project_name}/user_input/follow_ups/{f.name}`"
             )
-            lines.append(f"- **{m.label}** → `{target}` — {m.description}")
-        lines.append("")
+    else:
+        parts.append("- (none)")
+    parts.append("")
 
-    lines.append("### Constraints")
-    lines.append("")
-    lines.append("- Honor every rule in `CLAUDE.md` (state surfaces, agent naming, iteration bounds).")
-    lines.append("- Persist artifacts at the canonical paths above. Do not invent new locations.")
-    lines.append(
-        "- For stages 2/3/5, spawn the named manager agent per the contract in CLAUDE.md "
-        "(parent is the spawner; managers cannot self-spawn nested subagents)."
+    parts.append("### Stages to regenerate")
+    selected_defs = [s for s in STAGE_DEFS if s.id in stage_ids]
+    if not selected_defs:
+        parts.append("- (no stages selected)")
+    for stage in selected_defs:
+        parts.append(f"#### {stage.label} (`{stage.id}`)")
+        parts.append(stage.invocation)
+        parts.append("")
+        chosen_module_ids = module_ids.get(stage.id) or [m.id for m in stage.modules]
+        parts.append("Modules in scope:")
+        for module in stage.modules:
+            if module.id in chosen_module_ids:
+                target = (
+                    f"specs/{project_type}/{project_name}/{module.relative_path}"
+                    if not module.relative_path.startswith("(")
+                    else module.relative_path
+                )
+                parts.append(f"- **{module.label}** — `{target}` — {module.description}")
+        parts.append("")
+
+    parts.append("### Constraints")
+    parts.append(
+        "- Honor every rule in `CLAUDE.md`: state surfaces (CLAUDE.md, .claude/settings*, "
+        "specs/{type}/{name}/, .audit/...), agent naming (`agent_team__<role>`), "
+        "iteration bounds (3 revisions / 30 minutes per unit)."
+    )
+    parts.append(
+        "- Persist artifacts at canonical paths under "
+        f"`specs/{project_type}/{project_name}/...`. No sidecar caches, no hidden state."
+    )
+    parts.append(
+        "- For stages 2 (interview), 3 (research), and 5 (validation strategy), spawn "
+        "the named manager agent per CLAUDE.md (`agent_team__interview_manager`, "
+        "`agent_team__research_manager`, `agent_team__validation_manager`)."
+    )
+    parts.append(
+        "- **Read-zero contract**: regeneration deletes prior outputs first; new "
+        "generation reads only the inputs. Do not read prior `final_specs/spec.md`, "
+        "prior `validation/*`, or any prior generated artifact in the stages being "
+        "regenerated. Each stage starts from a clean slate so stale assumptions cannot "
+        "leak forward."
+    )
+    parts.append(
+        "- Emit `regen.delete.planned`, `regen.delete.completed`, and "
+        "`regen.write.completed` events to the run's `events.jsonl` under "
+        ".audit/adhoc_agents/{date}/{task_id}/."
     )
     if autonomous:
-        lines.append("- Do not stop to ask. Do not emit AskUserQuestion. Run the full pipeline above to completion.")
-    lines.append("")
-    lines.append("Begin.")
-    lines.append("")
-    return "\n".join(lines)
+        parts.append(
+            "- Autonomous mode: do NOT call `AskUserQuestion`. Do not stop to ask. "
+            "Use best judgment for ambiguous choices and record the decision inline "
+            "in the produced artifact."
+        )
+    else:
+        parts.append(
+            "- Interactive mode: `AskUserQuestion` is permitted only when intent "
+            "cannot be inferred from the existing artifacts."
+        )
+    parts.append("")
+
+    return "\n".join(parts)
+
+
+def build_regen_prompt_result(
+    project_type: str,
+    project_name: str,
+    stage_ids: list[str],
+    module_ids: dict[str, list[str]],
+    autonomous: bool,
+    repo_root: Path,
+) -> RegenPromptResult:
+    prompt = build_regen_prompt(
+        project_type, project_name, stage_ids, module_ids, autonomous, repo_root
+    )
+    encoded_size = len(prompt.encode("utf-8"))
+    if encoded_size > REGEN_HARD_CEILING_BYTES:
+        raise FileReadError(413, "too_large", kind="too_large")
+
+    project_dir = _project_dir(project_type, project_name, repo_root)
+    follow_ups_count = len(_list_followups(project_dir))
+    selected_stages_count = len([s for s in STAGE_DEFS if s.id in stage_ids])
+
+    warning: str | None = None
+    if encoded_size > REGEN_WARN_BYTES:
+        kb = encoded_size / 1024
+        warning = (
+            f"prompt is {kb:.1f} KB (> 50 KB threshold) — verify your selection "
+            "before pasting"
+        )
+
+    return RegenPromptResult(
+        prompt=prompt,
+        warning=warning,
+        selected_stages_count=selected_stages_count,
+        follow_ups_count=follow_ups_count,
+        autonomous=autonomous,
+    )

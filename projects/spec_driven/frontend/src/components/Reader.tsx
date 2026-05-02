@@ -1,180 +1,258 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchFile } from "../api";
-import { CodeView } from "../markdown/code";
-import { JsonlView } from "../markdown/jsonl";
-import { MarkdownView } from "../markdown/renderer";
-import type { FileResponse } from "../types";
+import type { FileResponse, TreeNode, TreeResponse } from "../types";
 import { Breadcrumb } from "./Breadcrumb";
 import { Editor } from "./Editor";
-import { QaView } from "./QaView";
+import { QaView, ParseError } from "./QaView";
+import { MarkdownView } from "../markdown/renderer";
+import { CodeView } from "../markdown/code";
+import { JsonlView } from "../markdown/jsonl";
 import { RegeneratePanel } from "./RegeneratePanel";
+import { RefreshButton } from "./RefreshButton";
 
-export interface ReaderProps {
+interface ReaderProps {
   filePath: string;
-  exposedPaths: ReadonlySet<string>;
-  onRequestRefresh: () => void;
+  tree: TreeResponse | null;
+  onRefresh: () => void;
 }
 
-export function Reader({ filePath, exposedPaths, onRequestRefresh }: ReaderProps): JSX.Element {
-  const [state, setState] = useState<
-    | { status: "loading" }
-    | { status: "ok"; data: FileResponse }
-    | { status: "error"; httpStatus: number; error: string; kind?: string }
-  >({ status: "loading" });
-  const [editing, setEditing] = useState<boolean>(false);
+interface LoadState {
+  status: "idle" | "loading" | "ok" | "error";
+  data?: FileResponse;
+  errorStatus?: number;
+  errorKind?: string;
+  errorMessage?: string;
+}
+
+function collectAllPaths(tree: TreeResponse): Set<string> {
+  const out = new Set<string>();
+  const walk = (nodes: ReadonlyArray<TreeNode>): void => {
+    for (const n of nodes) {
+      if (n.kind === "file") out.add(n.path);
+      if (n.children) walk(n.children);
+    }
+  };
+  walk(tree.settings.claude_md);
+  walk(tree.settings.agents);
+  walk(tree.settings.skills);
+  walk(tree.projects);
+  return out;
+}
+
+interface StageMatch {
+  projectType: string;
+  projectName: string;
+  stageFolder: string;
+}
+
+function parseStageFromPath(path: string): StageMatch | null {
+  // specs/{type}/{name}/{stage}/...
+  const segs = path.split("/");
+  if (segs[0] !== "specs" || segs.length < 5) return null;
+  const knownStages = new Set([
+    "user_input",
+    "interview",
+    "findings",
+    "final_specs",
+    "validation",
+  ]);
+  if (!knownStages.has(segs[3] ?? "")) return null;
+  return {
+    projectType: segs[1] ?? "",
+    projectName: segs[2] ?? "",
+    stageFolder: segs[3] ?? "",
+  };
+}
+
+function isMarkdownExt(ext: string): boolean {
+  return ext === ".md";
+}
+
+function isJsonlExt(ext: string): boolean {
+  return ext === ".jsonl";
+}
+
+export function Reader({ filePath, tree, onRefresh }: ReaderProps): JSX.Element {
+  const [load, setLoad] = useState<LoadState>({ status: "idle" });
+  const [editing, setEditing] = useState(false);
+
+  const exposedPaths = useMemo(() => {
+    if (!tree) return new Set<string>();
+    return collectAllPaths(tree);
+  }, [tree]);
 
   useEffect(() => {
     let cancelled = false;
-    setState({ status: "loading" });
+    setLoad({ status: "loading" });
     setEditing(false);
-    (async () => {
-      const result = await fetchFile(filePath);
-      if (cancelled) return;
-      if (result.ok) {
-        setState({ status: "ok", data: result.data });
-      } else {
-        setState({
+    fetchFile(filePath)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          setLoad({ status: "ok", data: res.data });
+        } else {
+          setLoad({
+            status: "error",
+            errorStatus: res.status,
+            errorKind: res.error.kind ?? res.error.error,
+            errorMessage: res.error.error,
+          });
+        }
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setLoad({
           status: "error",
-          httpStatus: result.status,
-          error: result.error.error,
-          kind: result.error.kind,
+          errorMessage: e instanceof Error ? e.message : "fetch failed",
         });
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
   }, [filePath]);
 
-  const projectContext = useMemo(() => deriveProjectContext(filePath), [filePath]);
-
-  const onSaved = (newText: string): void => {
-    setState((prev) =>
-      prev.status === "ok"
-        ? { status: "ok", data: { ...prev.data, text: newText, bytes: new Blob([newText]).size } }
-        : prev,
-    );
-  };
+  const stage = parseStageFromPath(filePath);
 
   return (
-    <main className="reader">
+    <div className="reader">
       <Breadcrumb filePath={filePath} />
-      {state.status === "ok" && (
-        <div className="reader-actions">
-          {!editing && (
-            <button type="button" className="editor-button" onClick={() => setEditing(true)}>
-              ✎ Edit
-            </button>
-          )}
-        </div>
-      )}
-      {projectContext && state.status === "ok" && !editing && (
+      {stage && (
         <RegeneratePanel
-          projectType={projectContext.projectType}
-          projectName={projectContext.projectName}
-          stageHint={projectContext.stageHint}
+          projectType={stage.projectType}
+          projectName={stage.projectName}
+          stageHint={stage.stageFolder}
         />
       )}
-      {state.status === "loading" && <div className="reader-loading">Loading…</div>}
-      {state.status === "error" && (
-        <ErrorView
-          httpStatus={state.httpStatus}
-          error={state.error}
-          kind={state.kind}
-          onRefresh={onRequestRefresh}
-        />
+      {load.status === "loading" && (
+        <div className="reader-loading">Loading…</div>
       )}
-      {state.status === "ok" && (
-        <div className="reader-content">
-          {editing ? (
-            <Editor
-              filePath={state.data.path}
-              initialText={state.data.text}
-              onSaved={onSaved}
-              onCancel={() => setEditing(false)}
-            />
+      {load.status === "error" && (
+        <div className="reader-error">
+          {load.errorStatus === 404 && load.errorKind === "file_removed" ? (
+            <div className="stale-tree-banner" role="status">
+              <span>this file no longer exists — refresh sidebar</span>
+              <RefreshButton onClick={onRefresh} />
+            </div>
           ) : (
-            <RenderedFile data={state.data} exposedPaths={exposedPaths} />
+            <div className="editor-error-banner" role="alert">
+              {load.errorStatus ?? ""} {load.errorKind ?? load.errorMessage ?? "error"}
+            </div>
           )}
         </div>
       )}
-    </main>
-  );
-}
-
-function RenderedFile({
-  data,
-  exposedPaths,
-}: {
-  data: FileResponse;
-  exposedPaths: ReadonlySet<string>;
-}): JSX.Element {
-  if (data.extension === ".md" && isQaFile(data.path)) {
-    return <QaView source={data.text} filePath={data.path} />;
-  }
-  if (data.extension === ".md") {
-    return <MarkdownView source={data.text} sourcePath={data.path} exposedPaths={exposedPaths} />;
-  }
-  if (data.extension === ".jsonl") {
-    return <JsonlView source={data.text} />;
-  }
-  return <CodeView source={data.text} extension={data.extension} />;
-}
-
-function isQaFile(path: string): boolean {
-  return path.endsWith("/interview/qa.md") || path === "interview/qa.md";
-}
-
-interface ProjectContext {
-  projectType: string;
-  projectName: string;
-  stageHint?: string;
-}
-
-function deriveProjectContext(filePath: string): ProjectContext | null {
-  const parts = filePath.split("/").filter((s) => s !== "");
-  if (parts[0] !== "specs" || parts.length < 3) return null;
-  const projectType = parts[1];
-  const projectName = parts[2];
-  const stageHint = parts[3];
-  return { projectType, projectName, stageHint };
-}
-
-function ErrorView({
-  httpStatus,
-  error,
-  kind,
-  onRefresh,
-}: {
-  httpStatus: number;
-  error: string;
-  kind?: string;
-  onRefresh: () => void;
-}): JSX.Element {
-  const cause = errorMessage(httpStatus, error, kind);
-  const showRefresh = kind === "file_removed" || error === "not_found";
-  return (
-    <div className="reader-error" role="alert">
-      <span className="link-broken" aria-disabled="true" title={cause}>
-        {cause}
-      </span>
-      {showRefresh && (
-        <button type="button" className="refresh-button" onClick={onRefresh}>
-          ↻ Refresh sidebar
-        </button>
+      {load.status === "ok" && load.data && (
+        <ReaderBody
+          file={load.data}
+          editing={editing}
+          onEdit={() => setEditing(true)}
+          onCancelEdit={() => setEditing(false)}
+          onSaved={(text) => {
+            setLoad({
+              status: "ok",
+              data: { ...load.data!, text, bytes: new Blob([text]).size },
+            });
+          }}
+          exposedPaths={exposedPaths}
+        />
       )}
     </div>
   );
 }
 
-function errorMessage(status: number, error: string, kind?: string): string {
-  if (status === 400 && error === "outside_sandbox") return "outside exposed tree";
-  if (status === 404 && kind === "file_removed") return "this file no longer exists — refresh sidebar";
-  if (status === 404 && kind === "outside_exposed_tree") return "outside exposed tree";
-  if (status === 404) return "file not found";
-  if (status === 403) return "permission denied";
-  if (status === 413) return "file too large";
-  if (status === 415 && error === "binary_content") return "file appears to be binary";
-  if (status === 415) return "unsupported file type";
-  return `error ${status}: ${error}`;
+interface ReaderBodyProps {
+  file: FileResponse;
+  editing: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onSaved: (text: string) => void;
+  exposedPaths: ReadonlySet<string>;
+}
+
+function ReaderBody({
+  file,
+  editing,
+  onEdit,
+  onCancelEdit,
+  onSaved,
+  exposedPaths,
+}: ReaderBodyProps): JSX.Element {
+  if (editing) {
+    return (
+      <Editor
+        filePath={file.path}
+        initialText={file.text}
+        onSaved={onSaved}
+        onCancel={onCancelEdit}
+      />
+    );
+  }
+  // Q/A path detection
+  const isQa = file.path.endsWith("/interview/qa.md");
+  return (
+    <>
+      <div className="reader-toolbar">
+        <button
+          type="button"
+          className="reader-edit-btn"
+          onClick={onEdit}
+          aria-label="Edit file"
+        >
+          &#x270E; Edit
+        </button>
+      </div>
+      {isQa ? (
+        <QaViewSafe
+          source={file.text}
+          filePath={file.path}
+          onSaved={onSaved}
+          exposedPaths={exposedPaths}
+        />
+      ) : isMarkdownExt(file.extension) ? (
+        <MarkdownView
+          source={file.text}
+          sourcePath={file.path}
+          exposedPaths={exposedPaths}
+        />
+      ) : isJsonlExt(file.extension) ? (
+        <JsonlView source={file.text} />
+      ) : (
+        <CodeView source={file.text} extension={file.extension} />
+      )}
+    </>
+  );
+}
+
+interface QaViewSafeProps {
+  source: string;
+  filePath: string;
+  onSaved: (text: string) => void;
+  exposedPaths: ReadonlySet<string>;
+}
+
+function QaViewSafe({
+  source,
+  filePath,
+  onSaved,
+  exposedPaths,
+}: QaViewSafeProps): JSX.Element {
+  try {
+    return <QaView source={source} filePath={filePath} onSaved={onSaved} />;
+  } catch (e) {
+    if (e instanceof ParseError) {
+      return (
+        <MarkdownView
+          source={source}
+          sourcePath={filePath}
+          exposedPaths={exposedPaths}
+        />
+      );
+    }
+    return (
+      <MarkdownView
+        source={source}
+        sourcePath={filePath}
+        exposedPaths={exposedPaths}
+      />
+    );
+  }
 }

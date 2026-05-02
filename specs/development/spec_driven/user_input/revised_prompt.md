@@ -2,7 +2,7 @@
 
 Stage 1 output. Auto-regenerated from `raw_prompt.md` + every `user_input/follow_ups/*.md` in numerical order.
 
-Last regenerated: 2026-05-02 (after follow-up 001).
+Last regenerated: 2026-05-02 (autonomous full-pipeline regen, after follow-up 001).
 
 ---
 

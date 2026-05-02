@@ -1,46 +1,43 @@
-.PHONY: install install-backend install-frontend run run-backend run-frontend test test-backend test-frontend clean
+.PHONY: help install run-backend run-frontend run-prod test clean
 
-PORT ?= 8765
-FRONTEND_DIST := backend/static
+# Resolve the repo's pre-configured venv. This Makefile lives at projects/spec_driven/,
+# so the repo root is two levels up.
+REPO_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
+PY := $(REPO_ROOT)/.venv/Scripts/python
+PIP := $(REPO_ROOT)/.venv/Scripts/pip
+BACKEND_PORT ?= 8765
+FRONTEND_PORT ?= 5173
 
-ifeq ($(OS),Windows_NT)
-    VENV_BIN := .venv/Scripts
-else
-    VENV_BIN := .venv/bin
-endif
+help:
+	@echo "spec_driven targets:"
+	@echo "  make install        -- pip install backend deps + npm install frontend deps"
+	@echo "  make run-backend    -- start FastAPI on http://127.0.0.1:$(BACKEND_PORT) with --reload"
+	@echo "  make run-frontend   -- start Vite dev server on http://127.0.0.1:$(FRONTEND_PORT) (proxies /api -> 8765)"
+	@echo "  make run-prod       -- build frontend bundle into backend/static/ and start a single FastAPI process"
+	@echo "  make test           -- run backend pytest"
+	@echo "  make clean          -- remove backend/static/ and frontend/dist/"
+	@echo ""
+	@echo "Use run-backend and run-frontend in two terminals during development."
 
-PYTHON := $(VENV_BIN)/python
-
-install: install-backend install-frontend
-
-install-backend:
-	python -m venv .venv
-	$(PYTHON) -m pip install --upgrade pip
-	$(PYTHON) -m pip install -r backend/requirements.txt
-
-install-frontend:
+install:
+	$(PIP) install -r backend/requirements.txt
+	$(PIP) install pytest httpx
 	cd frontend && npm install
 
-run:
-	cd frontend && npm run build
-	rm -rf $(FRONTEND_DIST)
-	mkdir -p $(FRONTEND_DIST)
-	cp -r frontend/dist/* $(FRONTEND_DIST)/
-	SPEC_DRIVEN_PORT=$(PORT) $(PYTHON) backend/main.py
-
 run-backend:
-	SPEC_DRIVEN_PORT=$(PORT) $(PYTHON) backend/main.py
+	cd backend && $(PY) -m uvicorn --factory libs.api:create_app --host 127.0.0.1 --port $(BACKEND_PORT) --reload
 
 run-frontend:
-	cd frontend && npm run dev
+	cd frontend && npm run dev -- --host 127.0.0.1 --port $(FRONTEND_PORT)
 
-test: test-backend test-frontend
+run-prod:
+	cd frontend && npm run build
+	mkdir -p backend/static
+	cp -r frontend/dist/. backend/static/
+	cd backend && SPEC_DRIVEN_PORT=$(BACKEND_PORT) $(PY) main.py
 
-test-backend:
-	cd backend && ../$(VENV_BIN)/python -m pytest -q
-
-test-frontend:
-	cd frontend && npm test --silent || true
+test:
+	cd backend && $(PY) -m pytest
 
 clean:
-	rm -rf $(FRONTEND_DIST) frontend/dist frontend/node_modules backend/__pycache__ backend/libs/__pycache__ backend/tests/__pycache__ backend/tests/unit/__pycache__ backend/.pytest_cache .venv
+	rm -rf backend/static frontend/dist

@@ -201,6 +201,44 @@ The webapp's `POST /api/regen-prompt` (FR-14c) builds the prompt body. It always
 - The webapp's autonomous-mode toggle defaults to **off** (interactive). Accidental autonomous runs should not be the path of least resistance.
 - The toggle's value is persisted in browser `localStorage` under `spec_driven.autonomous_mode.v1`. There is no server-side persistence — autonomous mode is a per-prompt flag, not a global setting.
 
+### Regeneration semantics: read-zero from prior outputs
+
+When a regeneration prompt asks Claude to re-run one or more stages, the regenerated stage's prior outputs MUST be treated as deleted. The regenerated stage depends ONLY on:
+
+1. The current stage's *input* artifacts (the canonical outputs of the prior stages, used as inputs).
+2. `CLAUDE.md` and shared `.claude/` context (agent definitions, skill definitions).
+3. The user-input layer (`raw_prompt.md` + every `user_input/follow_ups/*.md`).
+
+**Surgical edits to / preservation of prior outputs is forbidden during regeneration.** The prior file is not "the starting point you tweak" — it is "the thing you delete and rewrite from scratch." A regeneration that preserves prior text drifts away from the inputs and becomes a function of (input ∧ all previous runs), which defeats the point of the workflow.
+
+Per-stage delete-then-regenerate contract:
+
+| Stage being regenerated | Files to delete first | Inputs the new generation reads |
+|-------------------------|------------------------|---------------------------------|
+| 1 — Intake | (none — `revised_prompt.md` is rewritten in place from raw + follow-ups; this stage has no other prior outputs) | `user_input/raw_prompt.md`, every `user_input/follow_ups/*.md` |
+| 2 — Interview | `interview/qa.md` | `user_input/revised_prompt.md`, `CLAUDE.md`, `.claude/agents/agent_team__interview_manager.md` |
+| 3 — Research | every file under `findings/` (`dossier.md` + every `angle-*.md`) | `user_input/revised_prompt.md`, `interview/qa.md`, `CLAUDE.md`, `.claude/agents/agent_team__research_manager.md` |
+| 4 — Spec compilation | `final_specs/spec.md` | `user_input/revised_prompt.md`, `interview/qa.md`, `findings/dossier.md` (+ `findings/angle-*.md` if useful) |
+| 5 — Validation strategy | every file under `validation/` (`strategy.md`, `acceptance_criteria.md`, `bdd_scenarios.md`, `unit_tests.md`, `system_tests.md`, `security.md`, `performance.md`, `accessibility.md`, etc.) | `final_specs/spec.md`, `CLAUDE.md`, `.claude/agents/agent_team__validation_manager.md` |
+| 6 — Execution + streaming validation | the entire output project folder (`projects/{name}/` for `task_type=development`, or `ai_videos/{name}/` for `task_type=ai_video`) | `final_specs/spec.md`, every file under `validation/`, `CLAUDE.md` |
+
+Operational notes:
+
+- **Delete is a real `rm -rf`-equivalent action**, not a logical "treat as missing." After delete, the file MUST not exist on disk; regeneration writes the new file fresh. Stale bytes are how surgical-edit regen creeps back in.
+- **Multi-stage regeneration is sequential.** When the regen prompt selects multiple stages, delete each stage's outputs at the moment that stage runs (after its inputs are confirmed present), not all up-front. Otherwise stage N+1 will be missing its inputs while stage N is being regenerated.
+- **Selective module regeneration.** If the regen prompt selects only some of a stage's modules (e.g., regenerate only `validation/security.md` and `validation/performance.md`), delete only those module files, not every file in the stage folder. The default in copy-paste prompts is "all modules selected" → delete the entire stage folder.
+- **`changelog.md` and `.audit/` are NOT regeneration outputs** — they are the audit log. They are never deleted as part of a regeneration; they are appended to with a new entry that records what got deleted and what got regenerated.
+- **Project README and Makefile under `projects/{name}/`** are part of stage 6 outputs and ARE deleted along with the rest of the project folder. The new generation rebuilds them from the spec.
+- **Permanent agent files** (`.claude/agents/agent_team__*.md`) and **the `agent_team` skill** are NOT regeneration outputs — they are part of the harness/shared context. Never deleted by a project-scoped regeneration.
+
+Why: surgical edits accumulate path-dependent decisions that diverge from the inputs. The user wants regeneration runs to be a pure function of inputs, so the regen output is a faithful test of "what would these inputs produce today." If the inputs are insufficient to reproduce a load-bearing prior decision, that's a signal the inputs need a follow-up — not a signal to copy the decision forward silently.
+
+How to apply:
+- Before any regeneration, list the files that will be deleted and emit a `regen.delete.planned` event (one line per file) into the run's `events.jsonl`.
+- After deletion, emit `regen.delete.completed` with the count.
+- After the new generation writes the file, emit `regen.write.completed` with the new file's path and size.
+- The webapp's regen-prompt assembly (`projects/spec_driven/backend/libs/regen_prompt.py`) must include this contract verbatim in the constraints section of every assembled prompt.
+
 ## Tool scoping and team coordination
 
 Some tools in this harness are **deferred** — their schemas are not loaded at session start and calling them directly fails with `InputValidationError`. They appear by name in the session-start system reminder. To call one, first run `ToolSearch(query="select:<name>", max_results=1)` to load its schema.

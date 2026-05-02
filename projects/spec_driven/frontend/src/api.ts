@@ -1,52 +1,55 @@
-import type { FileError, FileResponse, TreeResponse } from "./types";
+import type { TreeResponse, FileResponse, FileError } from "./types";
 
 export async function fetchTree(): Promise<TreeResponse> {
-  const resp = await fetch("/api/tree");
-  if (!resp.ok) {
-    throw new Error(`tree fetch failed: ${resp.status}`);
+  const res = await fetch("/api/tree", { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    throw new Error(`tree fetch failed: ${res.status}`);
   }
-  return (await resp.json()) as TreeResponse;
+  return (await res.json()) as TreeResponse;
 }
 
-export type FileResult =
+export type FetchFileResult =
   | { ok: true; data: FileResponse }
   | { ok: false; status: number; error: FileError };
 
-export async function fetchFile(path: string): Promise<FileResult> {
-  const resp = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
-  if (resp.ok) {
-    return { ok: true, data: (await resp.json()) as FileResponse };
+export async function fetchFile(path: string): Promise<FetchFileResult> {
+  const res = await fetch(`/api/file?path=${encodeURIComponent(path)}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (res.ok) {
+    const data = (await res.json()) as FileResponse;
+    return { ok: true, data };
   }
-  let body: FileError;
+  let body: FileError = { error: `http_${res.status}` };
   try {
-    body = (await resp.json()) as FileError;
+    body = (await res.json()) as FileError;
   } catch {
-    body = { error: "unknown" };
+    // keep default
   }
-  return { ok: false, status: resp.status, error: body };
+  return { ok: false, status: res.status, error: body };
 }
 
-export type SaveResult =
+export type SaveFileResult =
   | { ok: true; bytes: number }
   | { ok: false; status: number; error: FileError };
 
-export async function saveFile(path: string, text: string): Promise<SaveResult> {
-  const resp = await fetch("/api/file", {
+export async function saveFile(path: string, text: string): Promise<SaveFileResult> {
+  const res = await fetch("/api/file", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ path, text }),
   });
-  if (resp.ok) {
-    const data = (await resp.json()) as { bytes: number };
+  if (res.ok) {
+    const data = (await res.json()) as { bytes: number };
     return { ok: true, bytes: data.bytes };
   }
-  let body: FileError;
+  let body: FileError = { error: `http_${res.status}` };
   try {
-    body = (await resp.json()) as FileError;
+    body = (await res.json()) as FileError;
   } catch {
-    body = { error: "unknown" };
+    // keep default
   }
-  return { ok: false, status: resp.status, error: body };
+  return { ok: false, status: res.status, error: body };
 }
 
 export interface StageModule {
@@ -71,16 +74,26 @@ export interface StagesResponse {
 }
 
 export async function fetchStages(
-  projectType: string,
-  projectName: string,
+  project_type: string,
+  project_name: string,
 ): Promise<StagesResponse> {
-  const resp = await fetch(
-    `/api/stages?project_type=${encodeURIComponent(projectType)}&project_name=${encodeURIComponent(projectName)}`,
-  );
-  if (!resp.ok) {
-    throw new Error(`stages fetch failed: ${resp.status}`);
+  const params = new URLSearchParams({ project_type, project_name });
+  const res = await fetch(`/api/stages?${params.toString()}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`stages fetch failed: ${res.status}`);
   }
-  return (await resp.json()) as StagesResponse;
+  return (await res.json()) as StagesResponse;
+}
+
+export interface RegenPromptResponse {
+  prompt: string;
+  warning: string | null;
+  selected_stages_count: number;
+  follow_ups_count: number;
+  autonomous: boolean;
+  bytes: number;
 }
 
 export interface RegenPromptRequest {
@@ -91,15 +104,32 @@ export interface RegenPromptRequest {
   autonomous: boolean;
 }
 
-export async function buildRegenPrompt(req: RegenPromptRequest): Promise<string> {
-  const resp = await fetch("/api/regen-prompt", {
+export class RegenPromptError extends Error {
+  status: number;
+  body: FileError;
+  constructor(status: number, body: FileError) {
+    super(body.error || `regen_prompt_failed_${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+export async function buildRegenPrompt(
+  req: RegenPromptRequest,
+): Promise<RegenPromptResponse> {
+  const res = await fetch("/api/regen-prompt", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(req),
   });
-  if (!resp.ok) {
-    throw new Error(`regen-prompt fetch failed: ${resp.status}`);
+  if (res.ok) {
+    return (await res.json()) as RegenPromptResponse;
   }
-  const data = (await resp.json()) as { prompt: string };
-  return data.prompt;
+  let body: FileError = { error: `http_${res.status}` };
+  try {
+    body = (await res.json()) as FileError;
+  } catch {
+    // keep default
+  }
+  throw new RegenPromptError(res.status, body);
 }

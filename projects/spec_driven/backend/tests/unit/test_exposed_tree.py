@@ -5,67 +5,70 @@ from pathlib import Path
 from libs.exposed_tree import ExposedTree
 
 
-def test_claude_md_inside(fake_repo: Path) -> None:
-    tree = ExposedTree(repo_root=fake_repo)
-    assert tree.is_inside(fake_repo / "CLAUDE.md")
+def test_claude_md_root_positive(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
+    assert tree.is_inside(fake_repo / "CLAUDE.md") is True
 
 
-def test_pyproject_outside(fake_repo: Path) -> None:
-    (fake_repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
-    tree = ExposedTree(repo_root=fake_repo)
-    assert not tree.is_inside(fake_repo / "pyproject.toml")
+def test_claude_md_in_subdir_negative(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
+    sub = fake_repo / "projects" / "spec_driven"
+    sub.mkdir(parents=True)
+    nested = sub / "CLAUDE.md"
+    nested.write_text("x", encoding="utf-8")
+    assert tree.is_inside(nested) is False
 
 
-def test_agent_md_inside(fake_repo: Path) -> None:
-    tree = ExposedTree(repo_root=fake_repo)
-    p = fake_repo / ".claude" / "agents" / "agent_team__interview_manager.md"
-    assert tree.is_inside(p)
+def test_agents_canonical_md_positive(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
+    p = fake_repo / ".claude" / "agents" / "agent_team__research_manager.md"
+    assert tree.is_inside(p) is True
 
 
-def test_agents_init_py_outside(fake_repo: Path) -> None:
-    p = fake_repo / ".claude" / "agents" / "__init__.py"
-    p.write_text("", encoding="utf-8")
-    tree = ExposedTree(repo_root=fake_repo)
-    assert not tree.is_inside(p)
+def test_agents_yaml_negative(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
+    p = fake_repo / ".claude" / "agents" / "foo.yaml"
+    p.write_text("x", encoding="utf-8")
+    assert tree.is_inside(p) is False
 
 
-def test_skill_md_inside(fake_repo: Path) -> None:
-    tree = ExposedTree(repo_root=fake_repo)
+def test_skills_canonical_positive(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
     p = fake_repo / ".claude" / "skills" / "agent_team" / "SKILL.md"
-    assert tree.is_inside(p)
+    assert tree.is_inside(p) is True
 
 
-def test_skill_readme_outside(fake_repo: Path) -> None:
+def test_skills_other_md_negative(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
     p = fake_repo / ".claude" / "skills" / "agent_team" / "README.md"
-    p.write_text("", encoding="utf-8")
-    tree = ExposedTree(repo_root=fake_repo)
-    assert not tree.is_inside(p)
+    p.write_text("x", encoding="utf-8")
+    assert tree.is_inside(p) is False
 
 
-def test_user_input_md_inside(fake_repo: Path) -> None:
-    tree = ExposedTree(repo_root=fake_repo)
-    p = fake_repo / "specs" / "development" / "spec_driven" / "user_input" / "raw_prompt.md"
-    assert tree.is_inside(p)
+def test_specs_final_specs_md_positive(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
+    p = fake_repo / "specs" / "development" / "spec_driven" / "final_specs" / "spec.md"
+    assert tree.is_inside(p) is True
 
 
-def test_non_stage_subfolder_outside(fake_repo: Path) -> None:
-    bad = fake_repo / "specs" / "development" / "spec_driven" / "notes"
-    bad.mkdir(parents=True)
-    p = bad / "scratch.md"
-    p.write_text("", encoding="utf-8")
-    tree = ExposedTree(repo_root=fake_repo)
-    assert not tree.is_inside(p)
+def test_specs_outside_five_stages_negative(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
+    notes = fake_repo / "specs" / "development" / "spec_driven" / "notes"
+    notes.mkdir(parents=True)
+    p = notes / "scratch.md"
+    p.write_text("x", encoding="utf-8")
+    assert tree.is_inside(p) is False
 
 
-def test_jsonl_in_validation_inside(fake_repo: Path) -> None:
+def test_specs_unsupported_extension_is_structurally_inside(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
+    p = fake_repo / "specs" / "development" / "spec_driven" / "findings" / "diagram.png"
+    p.write_text("x", encoding="utf-8")
+    assert tree.is_inside(p) is True
+
+
+def test_specs_jsonl_under_validation_positive(fake_repo: Path) -> None:
+    tree = ExposedTree(fake_repo)
     p = fake_repo / "specs" / "development" / "spec_driven" / "validation" / "events.jsonl"
-    p.write_text('{"a":1}\n', encoding="utf-8")
-    tree = ExposedTree(repo_root=fake_repo)
-    assert tree.is_inside(p)
-
-
-def test_unsupported_extension_outside(fake_repo: Path) -> None:
-    p = fake_repo / "specs" / "development" / "spec_driven" / "final_specs" / "diagram.png"
-    p.write_bytes(b"\x89PNG")
-    tree = ExposedTree(repo_root=fake_repo)
-    assert not tree.is_inside(p)
+    p.write_text("{}\n", encoding="utf-8")
+    assert tree.is_inside(p) is True

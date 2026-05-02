@@ -1,114 +1,137 @@
-# Angle — two-pane navigator + reader UX
+# Angle: Two-pane navigator + reader UX
 
-Researcher: researcher-02
-Run: spec_driven-20260502-141813
-Date: 2026-05-02
+This angle covers concrete v1 component behavior for spec_driven's left sidebar tree and right reader pane: how the sidebar tree should expand/collapse, how selection and keyboard focus relate, what to render in breadcrumbs, what keyboard map to wire up, and how to handle long filenames and overflow. The frame is "what should a small localhost spec viewer copy from production tools, and what should it skip?" — so the comparators below are limited to behaviors a single developer can implement on a Saturday with React + a tree library, not full-blown IDE telemetry. We compare six tools: VS Code Explorer, JetBrains "Project" tool window, GitHub's repo file tree, MkDocs Material sidebar, Storybook sidebar, and Backstage TechDocs sidebar — all anchored against the [W3C ARIA APG TreeView pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/) since it is the canonical reference every other tool either implements or diverges from.
 
-## 1. What this angle covers
+## The W3C reference (anchor)
 
-Conventions for two-pane "navigator (left tree) + reader (main content)" doc/code tools, applied to a readonly viewer that shows ≤50 projects × ≤200 files spread across 5 fixed stage subfolders per project. Locked decisions feeding this angle: collapsible-by-type sidebar (one section per task_type, default-expand the section containing the current project), spec_driven readme as landing page, in-app relative markdown link navigation, Shiki highlighting. The angle's job is to translate "what mature tools do" into concrete v1 component behavior for the viewer's sidebar tree, selection model, breadcrumbs, keyboard support, and overflow handling.
+The [APG Tree View pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/) defines the keyboard contract every other comparator is measured against:
 
-Reference tools probed: VS Code Explorer, JetBrains Project tool window, GitHub repo file view, MkDocs Material, Storybook sidebar, Backstage TechDocs.
+- Up/Down: move focus to previous/next visible node, do not open or close.
+- Right: on a closed node, open it; on an already-open node, move to first child; on an end node, do nothing.
+- Left: on an open node, close it; on a child or end node, move to parent.
+- Home: first node in tree (no expand/collapse).
+- End: last visible node in tree.
+- Enter: activate the node (default action — for a navigator, that is "open the file in the reader").
+- Type-ahead: focus moves to next node whose name starts with the typed character; search wraps.
+- `*` (optional): expand all siblings at the current level.
 
-## 2. Key findings
+The recommended **focus model is roving tabindex**: the tree itself is the single tab stop, exactly one `treeitem` carries `tabindex="0"`, every other carries `tabindex="-1"`, and arrow keys move both DOM focus and the tabindex marker. The [navigation treeview example](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/examples/treeview-navigation/) makes the convention explicit: the item matching `aria-current="page"` is the one that gets `tabindex="0"`, so when the user tabs back into the sidebar, focus lands on "where you are" rather than the top of the tree.
 
-### Click semantics: folder vs file
+The pattern also distinguishes **selection** (`aria-selected`) from **focus** (the DOM-focused element). For navigator-style trees with single-select-follows-focus, the two are wired together; for trees that allow lasso-select (file managers, multi-select tag pickers), they are independent. spec_driven is squarely a navigator, so single-select-follows-focus is the right default.
 
-- VS Code uses single-click as **preview** (reuses one tab); double-click or edit promotes to a permanent tab; folders single-click to expand/collapse. Source: [VS Code User interface](https://code.visualstudio.com/docs/getstarted/userinterface).
-- GitHub renders folders as in-place navigations (URL changes, content swaps) and renders files in a content pane below a breadcrumb derived from the path. Established practice: clicking the path **is** the navigation.
-- For a readonly viewer with no edit-vs-preview distinction, the simple convention is: **folder click = toggle expand/collapse, file click = render in main pane**. No double-click required.
+## VS Code Explorer
 
-### Selection state in URL (deep-linking)
+VS Code's Explorer pane is the closest spiritual cousin of what spec_driven wants — it is a tree of file paths feeding a single editor pane on the right. Its keyboard map matches the APG pattern: arrows for traversal, Enter to open (but defaults to **rename** when focus is on a file in the Explorer, which is a famous papercut — keyboard users have to use `Cmd+Down` / `Ctrl+Enter` to actually open the file, see [Adam Tuttle's writeup](https://adamtuttle.codes/blog/2024/navigating-vscode-file-explorer-without-mouse/)). Type-ahead works in the tree.
 
-- GitHub uses path-based URLs (`/{owner}/{repo}/blob/{branch}/{path}`); the URL **is** the selected file. Storybook uses query-style story IDs that round-trip.
-- MkDocs Material exposes `navigation.tracking` (URL updates on scroll to anchor) and `navigation.instant` for SPA-like navigation. Source: [Material for MkDocs setup](https://squidfunk.github.io/mkdocs-material/setup/setting-up-navigation/).
-- Established practice: **selected file should be reflected in the URL**, so any state (which project, which file, which heading) is shareable and refresh-safe. This is consistent across GitHub, Storybook, MkDocs, and Backstage TechDocs.
+The interesting wrinkle is `explorer.autoReveal`. By default it is `true`, which means opening a file via Quick Open (`Cmd+P`) or by clicking a tab causes the Explorer to scroll to that file *and* select it. Issue [microsoft/vscode#175690](https://github.com/microsoft/vscode/issues/175690) requested splitting this into two settings — "reveal but do not select" — because auto-selecting steals the keyboard cursor. The shipped values are `true`, `false`, and `focusNoScroll` (reveal without scrolling). The takeaway for spec_driven: **decoupling "reveal" from "select" is real UX work**, but for v1 we have no Quick Open, no editor tabs, and no other entry into "what's open"; URL is the single source of truth. So the issue does not apply yet, but the lesson — selection and focus are separate states — should still inform the data model.
 
-### Tree expansion default
+Long names are truncated at the end with a single ellipsis; the full path appears in a tooltip on hover. Selection visual is a filled row background (different shade for focused-vs-selected within the same tree, but most users never notice). Single tab stop, roving tabindex inside the tree.
 
-- VS Code Explorer: collapses everything except the workspace root; the user expands as needed. Provides `explorer.autoReveal` (default on) which auto-expands the path of the currently active file. Source: [Bobby Hadz — reveal current file](https://bobbyhadz.com/blog/vscode-reveal-current-file-in-explorer).
-- JetBrains: explicit "Always Select Opened File" (formerly "Autoscroll from Source") that expands the path of the active editor file in the Project tool window. Source: [JetBrains support — Autoscroll to Source](https://intellij-support.jetbrains.com/hc/en-us/community/posts/360006983339-Autoscroll-to-Source).
-- MkDocs Material: `navigation.expand` opens all sections by default; without it, only the section containing the current page expands. Source: [MkDocs Material discussion #2173](https://github.com/squidfunk/mkdocs-material/discussions/2173).
-- Established practice: **collapse by default, auto-expand the ancestor chain of the selected file**. This matches the locked decision "default-expand the section containing the current project".
+## JetBrains "Project" tool window
 
-### Breadcrumbs above content
+JetBrains is the counter-example. Per the [Project tool window docs](https://www.jetbrains.com/help/idea/project-tool-window.html), the tree is opened with `Alt+1`, navigated with arrows, expanded/collapsed with Right/Left, and supports `Ctrl+F` "Speed Search" — type-ahead with a visible filter bar instead of the silent type-ahead VS Code uses. `Space` previews the current file in a peek pane without committing it as the active editor — a focus/selection split spec_driven could borrow.
 
-- GitHub renders a clickable breadcrumb above every file/folder content view (each segment is a link to its directory).
-- Backstage TechDocs Reader has breadcrumbs in the page header pointing back to the docs homepage. Source: [Backstage TechDocs](https://backstage.io/docs/features/techdocs/).
-- MkDocs Material added `navigation.path` specifically for breadcrumb rendering above content.
-- Established practice: **breadcrumbs above content are standard for hierarchical doc/code tools**, especially when a sidebar tree could be collapsed. Worth including in v1 because the viewer's path is meaningful (`task_type / task_name / stage / file`).
+The "Always Select Opened File" toggle (renamed in 2022 from "Autoscroll from Source", per the [JetBrains community post](https://intellij-support.jetbrains.com/hc/en-us/community/posts/13016403707666-Toggle-button-for-Always-select-opened-file-in-Project-view)) does what `explorer.autoReveal=true` does in VS Code: when you switch editors, the Project view scrolls and selects the matching node. It is off by default, which is the opposite of VS Code, on the theory that an unsolicited tree-jump while typing is more annoying than the cost of pressing the "locate" button when you actually want to know where you are.
 
-### Keyboard navigation
+Long names truncate end-ellipsis; tooltip shows full name + path. Selection visual is row highlight; focused-but-unselected is a thin border. Single tab stop, roving tabindex within the tree.
 
-| Tool | Tree keys | Quick-open |
-|---|---|---|
-| VS Code | Up/Down move, Right expand/move-into, Left collapse/move-out, Enter renames (Ctrl+Down to open), filter with Ctrl+F | Ctrl+P |
-| Storybook | Arrow keys for tree, "/" for search | "/" |
-| JetBrains | Speed-search by typing, arrow keys for tree | Shift+Shift |
+## GitHub repo file tree
 
-- Source: [Adam Tuttle — Navigating VS Code File Explorer without a mouse](https://adamtuttle.codes/blog/2024/navigating-vscode-file-explorer-without-mouse/) and [VS Code tips and tricks](https://code.visualstudio.com/docs/getstarted/tips-and-tricks).
-- Storybook's accessibility tracker explicitly notes the sidebar should implement the ARIA `tree` role for proper keyboard support. Source: [Storybook accessibility roadmap](https://github.com/storybookjs/storybook/issues/33041).
-- W3C ARIA APG specifies arrow-key behavior for tree role: Up/Down move, Right expand-or-into-children, Left collapse-or-to-parent, Home/End jump to first/last visible. Source: [W3C ARIA Tree View Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/).
+GitHub added a persistent file tree to the repo viewer in 2022. It opens with the `t` shortcut (which actually launches the file finder, a fuzzy-match overlay rather than a tree-internal type-ahead), and the tree itself toggles with a button. Per [GitHub community discussion #51306](https://github.com/orgs/community/discussions/51306), the tree's open/closed state persists across navigation. Crucially, **every node click updates the URL** — clicking `src/foo.ts` navigates to `https://github.com/owner/repo/blob/main/src/foo.ts`, which is the canonical permalink for that view. There is no separate "selected file" in-memory state; the URL **is** the selection.
 
-### Selected vs focused (visual state)
+This is the single most important pattern for spec_driven. URL-as-state means deep links work, the back button works, refreshing works, and there is no "selection got out of sync with the editor" bug class because there is no separate selection. Stage and file in the URL pin both panes.
 
-- W3C ARIA APG requires the visual design distinguish **focus** (which item arrow-keys are on) from **selection** (which item's content is shown). Both indicators must be visible simultaneously. Source: [W3C ARIA Tree View Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/) and [aria-selected attribute](https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-selected).
-- Common convention: filled background bar for selected (`aria-selected="true"`), thin outline ring for keyboard focus.
+Keyboard support inside the tree is thinner than VS Code's — arrows work, Enter activates, but type-ahead is delegated to the file finder overlay. Long names use end-ellipsis. Single tab stop into the tree.
 
-### Long file names
+## MkDocs Material sidebar
 
-- Carbon Design System tree view: ellipsis truncation **with browser tooltip showing the full string**. Source: [Carbon Tree view](https://carbondesignsystem.com/components/tree-view/usage/).
-- PatternFly Truncate: prefer **middle-ellipsis for filenames** so the extension and any trailing identifier remain visible (e.g. `angle-two-pa…ux.md`). Source: [PatternFly Truncate guidelines](https://www.patternfly.org/components/truncate/design-guidelines/).
-- GitHub historically: end-ellipsis without tooltip — community has flagged this as worse UX than middle-ellipsis. Source: [isaacs/github issue #171](https://github.com/isaacs/github/issues/171).
-- Established practice: **single-line, ellipsis-on-overflow, native title tooltip on hover**. Do not horizontal-scroll the sidebar; do not wrap.
+Material for MkDocs (the [setup/setting-up-navigation docs](https://squidfunk.github.io/mkdocs-material/setup/setting-up-navigation/)) is the comparator for "documentation sidebar that pretends to be a tree." It is not a real ARIA tree — it is a nested `<nav>` of `<ul>` and `<a>` elements, so each link is its own tab stop and arrow keys do not navigate. Tab/Shift+Tab walk the entire link list, which is acceptable for short docs but painful for a 200-page manual.
 
-### "Currently selected" visual
+Where Material genuinely innovates is **overflow handling** for long titles. The [`md-ellipsis` class](https://github.com/squidfunk/mkdocs-material/issues/3785) applies `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` to nav links so a deeply nested title does not push the sidebar wider than its column. Tooltips on overflow are an open feature request — not built-in. State persistence is partial: the open section state is held in CSS via `<input type="checkbox">` toggles, but the URL itself reflects only the current page, not the open/closed state of unrelated branches. "Anchor tracking" updates the URL hash as you scroll the reader pane, which is a nice touch for jumping back to a particular section.
 
-- VS Code, JetBrains, GitHub, MkDocs, Storybook: all use a **filled background row + accent text colour** for the selected node. None rely on bold-only or icon-only.
-- Storybook explicitly tracks bugs where keyboard nav loses sync with visual selection — selection styling must move atomically with the URL/route. Source: [Storybook issue #13040](https://github.com/storybookjs/storybook/issues/13040).
+The takeaway for spec_driven: **adopt `md-ellipsis`-style end-truncation as the cheap default, but reach for middle-ellipsis for filenames** (see recommendations) because file extensions matter at a glance and end-ellipsis hides them.
 
-## 3. Implications for the spec (concrete, actionable)
+## Storybook sidebar
 
-1. **Routing.** Spec a single deep-linkable route shape, e.g. `/{section}/{task_type}/{task_name}/{stage}/{file_path}` for Projects and `/settings/{kind}/{file}` for Section 1. The full URL must round-trip on reload. The landing page (spec_driven readme) is just the canonical URL `/projects/development/spec_driven/final_specs/spec.md` (or `/.../user_input/revised_prompt.md` if the spec doesn't exist yet).
-2. **Click model.** Folder click toggles expand/collapse only — never opens a "folder index" page in v1. File click navigates and renders. This avoids the GitHub-style folder-index ambiguity and matches the locked "5 fixed stage subfolders" model where folders are pure containers.
-3. **Default expansion.** On any URL load, expand the ancestor chain of the selected file (task_type section → project → stage). All other sections collapsed. Matches locked decision and matches VS Code `autoReveal` semantics.
-4. **Breadcrumbs.** Render a breadcrumb above the reader pane: `task_type / task_name / stage / filename`. Each segment except the last is a link that navigates to that node (folder click in the tree = expand; breadcrumb segment click = navigate-and-expand). Section 1 gets a parallel breadcrumb: `Settings / kind / filename`.
-5. **Selected-state visual.** Filled background bar on the tree row for `aria-selected="true"`; separate ring outline for keyboard focus. Identical visual treatment for Section 1 leaves and Section 2 leaves.
-6. **Long names.** Single-line ellipsis with native `title` attribute = full file/folder name. Use middle-ellipsis for files (preserves `.md` extension), end-ellipsis for folders. No wrapping, no horizontal scroll.
-7. **Keyboard support — v1 minimum.** Tab to focus the tree, arrow keys per ARIA tree pattern (Up/Down move, Right expand, Left collapse), Enter to navigate. Defer Ctrl+P quick-open to v2 — Storybook and VS Code both treat it as a power-user accelerator, not a baseline.
-8. **In-app relative links.** Already locked. Implementation note: resolve them against the current file's directory; if the resolved path is inside the exposed tree, push to history and update URL. If not, fall through to default browser behavior (broken-link tooltip per locked decision).
-9. **No multi-select, no drag, no context menus.** Readonly scope. ARIA: `aria-multiselectable="false"` on the tree.
-10. **Accessibility baseline.** Implement the W3C ARIA tree pattern (`role="tree"`, `role="treeitem"`, `aria-expanded`, `aria-selected`, `aria-level`). This is the minimum vendors like Storybook and Backstage are explicitly working toward; doing it correctly from day one costs almost nothing.
+Storybook's sidebar is closer to a real tree — keyboard arrows work for parent/child traversal and Left/Right toggle expansion, per [PR #1427](https://github.com/storybookjs/storybook/pull/1427) which originally added keyboard accessibility to the story hierarchy. F6/Shift+F6 cycle landmark regions (sidebar, toolbar, preview, addons), per the [browse-stories docs](https://storybook.js.org/docs/get-started/browse-stories/). Selecting a story updates the URL (`?path=/story/...`), so URL-as-state holds as in GitHub.
 
-## 4. Open questions surfaced
+Known issues from earlier versions ([#13040](https://github.com/storybookjs/storybook/issues/13040)) included the sidebar "jumping" when components expand/collapse and skipping items across expansion boundaries — a reminder that **virtualization plus tree expansion is fiddly**. For spec_driven's v1 we expect at most a few dozen artifact files per project, so virtualization is not needed; rendering all nodes makes Up/Down behavior trivially correct.
 
-- **Sidebar width / resize.** Do we ship a fixed-width sidebar (simpler, matches Storybook's earlier versions) or a draggable splitter (matches VS Code/JetBrains)? Affects ellipsis frequency. Recommend fixed-width in v1 with sensible default (~280–320px); revisit if dogfooding shows constant ellipsis on real spec_driven paths.
-- **Section 1 vs Section 2 separator.** Locked decision says collapsible-by-type for Projects, but Section 1 is a separate top-level region. Is Section 1 always-visible above Section 2, or also a collapsible top-level section? Recommend always-visible header + always-expanded subgroups for Section 1 — it's small (1 + N agents + M skills), no benefit to collapsing.
-- **URL encoding of file paths.** Many `/`-separated path segments inside a single route param. Pick a strategy: nested route segments (clean URLs, more router config) vs single splat param with encoded `/` (simpler, uglier). Recommend nested segments — matches GitHub, future-proofs against deeper paths.
-- **Browser back/forward.** Should clicking in the tree push history entries (every click adds to history) or replace (only the address bar updates)? GitHub pushes; VS Code in browser pushes. Recommend push so back-button matches user mental model — but explicit decision needed.
-- **Active tree node when URL is a folder-only route.** If the user shares `/projects/development/spec_driven/findings/` (no file), what does the reader pane show? Empty state? Folder listing? Auto-pick first child? Spec must answer this; recommend auto-redirect to the first file alphabetically (or first markdown file) and keep the URL canonical.
-- **Settings section breadcrumb wording.** Locked decision says three subgroups: CLAUDE.md, Agents, Skills. Breadcrumb root: literal "Settings" or "Claude Settings & Shared Context"? The latter matches the in-app section name; the former is shorter for the breadcrumb bar. Minor, but spec should pick one.
+Search is a separate fuzzy-finder overlay, not in-tree type-ahead. Long names get end-truncated and may wrap on hover. Single tab stop, roving tabindex inside the tree.
+
+## Backstage TechDocs sidebar
+
+[Backstage TechDocs](https://backstage.io/docs/features/techdocs/how-to-guides/) embeds an MkDocs build inside a Backstage plugin, so its sidebar inherits MkDocs Material behavior — link list, no in-tree arrow navigation, end-ellipsis on long titles. Where it differs is **deep linking via annotation**: the [`backstage.io/techdocs-entity-path` annotation](https://backstage.io/docs/features/software-catalog/well-known-annotations/) lets a catalog entity link directly to a sub-page within the embedded docs, producing URLs like `/docs/default/component/<entity>/this-is-a-subpage/`. The URL pattern carries: namespace, kind, entity name, and page path. For spec_driven, the analog would be `/projects/<task_type>/<task_name>/stage-<n>/<artifact>`, and the parser is straightforward.
+
+Backstage has had recurring bugs ([#18441](https://github.com/backstage/backstage/issues/18441), [#16544](https://github.com/backstage/backstage/issues/16544)) where TechDocs navigation breaks when the app is not at domain root because relative URLs are baked into the iframe content. Lesson: **build the URL from a single base path constant**, not from `window.location` slices, so dev (`localhost:5173`) and prod (`localhost:5173/spec_driven/`) both work.
+
+## Comparison matrix
+
+| Tool | Up/Down | Left/Right | Enter | Home/End | Type-ahead | Focus vs selection | Long-name handling | URL-as-state | Tab stops |
+|---|---|---|---|---|---|---|---|---|---|
+| W3C ARIA APG TreeView | move focus | open/close, traverse | activate | first/last | yes, wraps | distinct, selection-follows-focus optional | not specified | not specified | single, roving tabindex |
+| VS Code Explorer | move focus | open/close, traverse | rename (papercut) | yes | yes, silent | distinct (`aria-selected` separate from focus); `autoReveal` couples them | end-ellipsis, tooltip on hover | partial: tab/editor state, not Explorer state | single, roving tabindex |
+| JetBrains Project | move focus | open/close, traverse | activate | yes | `Ctrl+F` Speed Search bar | distinct; "Always Select Opened File" couples editor->tree | end-ellipsis, full path tooltip | no — IDE state is in workspace | single, roving tabindex |
+| GitHub file tree | move focus | open/close, traverse | activate | yes | delegated to `t` finder overlay | URL is selection | end-ellipsis | yes — every click is a permalink | single |
+| MkDocs Material | (none — link list) | (none) | follow link | (none) | global `s`/`f` opens search | URL is current page; section open state in CSS | `md-ellipsis` end-truncate, no tooltip | partial — page yes, section state no | many (one per link) |
+| Storybook | move focus | open/close | activate | yes | separate finder | URL reflects story | end-ellipsis | yes — `?path=/story/...` | single, roving tabindex |
+| Backstage TechDocs | (none — link list) | (none) | follow link | (none) | none in sidebar | URL is current page | `md-ellipsis` end-truncate | yes — `techdocs-entity-path` URL convention | many |
+
+## Filename overflow: middle-ellipsis is worth the JS
+
+End-ellipsis breaks for filenames because the extension is the part that disambiguates: `migration-2024-...md` and `migration-2024-...py` look identical. Per the [MDN `text-overflow` reference](https://developer.mozilla.org/en-US/docs/Web/CSS/text-overflow), CSS does not natively support middle-ellipsis — the closest is the two-value form (`text-overflow: ellipsis ellipsis`) plus a scrolled container, which is awkward and does not preserve the extension specifically.
+
+The two practical approaches:
+
+1. **Two-element split with `direction: rtl`** — wrap the name in a flex row with two children: `.head` containing the first N-3 characters, `.tail` containing the last 3-7 characters. The `.tail` uses `direction: rtl` to keep the extension visible when the row shrinks. This is pure CSS and works in every modern browser ([CodePen example](https://codepen.io/markchitty/pen/RNZbRE)).
+2. **JS truncation** — measure the row's available width on resize and replace `name.ext` with `na…ame.ext`. Higher fidelity but requires a `ResizeObserver`. Libraries like [react-truncate's MiddleTruncate](https://truncate.js.org/reference/middle-truncate/) ship this.
+
+For spec_driven v1 the CSS-only `direction: rtl` split is the right tradeoff — zero runtime cost, no observer plumbing, and the extension is always visible. Tooltip on hover (or a focus-revealed full path inline) catches the rare case where the middle is also load-bearing.
+
+## Recommendations for spec_driven v1
+
+1. **Adopt the W3C APG TreeView pattern wholesale** for the sidebar: `role="tree"` on the container, `role="treeitem"` on every node, `role="group"` on each child container, `aria-expanded` on parents, `aria-current="page"` on the node matching the URL, and `aria-level` / `aria-posinset` / `aria-setsize` if any branch is dynamically loaded. Wire the keyboard map exactly as specified — Up/Down/Left/Right/Home/End/Enter/type-ahead. Leave the `*` "expand all siblings" shortcut out of v1; it's a power-user nice-to-have.
+
+2. **Single tab stop with roving tabindex.** Exactly one `treeitem` carries `tabindex="0"` and it is the one matching the current URL (mirroring `aria-current="page"`). All others are `tabindex="-1"`. When the tree gains focus from outside via Tab, focus lands on "where you are," not the top — this is the [APG navigation example's](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/examples/treeview-navigation/) load-bearing detail and it makes the experience feel correct without the user knowing why.
+
+3. **URL is the single source of truth for selection.** Pattern: `/projects/<task_type>/<task_name>/<stage>/<artifact_path>`. Selection in the tree, content in the reader, breadcrumbs at the top, and the open/closed state of every ancestor are all derived from the URL. No `useState` for "currently selected file." This is GitHub's and Storybook's pattern and it makes the back button, refresh, deep-link sharing, and "open in new tab" all work for free, plus it kills the entire class of "tree state drifted from editor state" bugs that plague VS Code's `autoReveal`.
+
+4. **Selection-follows-focus, but keep "activate" explicit.** Arrow keys move focus and update the URL via `history.replaceState` (so back-button history does not fill up with every arrow press). Enter triggers `history.pushState` so users can use the back button to revisit a previous file. This matches the APG "selection follows focus" recommendation while sidestepping the back-button-spam problem.
+
+5. **Middle-ellipsis on filenames; end-ellipsis on directory names.** Use a two-element flex split with `direction: rtl` on the tail (last 6 characters or so) so the extension is always visible — `migration-2024-...md` becomes `migration-...n-2024.md` and the file type stays legible. Directory names get plain `text-overflow: ellipsis` because they have no extension. Tooltip on hover shows the full name; full path lives in the breadcrumb.
+
+6. **Breadcrumbs as deep-link landmarks.** Render breadcrumbs `Project / Stage / Artifact` above the reader. Each segment is a real `<a href>`, so users can jump up a level with a click and copy a permalink to "this stage." Style as a single-line row with end-ellipsis on the middle segments if the name is long.
+
+7. **No virtualization in v1.** Render the full tree at mount. With ~30-50 artifacts per project the DOM cost is trivial, and skipping virtualization eliminates the [Storybook #13040](https://github.com/storybookjs/storybook/issues/13040) family of bugs (focus jump on expand, item skipping). Revisit when a real project lands with >500 nodes.
+
+8. **No in-tree type-ahead for v1.** The tree is small enough that arrow-key traversal is faster than typing a prefix, and silent type-ahead is the kind of feature users do not discover anyway. If a search is wanted later, copy GitHub's and Storybook's pattern — a separate `Cmd+P`-style finder overlay, not in-tree.
+
+## Open questions / not researched
+
+- **Mobile layout.** The two-pane layout assumes desktop. How the tree should collapse on a 375px viewport (drawer? off-canvas?) was out of scope for this angle.
+- **Multi-select.** Does spec_driven ever need to select multiple artifacts (for diff, for batch-export)? If so the `aria-selected` model has to split from focus and the keyboard map adds Shift+arrow / Ctrl+click. Not researched.
+- **Drag-and-drop reordering.** Out of scope; would require a different selection model and a drop-target spec.
+- **Tree filtering UI.** A "filter sidebar" input that hides non-matching nodes is a common pattern (Storybook, Backstage) but the interaction with `aria-current` and roving tabindex when the current node gets filtered out has edge cases that need their own pass.
+- **Unsaved-edit indicators on tree nodes.** If the right pane becomes editable (Stage 6 work), each tree node may need a dirty-dot indicator and a confirm-on-navigate hook. Not researched.
+- **Concrete focus-ring CSS.** APG specifies behavior, not visual style. The exact focus-vs-selection visual (border color, background opacity, which contrast ratio against which Material/Tailwind palette) is a design call, not a research call.
 
 ## Sources
 
-- [VS Code User interface](https://code.visualstudio.com/docs/getstarted/userinterface)
-- [VS Code tips and tricks](https://code.visualstudio.com/docs/getstarted/tips-and-tricks)
-- [Adam Tuttle — Navigating VS Code File Explorer without a mouse](https://adamtuttle.codes/blog/2024/navigating-vscode-file-explorer-without-mouse/)
-- [Bobby Hadz — reveal the current file in Explorer in VS Code](https://bobbyhadz.com/blog/vscode-reveal-current-file-in-explorer)
-- [JetBrains support — Autoscroll to Source](https://intellij-support.jetbrains.com/hc/en-us/community/posts/360006983339-Autoscroll-to-Source)
-- [JetBrains support — automatically select current file](https://intellij-support.jetbrains.com/hc/en-us/community/posts/206333529-How-to-automatically-select-current-file-in-left-project-view)
+- [W3C ARIA APG Tree View Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/)
+- [W3C ARIA APG Navigation Treeview Example](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/examples/treeview-navigation/)
+- [Adam Tuttle: Navigating VS Code's File Explorer Panel without Your Mouse](https://adamtuttle.codes/blog/2024/navigating-vscode-file-explorer-without-mouse/)
+- [microsoft/vscode#175690 — Separate explorer.autoReveal into 2 options](https://github.com/microsoft/vscode/issues/175690)
+- [JetBrains: Project tool window documentation](https://www.jetbrains.com/help/idea/project-tool-window.html)
+- [JetBrains community: Toggle button for "Always select opened file"](https://intellij-support.jetbrains.com/hc/en-us/community/posts/13016403707666-Toggle-button-for-Always-select-opened-file-in-Project-view)
+- [GitHub community discussion #51306 — file tree show/hide shortcut](https://github.com/orgs/community/discussions/51306)
 - [Material for MkDocs — Setting up navigation](https://squidfunk.github.io/mkdocs-material/setup/setting-up-navigation/)
-- [MkDocs Material discussion #2173 — Navigation section collapse](https://github.com/squidfunk/mkdocs-material/discussions/2173)
-- [Storybook — features and behavior](https://storybook.js.org/docs/configure/user-interface/features-and-behavior)
-- [Storybook — new component finder and sidebar](https://storybook.js.org/blog/new-component-finder-and-sidebar/)
-- [Storybook accessibility roadmap (issue #33041)](https://github.com/storybookjs/storybook/issues/33041)
-- [Storybook keyboard navigation glitches (issue #13040)](https://github.com/storybookjs/storybook/issues/13040)
-- [Backstage TechDocs](https://backstage.io/docs/features/techdocs/)
-- [Backstage TechDocs — getting started](https://backstage.io/docs/features/techdocs/getting-started/)
-- [Carbon Design System — Tree view](https://carbondesignsystem.com/components/tree-view/usage/)
-- [Carbon Design System — Overflow content](https://carbondesignsystem.com/patterns/overflow-content/)
-- [PatternFly Truncate design guidelines](https://www.patternfly.org/components/truncate/design-guidelines/)
-- [isaacs/github issue #171 — middle ellipsis for file names](https://github.com/isaacs/github/issues/171)
-- [W3C ARIA APG — Tree View Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/)
-- [MDN — ARIA tree role](https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/tree_role)
-- [MDN — ARIA aria-selected attribute](https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-selected)
+- [squidfunk/mkdocs-material#3785 — Show title on mouseover on overflowing nav items](https://github.com/squidfunk/mkdocs-material/issues/3785)
+- [Storybook: Browse stories](https://storybook.js.org/docs/get-started/browse-stories/)
+- [storybookjs/storybook PR #1427 — Story hierarchy keyboard accessibility](https://github.com/storybookjs/storybook/pull/1427)
+- [storybookjs/storybook#13040 — Keyboard navigation glitches in sidebar](https://github.com/storybookjs/storybook/issues/13040)
+- [Backstage TechDocs how-to guides](https://backstage.io/docs/features/techdocs/how-to-guides/)
+- [Backstage well-known annotations (`techdocs-entity-path`)](https://backstage.io/docs/features/software-catalog/well-known-annotations/)
+- [backstage/backstage#18441 — TechDocs navigation breaks off domain root](https://github.com/backstage/backstage/issues/18441)
+- [MDN: text-overflow](https://developer.mozilla.org/en-US/docs/Web/CSS/text-overflow)
+- [CodePen: CSS-only middle truncation with ellipsis (markchitty)](https://codepen.io/markchitty/pen/RNZbRE)
+- [react-truncate MiddleTruncate reference](https://truncate.js.org/reference/middle-truncate/)

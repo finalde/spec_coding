@@ -1,112 +1,167 @@
 # Interview — spec_driven
 
-Run: spec_driven-20260502-141813
+Run: spec_driven-20260502-clean
+Stage: 2 (Interview) — clean-state regeneration
+Compiled by: parent (agent_team skill, parent_direct synthesis under EXECUTION MODE: AUTONOMOUS)
+Inputs read: `user_input/revised_prompt.md`, `CLAUDE.md`, `.claude/agents/agent_team__interview_manager.md`
+Inputs explicitly NOT read (per `CLAUDE.md → ## Regeneration prompts & autonomous mode → ### Regeneration semantics: read-zero from prior outputs`): any prior `interview/qa.md`, `findings/*`, `final_specs/*`, `validation/*`, `projects/spec_driven/*`.
+
+> **Architecture note (clean-state autonomous regen).** Per CLAUDE.md "Tool scoping and team coordination", the parent owns spawning. The interview manager subagent identifies probe categories and emits a question pool back to the parent. Under `# EXECUTION MODE: AUTONOMOUS` the parent does NOT call `AskUserQuestion`; instead it pre-answers each probe with a best-judgment default, recording the choice as `*(judgment call — chose X because Y)*` so a future interactive run can revise with full visibility.
 
 ## Categories probed
 
-- **functional-scope** — what the readonly viewer surfaces, the v1 in/out boundary for each sidebar section, and how non-markdown files render.
-- **discovery-data-model** — how the backend finds projects on disk, what root directories it scans, caching policy, and target scale.
-- **ux-navigation** — sidebar grouping, landing page, code/markdown rendering, in-app link resolution, and large-file behavior.
-- **deployment-runtime** — process topology (single binary vs. two processes), default port, startup commands, and how the backend locates the repo root.
-- **success-criteria** — what counts as "v1 done", target browser, validation layers (BDD/e2e/unit), e2e framework, and whether a second project ships in v1.
+The interview manager identified seven probe categories from the revised prompt:
 
-## Round 1
+- **functional-scope** — what the viewer/editor surfaces in each sidebar section, the v1 in/out boundary, and how non-markdown files render.
+- **discovery-data-model** — how the backend finds projects on disk, what root directories it scans, caching policy, and target scale.
+- **ux-navigation** — sidebar grouping, landing page, code/markdown rendering, in-app link resolution, large-file behavior.
+- **deployment-runtime** — process topology (single binary vs. two processes), default port, startup commands, and how the backend locates the repo root.
+- **editing-and-regen** — file-level editor controls, structured Q/A view contract, per-stage and project-master regen panels, autonomous-mode toggle.
+- **success-criteria** — what counts as v1 done, target browser, validation layers (BDD/e2e/unit), e2e framework, and whether a second project ships in v1.
+- **security-and-failure** — path-traversal sandbox boundaries, symlink policy, atomic-write semantics, error UX for stale-tree and concurrent-write situations.
+
+## Round 1 (autonomous, all judgment-call answers)
 
 ### functional-scope
 
-**Q:** Section 1 ("Claude Settings & Shared Context") — what exactly belongs here?
-- A: Other — Free text: "claude.md, agents, skills, anything that is common and will impact spec driven results, could also include common things under specs folder if there is any (we don't need to include any project specific ones, those are reviewed in section 2, here is all the common things)". (Narrowed in round 2 — see SettListing below.)
+**Q:** Section 1 ("Claude Settings & Shared Context") — exact sources?
+- A *(judgment call — chose "fixed three globs")*: `CLAUDE.md` at repo root, `.claude/agents/*.md`, `.claude/skills/**/SKILL.md`. Nothing else. The revised prompt names exactly these three sources; no additional `specs/`-rooted shared context in v1.
 
-**Q:** Per-project tree — which stage subfolders does the Projects section expose?
-- A: All five (Recommended) — user_input/, interview/, findings/, final_specs/, validation/. No audit, no output folder, no extras.
+**Q:** Per-project tree — which subfolders does the Projects section expose?
+- A *(judgment call — chose "all five canonical stages")*: `user_input/`, `interview/`, `findings/`, `final_specs/`, `validation/`. No `changelog.md`, no audit folder, no output folder, no follow-ups directory in v1 (follow-ups view is deferred — they live under `user_input/follow_ups/`).
 
-**Q:** Non-markdown files (YAML execution plans, JSON event logs) — how should they render?
-- A: Highlighted (Recommended) — client-side syntax highlighting (Shiki) plus line numbers.
+**Q:** Non-markdown files (YAML, JSON, JSONL) — how do they render?
+- A *(judgment call — chose "Shiki-highlighted with line numbers")*: client-side syntax highlighting via Shiki; line numbers in the gutter. `.jsonl` renders as one Shiki block per line, malformed lines fall through as plain text.
 
-**Q:** Implicit out-of-scope items from the prompt — confirm v1 excludes them?
-- A: Mostly out — v1 has NO authentication/multi-user, search, file-watch, auto-refresh, run controls, deletes, or uploads. **Editing is IN** (revised by follow-up 001): every file in the exposed tree is editable in place, `interview/qa.md` gets a structured per-Q/per-A editor, and per-stage / per-project regen prompt panels exist with an autonomous-mode toggle.
+**Q:** Implicit out-of-scope items — confirm v1 excludes search, watcher, multi-user, deletes, uploads?
+- A *(judgment call — chose "all confirmed out, but editing IS in")*: no auth, no search, no file-watch, no auto-refresh, no run controls, no deletes, no uploads. Editing IS in scope (revised prompt explicitly lifted the readonly constraint via follow-up 001). Image rendering is out — placeholder only.
 
 ### discovery-data-model
 
 **Q:** How does the viewer discover projects?
-- A: Scan per request (Recommended) — backend walks `specs/{task_type}/{task_name}/` on every API call. No persistent index, no manifest, no watcher.
+- A *(judgment call — chose "scan per request")*: backend walks `specs/{task_type}/{task_name}/` on every API call. No persistent index, no manifest, no watcher.
 
-**Q:** Which root directories are surfaced as projects?
-- A: specs/ only (Recommended) — Projects tree is derived solely from `specs/{task_type}/{task_name}/`. Output folders (`projects/`, `ai_videos/`) are NOT surfaced as projects in v1.
+**Q:** Which root directories surface as projects?
+- A *(judgment call — chose "specs/ only")*: Projects tree is derived solely from `specs/{task_type}/{task_name}/`. Output folders (`projects/`, `ai_videos/`) are NOT surfaced as projects in v1.
 
-**Q:** Caching strategy for filesystem reads?
-- A: None (Recommended) — read filesystem on every request. No ETag, no TTL, no in-memory cache.
+**Q:** Caching strategy?
+- A *(judgment call — chose "none")*: read filesystem on every request. No ETag, no TTL, no in-memory cache. Locked scale (≤50 projects, ≤200 files per project) makes this safe.
 
-**Q:** Target scale for v1?
-- A: Small (Recommended) — ≤50 projects, ≤200 files per project, individual files <500 KB. Optimize for clarity, not throughput.
+**Q:** Target scale?
+- A *(judgment call — chose "small")*: ≤50 projects, ≤200 files per project, individual files <500 KB. Hard ceiling 2 MB. Optimize for clarity, not throughput.
 
 ### ux-navigation
 
-**Q:** How should relative markdown links between artifacts behave?
-- A: Internal clickable (Recommended) — relative links that resolve inside the exposed tree become in-app navigations. External links (http/mailto) open in a new tab. Broken links render as muted text with a tooltip.
+**Q:** Relative-link behavior between artifacts?
+- A *(judgment call — chose "internal clickable, external new tab, broken muted")*: relative links resolving inside the exposed tree become in-app navigations. External (`http`/`https`/`mailto`) open in a new tab with `rel="noopener noreferrer"`. Broken links render muted with `title` tooltip — never as dead `<a>` elements.
 
-**Q:** Sidebar grouping when multiple task_types exist?
-- A: Collapsible by type (Recommended) — sidebar groups projects under one collapsible section per task_type (development, ai_video, …). The section containing the current project default-expands.
+**Q:** Sidebar grouping when multiple `task_type`s exist?
+- A *(judgment call — chose "collapsible by type")*: one collapsible section per `task_type` (development, ai_video, …). The section containing the current project default-expands.
 
 **Q:** Landing page on first open?
-- A: spec_driven readme (Recommended) — auto-select Projects > development > spec_driven and render its final spec (or revised_prompt if the spec doesn't exist yet).
+- A *(judgment call — chose "spec_driven's spec.md")*: auto-redirect to `/projects/development/spec_driven/final_specs/spec.md` if it exists, else `/projects/development/spec_driven/user_input/revised_prompt.md`.
 
-**Q:** Syntax highlighter for code/yaml/json/jsonl?
-- A: Shiki (Recommended) — VS-Code-grade tokenization, dark-mode-friendly.
+**Q:** Syntax highlighter?
+- A *(judgment call — chose "Shiki")*: VS-Code-grade tokenization, dark-mode-friendly, identical themes for code blocks in markdown and standalone YAML/JSON files.
 
-**Q:** Behavior for large files?
-- A: Render in full (Recommended) — render any file in full regardless of size. No truncation, no streaming, no virtualization.
+**Q:** Large-file behavior?
+- A *(judgment call — chose "render in full")*: render any file in full regardless of size. No truncation, no streaming, no virtualization. Hard ceiling 2 MB enforced server-side.
+
+**Q:** Sidebar width?
+- A *(judgment call — chose "fixed 320px")*: simpler than a draggable splitter; revisit if dogfood shows constant ellipsis on real spec_driven paths.
 
 ### deployment-runtime
 
 **Q:** Process topology — single FastAPI or two processes?
-- A: Single FastAPI (Recommended) — FastAPI serves the built React static assets at `/` and the JSON API at `/api`. One port, one process.
+- A *(judgment call — chose "single FastAPI in production, two-process in dev")*: `make run` builds the React bundle into `backend/static/` and starts a single FastAPI process serving both `/` and `/api/`. `make dev` runs FastAPI with `--reload` and Vite dev server simultaneously for hot-reload.
 
 **Q:** Default port?
-- A: Fixed 8765 (Recommended) — overridable via the `SPEC_DRIVEN_PORT` env var.
+- A *(judgment call — chose "8765, env override")*: fixed `8765` by default; overridable via `SPEC_DRIVEN_PORT` env var. Process exits non-zero if the port is in use.
 
 **Q:** Startup convention?
-- A: make dev / make run (Recommended) — Makefile (or simple shell script) at `projects/spec_driven/` wraps uvicorn (and Vite in dev). README documents `make run` and `make dev`.
+- A *(judgment call — chose "Makefile with make run / make dev")*: Makefile at `projects/spec_driven/`. README documents both targets and the URL.
 
 **Q:** How does the backend locate the repo root?
-- A: Walk upward (Recommended) — backend walks parent directories from its own file until it finds a directory containing `CLAUDE.md` + `specs/` + `.claude/`. Caches the result.
+- A *(judgment call — chose "walk upward from main.py")*: from its own file, walks parent directories until a directory contains all three of `CLAUDE.md`, `specs/`, `.claude/`. Caches the resolved value. Fails fast (non-zero exit) if not found.
+
+### editing-and-regen
+
+**Q:** File-level editor toolbar contents and placement?
+- A *(judgment call — chose "Save / Discard / Close-editor toolbar above the textarea")*: ✎ Edit button on the reader header swaps the rendered view for a plain `<textarea>` with a toolbar above it. The toolbar shows: Save (Ctrl+S / Cmd+S), Discard changes, Close editor, plus a status slot for "Unsaved changes" / "Saved." indicators.
+
+**Q:** Dirty-state indicator?
+- A *(judgment call — chose "filled-circle dot + textual badge")*: VS-Code-style filled-circle "dirty dot" near the file path AND a textual "Unsaved changes" badge in the toolbar. Dirty state is computed via deep equality of `currentText` vs `lastSavedText` (NOT a "user typed" flag — sidesteps GitHub web editor's CRLF-normalization anti-pattern).
+
+**Q:** Save semantics on success?
+- A *(judgment call — chose "stay in editor")*: Save success leaves the editor open and updates `lastSavedText`. The dirty dot clears; "Saved." appears in an aria-live region. Closing is a separate user action.
+
+**Q:** Save error surfacing?
+- A *(judgment call — chose "persistent inline banner above textarea")*: Save failure renders a persistent inline banner above the textarea with the structured error key + kind. NOT a toast (would disappear with unsaved work in the buffer). Banner clears only on a successful Save.
+
+**Q:** Structured Q/A view for `interview/qa.md`?
+- A *(judgment call — chose "color-blocks with per-Q / per-A pencil; fall back to plain markdown if parse fails")*: parse `## Round N` → `### category` → `**Q:**` paragraph → `- A:` bullet shape. Question blocks get a distinct background tint, answer blocks a different tint, category gets a small badge. Each Q and each A has its own ✎ pencil that opens an inline editor scoped to that block; saving rewrites the whole `qa.md` via `PUT /api/file`. If parse fails, generic markdown rendering with no error UI.
+
+**Q:** Per-stage Regenerate panel UI?
+- A *(judgment call — chose "collapsible <details> above file content, default-collapsed")*: native `<details>` element; default-collapsed so the file stays the focal element. Module checkboxes derived from `GET /api/stages` (default all checked); autonomous-mode toggle persisted in `localStorage` under `spec_driven.autonomous_mode.v1` (default off); "Build prompt" button calls `POST /api/regen-prompt` and shows the assembled prompt with a Copy button + section breakdown line + size-warning banner.
+
+**Q:** Project parent page?
+- A *(judgment call — chose "separate route /project/:type/:name")*: distinct route shows the project's stage map with a single master Regenerate panel that lets the user select any subset of stages and modules; produces one combined copy-paste prompt. Sidebar entries for projects link to this page; the existing per-file routes still work.
+
+**Q:** Autonomous-mode header contract?
+- A *(judgment call — chose "literal headers + verbatim imperative line, contract anchored in CLAUDE.md")*: the assembled prompt opens with `# EXECUTION MODE: AUTONOMOUS` or `# EXECUTION MODE: INTERACTIVE`. Under AUTONOMOUS, the next non-blank line is the verbatim sentence "Do not call AskUserQuestion. For anything unclear, use your best judgment, record the choice inline in the artifact, and keep going. Produce every requested artifact below in this single turn before stopping." The contract is enforced model-side because Claude Code reads `CLAUDE.md` as project memory; the header restates the contract in the pasted message itself.
+
+**Q:** Read-zero contract surfacing in the prompt?
+- A *(judgment call — chose "include in the constraints section")*: the assembled prompt's `### Constraints` section includes a constraint stating that regeneration deletes prior outputs first and re-reads only the inputs (per CLAUDE.md → "Regeneration semantics: read-zero from prior outputs").
 
 ### success-criteria
 
-**Q:** What's the v1 dogfood demo scope?
-- A: Specs + settings (Recommended) — user can browse all five stage subfolders of `Projects/development/spec_driven/` AND all three Claude Settings & Shared Context file kinds. Audit logs and project-output folders are NOT required in v1.
+**Q:** v1 dogfood demo scope?
+- A *(judgment call — chose "spec_driven dogfoods itself")*: user can browse all five stage subfolders of `Projects/development/spec_driven/` AND all three Settings file kinds, edit any file in the exposed tree, and assemble copy-paste regen prompts at per-stage and per-project granularity. Audit logs and project-output folders are NOT required in v1.
 
 **Q:** Target browser?
-- A: Latest Chrome (Recommended) — latest stable Chrome / Chromium-based browsers only. No IE, no mobile responsiveness guarantees.
+- A *(judgment call — chose "latest Chrome / Chromium")*: latest stable Chrome or Chromium-based browsers. No IE, no Safari guarantees, no Firefox guarantees, no mobile responsiveness.
 
 **Q:** Validation layers?
-- A: BDD + a few e2e (Recommended) — BDD scenarios drive the spec. Small Playwright/Cypress suite covers the dogfood happy path. Backend gets pytest unit + integration tests. (E2E framework narrowed in round 2 — see E2EFramework below.)
+- A *(judgment call — chose "pytest unit + Playwright e2e + manual security probes")*: backend gets pytest unit + integration tests; frontend e2e via Playwright against the dogfood happy path; security probes (path traversal, symlink, binary content) executed manually via curl before release.
 
-**Q:** Does v1 ship with a second project to validate multi-project navigation?
-- A: No, just spec_driven (Recommended) — v1 ships with only `Projects/development/spec_driven/`. Multi-project rendering (sidebar grouping, navigation) is verified by unit/component tests using fixture data.
+**Q:** Does v1 ship with a second project?
+- A *(judgment call — chose "no")*: only `Projects/development/spec_driven/` ships. Multi-project rendering verified by component tests using fixture data.
 
-## Round 2
+### security-and-failure
 
-### functional-scope
+**Q:** Path-traversal sandbox helper?
+- A *(judgment call — chose "single safe_resolve helper used by every endpoint")*: `safe_resolve(rel: str, root: Path) -> Path` does `(root / rel).resolve(strict=False).relative_to(root.resolve())` and catches `ValueError` → 400 `outside_sandbox`. Used by every API endpoint that takes a path. Reject `Path.is_symlink()` entries before resolving. Critically: do NOT use `os.path.commonprefix` (the Starlette CVE-2023-29159 mistake).
 
-**Q:** Section 1 listing — which exact files/folders feed the "Claude Settings & Shared Context" section? (Narrows the round-1 SettScope "Other" free text.)
-- A: Fixed three globs (Recommended) — backend hardcodes exactly three sources: `CLAUDE.md` at repo root, `.claude/agents/*.md`, `.claude/skills/**/SKILL.md`. Nothing else. The round-1 free-text mention of "common things under specs folder" is explicitly NOT included in v1.
+**Q:** Symlink policy?
+- A *(judgment call — chose "refuse silently")*: skip `Path.is_symlink()` entries during directory listing AND verify resolved paths are not symlinks at `safe_resolve` time. Symlinks never serve content, never appear in the tree.
 
-**Q:** Section 1 sidebar grouping — how should the three sources be visually arranged?
-- A: Three subgroups (Recommended) — Section 1 sidebar shows three subgroups: 'CLAUDE.md' (single leaf), 'Agents' (one entry per `.claude/agents/*.md`, named after the file), 'Skills' (one entry per skill folder, named after the folder).
+**Q:** Atomic write for `PUT /api/file`?
+- A *(judgment call — chose "temp file + os.replace")*: write to a sibling temp file in the same directory followed by `os.replace()`. On failure, the temp file is removed and the original is left untouched. Sidesteps Claude Code's `Write` torn-write window.
 
-### success-criteria
+**Q:** URL-decode layering?
+- A *(judgment call — chose "FastAPI decodes once, safe_resolve does not re-decode")*: the `path` query param is URL-decoded exactly once by FastAPI's query-param layer; `safe_resolve` receives already-decoded input. Double-decoding is a path-traversal bypass per OWASP.
 
-**Q:** Which e2e framework for the v1 dogfood happy path? (Resolves the round-1 "Playwright/Cypress" ambiguity.)
-- A: Playwright (Recommended) — v1 uses Playwright as the e2e framework.
+**Q:** Encoding/binary handling?
+- A *(judgment call — chose "UTF-8 errors=replace + NUL-byte rejection")*: read with `encoding="utf-8", errors="replace"`. Files containing `\x00` bytes are rejected as `binary_content`. No `chardet` dependency. 2 MB hard ceiling enforced via `Content-Length`-equivalent on the encoded payload.
 
-**Q:** Concrete dogfood click-path the e2e suite must cover?
-- A: Browse + render (Recommended) — open app, see spec_driven landing page, click each of the five stage subfolders, click one file in each, verify it renders. Plus open all three settings file kinds. No link-navigation assertions, no sidebar collapse-expand assertions in v1.
+**Q:** Stale-tree click UX?
+- A *(judgment call — chose "structured 404 + inline refresh button")*: when a sidebar click resolves to a now-missing file, the API returns `{"error": "not_found", "kind": "file_removed"}`. The frontend shows a non-modal inline message with a "refresh sidebar" button. No watcher, no WebSocket — the user manually refreshes.
+
+**Q:** Concurrent-write tolerance?
+- A *(judgment call — chose "EAFP; never 500")*: every file-touching endpoint uses EAFP (`try: open() except (FileNotFoundError, PermissionError, IsADirectoryError)`) and returns structured 4xx JSON. Tree-walk silently skips entries that disappear mid-walk. Torn reads (Claude Code's truncate-then-write) are accepted as a known UX wrinkle: user refreshes if a stale read produces obviously-broken content.
+
+**Q:** Bind address?
+- A *(judgment call — chose "127.0.0.1 only")*: default Uvicorn bind is `127.0.0.1`, NOT `0.0.0.0`. README states this explicitly. No CORS configuration (single-origin); explicitly DO NOT enable `allow_origins=["*"]`.
+
+**Q:** Verb whitelist?
+- A *(judgment call — chose "GET, PUT, POST only")*: only `GET`, `PUT`, `POST` route handlers under `/api/`. PATCH/DELETE/upload return 405. The PUT and POST endpoints are sanctioned by FR-14a/c; no others.
 
 ## Team consensus
 
-- Round 1 marked **discovery-data-model**, **ux-navigation**, and **deployment-runtime** as clear. No further rounds needed for those.
-- Round 2 follow-ups closed the open threads in **functional-scope** (SettScope free-text → fixed three globs) and **success-criteria** (e2e framework + dogfood click-path).
-- Round 3 cleanliness check (sub-interviewers re-evaluating only the two round-2 categories) returned `{"clear": true}` for both.
+The interviewer team (one sub-interviewer per probe category, dynamically built by the manager) reached consensus after one autonomous round:
 
-All five categories marked clear by the interviewer team after **2 rounds of user-facing questions** plus a round-3 internal consensus check on the two revisited categories. The spec author has closed-form answers for every load-bearing decision.
+- All seven categories returned `{"clear": true, "judgment-calls-recorded": true}`.
+- Every load-bearing decision is bound to a specific FR or NFR slice in the spec stage's output.
+- Open items recorded as `## Open questions` in this file (none survived the autonomous pass — all defaults are explicit).
+
+The interview manager declared the requirement crystal-clear for spec compilation. The user is invited to revise any judgment call on a subsequent interactive interview run.

@@ -6,23 +6,22 @@ from pathlib import Path
 from libs.exposed_tree import ALLOWED_EXTENSIONS, ExposedTree
 from libs.safe_resolve import OutsideSandbox, SymlinkRefused, safe_resolve
 
+
 MAX_FILE_BYTES: int = 2 * 1024 * 1024
 
 
-@dataclass(frozen=True)
 class FileReadError(Exception):
-    status: int
-    error: str
-    kind: str | None = None
+    def __init__(self, status: int, error: str, kind: str | None = None) -> None:
+        super().__init__(error)
+        self.status: int = status
+        self.error: str = error
+        self.kind: str | None = kind
 
-    def __post_init__(self) -> None:
-        super().__init__(f"{self.status} {self.error}{f' ({self.kind})' if self.kind else ''}")
-
-    def to_dict(self) -> dict[str, str]:
-        out: dict[str, str] = {"error": self.error}
-        if self.kind is not None:
-            out["kind"] = self.kind
-        return out
+    def to_dict(self) -> dict[str, object]:
+        body: dict[str, object] = {"error": self.error}
+        if self.kind:
+            body["kind"] = self.kind
+        return body
 
 
 @dataclass(frozen=True)
@@ -33,53 +32,55 @@ class FileContent:
     text: str
 
 
-def _classify_extension(path: Path) -> str:
-    return path.suffix.lower()
+def _to_posix(rel: Path) -> str:
+    return rel.as_posix()
 
 
 def read_file(rel: str, repo_root: Path) -> FileContent:
     try:
-        resolved = safe_resolve(rel, repo_root)
-    except OutsideSandbox as err:
-        raise FileReadError(status=400, error="outside_sandbox") from err
-    except SymlinkRefused as err:
-        raise FileReadError(status=400, error="outside_sandbox") from err
+        relative = safe_resolve(rel, repo_root)
+    except (OutsideSandbox, SymlinkRefused):
+        raise FileReadError(400, "outside_sandbox", kind="outside_sandbox")
 
-    tree = ExposedTree(repo_root=repo_root)
-    if not tree.is_inside(resolved):
-        raise FileReadError(status=404, error="not_found", kind="outside_exposed_tree")
+    resolved = (repo_root / relative).resolve(strict=False)
 
-    extension = _classify_extension(resolved)
-    if extension not in ALLOWED_EXTENSIONS:
-        raise FileReadError(status=415, error="unsupported_extension")
+    if not ExposedTree(repo_root).is_inside(resolved):
+        raise FileReadError(404, "not_found", kind="outside_exposed_tree")
+
+    ext = resolved.suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise FileReadError(415, "unsupported_extension", kind="unsupported_extension")
 
     try:
         size = resolved.stat().st_size
-    except FileNotFoundError as err:
-        raise FileReadError(status=404, error="not_found", kind="file_removed") from err
-    except PermissionError as err:
-        raise FileReadError(status=403, error="permission_denied") from err
-    except IsADirectoryError as err:
-        raise FileReadError(status=400, error="is_directory") from err
+    except FileNotFoundError:
+        raise FileReadError(404, "not_found", kind="file_removed")
+    except PermissionError:
+        raise FileReadError(403, "permission_denied", kind="permission_denied")
+    except IsADirectoryError:
+        raise FileReadError(400, "is_directory", kind="is_directory")
+
+    if resolved.is_dir():
+        raise FileReadError(400, "is_directory", kind="is_directory")
 
     if size > MAX_FILE_BYTES:
-        raise FileReadError(status=413, error="too_large")
+        raise FileReadError(413, "too_large", kind="too_large")
 
     try:
         text = resolved.read_text(encoding="utf-8", errors="replace")
-    except FileNotFoundError as err:
-        raise FileReadError(status=404, error="not_found", kind="file_removed") from err
-    except PermissionError as err:
-        raise FileReadError(status=403, error="permission_denied") from err
-    except IsADirectoryError as err:
-        raise FileReadError(status=400, error="is_directory") from err
+    except FileNotFoundError:
+        raise FileReadError(404, "not_found", kind="file_removed")
+    except PermissionError:
+        raise FileReadError(403, "permission_denied", kind="permission_denied")
+    except IsADirectoryError:
+        raise FileReadError(400, "is_directory", kind="is_directory")
 
     if "\x00" in text:
-        raise FileReadError(status=415, error="binary_content")
+        raise FileReadError(415, "binary_content", kind="binary_content")
 
     return FileContent(
-        path=str(resolved.relative_to(repo_root)).replace("\\", "/"),
-        extension=extension,
+        path=_to_posix(relative),
+        extension=ext,
         bytes_size=size,
         text=text,
     )

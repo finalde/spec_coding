@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 
@@ -8,21 +8,19 @@ class RepoRootNotFound(Exception):
     pass
 
 
-@dataclass(frozen=True)
-class RepoRootMarkers:
-    must_contain: tuple[str, ...] = ("CLAUDE.md", "specs", ".claude")
-
-    def matches(self, candidate: Path) -> bool:
-        return all((candidate / name).exists() for name in self.must_contain)
+_REQUIRED_MARKERS: tuple[str, ...] = ("CLAUDE.md", "specs", ".claude")
 
 
-def discover_repo_root(start: Path, markers: RepoRootMarkers | None = None) -> Path:
-    markers = markers or RepoRootMarkers()
-    current = start if start.is_dir() else start.parent
-    for candidate in (current, *current.parents):
-        if markers.matches(candidate):
-            return candidate.resolve()
-    raise RepoRootNotFound(
-        f"could not locate repo root above {start}; "
-        f"need a directory containing all of {markers.must_contain}"
-    )
+@cache
+def discover_repo_root(start: Path) -> Path:
+    current = start.resolve()
+    while True:
+        if all((current / marker).exists() for marker in _REQUIRED_MARKERS):
+            return current
+        parent = current.parent
+        if parent == current:
+            raise RepoRootNotFound(
+                "could not locate REPO_ROOT (no ancestor contains all of: "
+                "CLAUDE.md, specs/, .claude/)"
+            )
+        current = parent

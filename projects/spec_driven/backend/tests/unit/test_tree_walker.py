@@ -5,76 +5,62 @@ from pathlib import Path
 from libs.tree_walker import build_tree
 
 
-def _names(nodes: list[dict[str, object]]) -> list[str]:
-    return [n["name"] for n in nodes]  # type: ignore[index]
-
-
-def test_tree_top_level_keys(fake_repo: Path) -> None:
-    result = build_tree(fake_repo)
-    assert set(result.keys()) == {"settings", "projects"}
-
-
-def test_tree_settings_three_subgroups(fake_repo: Path) -> None:
-    settings = build_tree(fake_repo)["settings"]
+def test_basic_shape(fake_repo: Path) -> None:
+    tree = build_tree(fake_repo)
+    assert list(tree.keys()) == ["settings", "projects"]
+    settings = tree["settings"]
     assert isinstance(settings, dict)
-    assert set(settings.keys()) == {"claude_md", "agents", "skills"}
-    assert _names(settings["claude_md"]) == ["CLAUDE.md"]  # type: ignore[arg-type]
-    assert _names(settings["agents"]) == [  # type: ignore[arg-type]
-        "agent_team__interview_manager.md",
-        "agent_team__research_manager.md",
-    ]
-    assert _names(settings["skills"]) == ["agent_team"]  # type: ignore[arg-type]
+    assert list(settings.keys()) == ["claude_md", "agents", "skills"]
 
 
-def test_tree_projects_section_shape(fake_repo: Path) -> None:
-    projects = build_tree(fake_repo)["projects"]
-    assert isinstance(projects, list)
-    assert _names(projects) == ["development"]  # type: ignore[arg-type]
-    project_children = projects[0]["children"]  # type: ignore[index]
-    assert _names(project_children) == ["spec_driven"]  # type: ignore[arg-type]
-    stages = projects[0]["children"][0]["children"]  # type: ignore[index]
-    assert _names(stages) == [  # type: ignore[arg-type]
-        "user_input",
-        "interview",
-        "findings",
-        "final_specs",
-        "validation",
-    ]
+def test_missing_folder_for_absent_stage(tmp_path: Path) -> None:
+    (tmp_path / "CLAUDE.md").write_text("x", encoding="utf-8")
+    (tmp_path / ".claude" / "agents").mkdir(parents=True)
+    (tmp_path / ".claude" / "skills").mkdir(parents=True)
+    project = tmp_path / "specs" / "development" / "spec_driven"
+    (project / "user_input").mkdir(parents=True)
+    (project / "user_input" / "raw_prompt.md").write_text("x", encoding="utf-8")
+    tree = build_tree(tmp_path)
+    projects = tree["projects"]
+    assert isinstance(projects, list) and projects
+    type_node = projects[0]
+    assert type_node["name"] == "development"
+    proj_list = type_node["projects"]
+    assert isinstance(proj_list, list) and proj_list
+    stages = proj_list[0]["stages"]
+    stage_names = [s["name"] for s in stages]
+    assert stage_names == ["user_input", "interview", "findings", "final_specs", "validation"]
+    validation = stages[-1]
+    assert validation["kind"] == "missing-folder"
+    assert validation["present"] is False
 
 
-def test_validation_priority_ordering(fake_repo: Path) -> None:
-    projects = build_tree(fake_repo)["projects"]
-    validation_node = projects[0]["children"][0]["children"][4]  # type: ignore[index]
-    assert validation_node["name"] == "validation"
-    children = validation_node["children"]
-    assert _names(children) == [  # type: ignore[arg-type]
-        "strategy.md",
-        "acceptance_criteria.md",
-        "bdd_scenarios.md",
-        "extra.md",
-    ]
+def test_validation_priority_order(fake_repo: Path) -> None:
+    val_dir = fake_repo / "specs" / "development" / "spec_driven" / "validation"
+    (val_dir / "system_tests.md").write_text("x", encoding="utf-8")
+    (val_dir / "unit_tests.md").write_text("x", encoding="utf-8")
+    (val_dir / "security.md").write_text("x", encoding="utf-8")
+    tree = build_tree(fake_repo)
+    proj = tree["projects"][0]["projects"][0]
+    stages = proj["stages"]
+    validation = next(s for s in stages if s["name"] == "validation")
+    files = [c["name"] for c in validation["children"] if c.get("kind") == "file"]
+    assert files[0] == "strategy.md"
+    assert files[1] == "acceptance_criteria.md"
+    assert files[2] == "bdd_scenarios.md"
+    tail = files[3:]
+    assert tail == sorted(tail, key=lambda n: n.lower())
 
 
-def test_missing_stage_present_false(fake_repo: Path) -> None:
-    import shutil
-
-    shutil.rmtree(fake_repo / "specs" / "development" / "spec_driven" / "validation")
-    projects = build_tree(fake_repo)["projects"]
-    validation_node = projects[0]["children"][0]["children"][4]  # type: ignore[index]
-    assert validation_node["name"] == "validation"
-    assert validation_node["kind"] == "missing-folder"
-    assert validation_node["present"] is False
-
-
-def test_files_alphabetical_in_findings(fake_repo: Path) -> None:
+def test_alphabetical_within_stage_case_insensitive(fake_repo: Path) -> None:
     findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
-    (findings / "z-late.md").write_text("", encoding="utf-8")
-    (findings / "B-mid.md").write_text("", encoding="utf-8")
-    projects = build_tree(fake_repo)["projects"]
-    findings_node = projects[0]["children"][0]["children"][2]  # type: ignore[index]
-    assert _names(findings_node["children"]) == [  # type: ignore[arg-type]
-        "angle-a.md",
-        "B-mid.md",
-        "dossier.md",
-        "z-late.md",
-    ]
+    (findings / "Zebra.md").write_text("x", encoding="utf-8")
+    (findings / "alpha.md").write_text("x", encoding="utf-8")
+    (findings / "Alpha-2.md").write_text("x", encoding="utf-8")
+    (findings / "beta.md").write_text("x", encoding="utf-8")
+    tree = build_tree(fake_repo)
+    proj = tree["projects"][0]["projects"][0]
+    findings_node = next(s for s in proj["stages"] if s["name"] == "findings")
+    files = [c["name"] for c in findings_node["children"] if c.get("kind") == "file"]
+    lower_seq = [n.lower() for n in files]
+    assert lower_seq == sorted(lower_seq)

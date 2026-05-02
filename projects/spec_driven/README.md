@@ -1,94 +1,90 @@
 # spec_driven
 
-A readonly viewer for the artifacts produced by the spec-driven workflow in this monorepo.
-
-## What it shows
-
-Two top-level sidebar sections:
-
-1. **Claude Settings & Shared Context** — `CLAUDE.md`, every `.claude/agents/*.md`, every `.claude/skills/<folder>/SKILL.md`.
-2. **Projects** — for each `task_type` (`development`, `ai_video`, …), every project's five-stage subtree under `specs/{task_type}/{task_name}/`: `user_input/`, `interview/`, `findings/`, `final_specs/`, `validation/`.
-
-The main pane renders the selected file: markdown via CommonMark + GFM with Shiki-highlighted code blocks; YAML / JSON / JSONL via Shiki with line numbers (one block per line for `.jsonl`).
-
-## Run
-
-```sh
-make run
-```
-
-Builds the React bundle, then starts a single FastAPI process on `127.0.0.1:8765` serving both `/` (static) and `/api/`. Open `http://localhost:8765/` in Chrome.
-
-```sh
-make dev
-```
-
-Two-process dev: FastAPI with `--reload` on `127.0.0.1:8765` and Vite dev server on `127.0.0.1:5173`. Use the Vite URL while developing.
-
-## Configure
-
-- `SPEC_DRIVEN_PORT` env var overrides the default port (`8765`).
-- The backend walks parent directories from its own file at startup until it finds a directory containing `CLAUDE.md`, `specs/`, and `.claude/`. That's `REPO_ROOT`. If none is found, the process exits non-zero.
+A single-user, localhost FastAPI + React viewer/editor for the artifacts produced
+by the spec-driven workflow itself. Browse, render, edit, and assemble
+copy-paste regeneration prompts for every artifact under the project's exposed
+tree (`CLAUDE.md`, `.claude/agents/*.md`, `.claude/skills/**/SKILL.md`, and the
+five-stage subfolders under `specs/{task_type}/{task_name}/`).
 
 ## Install
 
 ```sh
-# from this folder
-uv sync                                # backend deps via the root pyproject.toml
-cd frontend && npm install              # frontend deps
+make install
 ```
+
+Runs `pip install -r backend/requirements.txt` (plus `pytest` and `httpx` for
+tests) into the repo's `.venv`, then `npm install` inside `frontend/`. The
+backend uses the pre-existing `.venv` at the repo root rather than `uv` —
+this avoids `uv run`'s known crash on this Windows host.
+
+## Develop (two-process mode)
+
+Run the backend and frontend in **two separate terminals**:
+
+```sh
+make run-backend
+```
+
+Starts FastAPI on `http://127.0.0.1:8765` with `--reload` (auto-restart on
+backend code changes). Uses uvicorn's `--factory` mode against
+`libs.api:create_app`, which discovers the repo root from the file's location.
+
+```sh
+make run-frontend
+```
+
+Starts the Vite dev server on `http://127.0.0.1:5173`. Vite is configured to
+proxy `/api/*` to `http://127.0.0.1:8765`, so open the frontend URL in a
+browser and HMR works against the live backend.
+
+## Run (production-style, single process)
+
+```sh
+make run-prod
+```
+
+Builds the React bundle into `backend/static/` and starts one FastAPI process
+serving both the SPA and `/api/`. Open `http://localhost:8765/`.
+
+## Test
+
+```sh
+make test
+```
+
+Runs the backend `pytest` suite via the repo `.venv`.
+
+## Configuration
+
+- `BACKEND_PORT` — overrides the FastAPI port (default `8765`). Example:
+  `BACKEND_PORT=9090 make run-backend`. The same value is forwarded to
+  `SPEC_DRIVEN_PORT` for `make run-prod`.
+- `FRONTEND_PORT` — overrides the Vite dev port (default `5173`).
+- `SPEC_DRIVEN_PORT` — read directly by `main.py` (used by `make run-prod`).
+  If the port is unavailable, the process exits non-zero with a clear error.
 
 ## Security model
 
-Localhost-only. The backend binds to `127.0.0.1`, has no auth, and exposes only `GET` endpoints. Running on a multi-user machine without a network sandbox is **out of scope for v1** — the threat model assumes one user, one machine.
+- The backend binds to `127.0.0.1` only. There is no authentication, no CORS
+  configuration, and no remote reachability. The deployment is a single-user,
+  localhost-only dogfood tool.
+- All file-touching endpoints funnel through a single `safe_resolve` helper
+  that rejects path traversal, symlinks (including ancestor symlinks),
+  absolute paths, and embedded NUL bytes. Only `.md`, `.yaml`, `.yml`,
+  `.json`, and `.jsonl` files inside the exposed tree are served. The 2 MB
+  per-file ceiling and the NUL-byte rejection are also enforced on `PUT`.
+- Sanctioned mutation endpoints are exactly `PUT /api/file` (atomic-replace
+  via `tempfile.mkstemp` + `os.fsync` + `os.replace`) and
+  `POST /api/regen-prompt` (which only assembles a string and never writes).
+  PATCH and DELETE return 405. No upload, no create, no delete.
 
-## Browser support
+## Autonomous-mode contract
 
-Latest stable Chrome / Chromium-based browsers. No IE, Firefox, or Safari guarantees. No mobile responsiveness.
-
-## Layout
-
-```
-projects/spec_driven/
-├── README.md
-├── Makefile
-├── .gitignore
-├── backend/
-│   ├── main.py                        # ~15-line entry; argparse, env, hand off to libs.api
-│   ├── requirements.txt               # mirrored into root pyproject.toml
-│   ├── libs/
-│   │   ├── repo_root.py               # walk-upward discovery
-│   │   ├── exposed_tree.py            # the EXPOSED_TREE concept (FR-1)
-│   │   ├── safe_resolve.py            # path sandbox (FR-5, FR-6, NFR-4)
-│   │   ├── tree_walker.py             # /api/tree shape (FR-7..FR-10)
-│   │   ├── file_reader.py             # /api/file with full error mapping (FR-5)
-│   │   └── api.py                     # FastAPI app wiring + static-files mount
-│   └── tests/
-│       ├── unit/                      # pytest unit tests
-│       └── fixtures/                  # checked-in test data
-└── frontend/
-    ├── package.json
-    ├── vite.config.ts
-    ├── tsconfig.json
-    ├── index.html
-    └── src/
-        ├── main.tsx
-        ├── App.tsx
-        ├── api.ts                     # fetch wrapper for /api/tree, /api/file
-        ├── routes.tsx                 # React Router config (FR-15)
-        ├── localStorage.ts            # spec_driven.sidebar.v1 helpers
-        ├── components/
-        │   ├── Sidebar.tsx            # ARIA tree (FR-18..FR-28)
-        │   ├── Reader.tsx             # main pane
-        │   ├── Breadcrumb.tsx         # FR-29
-        │   ├── BrokenLink.tsx         # FR-34 muted-tooltip component
-        │   └── RefreshButton.tsx
-        ├── markdown/
-        │   ├── slug.ts                # GFM kebab-case slug (FR-30)
-        │   ├── classifier.ts          # link classification (FR-33)
-        │   ├── renderer.tsx           # CommonMark + GFM + Shiki
-        │   └── jsonl.ts               # per-line JSON (FR-32)
-        └── styles.css
-```
-
-See `specs/development/spec_driven/final_specs/spec.md` for the full contract (39 FRs, 16 NFRs).
+The web app emits **copy-paste regeneration prompts** that the user pastes
+into the Claude Code CLI. Each prompt opens with one of two execution-mode
+headers: `# EXECUTION MODE: AUTONOMOUS` or `# EXECUTION MODE: INTERACTIVE`.
+Under autonomous mode, Claude must not call `AskUserQuestion`, must use best
+judgment for ambiguous choices and record the decision inline in the
+artifact, and must produce every requested artifact in the same turn before
+stopping. See the **Regeneration prompts & autonomous mode** section in the
+repo-root `CLAUDE.md` for the full contract.

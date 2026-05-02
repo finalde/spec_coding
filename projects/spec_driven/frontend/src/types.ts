@@ -1,21 +1,17 @@
-export type NodeKind = "file" | "folder" | "missing-folder";
-
 export interface TreeNode {
+  kind: "file" | "folder" | "missing-folder";
   name: string;
-  kind: NodeKind;
   path: string;
-  present: boolean;
   children?: TreeNode[];
-}
-
-export interface SettingsSection {
-  claude_md: TreeNode[];
-  agents: TreeNode[];
-  skills: TreeNode[];
+  present?: boolean;
 }
 
 export interface TreeResponse {
-  settings: SettingsSection;
+  settings: {
+    claude_md: TreeNode[];
+    agents: TreeNode[];
+    skills: TreeNode[];
+  };
   projects: TreeNode[];
 }
 

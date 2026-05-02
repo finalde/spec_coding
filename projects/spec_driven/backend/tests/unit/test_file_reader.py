@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -7,54 +8,65 @@ import pytest
 from libs.file_reader import FileReadError, read_file
 
 
-def test_read_existing_md(fake_repo: Path) -> None:
-    content = read_file("CLAUDE.md", fake_repo)
-    assert content.path == "CLAUDE.md"
-    assert content.extension == ".md"
-    assert "fake claude" in content.text
+def test_happy_path_md(fake_repo: Path) -> None:
+    out = read_file("specs/development/spec_driven/final_specs/spec.md", fake_repo)
+    assert out.path == "specs/development/spec_driven/final_specs/spec.md"
+    assert out.extension == ".md"
+    assert "spec content" in out.text
 
 
-def test_read_traversal_blocked(fake_repo: Path) -> None:
+def test_outside_sandbox_traversal(fake_repo: Path) -> None:
     with pytest.raises(FileReadError) as ei:
-        read_file("../../../etc/hosts", fake_repo)
+        read_file("../../etc/hosts", fake_repo)
     assert ei.value.status == 400
-    assert ei.value.error == "outside_sandbox"
+    assert ei.value.kind == "outside_sandbox"
 
 
-def test_read_outside_exposed_tree(fake_repo: Path) -> None:
-    (fake_repo / "pyproject.toml").write_text("[project]", encoding="utf-8")
+def test_unsupported_extension(fake_repo: Path) -> None:
+    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
+    p = findings / "diagram.png"
+    p.write_text("x", encoding="utf-8")
+    with pytest.raises(FileReadError) as ei:
+        read_file("specs/development/spec_driven/findings/diagram.png", fake_repo)
+    assert ei.value.status == 415
+    assert ei.value.kind == "unsupported_extension"
+
+
+def test_too_large(fake_repo: Path) -> None:
+    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
+    big = findings / "big.md"
+    big.write_bytes(b"a" * (2 * 1024 * 1024 + 100))
+    with pytest.raises(FileReadError) as ei:
+        read_file("specs/development/spec_driven/findings/big.md", fake_repo)
+    assert ei.value.status == 413
+    assert ei.value.kind == "too_large"
+
+
+def test_binary_content_nul(fake_repo: Path) -> None:
+    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
+    bin_md = findings / "binary.md"
+    bin_md.write_bytes(b"# header\x00more")
+    with pytest.raises(FileReadError) as ei:
+        read_file("specs/development/spec_driven/findings/binary.md", fake_repo)
+    assert ei.value.status == 415
+    assert ei.value.kind == "binary_content"
+
+
+def test_outside_exposed_tree(fake_repo: Path) -> None:
+    other = fake_repo / "pyproject.toml"
+    other.write_text("[project]\n", encoding="utf-8")
     with pytest.raises(FileReadError) as ei:
         read_file("pyproject.toml", fake_repo)
     assert ei.value.status == 404
     assert ei.value.kind == "outside_exposed_tree"
 
 
-def test_read_unsupported_extension(fake_repo: Path) -> None:
-    (fake_repo / "specs" / "development" / "spec_driven" / "final_specs" / "diagram.png").write_bytes(b"\x89PNG")
+def test_file_removed_after_stat(fake_repo: Path) -> None:
+    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
+    p = findings / "transient.md"
+    p.write_text("hi", encoding="utf-8")
+    os.unlink(p)
     with pytest.raises(FileReadError) as ei:
-        read_file("specs/development/spec_driven/final_specs/diagram.png", fake_repo)
-    assert ei.value.status in (404, 415)
-
-
-def test_read_too_large(fake_repo: Path) -> None:
-    big = fake_repo / "specs" / "development" / "spec_driven" / "final_specs" / "huge.md"
-    big.write_text("x" * (2 * 1024 * 1024 + 1), encoding="utf-8")
-    with pytest.raises(FileReadError) as ei:
-        read_file("specs/development/spec_driven/final_specs/huge.md", fake_repo)
-    assert ei.value.status == 413
-
-
-def test_read_binary_content(fake_repo: Path) -> None:
-    bad = fake_repo / "specs" / "development" / "spec_driven" / "final_specs" / "bin.md"
-    bad.write_bytes(b"hello\x00world")
-    with pytest.raises(FileReadError) as ei:
-        read_file("specs/development/spec_driven/final_specs/bin.md", fake_repo)
-    assert ei.value.status == 415
-    assert ei.value.error == "binary_content"
-
-
-def test_read_missing_file(fake_repo: Path) -> None:
-    with pytest.raises(FileReadError) as ei:
-        read_file("specs/development/spec_driven/final_specs/missing.md", fake_repo)
+        read_file("specs/development/spec_driven/findings/transient.md", fake_repo)
     assert ei.value.status == 404
-    assert ei.value.kind in ("file_removed", "outside_exposed_tree")
+    assert ei.value.kind == "file_removed"
