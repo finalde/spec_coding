@@ -2,7 +2,7 @@ import { useState } from "react";
 import { saveFile } from "../api";
 
 interface QaViewProps {
-  source: string;
+  parsed: ParseResult;
   filePath: string;
   onSaved: (text: string) => void;
 }
@@ -76,8 +76,8 @@ function parseQa(source: string): ParseResult {
       inQ = true;
       continue;
     }
-    // Answer bullet: "- A:"
-    const aMatch = /^-\s*A:\s*(.*)$/.exec(line);
+    // Answer bullet: "- A:" or "- A *(judgment call ...)*:" (autonomous mode form)
+    const aMatch = /^-\s*A\s*(?:\*[^*\n]*\*\s*)?:\s*(.*)$/.exec(line);
     if (aMatch) {
       if (!curCat) continue;
       const answerText = aMatch[1] ?? "";
@@ -182,11 +182,10 @@ function QaBlock(props: BlockProps): JSX.Element {
 }
 
 export function QaView({
-  source,
+  parsed,
   filePath,
   onSaved,
 }: QaViewProps): JSX.Element {
-  const [parsed] = useState<ParseResult>(() => parseQa(source));
   const [editing, setEditing] = useState<InlineEditState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -279,4 +278,5 @@ export function QaView({
   );
 }
 
-export { ParseError };
+export { ParseError, parseQa };
+export type { ParseResult };

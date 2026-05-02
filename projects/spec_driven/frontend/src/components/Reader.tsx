@@ -3,7 +3,7 @@ import { fetchFile } from "../api";
 import type { FileResponse, TreeNode, TreeResponse } from "../types";
 import { Breadcrumb } from "./Breadcrumb";
 import { Editor } from "./Editor";
-import { QaView, ParseError } from "./QaView";
+import { QaView, ParseError, parseQa } from "./QaView";
 import { MarkdownView } from "../markdown/renderer";
 import { CodeView } from "../markdown/code";
 import { JsonlView } from "../markdown/jsonl";
@@ -235,17 +235,19 @@ function QaViewSafe({
   onSaved,
   exposedPaths,
 }: QaViewSafeProps): JSX.Element {
+  // Parse synchronously here so any ParseError is caught BEFORE we hand
+  // off to QaView. A try/catch around <QaView .../> alone does NOT catch
+  // errors thrown inside React rendering — that needs an error boundary
+  // or this hoisted-parse pattern.
   try {
-    return <QaView source={source} filePath={filePath} onSaved={onSaved} />;
+    const parsed = parseQa(source);
+    return <QaView parsed={parsed} filePath={filePath} onSaved={onSaved} />;
   } catch (e) {
-    if (e instanceof ParseError) {
-      return (
-        <MarkdownView
-          source={source}
-          sourcePath={filePath}
-          exposedPaths={exposedPaths}
-        />
-      );
+    void e; // ParseError or anything else — fall back to plain markdown per FR-41.
+    if (!(e instanceof ParseError)) {
+      // Non-parse errors are unexpected; surface to console for debugging.
+      // eslint-disable-next-line no-console
+      console.error("QaView render failed unexpectedly", e);
     }
     return (
       <MarkdownView

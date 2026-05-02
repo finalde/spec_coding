@@ -104,6 +104,20 @@ The skill `agent_team` is the single entry point and walks through all six stage
 - The dynamic sub-agents that managers spawn at runtime are NOT permanent agent files — they are general-purpose agents driven by manager-authored prompts, captured under `.audit/adhoc_agents/{date}/{task_id}/spawns/`.
 - YAML frontmatter `description` field has a hard ceiling of **500 characters**.
 
+## Agent reference docs (`.claude/agent_refs/`)
+
+A fifth state surface, layered on top of the four declared at the top of this file:
+
+5. **`.claude/agent_refs/<manager_name>/{general.md, <task_type>.md}`** — accumulated institutional memory each manager must consult before defining its team. One folder per permanent manager. `general.md` holds task-type-agnostic principles; `<task_type>.md` (e.g., `development.md`, `ai_video.md`) holds lessons learned from past runs of that task type.
+
+Rules:
+
+- Each permanent manager (`agent_team__interview_manager`, `agent_team__research_manager`, `agent_team__validation_manager`) MUST read `general.md` for its folder on every invocation, plus `<task_type>.md` when the file exists for the current task's type. The manager's output JSON includes a `pre_reading_consulted` array citing the absolute paths actually loaded; the parent verifies this against the spawn audit and treats a missing array as a critical failure.
+- Per-task-type rules **override** the agent file's defaults when they conflict. The agent file is the contract; the playbook is what the manager has *learned*. Different lifecycles.
+- Updates to these files are surgical (one new principle, one new severity row, one new "required validation move"). They cite the run id where the lesson surfaced. Wholesale rewrites are anti-patterns — the goal is to grow institutional memory, not to refactor it.
+- The `EXPOSED_TREE` of the spec_driven webapp includes `.claude/agent_refs/**/*.md`, so users can view and edit these alongside `CLAUDE.md` and the agent files via the same UX.
+- Why a separate folder, not appendices to the agent files: agent files are **what the manager does**; refs are **what the manager has learned**. As lessons accumulate, embedding everything in the agent file would balloon it past readability.
+
 ## Project rules (under `projects/`)
 
 - One folder per project. No cross-project imports.

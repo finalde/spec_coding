@@ -43,6 +43,13 @@ class ExposedTree:
             and parts[-1] == "SKILL.md"
         ):
             return True
+        if (
+            len(parts) >= 4
+            and parts[0] == ".claude"
+            and parts[1] == "agent_refs"
+            and parts[-1].endswith(".md")
+        ):
+            return True
         if len(parts) >= 5 and parts[0] == "specs":
             stage = parts[3]
             if stage not in _STAGE_FOLDERS:

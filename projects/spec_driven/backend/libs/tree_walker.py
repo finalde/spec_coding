@@ -32,6 +32,7 @@ def _build_settings(repo_root: Path) -> dict[str, object]:
         "claude_md": _build_claude_md(repo_root),
         "agents": _build_agents(repo_root),
         "skills": _build_skills(repo_root),
+        "agent_refs": _build_agent_refs(repo_root),
     }
 
 
@@ -61,6 +62,39 @@ def _build_agents(repo_root: Path) -> list[dict[str, object]]:
         rel = f".claude/agents/{child.name}"
         entries.append(_leaf(child.name, rel))
     return entries
+
+
+def _build_agent_refs(repo_root: Path) -> list[dict[str, object]]:
+    refs_dir = repo_root / ".claude" / "agent_refs"
+    if not refs_dir.is_dir():
+        return []
+    out: list[dict[str, object]] = []
+    try:
+        manager_dirs = list(refs_dir.iterdir())
+    except OSError:
+        return []
+    for manager_dir in sorted(manager_dirs, key=lambda p: p.name.lower()):
+        if _safe_is_symlink(manager_dir) or not manager_dir.is_dir():
+            continue
+        try:
+            files = list(manager_dir.iterdir())
+        except OSError:
+            continue
+        leaves: list[dict[str, object]] = []
+        for f in sorted(files, key=lambda p: p.name.lower()):
+            if _safe_is_symlink(f) or not f.is_file():
+                continue
+            if f.suffix.lower() != ".md":
+                continue
+            rel = f".claude/agent_refs/{manager_dir.name}/{f.name}"
+            leaves.append(_leaf(f.name, rel))
+        out.append({
+            "kind": "folder",
+            "name": manager_dir.name,
+            "path": f".claude/agent_refs/{manager_dir.name}",
+            "children": leaves,
+        })
+    return out
 
 
 def _build_skills(repo_root: Path) -> list[dict[str, object]]:
@@ -106,13 +140,13 @@ def _build_projects(repo_root: Path) -> list[dict[str, object]]:
                 "kind": "project",
                 "name": name_dir.name,
                 "path": project_rel,
-                "stages": stages_payload,
+                "children": stages_payload,
             })
         out.append({
             "kind": "task_type",
             "name": type_dir.name,
             "path": f"specs/{type_dir.name}",
-            "projects": names_payload,
+            "children": names_payload,
         })
     return out
 

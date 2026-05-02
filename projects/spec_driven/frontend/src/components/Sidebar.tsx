@@ -102,9 +102,43 @@ function buildVisible(tree: TreeResponse, opts: BuildOpts): VisibleNode[] {
     }
   };
 
+  const pushNestedGroup = (id: string, label: string, items: ReadonlyArray<TreeNode>): void => {
+    nodes.push({
+      id,
+      level: 2,
+      path: null,
+      kind: "settings-group",
+      name: label,
+      parentId: sec1Id,
+      hasChildren: true,
+      ariaSelected: false,
+    });
+    for (const folder of items) {
+      if (folder.kind !== "folder" || !folder.children) continue;
+      for (const f of folder.children) {
+        if (f.kind !== "file") continue;
+        const isSelected =
+          opts.selectedPath !== null && opts.selectedPath === f.path;
+        nodes.push({
+          id: `file:${f.path}`,
+          level: 3,
+          path: f.path,
+          kind: "file",
+          name: `${folder.name}/${f.name}`,
+          parentId: id,
+          hasChildren: false,
+          ariaSelected: isSelected,
+        });
+      }
+    }
+  };
+
   pushGroup("group:claude_md", "CLAUDE.md", tree.settings.claude_md);
   pushGroup("group:agents", "Agents", tree.settings.agents);
   pushGroup("group:skills", "Skills", tree.settings.skills);
+  if (tree.settings.agent_refs && tree.settings.agent_refs.length > 0) {
+    pushNestedGroup("group:agent_refs", "Agent refs", tree.settings.agent_refs);
+  }
 
   // Section 2: Projects
   const sec2Id = "section:projects";
@@ -497,6 +531,32 @@ export function Sidebar({
           ))}
         </ul>
       </div>
+      {tree.settings.agent_refs && tree.settings.agent_refs.length > 0 && (
+        <div className="sidebar-subgroup">
+          <h3 className="sidebar-subgroup-header">Agent refs</h3>
+          <ul className="sidebar-list">
+            {tree.settings.agent_refs.flatMap((mgr) =>
+              (mgr.children ?? []).map((f) => (
+                <li key={f.path}>
+                  <Link
+                    to={`/file/${encodeURI(f.path)}`}
+                    className={
+                      selectedPath === f.path
+                        ? "sidebar-leaf sidebar-leaf-selected"
+                        : "sidebar-leaf"
+                    }
+                    title={`${mgr.name}/${f.name}`}
+                  >
+                    <span className="sidebar-leaf-text">
+                      {truncateFileName(`${mgr.name}/${f.name}`, 44)}
+                    </span>
+                  </Link>
+                </li>
+              )),
+            )}
+          </ul>
+        </div>
+      )}
     </section>
   );
 

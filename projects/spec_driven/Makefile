@@ -1,4 +1,4 @@
-.PHONY: help install run-backend run-frontend run-prod test clean
+.PHONY: help install run-backend run-frontend run-prod test e2e clean
 
 # Resolve the repo's pre-configured venv. This Makefile lives at projects/spec_driven/,
 # so the repo root is two levels up.
@@ -15,6 +15,7 @@ help:
 	@echo "  make run-frontend   -- start Vite dev server on http://127.0.0.1:$(FRONTEND_PORT) (proxies /api -> 8765)"
 	@echo "  make run-prod       -- build frontend bundle into backend/static/ and start a single FastAPI process"
 	@echo "  make test           -- run backend pytest"
+	@echo "  make e2e            -- run Playwright dogfood e2e (requires run-prod up on $(BACKEND_PORT))"
 	@echo "  make clean          -- remove backend/static/ and frontend/dist/"
 	@echo ""
 	@echo "Use run-backend and run-frontend in two terminals during development."
@@ -38,6 +39,9 @@ run-prod:
 
 test:
 	cd backend && $(PY) -m pytest
+
+e2e:
+	cd frontend && npm run e2e
 
 clean:
 	rm -rf backend/static frontend/dist

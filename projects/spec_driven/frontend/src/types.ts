@@ -11,6 +11,7 @@ export interface TreeResponse {
     claude_md: TreeNode[];
     agents: TreeNode[];
     skills: TreeNode[];
+    agent_refs?: TreeNode[];
   };
   projects: TreeNode[];
 }
