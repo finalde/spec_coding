@@ -1,275 +1,237 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  buildRegenPrompt,
-  fetchStages,
-  RegenPromptError,
-  RegenPromptResponse,
-  StageDef,
-  StagesResponse,
-} from "../api";
-import {
-  loadAutonomous,
-  saveAutonomous,
-  subscribeAutonomous,
-} from "../autonomousMode";
+import { fetchStages, postRegenPrompt } from "../api";
+import { useAutonomousMode } from "../autonomousMode";
+import type { RegenResult, Stage } from "../types";
 
-interface RegeneratePanelProps {
+interface Props {
   projectType: string;
   projectName: string;
-  stageHint?: string;
-  // When true, shows ALL stages (project-level / master) regardless of stageHint.
-  showAll?: boolean;
+  initialStageId?: string;
+  master?: boolean;
 }
 
-interface ModuleSelection {
-  // stageId -> set of relative_path's that are checked
-  [stageId: string]: Set<string>;
+function formatBytes(bytes: number): string {
+  return `${(bytes / 1024).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} KB`;
 }
 
-function formatBytes(n: number): string {
-  const kb = n / 1024;
-  return `${kb.toLocaleString(undefined, { maximumFractionDigits: 1 })} KB`;
-}
-
-export function RegeneratePanel({
-  projectType,
-  projectName,
-  stageHint,
-  showAll,
-}: RegeneratePanelProps): JSX.Element {
-  const [stages, setStages] = useState<StagesResponse | null>(null);
-  const [stageError, setStageError] = useState<string | null>(null);
-  const [autonomous, setAutonomous] = useState(loadAutonomous());
-  const [selection, setSelection] = useState<ModuleSelection>({});
-  const [stageChecked, setStageChecked] = useState<Record<string, boolean>>({});
-  const [building, setBuilding] = useState(false);
-  const [response, setResponse] = useState<RegenPromptResponse | null>(null);
-  const [buildError, setBuildError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [softWrap, setSoftWrap] = useState(true);
+export function RegeneratePanel({ projectType, projectName, initialStageId, master }: Props) {
+  const [stages, setStages] = useState<Stage[] | null>(null);
+  const [selectedStageIds, setSelectedStageIds] = useState<Set<string>>(new Set());
+  const [selectedModules, setSelectedModules] = useState<Record<string, Set<string>>>({});
+  const [autonomous, setAutonomous] = useAutonomousMode();
+  const [result, setResult] = useState<RegenResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [building, setBuilding] = useState<boolean>(false);
+  const [wrap, setWrap] = useState<boolean>(true);
+  const [copied, setCopied] = useState<boolean>(false);
 
   useEffect(() => {
-    const unsub = subscribeAutonomous(setAutonomous);
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
     fetchStages(projectType, projectName)
       .then((s) => {
-        if (cancelled) return;
         setStages(s);
-        // Default: all checked
-        const sel: ModuleSelection = {};
-        const stCheck: Record<string, boolean> = {};
-        for (const st of s.stages) {
-          sel[st.id] = new Set(st.modules.map((m) => m.relative_path));
-          stCheck[st.id] = true;
+        if (master) {
+          setSelectedStageIds(new Set(s.map((x) => x.id)));
+          const all: Record<string, Set<string>> = {};
+          for (const stage of s) all[stage.id] = new Set(stage.modules.map((m) => m.id));
+          setSelectedModules(all);
+        } else if (initialStageId) {
+          setSelectedStageIds(new Set([initialStageId]));
+          const stage = s.find((x) => x.id === initialStageId);
+          if (stage) {
+            setSelectedModules({ [initialStageId]: new Set(stage.modules.map((m) => m.id)) });
+          }
         }
-        setSelection(sel);
-        setStageChecked(stCheck);
       })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setStageError(e instanceof Error ? e.message : "stages fetch failed");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectType, projectName]);
+      .catch((e) => setError(String(e)));
+  }, [projectType, projectName, initialStageId, master]);
 
-  const visibleStages: StageDef[] = useMemo(() => {
-    if (!stages) return [];
-    if (showAll) return stages.stages;
-    if (stageHint) {
-      const match = stages.stages.find(
-        (s) => s.folder === stageHint || s.id === stageHint,
-      );
-      return match ? [match] : stages.stages;
+  const toggleStage = (stageId: string, checked: boolean) => {
+    const next = new Set(selectedStageIds);
+    if (checked) next.add(stageId);
+    else next.delete(stageId);
+    setSelectedStageIds(next);
+    if (checked && stages) {
+      const stage = stages.find((s) => s.id === stageId);
+      if (stage)
+        setSelectedModules((m) => ({ ...m, [stageId]: new Set(stage.modules.map((mm) => mm.id)) }));
     }
-    return stages.stages;
-  }, [stages, showAll, stageHint]);
+  };
 
-  const toggleModule = (stageId: string, relPath: string): void => {
-    setSelection((prev) => {
-      const cur = new Set(prev[stageId] ?? []);
-      if (cur.has(relPath)) cur.delete(relPath);
-      else cur.add(relPath);
-      return { ...prev, [stageId]: cur };
+  const toggleModule = (stageId: string, moduleId: string, checked: boolean) => {
+    setSelectedModules((m) => {
+      const cur = new Set(m[stageId] || []);
+      if (checked) cur.add(moduleId);
+      else cur.delete(moduleId);
+      return { ...m, [stageId]: cur };
     });
   };
 
-  const toggleStage = (stageId: string): void => {
-    setStageChecked((prev) => ({ ...prev, [stageId]: !prev[stageId] }));
-  };
-
-  const onAutonomousChange = (v: boolean): void => {
-    setAutonomous(v);
-    saveAutonomous(v);
-  };
-
-  const onBuild = async (): Promise<void> => {
-    if (!stages) return;
+  const buildPrompt = async () => {
     setBuilding(true);
-    setBuildError(null);
-    setResponse(null);
+    setError(null);
+    setResult(null);
     try {
-      const stageIds: string[] = [];
-      const modules: Record<string, string[]> = {};
-      for (const st of visibleStages) {
-        if (!stageChecked[st.id]) continue;
-        stageIds.push(st.id);
-        modules[st.id] = Array.from(selection[st.id] ?? []);
-      }
-      const r = await buildRegenPrompt({
+      const stageIdArr = Array.from(selectedStageIds);
+      const modulesObj: Record<string, string[]> = {};
+      for (const sid of stageIdArr) modulesObj[sid] = Array.from(selectedModules[sid] || []);
+      const r = await postRegenPrompt({
         project_type: projectType,
         project_name: projectName,
-        stages: stageIds,
-        modules,
+        stages: stageIdArr,
+        modules: modulesObj,
         autonomous,
       });
-      setResponse(r);
-    } catch (e) {
-      if (e instanceof RegenPromptError) {
-        setBuildError(`${e.status} ${e.body.kind ?? e.body.error ?? "error"}`);
+      setResult(r);
+    } catch (e: any) {
+      const detail = e?.detail?.detail;
+      if (detail && typeof detail === "object" && detail.kind === "too_large") {
+        setError(`Could not build prompt: too large (${formatBytes(detail.bytes)})`);
       } else {
-        setBuildError(e instanceof Error ? e.message : "build failed");
+        setError(`Could not build prompt: ${typeof detail === "string" ? detail : JSON.stringify(detail || e)}`);
       }
     } finally {
       setBuilding(false);
     }
   };
 
-  const onCopy = async (): Promise<void> => {
-    if (!response) return;
+  const copyPrompt = async () => {
+    if (!result) return;
     try {
-      await navigator.clipboard.writeText(response.prompt);
+      await navigator.clipboard.writeText(result.prompt);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), 1500);
     } catch {
-      // ignore
+      setError("clipboard write failed");
     }
   };
 
-  if (stageError) {
-    return (
-      <div className="regen-panel regen-error" role="alert">
-        regen panel error: {stageError}
-      </div>
-    );
-  }
-  if (!stages) {
-    return <div className="regen-panel">Loading stages…</div>;
-  }
+  const breakdown = useMemo(() => {
+    if (!result) return null;
+    return `${result.selected_stages_count} stages selected, ${result.follow_ups_count} follow-ups inlined, autonomous=${result.autonomous}, ${formatBytes(result.bytes)}`;
+  }, [result]);
 
-  const summaryLine = response
-    ? `${response.selected_stages_count} ${response.selected_stages_count === 1 ? "stage" : "stages"} selected, ${response.follow_ups_count} ${response.follow_ups_count === 1 ? "follow-up" : "follow-ups"} inlined, autonomous=${response.autonomous}, ${formatBytes(response.bytes)}`
-    : "";
+  if (!stages) return null;
 
-  return (
-    <details className="regen-panel">
-      <summary className="regen-panel-summary">Regenerate</summary>
-      <div className="regen-panel-body">
-        <label className="regen-autonomous">
-          <input
-            type="checkbox"
-            checked={autonomous}
-            onChange={(e) => onAutonomousChange(e.target.checked)}
-          />
-          Autonomous mode
-        </label>
-        {visibleStages.map((st) => (
-          <fieldset key={st.id} className="regen-stage">
-            <legend className="regen-stage-legend">
+  const visibleStages = master ? stages : stages.filter((s) => s.id === initialStageId);
+
+  const panel = (
+    <div className="regen-body">
+      {visibleStages.map((stage) => (
+        <fieldset key={stage.id} className="regen-stage">
+          <legend>
+            {master && (
               <label>
                 <input
                   type="checkbox"
-                  checked={stageChecked[st.id] !== false}
-                  onChange={() => toggleStage(st.id)}
+                  checked={selectedStageIds.has(stage.id)}
+                  onChange={(e) => toggleStage(stage.id, e.target.checked)}
                 />{" "}
-                {st.label}
+                <strong>{stage.label}</strong>
               </label>
-              <span className="regen-stage-folder">{st.folder}</span>
-            </legend>
-            <ul className="regen-modules">
-              {st.modules.map((m) => {
-                const checked = selection[st.id]?.has(m.relative_path) ?? false;
-                return (
-                  <li key={m.relative_path}>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleModule(st.id, m.relative_path)}
-                      />{" "}
-                      <span className="regen-module-label">{m.label}</span>{" "}
-                      <span className="regen-module-path">
-                        {m.relative_path}
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          </fieldset>
-        ))}
-        <div className="regen-actions">
-          <button
-            type="button"
-            className="regen-build-btn"
-            onClick={() => void onBuild()}
-            disabled={building}
-          >
-            {building ? "Building…" : "Build prompt"}
-          </button>
-          {response && (
-            <span className="regen-summary-line">{summaryLine}</span>
-          )}
-        </div>
-        {buildError && (
-          <div className="editor-error-banner" role="alert">
-            {buildError}
-          </div>
-        )}
-        {response?.warning && (
-          <div className="regen-warning" role="status">
-            warning: {response.warning} — verify your selection before pasting
-          </div>
-        )}
-        {response && (
-          <div className="regen-prompt-block">
-            <div className="regen-prompt-header">
-              <span className="regen-prompt-title">Assembled prompt</span>
-              <label className="regen-wrap-toggle">
-                <input
-                  type="checkbox"
-                  checked={softWrap}
-                  onChange={(e) => setSoftWrap(e.target.checked)}
-                />{" "}
-                Wrap
-              </label>
-              <button
-                type="button"
-                className="regen-copy-btn-prominent"
-                onClick={() => void onCopy()}
-                aria-live="polite"
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-            <pre
-              className={
-                softWrap
-                  ? "regen-prompt-pre regen-prompt-pre--wrap"
-                  : "regen-prompt-pre"
-              }
-              tabIndex={0}
-            >
-              {response.prompt}
-            </pre>
-          </div>
+            )}
+            {!master && <strong>{stage.label}</strong>}
+          </legend>
+          <ul className="modules">
+            {stage.modules.map((m) => (
+              <li key={m.id}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selectedModules[stage.id]?.has(m.id) ?? false}
+                    onChange={(e) => toggleModule(stage.id, m.id, e.target.checked)}
+                  />{" "}
+                  <span>{m.label}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </fieldset>
+      ))}
+      <label className="autonomous-label">
+        <input
+          type="checkbox"
+          checked={autonomous}
+          onChange={(e) => setAutonomous(e.target.checked)}
+          data-testid="autonomous-toggle"
+        />{" "}
+        Autonomous mode
+      </label>
+      <div className="regen-actions">
+        <button
+          type="button"
+          data-testid="regen-build-button"
+          onClick={buildPrompt}
+          disabled={building || selectedStageIds.size === 0}
+        >
+          {building ? "Building…" : "Build prompt"}
+        </button>
+        {breakdown && (
+          <span className="regen-breakdown" data-testid="regen-breakdown">
+            {breakdown}
+          </span>
         )}
       </div>
+      {error && (
+        <div role="alert" className="regen-error">
+          {error}
+        </div>
+      )}
+      {result?.warning && (
+        <div className="regen-warning" data-testid="regen-warning-banner">
+          warning: {result.warning} — verify your selection before pasting
+        </div>
+      )}
+      {result && !error && (
+        <div className="regen-prompt-block" data-testid="regen-prompt-block">
+          <div className="regen-prompt-header">
+            <span className="regen-prompt-title">Assembled prompt</span>
+            <label className="wrap-toggle">
+              <input
+                type="checkbox"
+                checked={wrap}
+                onChange={(e) => setWrap(e.target.checked)}
+                data-testid="regen-wrap-toggle"
+              />{" "}
+              Wrap
+            </label>
+            <button
+              type="button"
+              className="btn-primary"
+              data-testid="regen-copy-button"
+              aria-live="polite"
+              style={{ minWidth: 90 }}
+              onClick={copyPrompt}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <pre
+            style={
+              wrap
+                ? { whiteSpace: "pre-wrap", wordBreak: "break-word" }
+                : { whiteSpace: "pre", overflowX: "auto" }
+            }
+          >
+            {result.prompt}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+
+  if (master) {
+    return (
+      <section className="regen-panel master" data-testid="master-regen">
+        <h2>Regenerate (whole project)</h2>
+        {panel}
+      </section>
+    );
+  }
+
+  return (
+    <details className="regen-panel" title="Regenerate" data-testid="regen-panel">
+      <summary>Regenerate</summary>
+      {panel}
     </details>
   );
 }

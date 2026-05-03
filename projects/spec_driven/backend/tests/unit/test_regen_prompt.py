@@ -1,186 +1,159 @@
-from __future__ import annotations
+"""
+Group 4 — regen_prompt (FR-10, FR-11, FR-12, AC-13..AC-17).
 
-from pathlib import Path
+Most-load-bearing assertions:
+- 4.1/4.2 first-line + autonomous imperative line VERBATIM
+- 4.3 INTERACTIVE header has no imperative
+- 4.5 follow-ups numerical order
+- 4.6 promoted.md inlined under "### Pinned items (MUST survive regeneration)"
+- 4.7 size policy 50KB-warn / 1MB-413 (warn-don't-truncate)
+- 4.8 read-zero sentence in Constraints section
+"""
+
+from __future__ import annotations
 
 import pytest
 
-from libs.file_reader import FileReadError
 from libs.regen_prompt import (
     AUTONOMOUS_IMPERATIVE,
-    REGEN_HARD_CEILING_BYTES,
-    REGEN_WARN_BYTES,
-    build_regen_prompt,
-    build_regen_prompt_result,
+    HARD_LIMIT,
+    READ_ZERO_SENTENCE,
+    RegenInputError,
+    RegenPromptAssembler,
+    TooLargePromptError,
+    WARN_THRESHOLD,
 )
 
 
-def test_under_warn_no_warning(fake_repo: Path) -> None:
-    result = build_regen_prompt_result(
+def _assemble(repo_root, **kwargs):
+    asm = RegenPromptAssembler(repo_root=repo_root.path)
+    defaults = dict(
         project_type="development",
         project_name="spec_driven",
-        stage_ids=["spec_compilation"],
-        module_ids={"spec_compilation": ["spec"]},
+        stage_ids=["interview"],
+        modules={},
         autonomous=False,
-        repo_root=fake_repo,
     )
-    assert result.warning is None
+    defaults.update(kwargs)
+    return asm.assemble(**defaults)
 
 
-def test_autonomous_includes_verbatim_imperative(fake_repo: Path) -> None:
-    prompt = build_regen_prompt(
-        project_type="development",
-        project_name="spec_driven",
-        stage_ids=["spec_compilation"],
-        module_ids={"spec_compilation": ["spec"]},
-        autonomous=True,
-        repo_root=fake_repo,
+def test_first_line_autonomous_header(repo_root):
+    r = _assemble(repo_root, autonomous=True)
+    first_line = r.prompt.split("\n", 1)[0]
+    assert first_line == "# EXECUTION MODE: AUTONOMOUS"
+
+
+def test_autonomous_imperative_line_verbatim(repo_root):
+    r = _assemble(repo_root, autonomous=True)
+    assert AUTONOMOUS_IMPERATIVE in r.prompt
+    assert (
+        "Do not call AskUserQuestion. For anything unclear, use your best judgment, "
+        "record the choice inline in the artifact, and keep going. "
+        "Produce every requested artifact below in this single turn before stopping."
+        in r.prompt
     )
-    lines = [ln for ln in prompt.splitlines() if ln.strip()]
-    assert lines[0] == "# EXECUTION MODE: AUTONOMOUS"
-    assert lines[1] == AUTONOMOUS_IMPERATIVE
 
 
-def test_interactive_no_imperative(fake_repo: Path) -> None:
-    prompt = build_regen_prompt(
-        project_type="development",
-        project_name="spec_driven",
-        stage_ids=["spec_compilation"],
-        module_ids={"spec_compilation": ["spec"]},
-        autonomous=False,
-        repo_root=fake_repo,
-    )
-    lines = [ln for ln in prompt.splitlines() if ln.strip()]
-    assert lines[0] == "# EXECUTION MODE: INTERACTIVE"
-    assert AUTONOMOUS_IMPERATIVE not in prompt
+def test_interactive_header_no_imperative(repo_root):
+    r = _assemble(repo_root, autonomous=False)
+    first_line = r.prompt.split("\n", 1)[0]
+    assert first_line == "# EXECUTION MODE: INTERACTIVE"
+    assert "Do not call AskUserQuestion" not in r.prompt
 
 
-def test_above_warn_emits_warning_full_prompt(fake_repo: Path) -> None:
-    revised = fake_repo / "specs" / "development" / "spec_driven" / "user_input" / "revised_prompt.md"
-    revised.write_text("X" * (REGEN_WARN_BYTES + 5_000), encoding="utf-8")
-    result = build_regen_prompt_result(
-        project_type="development",
-        project_name="spec_driven",
-        stage_ids=["spec_compilation"],
-        module_ids={"spec_compilation": ["spec"]},
-        autonomous=False,
-        repo_root=fake_repo,
-    )
-    assert result.warning is not None
-    assert len(result.prompt.encode("utf-8")) > REGEN_WARN_BYTES
+def test_inlines_revised_prompt(repo_root):
+    r = _assemble(repo_root)
+    assert "## Revised prompt" in r.prompt
+    assert "spec_driven" in r.prompt
 
 
-def test_above_hard_ceiling_raises_413(fake_repo: Path) -> None:
-    revised = fake_repo / "specs" / "development" / "spec_driven" / "user_input" / "revised_prompt.md"
-    revised.write_text("X" * (REGEN_HARD_CEILING_BYTES + 5_000), encoding="utf-8")
-    with pytest.raises(FileReadError) as ei:
-        build_regen_prompt_result(
+def test_follow_ups_in_numerical_order(repo_root):
+    r = _assemble(repo_root)
+    assert r.follow_ups_count >= 0
+    if r.follow_ups_count >= 2:
+        section = r.prompt.split("## Follow-ups", 1)[1].split("## Stage:", 1)[0]
+        last_idx = -1
+        for line in section.splitlines():
+            if line.startswith("- `user_input/follow_ups/"):
+                name = line.split("/")[-1].rstrip("`")
+                num = int(name.split("-", 1)[0])
+                assert num >= last_idx
+                last_idx = num
+
+
+def test_promoted_md_inlined_under_pinned_items(repo_root):
+    r = _assemble(repo_root, stage_ids=["interview"])
+    assert "### Pinned items (MUST survive regeneration)" in r.prompt
+    assert "All discovered (Recommended)" in r.prompt
+
+
+def test_constraints_section_includes_read_zero(repo_root):
+    r = _assemble(repo_root)
+    assert "### Constraints" in r.prompt
+    assert READ_ZERO_SENTENCE in r.prompt
+    for marker in ("regen.delete.planned", "regen.delete.completed", "regen.write.completed"):
+        assert marker in r.prompt
+    for surface in ("CLAUDE.md", "specs/{type}/{name}/", ".audit/adhoc_agents/"):
+        assert surface in r.prompt
+    assert "parent-direct" in r.prompt.lower()
+
+
+def test_response_shape(repo_root):
+    r = _assemble(repo_root)
+    d = r.to_dict()
+    assert set(d.keys()) == {"prompt", "warning", "selected_stages_count", "follow_ups_count", "autonomous", "bytes"}
+    assert d["bytes"] == len(d["prompt"].encode("utf-8"))
+
+
+def test_size_policy_warn_threshold(repo_root):
+    r = _assemble(repo_root, stage_ids=["interview"])
+    if r.bytes <= WARN_THRESHOLD:
+        assert r.warning is None
+    else:
+        assert r.warning is not None
+
+
+def test_size_policy_full_pipeline_might_warn(repo_root):
+    r = _assemble(repo_root, stage_ids=["intake", "interview", "research", "spec", "validation", "execution"])
+    if r.bytes > WARN_THRESHOLD:
+        assert r.warning is not None
+        assert r.bytes == len(r.prompt.encode("utf-8"))
+
+
+def test_unknown_stage_id_rejected(repo_root):
+    with pytest.raises(RegenInputError):
+        _assemble(repo_root, stage_ids=["bogus_stage"])
+
+
+def test_empty_stages_rejected(repo_root):
+    with pytest.raises(RegenInputError):
+        _assemble(repo_root, stage_ids=[])
+
+
+def test_bytes_match_prompt_length_no_truncation(repo_root):
+    r = _assemble(repo_root, stage_ids=["interview", "research", "validation"])
+    assert r.bytes == len(r.prompt.encode("utf-8"))
+
+
+def test_too_large_raises(repo_root, monkeypatch):
+    """When the assembled prompt would exceed 1 MB, raise TooLargePromptError."""
+    from libs import regen_prompt
+
+    monkeypatch.setattr(regen_prompt, "HARD_LIMIT", 1024)
+    asm = RegenPromptAssembler(repo_root=repo_root.path)
+    with pytest.raises(TooLargePromptError):
+        asm.assemble(
             project_type="development",
             project_name="spec_driven",
-            stage_ids=["spec_compilation"],
-            module_ids={"spec_compilation": ["spec"]},
+            stage_ids=["interview", "research"],
+            modules={},
             autonomous=False,
-            repo_root=fake_repo,
         )
-    assert ei.value.status == 413
-    assert ei.value.kind == "too_large"
 
 
-def test_breakdown_counts(fake_repo: Path) -> None:
-    fu_dir = fake_repo / "specs" / "development" / "spec_driven" / "user_input" / "follow_ups"
-    fu_dir.mkdir(parents=True)
-    (fu_dir / "001-foo.md").write_text("foo", encoding="utf-8")
-    (fu_dir / "002-bar.md").write_text("bar", encoding="utf-8")
-    result = build_regen_prompt_result(
-        project_type="development",
-        project_name="spec_driven",
-        stage_ids=["spec_compilation", "validation_strategy"],
-        module_ids={},
-        autonomous=False,
-        repo_root=fake_repo,
-    )
-    assert result.selected_stages_count == 2
-    assert result.follow_ups_count == 2
-
-
-def test_read_zero_constraint_in_prompt(fake_repo: Path) -> None:
-    prompt = build_regen_prompt(
-        project_type="development",
-        project_name="spec_driven",
-        stage_ids=["spec_compilation"],
-        module_ids={},
-        autonomous=False,
-        repo_root=fake_repo,
-    )
-    assert "Read-zero" in prompt or "read-zero" in prompt
-    assert "deletes prior outputs first" in prompt
-    assert "reads only the inputs" in prompt
-
-
-def test_promoted_section_absent_when_no_pins(fake_repo: Path) -> None:
-    prompt = build_regen_prompt(
-        project_type="development",
-        project_name="spec_driven",
-        stage_ids=["interview"],
-        module_ids={},
-        autonomous=False,
-        repo_root=fake_repo,
-    )
-    assert "### Pinned items" not in prompt
-
-
-def test_promoted_section_inlined_when_pins_exist(fake_repo: Path) -> None:
-    from libs.promotions import add_promotion
-
-    add_promotion(
-        stage_path="specs/development/spec_driven/interview",
-        location="interview/qa.md / Round 1 / scope",
-        body="**Q:** Pinned question?\n- A: Pinned answer.",
-        repo_root=fake_repo,
-    )
-    prompt = build_regen_prompt(
-        project_type="development",
-        project_name="spec_driven",
-        stage_ids=["interview"],
-        module_ids={},
-        autonomous=False,
-        repo_root=fake_repo,
-    )
-    assert "### Pinned items (MUST survive regeneration)" in prompt
-    assert "Pinned question?" in prompt
-    assert "Pinned answer." in prompt
-    assert "promoted.md" in prompt
-    # The "promoted always wins" semantics must be stated.
-    assert "verbatim" in prompt
-    # Promoted.md is preserved (not deleted) by read-zero — the constraint must mention this.
-    assert "promoted.md` is an INPUT" in prompt or "promoted.md is an INPUT" in prompt
-
-
-def test_promoted_section_only_for_selected_stages(fake_repo: Path) -> None:
-    from libs.promotions import add_promotion
-
-    add_promotion(
-        stage_path="specs/development/spec_driven/interview",
-        location="interview/qa.md / x",
-        body="**Q:** x?\n- A: y",
-        repo_root=fake_repo,
-    )
-    # Selecting only spec_compilation should NOT inline the interview pin.
-    prompt = build_regen_prompt(
-        project_type="development",
-        project_name="spec_driven",
-        stage_ids=["spec_compilation"],
-        module_ids={},
-        autonomous=False,
-        repo_root=fake_repo,
-    )
-    assert "Pinned question" not in prompt or "x?" not in prompt
-    # And selecting interview SHOULD inline it.
-    prompt2 = build_regen_prompt(
-        project_type="development",
-        project_name="spec_driven",
-        stage_ids=["interview"],
-        module_ids={},
-        autonomous=False,
-        repo_root=fake_repo,
-    )
-    assert "x?" in prompt2
+def test_walks_each_selected_stage_with_invocation_and_modules(repo_root):
+    r = _assemble(repo_root, stage_ids=["interview", "validation"])
+    assert "## Stage: interview" in r.prompt
+    assert "## Stage: validation strategy" in r.prompt
+    assert "_Invocation_:" in r.prompt

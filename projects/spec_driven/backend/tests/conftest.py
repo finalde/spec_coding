@@ -5,66 +5,46 @@ from pathlib import Path
 
 import pytest
 
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
-BACKEND_ROOT = Path(__file__).resolve().parent.parent
-if str(BACKEND_ROOT) not in sys.path:
-    sys.path.insert(0, str(BACKEND_ROOT))
+from libs.api import create_app  # noqa: E402
+from libs.api_security import BoundOrigin  # noqa: E402
+from libs.repo_root import RepoRoot  # noqa: E402
+from libs.safe_resolve import SafeResolver  # noqa: E402
 
 
-@pytest.fixture
-def fake_repo(tmp_path: Path) -> Path:
-    (tmp_path / "CLAUDE.md").write_text("# CLAUDE.md fake\n", encoding="utf-8")
+@pytest.fixture(scope="session")
+def repo_root() -> RepoRoot:
+    return RepoRoot.find()
 
-    skills_dir = tmp_path / ".claude" / "skills" / "agent_team"
-    skills_dir.mkdir(parents=True)
-    (skills_dir / "SKILL.md").write_text("# agent_team skill\n", encoding="utf-8")
 
-    playbooks_dir = skills_dir / "playbooks"
-    playbooks_dir.mkdir(parents=True)
-    (playbooks_dir / "interview.md").write_text(
-        "# interview playbook\n", encoding="utf-8"
-    )
-    (playbooks_dir / "research.md").write_text(
-        "# research playbook\n", encoding="utf-8"
-    )
+@pytest.fixture(scope="session")
+def resolver(repo_root: RepoRoot) -> SafeResolver:
+    return SafeResolver(root=repo_root.path)
 
-    refs_dir = tmp_path / ".claude" / "agent_refs"
-    (refs_dir / "interview").mkdir(parents=True)
-    (refs_dir / "interview" / "general.md").write_text(
-        "# interview general\n", encoding="utf-8"
-    )
-    (refs_dir / "research").mkdir(parents=True)
-    (refs_dir / "research" / "general.md").write_text(
-        "# research general\n", encoding="utf-8"
-    )
 
-    project = tmp_path / "specs" / "development" / "spec_driven"
+@pytest.fixture(scope="session")
+def bound() -> BoundOrigin:
+    return BoundOrigin(host="127.0.0.1", port=8765)
 
-    user_input = project / "user_input"
-    user_input.mkdir(parents=True)
-    (user_input / "raw_prompt.md").write_text("raw prompt content\n", encoding="utf-8")
-    (user_input / "revised_prompt.md").write_text(
-        "revised prompt content\n", encoding="utf-8"
-    )
 
-    interview = project / "interview"
-    interview.mkdir(parents=True)
-    (interview / "qa.md").write_text("# qa\n", encoding="utf-8")
+@pytest.fixture()
+def client(repo_root: RepoRoot, bound: BoundOrigin):
+    from fastapi.testclient import TestClient
 
-    findings = project / "findings"
-    findings.mkdir(parents=True)
-    (findings / "dossier.md").write_text("# dossier\n", encoding="utf-8")
-    (findings / "angle-a.md").write_text("# angle a\n", encoding="utf-8")
+    app = create_app(repo_root=repo_root, bound=bound, serve_static=False)
+    return TestClient(app)
 
-    final_specs = project / "final_specs"
-    final_specs.mkdir(parents=True)
-    (final_specs / "spec.md").write_text("# spec content\n", encoding="utf-8")
 
-    validation = project / "validation"
-    validation.mkdir(parents=True)
-    (validation / "strategy.md").write_text("# strategy\n", encoding="utf-8")
-    (validation / "acceptance_criteria.md").write_text("# ac\n", encoding="utf-8")
-    (validation / "bdd_scenarios.md").write_text("# bdd\n", encoding="utf-8")
-    (validation / "extra.md").write_text("# extra\n", encoding="utf-8")
+@pytest.fixture()
+def scratch_dir(repo_root: RepoRoot) -> Path:
+    p = repo_root.path / "specs" / "development" / "spec_driven" / "__scratch__"
+    p.mkdir(parents=True, exist_ok=True)
+    yield p
 
-    return tmp_path
+
+@pytest.fixture()
+def good_headers() -> dict[str, str]:
+    return {"Origin": "http://127.0.0.1:8765", "Host": "127.0.0.1:8765"}

@@ -1,273 +1,172 @@
+"""
+tree_walker — produce the EXPOSED_TREE JSON consumed by GET /api/tree.
+
+Output shape (FR-1):
+    {name, path, type, children[]}
+
+Where `type` ∈ {"section", "type", "project", "stage", "file"}.
+
+Every non-leaf node carries a `children` array. The frontend Sidebar descends
+node["children"] uniformly — there is NO `task_type.projects` or `project.stages`
+drift (regression-2026-05-02-clean).
+
+Paths are forward-slash normalized (NFR-13).
+"""
+
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, TypedDict
 
-from libs.exposed_tree import ALLOWED_EXTENSIONS
-
-
-_STAGES: tuple[str, ...] = (
-    "user_input",
-    "interview",
-    "findings",
-    "final_specs",
-    "validation",
-)
-
-_VALIDATION_PRIORITY: tuple[str, ...] = (
-    "strategy.md",
-    "acceptance_criteria.md",
-    "bdd_scenarios.md",
-)
+from .exposed_tree import CANONICAL_STAGES, PROJECT_LEVEL_FILES, ExposedTree
 
 
-def build_tree(repo_root: Path) -> dict[str, object]:
-    return {
-        "settings": _build_settings(repo_root),
-        "projects": _build_projects(repo_root),
-    }
+class TreeNode(TypedDict):
+    name: str
+    path: str
+    type: str
+    children: list["TreeNode"]
 
 
-def _build_settings(repo_root: Path) -> dict[str, object]:
-    return {
-        "claude_md": _build_claude_md(repo_root),
-        "playbooks": _build_playbooks(repo_root),
-        "skills": _build_skills(repo_root),
-        "agent_refs": _build_agent_refs(repo_root),
-    }
+@dataclass(frozen=True)
+class TreeWalker:
+    exposed: ExposedTree
 
+    def walk(self) -> list[TreeNode]:
+        return [self._claude_section(), self._projects_section()]
 
-def _build_claude_md(repo_root: Path) -> list[dict[str, object]]:
-    target = repo_root / "CLAUDE.md"
-    if _safe_exists(target) and not _safe_is_symlink(target) and target.is_file():
-        return [_leaf("CLAUDE.md", "CLAUDE.md")]
-    return []
-
-
-def _build_playbooks(repo_root: Path) -> list[dict[str, object]]:
-    playbooks_dir = repo_root / ".claude" / "skills" / "agent_team" / "playbooks"
-    if not playbooks_dir.is_dir():
-        return []
-    entries: list[dict[str, object]] = []
-    try:
-        children = list(playbooks_dir.iterdir())
-    except OSError:
-        return []
-    for child in sorted(children, key=lambda p: p.name.lower()):
-        if _safe_is_symlink(child):
-            continue
-        if not child.is_file():
-            continue
-        if child.suffix != ".md":
-            continue
-        rel = f".claude/skills/agent_team/playbooks/{child.name}"
-        entries.append(_leaf(child.name, rel))
-    return entries
-
-
-def _build_agent_refs(repo_root: Path) -> list[dict[str, object]]:
-    refs_dir = repo_root / ".claude" / "agent_refs"
-    if not refs_dir.is_dir():
-        return []
-    out: list[dict[str, object]] = []
-    try:
-        stage_dirs = list(refs_dir.iterdir())
-    except OSError:
-        return []
-    for stage_dir in sorted(stage_dirs, key=lambda p: p.name.lower()):
-        if _safe_is_symlink(stage_dir) or not stage_dir.is_dir():
-            continue
+    def _rel(self, p: Path) -> str:
         try:
-            files = list(stage_dir.iterdir())
-        except OSError:
-            continue
-        leaves: list[dict[str, object]] = []
-        for f in sorted(files, key=lambda p: p.name.lower()):
-            if _safe_is_symlink(f) or not f.is_file():
-                continue
-            if f.suffix.lower() != ".md":
-                continue
-            rel = f".claude/agent_refs/{stage_dir.name}/{f.name}"
-            leaves.append(_leaf(f.name, rel))
-        out.append({
-            "kind": "folder",
-            "name": stage_dir.name,
-            "path": f".claude/agent_refs/{stage_dir.name}",
-            "children": leaves,
-        })
-    return out
+            return p.resolve().relative_to(self.exposed.root.resolve()).as_posix()
+        except ValueError:
+            return p.as_posix().replace("\\", "/")
 
+    def _file_node(self, p: Path) -> TreeNode:
+        return {"name": p.name, "path": self._rel(p), "type": "file", "children": []}
 
-def _build_skills(repo_root: Path) -> list[dict[str, object]]:
-    skills_dir = repo_root / ".claude" / "skills"
-    if not skills_dir.is_dir():
-        return []
-    entries: list[dict[str, object]] = []
-    try:
-        folders = list(skills_dir.iterdir())
-    except OSError:
-        return []
-    for folder in sorted(folders, key=lambda p: p.name.lower()):
-        if _safe_is_symlink(folder):
-            continue
-        if not folder.is_dir():
-            continue
-        skill_md = folder / "SKILL.md"
-        if _safe_exists(skill_md) and not _safe_is_symlink(skill_md) and skill_md.is_file():
-            rel = f".claude/skills/{folder.name}/SKILL.md"
-            entries.append(_leaf(folder.name, rel))
-    return entries
+    def _claude_section(self) -> TreeNode:
+        children: list[TreeNode] = []
+        claude_md = self.exposed.claude_md()
+        if claude_md.is_file():
+            children.append(self._file_node(claude_md))
 
+        agents = self.exposed.claude_agents()
+        if agents:
+            children.append(
+                {
+                    "name": ".claude/agents",
+                    "path": ".claude/agents",
+                    "type": "section",
+                    "children": [self._file_node(a) for a in agents],
+                }
+            )
 
-def _build_projects(repo_root: Path) -> list[dict[str, object]]:
-    specs_dir = repo_root / "specs"
-    if not specs_dir.is_dir():
-        return []
-    out: list[dict[str, object]] = []
-    try:
-        type_dirs = [p for p in specs_dir.iterdir() if p.is_dir() and not _safe_is_symlink(p)]
-    except OSError:
-        return []
-    for type_dir in sorted(type_dirs, key=lambda p: p.name.lower()):
-        try:
-            name_dirs = [p for p in type_dir.iterdir() if p.is_dir() and not _safe_is_symlink(p)]
-        except OSError:
-            continue
-        names_payload: list[dict[str, object]] = []
-        for name_dir in sorted(name_dirs, key=lambda p: p.name.lower()):
-            project_rel = f"specs/{type_dir.name}/{name_dir.name}"
-            stages_payload = _build_stages(name_dir, project_rel)
-            names_payload.append({
-                "kind": "project",
-                "name": name_dir.name,
-                "path": project_rel,
-                "children": stages_payload,
-            })
-        out.append({
-            "kind": "task_type",
-            "name": type_dir.name,
-            "path": f"specs/{type_dir.name}",
-            "children": names_payload,
-        })
-    return out
+        skill_files = self.exposed.claude_skill_files()
+        if skill_files:
+            children.append(
+                {
+                    "name": ".claude/skills",
+                    "path": ".claude/skills",
+                    "type": "section",
+                    "children": sorted(
+                        [self._file_node(s) for s in skill_files],
+                        key=lambda n: n["path"].lower(),
+                    ),
+                }
+            )
 
+        refs = self.exposed.claude_agent_refs()
+        if refs:
+            children.append(
+                {
+                    "name": ".claude/agent_refs",
+                    "path": ".claude/agent_refs",
+                    "type": "section",
+                    "children": sorted(
+                        [self._file_node(r) for r in refs],
+                        key=lambda n: n["path"].lower(),
+                    ),
+                }
+            )
 
-def _build_stages(project_dir: Path, project_rel: str) -> list[dict[str, object]]:
-    stages: list[dict[str, object]] = []
-    for stage in _STAGES:
-        stage_dir = project_dir / stage
-        rel = f"{project_rel}/{stage}"
-        if not stage_dir.exists():
-            stages.append({
-                "kind": "missing-folder",
-                "name": stage,
-                "path": rel,
-                "present": False,
-                "files": [],
-                "children": [],
-            })
-            continue
-        if _safe_is_symlink(stage_dir):
-            stages.append({
-                "kind": "missing-folder",
-                "name": stage,
-                "path": rel,
-                "present": False,
-                "files": [],
-                "children": [],
-            })
-            continue
-        children = _walk_stage(stage_dir, rel, stage)
-        files_flat = _collect_filenames(children)
-        stages.append({
-            "kind": "folder",
-            "name": stage,
-            "path": rel,
-            "present": True,
-            "files": files_flat,
+        return {
+            "name": "Claude Settings & Shared Context",
+            "path": "_claude",
+            "type": "section",
             "children": children,
-        })
-    return stages
+        }
+
+    def _projects_section(self) -> TreeNode:
+        type_groups: dict[str, list[TreeNode]] = {}
+        for project_dir in self.exposed.project_dirs():
+            type_name = project_dir.parent.name
+            project_children: list[TreeNode] = []
+
+            for top_file in self.exposed.project_top_level_files(project_dir):
+                project_children.append(self._file_node(top_file))
+
+            for stage_dir in self.exposed.project_stage_dirs(project_dir):
+                stage_files: list[TreeNode] = []
+                for entry in sorted(stage_dir.iterdir(), key=lambda x: x.name.lower()):
+                    if entry.is_file():
+                        stage_files.append(self._file_node(entry))
+                    elif entry.is_dir():
+                        sub_files = [
+                            self._file_node(f)
+                            for f in sorted(entry.iterdir(), key=lambda x: x.name.lower())
+                            if f.is_file()
+                        ]
+                        if sub_files:
+                            stage_files.append(
+                                {
+                                    "name": entry.name,
+                                    "path": self._rel(entry),
+                                    "type": "stage",
+                                    "children": sub_files,
+                                }
+                            )
+                project_children.append(
+                    {
+                        "name": stage_dir.name,
+                        "path": self._rel(stage_dir),
+                        "type": "stage",
+                        "children": stage_files,
+                    }
+                )
+
+            type_groups.setdefault(type_name, []).append(
+                {
+                    "name": project_dir.name,
+                    "path": self._rel(project_dir),
+                    "type": "project",
+                    "children": project_children,
+                }
+            )
+
+        type_nodes: list[TreeNode] = []
+        for type_name in sorted(type_groups.keys(), key=str.lower):
+            type_nodes.append(
+                {
+                    "name": type_name,
+                    "path": f"specs/{type_name}",
+                    "type": "type",
+                    "children": type_groups[type_name],
+                }
+            )
+
+        return {
+            "name": "Projects",
+            "path": "_projects",
+            "type": "section",
+            "children": type_nodes,
+        }
 
 
-def _collect_filenames(children: list[dict[str, object]]) -> list[str]:
-    out: list[str] = []
-    for c in children:
-        if c.get("kind") == "file":
-            name = c.get("name")
-            if isinstance(name, str):
-                out.append(name)
-        elif c.get("kind") == "folder":
-            grand = c.get("children")
-            if isinstance(grand, list):
-                out.extend(_collect_filenames([g for g in grand if isinstance(g, dict)]))
-    return out
-
-
-def _walk_stage(directory: Path, rel: str, stage: str) -> list[dict[str, object]]:
-    try:
-        entries = list(directory.iterdir())
-    except OSError:
-        return []
-    files: list[Path] = []
-    folders: list[Path] = []
-    for e in entries:
-        if _safe_is_symlink(e):
-            continue
-        if e.is_file() and e.suffix.lower() in ALLOWED_EXTENSIONS:
-            files.append(e)
-        elif e.is_dir():
-            folders.append(e)
-
-    if stage == "validation":
-        files_sorted = _sort_validation(files)
-    else:
-        files_sorted = _alpha_sort(files)
-    folders_sorted = _alpha_sort(folders)
-
-    out: list[dict[str, object]] = []
-    for f in files_sorted:
-        out.append(_leaf(f.name, f"{rel}/{f.name}"))
-    for d in folders_sorted:
-        sub_rel = f"{rel}/{d.name}"
-        children = _walk_stage(d, sub_rel, stage="")
-        out.append({
-            "kind": "folder",
-            "name": d.name,
-            "path": sub_rel,
-            "children": children,
-        })
-    return out
-
-
-def _alpha_sort(paths: list[Path]) -> list[Path]:
-    return sorted(paths, key=lambda p: (p.name.lower(), p.name))
-
-
-def _sort_validation(paths: list[Path]) -> list[Path]:
-    by_name: dict[str, Path] = {p.name: p for p in paths}
-    head: list[Path] = []
-    used: set[str] = set()
-    for priority in _VALIDATION_PRIORITY:
-        if priority in by_name:
-            head.append(by_name[priority])
-            used.add(priority)
-    rest = [p for p in paths if p.name not in used]
-    return head + _alpha_sort(rest)
-
-
-def _leaf(name: str, rel: str) -> dict[str, object]:
-    return {"kind": "file", "name": name, "path": rel}
-
-
-def _safe_exists(p: Path) -> bool:
-    try:
-        return p.exists()
-    except OSError:
-        return False
-
-
-def _safe_is_symlink(p: Path) -> bool:
-    try:
-        return p.is_symlink()
-    except OSError:
-        return False
+def to_jsonable(node: TreeNode) -> dict[str, Any]:
+    return {
+        "name": node["name"],
+        "path": node["path"],
+        "type": node["type"],
+        "children": [to_jsonable(c) for c in node["children"]],
+    }

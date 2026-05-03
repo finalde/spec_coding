@@ -1,86 +1,92 @@
+"""
+file_reader — backing module for GET /api/file (FR-3, FR-5, AC-2, AC-7, AC-8).
+
+- Allowed extensions: .md, .json, .yaml, .yml, .jsonl, .txt, .png, .jpg
+- Files >1 MB return 413 (size check via os.stat BEFORE any read).
+- Anything outside the EXPOSED_TREE returns 404 (single status — no enumeration
+  side-channel between "missing inside tree" and "outside tree").
+"""
+
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
-from libs.exposed_tree import ALLOWED_EXTENSIONS, ExposedTree
-from libs.safe_resolve import OutsideSandbox, SymlinkRefused, safe_resolve
+from .safe_resolve import OutsideTreeError, SafeResolver
+
+ALLOWED_TEXT_EXT = frozenset({".md", ".json", ".yaml", ".yml", ".jsonl", ".txt"})
+ALLOWED_IMAGE_EXT = frozenset({".png", ".jpg"})
+ALLOWED_EXT = ALLOWED_TEXT_EXT | ALLOWED_IMAGE_EXT
+MAX_BYTES = 1 * 1024 * 1024
 
 
-MAX_FILE_BYTES: int = 2 * 1024 * 1024
+class NotFoundError(Exception):
+    """Maps to HTTP 404. Used for both 'missing inside tree' and 'outside tree'."""
 
 
-class FileReadError(Exception):
-    def __init__(self, status: int, error: str, kind: str | None = None) -> None:
-        super().__init__(error)
-        self.status: int = status
-        self.error: str = error
-        self.kind: str | None = kind
+class TooLargeError(Exception):
+    pass
 
-    def to_dict(self) -> dict[str, object]:
-        body: dict[str, object] = {"error": self.error}
-        if self.kind:
-            body["kind"] = self.kind
-        return body
+
+class UnsupportedExtensionError(Exception):
+    pass
 
 
 @dataclass(frozen=True)
-class FileContent:
+class ReadResult:
     path: str
-    extension: str
-    bytes_size: int
-    text: str
+    content: str
+    mtime: str
+    bytes: int
+    is_image: bool
+
+    def to_dict(self) -> dict:
+        d = {"path": self.path, "content": self.content, "mtime": self.mtime, "bytes": self.bytes}
+        if self.is_image:
+            d["data_encoding"] = "base64"
+        return d
 
 
-def _to_posix(rel: Path) -> str:
-    return rel.as_posix()
+@dataclass(frozen=True)
+class FileReader:
+    resolver: SafeResolver
 
+    def read(self, rel: str) -> ReadResult:
+        try:
+            absolute = self.resolver.resolve(rel)
+        except OutsideTreeError as e:
+            raise NotFoundError("not found") from e
 
-def read_file(rel: str, repo_root: Path) -> FileContent:
-    try:
-        relative = safe_resolve(rel, repo_root)
-    except (OutsideSandbox, SymlinkRefused):
-        raise FileReadError(400, "outside_sandbox", kind="outside_sandbox")
+        ext = absolute.suffix.lower()
+        if ext not in ALLOWED_EXT:
+            raise UnsupportedExtensionError("unsupported_extension")
 
-    resolved = (repo_root / relative).resolve(strict=False)
+        if not absolute.is_file():
+            raise NotFoundError("not found")
 
-    if not ExposedTree(repo_root).is_inside(resolved):
-        raise FileReadError(404, "not_found", kind="outside_exposed_tree")
+        st = absolute.stat()
+        if st.st_size > MAX_BYTES:
+            raise TooLargeError("too_large")
 
-    ext = resolved.suffix.lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        raise FileReadError(415, "unsupported_extension", kind="unsupported_extension")
+        is_image = ext in ALLOWED_IMAGE_EXT
+        if is_image:
+            content = base64.b64encode(absolute.read_bytes()).decode("ascii")
+        else:
+            content = absolute.read_bytes().decode("utf-8", errors="replace")
 
-    try:
-        size = resolved.stat().st_size
-    except FileNotFoundError:
-        raise FileReadError(404, "not_found", kind="file_removed")
-    except PermissionError:
-        raise FileReadError(403, "permission_denied", kind="permission_denied")
-    except IsADirectoryError:
-        raise FileReadError(400, "is_directory", kind="is_directory")
+        rel_normalized = rel.replace("\\", "/").lstrip("./")
+        try:
+            rel_normalized = absolute.resolve().relative_to(self.resolver.root).as_posix()
+        except ValueError:
+            pass
 
-    if resolved.is_dir():
-        raise FileReadError(400, "is_directory", kind="is_directory")
-
-    if size > MAX_FILE_BYTES:
-        raise FileReadError(413, "too_large", kind="too_large")
-
-    try:
-        text = resolved.read_text(encoding="utf-8", errors="replace")
-    except FileNotFoundError:
-        raise FileReadError(404, "not_found", kind="file_removed")
-    except PermissionError:
-        raise FileReadError(403, "permission_denied", kind="permission_denied")
-    except IsADirectoryError:
-        raise FileReadError(400, "is_directory", kind="is_directory")
-
-    if "\x00" in text:
-        raise FileReadError(415, "binary_content", kind="binary_content")
-
-    return FileContent(
-        path=_to_posix(relative),
-        extension=ext,
-        bytes_size=size,
-        text=text,
-    )
+        mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()
+        return ReadResult(
+            path=rel_normalized,
+            content=content,
+            mtime=mtime,
+            bytes=st.st_size,
+            is_image=is_image,
+        )

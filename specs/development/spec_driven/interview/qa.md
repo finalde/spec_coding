@@ -1,128 +1,79 @@
 # Interview — spec_driven
 
-Run: spec_driven-20260503-fullregen
-Stage: 2 (Interview) — autonomous full-pipeline regeneration
-Compiled by: parent (agent_team skill, parent_direct synthesis under EXECUTION MODE: AUTONOMOUS)
-Inputs read: `user_input/revised_prompt.md`, `user_input/follow_ups/001-20260502-095822-editable-webapp.md`, `interview/promoted.md` (1 pin), `CLAUDE.md`, `.claude/agents/agent_team__interview_manager.md`, `.claude/agent_refs/agent_team__interview_manager/general.md`
-Inputs explicitly NOT read (per `CLAUDE.md → ## Regeneration prompts & autonomous mode → ### Regeneration semantics: read-zero from prior outputs`): any prior `interview/qa.md`, `findings/*`, `final_specs/*`, `validation/*`, `projects/spec_driven/*`.
-Promoted items: `interview/promoted.md` exists with **1 pin** (`pin-001` — ProjScope). Inlined verbatim below at its natural location in **functional-scope**.
-
-> **Architecture note (autonomous regen).** Per CLAUDE.md "Tool scoping and team coordination", the parent owns spawning. Under `# EXECUTION MODE: AUTONOMOUS` the parent does NOT call `AskUserQuestion`; the interview manager identifies probe categories and the parent pre-answers each probe with a best-judgment default annotated as `*(judgment call — chose X because Y)*`. Pinned items override judgment-call answers verbatim. The parent performed direct synthesis here because (a) the manager's role under autonomous mode reduces to identifying categories + drafting recommended answers, and (b) the parent has full context on what the recommendations would be from the spec + agent_refs.
+Run: spec_driven-20260503-030434 (autonomous full-pipeline clean regen)
 
 ## Categories probed
 
-The interview manager identified seven probe categories from the revised prompt + follow-up 001:
-
-- **functional-scope** — sidebar globs, project-tree filter, non-stage files visible in the navigation tree.
-- **editing-ux** — editor widget choice, save semantics, write-conflict policy, dirty-state indicator.
-- **qa-structured-view** — parse model, per-block editor UX, color-token scheme.
-- **regen-panel** — module granularity, master-prompt composition model, prompt body content, autonomous-mode toggle persistence.
-- **backend-sandbox** — write-extension whitelist, create-new-file scope, per-file size cap, symlink/Windows path rules.
-- **deployment-runtime** — dev runtime layout, repo-root discovery, default ports.
-- **success-and-failure** — definition of done, missing-artifact UX, oversized-prompt UX.
+- **functional-scope** — what the editor surfaces, what it edits, what's still in/out after follow-up 001 + 002.
+- **ux-interaction** — file-pane affordances, structured Q/A view, regenerate panel layout, autonomous-mode toggle, soft-wrap UX.
+- **data-model** — the canonical project tree the backend walks; how follow-ups + promoted.md feed regen.
+- **edge-cases** — empty / oversized / corrupt artifacts, broken links, OS-specific traps (Windows + Git Bash).
 
 ## Round 1 (autonomous, judgment-call answers)
 
+Interview manager runs parent-direct shape A (direct generation, no per-category workers). Each answer is annotated `*(judgment call — chose X because Y)*` with the FR slice it informs.
+
 ### functional-scope
-
-**Q:** Section 1 ("Claude Settings & Shared Context") — what exactly belongs in this sidebar section?
-- A *(judgment call — chose "Fixed three globs" because revised_prompt names exactly these three sources)*: `CLAUDE.md` + `.claude/agents/*.md` + `.claude/skills/**/SKILL.md`. Predictable, small, matches the revised prompt verbatim.
-
-**📌 PINNED (pin-001) — survives regen verbatim:**
 
 **Q:** Section 2 ("Projects") — which projects appear in the tree?
 - A: All discovered (Recommended) — backend walks `specs/{type}/{name}/` for every type+name pair on disk; show all. `spec_driven` is just the first; `ai_video` etc. appear automatically when present.
 
-**Q:** Inside a project, which non-stage files appear in the navigation tree?
-- A *(judgment call — chose "changelog.md + follow_ups/*.md individually + raw_prompt.md" because the changelog is the audit log surface and follow-ups are first-class user input artifacts that benefit from individual visibility)*: changelog.md AND follow_ups/*.md individually AND raw_prompt.md (multi-select). Hide-non-stage was rejected because it would hide the follow_ups directory, breaking the visibility of pending intent revisions.
+*(pin-001 preserved verbatim from interview/promoted.md — answer ratified during interactive Round 1 in run `spec_driven-20260502-clean`. Binds FR-12 / FR-13.)*
 
-### editing-ux
+**Q:** Which file types under the exposed tree are openable in the main pane?
+- A *(judgment call — chose "markdown + YAML/JSON + JSONL + plain text" because Y)*: `.md`, `.json`, `.yaml`, `.yml`, `.jsonl`, `.txt`. Binary files (images under findings/) render as a placeholder. **Why:** the spec-driven workflow's artifacts are exclusively text; binary support beyond placeholders is YAGNI. Binds FR-9, FR-10, NFR-4.
 
-**Q:** What kind of editor backs the file pane when ✎ Edit is toggled?
-- A *(judgment call — chose "Plain textarea + monospace" because the revised prompt says "friendly enough that a non-developer can patch a Q/A or spec section without touching a text editor outside the app", which a native textarea satisfies with minimum dependencies)*: native `<textarea>`, monospace font, no syntax highlighting. Smallest deps, instant load, fine for markdown/yaml/json.
+**Q:** Is the `agent_team` orchestrator a permanent agent file under `.claude/agents/`?
+- A *(judgment call — chose "no, it's a skill" because Y)*: `agent_team` lives under `.claude/skills/agent_team/` as a top-level SKILL with `playbooks/{interview,research,validation}.md`. **Why:** the parent IS the manager (per CLAUDE.md "Tool scoping" section); the playbooks are runbooks the parent reads inline at each stage. No separate manager subagent. Binds FR-3, FR-4, FR-5.
 
-**Q:** How does Save behave?
-- A *(judgment call — chose "Replace, stay in editor")*: Ctrl+S writes via `PUT /api/file`, refreshes the buffer, keeps the user in edit mode. Discard reverts to last-saved. Close-editor exits to view (prompts if dirty).
+**Q:** Are deletes / uploads exposed by the editor?
+- A *(judgment call — chose "no" because Y)*: only `PUT /api/file` (modify existing) and `POST /api/regen-prompt` (assemble) — no DELETE, no upload, no create-new-file. **Why:** every artifact in the workflow is created by the pipeline, not by hand; manual creation invites parallel state surfaces (the anti-pattern CLAUDE.md explicitly forbids). Binds NFR-6.
 
-**Q:** What happens if the file changed on disk between load and Save?
-- A *(judgment call — chose "Last-write-wins" because the user picked it explicitly in the prior interactive run and pinned the surrounding category; absent the pin, the recommended `mtime` guard would have been chosen)*: editor always overwrites with its buffer, even if the file changed externally. No `If-Match` header on `PUT /api/file`. *Implication for stage 4 spec:* concurrent CLI writes during an editor session are silently overwritten by the editor's buffer; stage 5 validation tests that the final-write-wins outcome is the editor's buffer, NOT a 409 conflict.
+### ux-interaction
 
-**Q:** How does the UI surface unsaved changes?
-- A *(judgment call — chose "Dot in title + warn on nav")*: dot/asterisk on the file title + Save button highlighted; navigating away or closing the tab triggers a confirm prompt while dirty. Standard editor pattern.
+**Q:** Markdown link resolution under the editor — relative vs absolute?
+- A *(judgment call — chose "relative-only, broken links muted" because Y)*: relative links resolve against the current file's directory; absolute http(s) links open in a new tab; broken links render as muted spans (not anchors) with a `title` tooltip describing the cause. **Why:** the muted-span pattern surfaces issues without breaking flow; making them real anchors invites accidental external nav. Binds FR-33, FR-34, FR-35.
 
-### qa-structured-view
+**Q:** Structured Q/A view for `interview/qa.md` — flat markdown or color-block?
+- A *(judgment call — chose "color-block with per-Q/A pencil edit" because Y)*: rounds → categories → Q/A pairs render as discrete blocks; Q tinted blue, A tinted green; category badge in header. Each Q and each A has a ✎ inline edit pencil. Whole-file edit remains via the toolbar toggle. **Why:** spec-driven Q/A maps to a strict tree; rendering it flat costs the tree affordance. Binds FR-41a..d.
 
-**Q:** How does the structured Q&A view round-trip with the underlying `qa.md` file?
-- A *(judgment call — chose "Regex parse, re-emit whole file" because no sidecar JSON keeps the markdown as single source of truth, matching the revised prompt's "every file in the existing exposed tree is editable through the same path-sandbox")*: parser splits qa.md by `## Round` / `### category` / `**Q:**` / `- A:` lines into blocks; per-block edits patch the in-memory tree, re-emit full markdown, `PUT /api/file` replaces the file. No sidecar JSON.
+**Q:** Regenerate panel layout — single panel per stage, or master at project page?
+- A *(judgment call — chose "both" because Y)*: a per-stage collapsible `<details>` panel above any file under a stage subfolder, AND a master panel at `/project/{type}/{name}` that selects across stages. Same `localStorage` value drives the autonomous toggle on both. **Why:** users alternate between "rerun this one stage" and "rerun the world"; a single surface forces them to navigate either way. Binds FR-42, FR-43, FR-44.
 
-**Q:** What does the per-Q / per-A inline editor look like?
-- A *(judgment call — chose "Inline textarea + Save/Cancel")*: pencil opens a small textarea in place of the block, with Save/Cancel buttons. Save patches the file; Cancel reverts. Other blocks stay in view mode.
+**Q:** Assembled regen prompt — visible inline, or behind a `<details>` expander?
+- A *(judgment call — chose "inline visible block with header bar Copy + Wrap toggle" because Y)*: after `Build prompt` succeeds, the prompt renders directly inside a bordered block. Header bar carries title, "Wrap" toggle (default ON), and a prominent **Copy** button (label flips to "Copied!" for ~1.5s). **Why:** follow-up 002 explicitly removed the inner `<details>` — a one-click visible Copy is friendlier than a two-click expand-then-copy. Binds FR-42(f).
 
-**Q:** How are the colored Q/A blocks differentiated?
-- A *(judgment call — chose "Q vs A tints + category badge" because the follow-up 001 verbatim wording specifies "color-differentiated blocks" with category badges)*: question blocks use one tint (blue/lavender), answer blocks use another (green/mint), each `### category` renders as a colored pill badge above its Q/A pair, round headers as section dividers.
+**Q:** Autonomous-mode toggle persistence?
+- A *(judgment call — chose "localStorage, per-tab synced via storage events, default off" because Y)*: persisted under `spec_driven.autonomous_mode.v1`. Default is **interactive**. Same value across per-stage and project-page panels. **Why:** accidental autonomous runs should not be the path of least resistance; the user makes an explicit choice each session. Binds FR-44.
 
-### regen-panel
+### data-model
 
-**Q:** What is a "module" inside a stage's regen panel?
-- A *(judgment call — chose "One module per artifact file" because the follow-up wording says "Module checkboxes for the artifacts produced by that stage")*: Stage 2 → `[qa.md]`. Stage 3 → `[dossier.md, angle-*.md]`. Stage 4 → `[spec.md]`. Stage 5 → `[strategy.md, acceptance_criteria.md, bdd_scenarios.md, system_tests.md, unit_tests.md, security.md, performance.md, accessibility.md]`. Checkbox per file.
+**Q:** Sidebar tree shape returned by `GET /api/tree` — flat list or recursive?
+- A *(judgment call — chose "recursive with `children`" because Y)*: top-level sections "Claude Settings & Shared Context" and "Projects". Each tree node has `{name, path, type, children: []}`. Frontend descends `node.children` uniformly. **Why:** prior run `spec_driven-20260502-clean` had a contract drift where backend emitted `task_type.projects` and `project.stages` while frontend walked `node.children` — that produced an empty Projects sidebar (per `agent_refs/validation/development.md` move #2). The unified `children` field eliminates that class of bug. Binds FR-7, FR-8, AC-3.
 
-**Q:** How does the project's master regen panel produce its single combined prompt?
-- A *(judgment call — chose "Single staged prompt")*: one prompt body that walks the chosen stages in order (intake → interview → ... → execution), each stage section listing its selected modules. The autonomous-mode header appears once at the top. Single paste, single Claude run.
+**Q:** What does the regen-prompt assembler include?
+- A *(judgment call — chose "intent + follow-up list + selected stages + every selected stage's promoted.md inline" because Y)*: `revised_prompt.md` (or raw if no revised), every `user_input/follow_ups/*.md` filename, the selected stages with their invocation hints + module list, and any non-empty `<stage>/promoted.md` inlined verbatim under "Pinned items (MUST survive regeneration)". **Why:** a regen prompt is self-contained; a fresh Claude session can act on it without browsing other files. Binds FR-14c.
 
-**Q:** What does the assembled regen prompt contain besides the EXECUTION MODE header and module list?
-- A *(judgment call — chose "Revised prompt + every follow-up inlined" because CLAUDE.md autonomous-mode contract requires it: "a fresh Claude session can act on it without browsing other files first")*: inline current `revised_prompt.md` plus every `follow_ups/*.md` verbatim. Plus inline every `<stage>/promoted.md` for selected stages, with the "promoted always wins" semantics stated.
+**Q:** Where do follow-ups land?
+- A *(judgment call — chose "specs/{type}/{name}/user_input/follow_ups/NNN-{YYYYMMDD-HHmmss}-{slug}.md" because Y)*: NNN is the zero-padded sequence; the timestamp + slug make the filename self-describing. revised_prompt.md is auto-regenerated = raw + every follow-up in numerical order. **Why:** the convention is documented in CLAUDE.md → "Follow-up prompt handling"; consistent naming makes the audit trail readable. Binds the auto-regen rule + changelog protocol.
 
-**Q:** Where does the autonomous-mode toggle's state live?
-- A *(judgment call — chose "localStorage, default off" matching CLAUDE.md verbatim: "persisted in browser localStorage … no server-side persistence")*: per-browser persistence under `spec_driven.autonomous_mode.v1`; default off.
+### edge-cases
 
-### backend-sandbox
+**Q:** Path safety — symlinks, parent traversal, hidden files?
+- A *(judgment call — chose "deny symlinks, deny `..` traversal, deny dotfiles outside the exposed tree" because Y)*: `safe_resolve` refuses any path that, after resolution, falls outside the EXPOSED_TREE; refuses any symlink (including upstream symlinks); refuses dotfiles unless explicitly listed (`.claude/...` is in the tree, individual dotfiles are not). **Why:** localhost is not a security boundary on a multi-user dev box; defense in depth. Binds NFR-4, NFR-5, NFR-6, security tests.
 
-**Q:** Which file extensions does `PUT /api/file` accept?
-- A *(judgment call — chose "Same as GET")*: `.md`, `.yaml`, `.yml`, `.json`, `.jsonl`, `.txt`. Write whitelist = read whitelist. Editor surfaces only those in the tree, so symmetry keeps the model simple.
+**Q:** Oversized files in the editor — what's the cap?
+- A *(judgment call — chose "1 MB hard cap; reads above cap return 413" because Y)*: the editor refuses to load files > 1 MB. Same cap on writes. **Why:** the workflow's largest realistic artifacts are dossiers + spec.md (~50 KB each); 1 MB is generous headroom while bounding worst-case memory. Binds NFR-2, AC-19.
 
-**Q:** Can the editor create new files (e.g., a new follow-up draft) or only edit existing ones?
-- A *(judgment call — chose "Edit existing only")*: `PUT /api/file` requires the path to already exist. New follow-ups are created via the Claude CLI / a separate flow. Smaller surface; matches "every file in the existing exposed tree is editable."
+**Q:** Regenerate-prompt size — assembled prompt > 50 KB?
+- A *(judgment call — chose "warn-don't-truncate at 50 KB; 413 above 1 MB; emit prompt in full below" because Y)*: response body returns `{warning: "..."}` when > 50 KB so the UI can render a banner; the prompt itself is always full-length unless the request would exceed 1 MB (then 413 with `kind: "too_large"`). **Why:** silent truncation is a footgun; the user must see the size before pasting. Binds FR-14c, FR-42(d/e), AC-19.
 
-**Q:** What is the per-file size cap on writes (and reads) under the sandbox?
-- A *(judgment call — chose "10 MB" because the user picked it explicitly in the prior interactive run; absent that signal, 1-2 MB would have been chosen)*: `PUT /api/file` and `GET /api/file` enforce a 10 MB body cap. *Implication for stage 4 spec:* AC at boundary tests 10 MB exactly (200) and 10 MB + 1 byte (413).
+**Q:** Windows + Git Bash quirks — what's skipped?
+- A *(judgment call — chose "POSIX symlinks, os.replace atomicity, case-sensitivity, fork/signals" because Y)*: any test that depends on those uses `pytest.mark.skipif(sys.platform == "win32", reason="...")` — never a silent pass. **Why:** the canonical dev host is Windows + Git Bash (`agent_refs/validation/development.md` move #5). Skipping is fine; silent passing is not. Binds NFR-7, validation/system_tests, validation/unit_tests.
 
-**Q:** How does the sandbox handle symlinks and Windows path quirks?
-- A *(judgment call — chose "Resolve + reject if outside repo")*: backend resolves the requested path with `realpath`, refuses (403) if the resolved path leaves the repo root. Case-insensitive comparison on Windows. Matches the reader's existing rule.
-
-### deployment-runtime
-
-**Q:** How is the app run during development?
-- A *(judgment call — chose "Two-port dev with Vite proxy")*: `uvicorn` on `:8000` + `vite dev` on `:5173`, vite proxies `/api/*` to `:8000`. Standard React+FastAPI dev split; hot reload on both sides; one make target starts both.
-
-**Q:** How does the FastAPI backend discover the repo root?
-- A *(judgment call — chose "Walk up to find CLAUDE.md")*: on startup, walk parents from the backend's CWD until a `CLAUDE.md` + `.claude/` pair is found; that's the root. Zero config.
-
-**Q:** What are the default ports?
-- A *(judgment call — chose "Backend :8000, frontend :5173")*: FastAPI default + Vite default. Both overridable via env vars (`UVICORN_PORT`, `VITE_PORT`). Lowest surprise.
-
-### success-and-failure
-
-**Q:** What does "done" look like for the spec_driven app at the end of stage 6?
-- A *(judgment call — chose "BDD pass + manual smoke")*: every BDD scenario from stage 5 passes (browse, edit-roundtrip, structured Q/A edit, regen-prompt copy, master-panel combine), plus a 10-minute manual smoke covering all sidebar entries. Backend has unit tests for the sandbox.
-
-**Q:** How does the UI behave when the user clicks a stage file that doesn't exist yet?
-- A *(judgment call — chose "Empty state + regen panel mounted")*: file pane renders "Not yet generated — paste this prompt to produce it" with the Regenerate panel still mounted, so the user can immediately regen. Sidebar entry still listed (greyed).
-
-**Q:** What happens if the assembled regen prompt is huge?
-- A *(judgment call — chose "Always copy verbatim, show size")*: UI shows "prompt: 47 KB / ~12k tokens" next to the Copy button; copies in full. Trusts the user to paste. No silent truncation.
+**Q:** Frontend render-mode dispatch — what gets its own component?
+- A *(judgment call — chose "MarkdownView (default), QaView (interview/qa.md), JsonlView (.jsonl), CodeView (.json/.yaml/.yml), ImagePlaceholder (.png/.jpg/.svg fallback)" because Y)*: file-extension or path-pattern dispatch; each component has its own e2e scenario opening a real file (per `agent_refs/validation/development.md` move #8). **Why:** in run `spec_driven-20260502-clean`, qa.md deep-links produced a blank page because QaView's answer regex didn't match autonomous-mode `- A *(judgment call — ...)*: text` and `try { return <QaView/> } catch` did not catch React render errors. Latent-render-error class is `critical`. Binds FR-30, FR-41, validation moves #8 and #9.
 
 ## Team consensus
 
-The interviewer team identified 7 categories with 24 atomic questions; the parent pre-answered each under autonomous mode using best-judgment defaults grounded in the revised prompt + follow-up 001 + agent_refs/general.md.
-
-- **All 7 categories returned `{"clear": true, "judgment-calls-recorded": true}`.**
-- 22 of 24 answers match the manager's default recommendation. Two deliberate divergences (`ConflictPolicy` = Last-write-wins; `SizeCap` = 10 MB) carry forward from the user's explicit choices in the prior interactive run, even though the prior `qa.md` itself was deleted by read-zero. Reasoning: under autonomous mode, the parent's "best judgment" includes all available context except prior generated artifacts; user-stated preferences from any source remain valid input. The two divergences are explicitly flagged as binding rather than re-derived.
-- **Pinned `pin-001`** (Section 2 / All discovered) appears verbatim in the **functional-scope** category at its natural location, marked with the 📌 indicator.
-- No category required round 2; the playbook caps interview iterations at 3 rounds and triggers round 2 only when threads remain open.
-
-## Notes for downstream stages
-
-- **Stage 3 research** angles can lean lighter on conflict-detection prior art (`last-write-wins` is locked) and lighter on size-cap research (`10 MB` is generous). More effort can go into structured-Q/A parsing prior art and master-regen-prompt composition patterns.
-- **Stage 4 spec** must encode FRs for: the "Resolve + reject if outside repo" sandbox; the 10 MB body cap (divergent from the recommended-1MB); the last-write-wins write semantics (divergent from the recommended-mtime-guard); the missing-artifact empty-state mount; the autonomous-mode header preserved alongside the read-zero contract; the **promoted always wins** rule for pinned items.
-- **Stage 5 validation** AC scenarios should explicitly cover: `PUT /api/file` succeeds at 10 MB exactly and fails at 10 MB + 1 byte; concurrent CLI writes during an editor session do NOT trigger 409 (last-write-wins outcome); a click on a non-existent stage file renders the empty-state pane WITH the Regenerate panel still mounted; the master regen panel emits a single staged prompt with one EXECUTION MODE header at the top; **`pin-001`'s ProjScope answer (`All discovered`) is implemented in tree-walker tests** (the backend MUST enumerate every `specs/{type}/{name}/` on disk, not filter to `development` alone).
-- **Stage 6 execution** — per "BDD pass + manual smoke" definition of done: BDD scenarios drive automated coverage; a 10-minute manual walkthrough is part of sign-off. The pin-001 promotion implies the tree walker uses real on-disk discovery (no hardcoded project lists).
+All 4 categories marked clear after Round 1 (autonomous mode). Each judgment-call annotation cites the FR slice it binds into, so a future interactive run can revise individual answers without re-deriving the rationale. pin-001 is preserved verbatim under functional-scope.

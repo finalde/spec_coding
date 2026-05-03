@@ -1,5 +1,23 @@
 # Changelog — spec_driven
 
+## Follow-up 003 — 2026-05-03 13:36:25
+Source: user_input/follow_ups/003-20260503-133625-make-run-backend-frontend.md
+Summary: Split the dev-server story in the `Makefile` into `make run-backend` (FastAPI on 127.0.0.1:8765) and `make run-frontend` (Vite on 127.0.0.1:5173); preserve `make run` as a backend-only alias so AC-29 / SYS-17 stay literal.
+
+Auto-updated:
+- `specs/development/spec_driven/user_input/revised_prompt.md` — bumped Last-regenerated line and added a "Dev workflow" bullet under Stack noting the run-backend / run-frontend split.
+- `specs/development/spec_driven/final_specs/spec.md` — FR-39 target list extended with `run-backend` and `run-frontend`; `run` re-described as a backend-only alias.
+- `projects/spec_driven/Makefile` — added `run-backend` and `run-frontend` targets; `run` now depends on `run-backend`; `.PHONY` and the `help` echo updated.
+- `projects/spec_driven/README.md` — Run section gains a "backend + frontend in two terminals" subsection naming both new targets.
+
+No conflicts found in:
+- `specs/development/spec_driven/interview/qa.md` (no Q/A about the Makefile dev-server shape).
+- `specs/development/spec_driven/findings/` (no angle covers Makefile target layout).
+- `specs/development/spec_driven/validation/acceptance_criteria.md` (AC-28 / AC-29 still spell `make run-prod` / `make run` literally; both keep working — `run` is now an alias for `run-backend` and `run-prod` is unchanged).
+- `specs/development/spec_driven/validation/bdd_scenarios.md` (`make run-prod` and `make run` scenarios at lines 513 / 528 still hold).
+- `specs/development/spec_driven/validation/system_tests.md` (SYS-1 boot smoke + SYS-17 localhost bind both invoke `make run-prod` / `make run` literally; both still resolve as before).
+- `specs/development/spec_driven/validation/strategy.md` (no language touched — the new dev-only targets do not introduce a new validation gate).
+
 ## Follow-up 001 — 2026-05-02 09:58:22
 Source: user_input/follow_ups/001-20260502-095822-editable-webapp.md
 Summary: Drop readonly constraint. Editable in place for every file, structured colored Q/A view for `interview/qa.md`, per-stage and per-project regen-prompt panels with autonomous-mode toggle, autonomous-mode contract documented in `CLAUDE.md`.
@@ -118,3 +136,28 @@ No conflicts found in:
 - `projects/spec_driven/backend/libs/regen_prompt.py`, `backend/libs/api.py` (no contract change to `POST /api/regen-prompt`).
 - `projects/spec_driven/frontend/src/api.ts`, `src/autonomousMode.ts`, `src/components/Editor.tsx`, `src/components/ProjectPage.tsx` (downstream consumers of the panel and unrelated components — unaffected).
 - `CLAUDE.md` (no change to state surfaces, regen contract, or pinning rules).
+
+## Stage 6 regeneration — 2026-05-03 11:45:22
+Run id: spec_driven-20260503-114522
+Trigger: User invoked "rebuild the spec driven project using the specs and validation strategy" — full read-zero regeneration of stage 6 outputs per CLAUDE.md regen contract.
+Audit log: .audit/adhoc_agents/2026-05-03/spec_driven-20260503-114522/events.jsonl
+
+Read-zero deletes (regen.delete.planned x14 → regen.delete.completed):
+- Entire `projects/spec_driven/` folder removed before rebuild (backend libs, frontend src, package.json, tsconfig, vite.config, index.html). No surgical preservation; new generation reads only the canonical inputs (final_specs/spec.md + validation/* + CLAUDE.md + revised_prompt + follow_ups + interview/promoted.md).
+
+Regenerated:
+- Backend (FastAPI, 127.0.0.1:8765 only): `libs/{repo_root,safe_resolve,exposed_tree,tree_walker,file_reader,file_writer,promotions,stages,regen_prompt,api_security,api,__init__}.py`, `main.py`, `pyproject.toml`, `requirements.txt`, `Makefile`, `README.md`. Pin pin-001 verbatim in regen-prompt output. PATCH/DELETE on /api/file → 405; PUT without same-origin → 403; traversal/ADS/CON.md → single 404.
+- Backend tests: `tests/conftest.py` + `tests/unit/test_{safe_resolve,file_reader,file_writer,regen_prompt,promotions,tree_walker,api}.py`. 133 cases pass. Includes the two regression-2026-05-02-clean cases (uniform `children` field + consumer-walk).
+- Frontend (React + Vite + react-router-dom + react-markdown + rehype-sanitize + rehype-highlight): `src/{main.tsx,App.tsx,api.ts,types.ts,styles.css,autonomousMode.ts,localStorage.ts}`, `src/lib/{qaParser.ts,linkResolver.ts}`, `src/components/{Sidebar,Reader,Editor,QaView,QaErrorBoundary,RegeneratePanel,ProjectPage,Home,Breadcrumb,BrokenLink}.tsx`, `src/markdown/{Renderer,CodeView,JsonlView,ImagePlaceholder}.tsx`. SPA builds to `backend/static/` so `make run-prod` is a single process.
+- Frontend tests: `test/{setup.ts,qaParser.test.ts,linkResolver.test.ts,autonomousMode.test.ts,Sidebar.test.tsx,QaErrorBoundary.test.tsx}` plus `test/fixtures/qa/{interactive,autonomous}.md`. 20 vitest cases pass. Includes regression-2026-05-02-clean coverage: qaParser autonomous form, Sidebar node.children walk, QaErrorBoundary as a real `Component` class (not try/catch).
+- E2E: `frontend/playwright.config.ts` + `frontend/e2e/dogfood.spec.ts` (10 SYS-NN scenarios). Written, NOT executed in this run — Playwright browser drivers were not invoked. User runs via `make e2e`.
+
+Verification covered in this run:
+- Backend pytest: 133/133 passing. Single 404 on traversal/ADS/CON.md/short-name; 415 on .exe/.svg/.html/.png-write; 413 on >1 MB; verb whitelist 405 with `Allow: GET, PUT`; Origin/Host validation 403; regen-prompt header verbatim + autonomous imperative + read-zero in Constraints; promotions roundtrip + idempotence + stage_folder allowlist + parse_promoted_text; tree_walker uniform-children regression + consumer-walk regression.
+- Frontend vitest: 20/20 passing.
+- Production build: `npm run build` emits `backend/static/index.html` + `backend/static/assets/*` (1.4 MB JS / 467 KB gzip).
+- Smoke: `python main.py` → 127.0.0.1:8765 binds correctly; `/`, `/file/*`, `/project/*`, `/api/tree`, `/api/file`, `/api/regen-prompt`, `/assets/*` all return 200.
+
+Pending manual verification (per accessibility.md A11Y-17 + system_tests.md manual-walkthrough trigger): visual hierarchy of QaView Q/A tints, focus-visibility under real keyboard, motion/animation perceptibility, NVDA screen-reader sanity, forced-colors mode, 200% zoom, prefers-reduced-motion. Run `make e2e` to execute the Playwright suite.
+
+`0.0.0.0` audit (SEC-20): zero hits across `projects/spec_driven/` — main.py + Makefile + README + libs all use 127.0.0.1 wording without the LAN-bind literal.

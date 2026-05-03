@@ -1,72 +1,94 @@
-from __future__ import annotations
+"""
+Group 2 — file_reader (FR-3, FR-5, AC-2, AC-7, AC-8).
+"""
 
-import os
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 
-from libs.file_reader import FileReadError, read_file
+from libs.file_reader import (
+    FileReader,
+    NotFoundError,
+    TooLargeError,
+    UnsupportedExtensionError,
+)
 
 
-def test_happy_path_md(fake_repo: Path) -> None:
-    out = read_file("specs/development/spec_driven/final_specs/spec.md", fake_repo)
-    assert out.path == "specs/development/spec_driven/final_specs/spec.md"
-    assert out.extension == ".md"
-    assert "spec content" in out.text
+def test_reads_known_markdown(resolver):
+    reader = FileReader(resolver=resolver)
+    r = reader.read("CLAUDE.md")
+    assert r.path == "CLAUDE.md"
+    assert "# CLAUDE.md" in r.content
+    assert r.bytes > 0
 
 
-def test_outside_sandbox_traversal(fake_repo: Path) -> None:
-    with pytest.raises(FileReadError) as ei:
-        read_file("../../etc/hosts", fake_repo)
-    assert ei.value.status == 400
-    assert ei.value.kind == "outside_sandbox"
+@pytest.mark.parametrize("ext", [".md", ".json", ".yaml", ".yml", ".jsonl", ".txt"])
+def test_extension_whitelist_allows_text(resolver, scratch_dir, ext):
+    f = scratch_dir / f"sample{ext}"
+    f.write_bytes(b"ok\n")
+    try:
+        reader = FileReader(resolver=resolver)
+        r = reader.read(f"specs/development/spec_driven/__scratch__/sample{ext}")
+        assert r.bytes == 3
+    finally:
+        f.unlink()
 
 
-def test_unsupported_extension(fake_repo: Path) -> None:
-    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
-    p = findings / "diagram.png"
-    p.write_text("x", encoding="utf-8")
-    with pytest.raises(FileReadError) as ei:
-        read_file("specs/development/spec_driven/findings/diagram.png", fake_repo)
-    assert ei.value.status == 415
-    assert ei.value.kind == "unsupported_extension"
+@pytest.mark.parametrize("ext", [".exe", ".bat", ".cmd", ".ps1", ".sh", ".html", ".svg", ".dll"])
+def test_extension_whitelist_rejects_executables(resolver, scratch_dir, ext):
+    f = scratch_dir / f"sample{ext}"
+    f.write_text("nope\n", encoding="utf-8")
+    try:
+        reader = FileReader(resolver=resolver)
+        with pytest.raises(UnsupportedExtensionError):
+            reader.read(f"specs/development/spec_driven/__scratch__/sample{ext}")
+    finally:
+        f.unlink()
 
 
-def test_too_large(fake_repo: Path) -> None:
-    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
-    big = findings / "big.md"
-    big.write_bytes(b"a" * (2 * 1024 * 1024 + 100))
-    with pytest.raises(FileReadError) as ei:
-        read_file("specs/development/spec_driven/findings/big.md", fake_repo)
-    assert ei.value.status == 413
-    assert ei.value.kind == "too_large"
+def test_rejects_no_extension(resolver, scratch_dir):
+    f = scratch_dir / "noext"
+    f.write_text("x", encoding="utf-8")
+    try:
+        with pytest.raises(UnsupportedExtensionError):
+            FileReader(resolver=resolver).read("specs/development/spec_driven/__scratch__/noext")
+    finally:
+        f.unlink()
 
 
-def test_binary_content_nul(fake_repo: Path) -> None:
-    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
-    bin_md = findings / "binary.md"
-    bin_md.write_bytes(b"# header\x00more")
-    with pytest.raises(FileReadError) as ei:
-        read_file("specs/development/spec_driven/findings/binary.md", fake_repo)
-    assert ei.value.status == 415
-    assert ei.value.kind == "binary_content"
+def test_size_cap_at_1mb(resolver, scratch_dir):
+    f = scratch_dir / "big.md"
+    f.write_bytes(b"a" * (1024 * 1024 + 1))
+    try:
+        with pytest.raises(TooLargeError):
+            FileReader(resolver=resolver).read("specs/development/spec_driven/__scratch__/big.md")
+    finally:
+        f.unlink()
 
 
-def test_outside_exposed_tree(fake_repo: Path) -> None:
-    other = fake_repo / "pyproject.toml"
-    other.write_text("[project]\n", encoding="utf-8")
-    with pytest.raises(FileReadError) as ei:
-        read_file("pyproject.toml", fake_repo)
-    assert ei.value.status == 404
-    assert ei.value.kind == "outside_exposed_tree"
+def test_zero_byte_file_returns_empty_content(resolver, scratch_dir):
+    f = scratch_dir / "empty.md"
+    f.write_bytes(b"")
+    try:
+        r = FileReader(resolver=resolver).read("specs/development/spec_driven/__scratch__/empty.md")
+        assert r.content == ""
+        assert r.bytes == 0
+    finally:
+        f.unlink()
 
 
-def test_file_removed_after_stat(fake_repo: Path) -> None:
-    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
-    p = findings / "transient.md"
-    p.write_text("hi", encoding="utf-8")
-    os.unlink(p)
-    with pytest.raises(FileReadError) as ei:
-        read_file("specs/development/spec_driven/findings/transient.md", fake_repo)
-    assert ei.value.status == 404
-    assert ei.value.kind == "file_removed"
+def test_single_404_for_missing_file(resolver, scratch_dir):
+    with pytest.raises(NotFoundError):
+        FileReader(resolver=resolver).read("specs/development/spec_driven/__scratch__/nope.md")
+
+
+def test_single_404_for_outside_tree(resolver):
+    with pytest.raises(NotFoundError):
+        FileReader(resolver=resolver).read("../etc/passwd")
+
+
+def test_returns_mtime_and_bytes(resolver):
+    r = FileReader(resolver=resolver).read("CLAUDE.md")
+    assert r.mtime
+    assert r.bytes > 0
+    assert "T" in r.mtime

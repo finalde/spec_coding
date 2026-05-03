@@ -1,95 +1,101 @@
+"""
+Group 6 — tree_walker (FR-1, FR-2).
+
+The two regression tests from `spec_driven-20260502-clean` are the load-bearing
+assertions in this file: 6.1 (uniform `children` field) and 6.2 (consumer-walk
+parity with how the frontend Sidebar descends the tree).
+"""
+
 from __future__ import annotations
 
-from pathlib import Path
+import pytest
 
-from libs.tree_walker import build_tree
-
-
-def test_basic_shape(fake_repo: Path) -> None:
-    tree = build_tree(fake_repo)
-    assert list(tree.keys()) == ["settings", "projects"]
-    settings = tree["settings"]
-    assert isinstance(settings, dict)
-    assert list(settings.keys()) == ["claude_md", "playbooks", "skills", "agent_refs"]
+from libs.exposed_tree import ExposedTree
+from libs.tree_walker import TreeWalker, to_jsonable
 
 
-def test_missing_folder_for_absent_stage(tmp_path: Path) -> None:
-    (tmp_path / "CLAUDE.md").write_text("x", encoding="utf-8")
-    (tmp_path / ".claude" / "skills" / "agent_team" / "playbooks").mkdir(parents=True)
-    (tmp_path / ".claude" / "skills").mkdir(parents=True, exist_ok=True)
-    project = tmp_path / "specs" / "development" / "spec_driven"
-    (project / "user_input").mkdir(parents=True)
-    (project / "user_input" / "raw_prompt.md").write_text("x", encoding="utf-8")
-    tree = build_tree(tmp_path)
-    projects = tree["projects"]
-    assert isinstance(projects, list) and projects
-    type_node = projects[0]
-    assert type_node["name"] == "development"
-    proj_list = type_node["children"]
-    assert isinstance(proj_list, list) and proj_list
-    stages = proj_list[0]["children"]
-    stage_names = [s["name"] for s in stages]
-    assert stage_names == ["user_input", "interview", "findings", "final_specs", "validation"]
-    validation = stages[-1]
-    assert validation["kind"] == "missing-folder"
-    assert validation["present"] is False
+@pytest.fixture()
+def tree(repo_root):
+    return TreeWalker(exposed=ExposedTree(root=repo_root.path)).walk()
 
 
-def test_validation_priority_order(fake_repo: Path) -> None:
-    val_dir = fake_repo / "specs" / "development" / "spec_driven" / "validation"
-    (val_dir / "system_tests.md").write_text("x", encoding="utf-8")
-    (val_dir / "unit_tests.md").write_text("x", encoding="utf-8")
-    (val_dir / "security.md").write_text("x", encoding="utf-8")
-    tree = build_tree(fake_repo)
-    proj = tree["projects"][0]["children"][0]
-    stages = proj["children"]
-    validation = next(s for s in stages if s["name"] == "validation")
-    files = [c["name"] for c in validation["children"] if c.get("kind") == "file"]
-    assert files[0] == "strategy.md"
-    assert files[1] == "acceptance_criteria.md"
-    assert files[2] == "bdd_scenarios.md"
-    tail = files[3:]
-    assert tail == sorted(tail, key=lambda n: n.lower())
+def _walk(node):
+    """Mirror the frontend Sidebar: descend `node['children']` literally.
+
+    KeyError on a missing children field is the canonical regression failure.
+    """
+    yield node
+    for c in node["children"]:
+        yield from _walk(c)
 
 
-def test_alphabetical_within_stage_case_insensitive(fake_repo: Path) -> None:
-    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
-    (findings / "Zebra.md").write_text("x", encoding="utf-8")
-    (findings / "alpha.md").write_text("x", encoding="utf-8")
-    (findings / "Alpha-2.md").write_text("x", encoding="utf-8")
-    (findings / "beta.md").write_text("x", encoding="utf-8")
-    tree = build_tree(fake_repo)
-    proj = tree["projects"][0]["children"][0]
-    findings_node = next(s for s in proj["children"] if s["name"] == "findings")
-    files = [c["name"] for c in findings_node["children"] if c.get("kind") == "file"]
-    lower_seq = [n.lower() for n in files]
-    assert lower_seq == sorted(lower_seq)
+def test_emits_children_field_uniformly(tree):
+    """**[regression-2026-05-02-clean]** every non-leaf has a `children` array,
+    and NO node has `projects` or `stages` or `task_type.projects` keys."""
+    nodes = []
+    for top in tree:
+        nodes.extend(_walk(top))
+    for n in nodes:
+        assert "children" in n, f"missing 'children' on node {n.get('name')}"
+        for forbidden in ("projects", "stages", "task_type"):
+            assert forbidden not in n, f"forbidden field {forbidden!r} on node {n.get('name')}"
 
 
-def test_every_non_leaf_uses_children_field(fake_repo: Path) -> None:
-    """Sidebar walks the tree via the single `children` field at every depth.
-    Backend MUST NOT use stage-specific names like `projects` or `stages` for descent."""
-    tree = build_tree(fake_repo)
+def test_tree_consumer_walk(tree):
+    """**[regression-2026-05-02-clean]** walking via `node['children']` reaches
+    every leaf — KeyError if any non-leaf is missing the field. Asserts the
+    frontend's recursion contract on the backend output."""
     leaves: list[str] = []
+    for top in tree:
+        for n in _walk(top):
+            if not n["children"] and n["type"] == "file":
+                leaves.append(n["path"])
+    assert "CLAUDE.md" in leaves
+    assert any("specs/development/spec_driven/final_specs/spec.md" in p for p in leaves)
+    assert any("specs/development/spec_driven/interview/qa.md" in p for p in leaves)
 
-    def walk(node: dict[str, object], depth: int) -> None:
-        kind = node.get("kind")
-        if kind == "file":
-            leaves.append(str(node.get("path", "")))
-            return
-        if kind == "missing-folder":
-            return
-        children = node.get("children")
-        assert isinstance(children, list), (
-            f"node kind={kind!r} at depth {depth} missing `children` list "
-            f"(got keys {list(node.keys())!r}); frontend Sidebar relies on this single field"
-        )
-        for c in children:
-            assert isinstance(c, dict)
-            walk(c, depth + 1)
 
-    for tt in tree["projects"]:
-        assert isinstance(tt, dict)
-        walk(tt, 1)
-    assert leaves, "expected at least one file leaf under projects"
-    assert any(p.endswith("/spec.md") for p in leaves)
+def test_top_level_sections(tree):
+    names = [n["name"] for n in tree]
+    assert names[0] == "Claude Settings & Shared Context"
+    assert names[1] == "Projects"
+
+
+def test_type_tags(tree):
+    valid = {"section", "type", "project", "stage", "file"}
+    for top in tree:
+        for n in _walk(top):
+            assert n["type"] in valid
+
+
+def test_paths_are_forward_slash(tree):
+    for top in tree:
+        for n in _walk(top):
+            assert "\\" not in n["path"], f"backslash in path {n['path']!r}"
+
+
+def test_includes_required_paths(tree):
+    leaves = []
+    for top in tree:
+        for n in _walk(top):
+            if n["type"] == "file":
+                leaves.append(n["path"])
+    required_substrings = [
+        "CLAUDE.md",
+        ".claude/skills/agent_team/playbooks/interview.md",
+        ".claude/skills/agent_team/playbooks/research.md",
+        ".claude/skills/agent_team/playbooks/validation.md",
+        ".claude/agent_refs/validation/general.md",
+        "specs/development/spec_driven/final_specs/spec.md",
+        "specs/development/spec_driven/interview/qa.md",
+        "specs/development/spec_driven/validation/strategy.md",
+        "specs/development/spec_driven/interview/promoted.md",
+    ]
+    for needle in required_substrings:
+        assert any(needle in p for p in leaves), f"required path missing: {needle}"
+
+
+def test_deterministic_within_a_directory(repo_root):
+    a = TreeWalker(exposed=ExposedTree(root=repo_root.path)).walk()
+    b = TreeWalker(exposed=ExposedTree(root=repo_root.path)).walk()
+    assert [to_jsonable(n) for n in a] == [to_jsonable(n) for n in b]

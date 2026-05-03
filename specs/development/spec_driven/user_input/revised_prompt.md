@@ -2,7 +2,7 @@
 
 Stage 1 output. Auto-regenerated from `raw_prompt.md` + every `user_input/follow_ups/*.md` in numerical order.
 
-Last regenerated: 2026-05-03 (follow-up 002 auto-regen — friendly regen-prompt copy UI).
+Last regenerated: 2026-05-03 (follow-up 003 — added `run-backend` / `run-frontend` Makefile targets; prior autonomous full-pipeline regen preserved).
 
 ---
 
@@ -32,6 +32,7 @@ The six stages:
 - **Backend:** FastAPI.
 - **Frontend:** React.
 - **Layout:** single project at `projects/spec_driven/` with `backend/` and `frontend/` subfolders sharing one `README.md`.
+- **Dev workflow (added by follow-up 003):** the `Makefile` exposes `run-backend` (FastAPI on `127.0.0.1:8765`) and `run-frontend` (Vite dev server on `127.0.0.1:5173`) as separate targets; `run` is preserved as a backend-only alias and `run-prod` still builds + serves single-process from `backend/static/`.
 
 ### What the viewer/editor surfaces
 

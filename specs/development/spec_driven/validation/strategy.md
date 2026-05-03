@@ -1,157 +1,126 @@
 # Validation strategy — spec_driven
 
-Run: spec_driven-20260502-clean
-Stage: 5 (Validation strategy)
-Compiled by: parent (agent_team skill, parent_direct synthesis under EXECUTION MODE: AUTONOMOUS), 2026-05-02
-Inputs read: `final_specs/spec.md` (44 FRs incl. 14a/14b/14c subletters and 40-44, 16 NFRs, 27 ACs).
-Inputs explicitly NOT read: any prior `validation/*.md`. Per CLAUDE.md "Regeneration semantics: read-zero from prior outputs."
+Run: spec_driven-20260503-030434 (autonomous full-pipeline clean regen)
 
-## Architecture note
-
-Per CLAUDE.md "Tool scoping and team coordination", the parent owns spawning. For Stage 5 strategy:
-- `agent_team__validation_manager` was invoked (mode=strategy) to identify levels and define worker prompts. It returned the JSON team definition and recommended `parent_direct` synthesis.
-- The parent spawned 5 level-specialist subagents in parallel (acceptance_criteria, bdd_scenarios, unit_tests, system_tests, security+performance+accessibility-combined). Each wrote its level file plus a spawn audit pair under `.audit/adhoc_agents/2026-05-02/spec_driven-20260502-clean/spawns/`.
-- This file (strategy.md) was authored by the parent from the five returned summaries — no synthesis subagent was invoked.
+Inputs: `final_specs/spec.md` (44 FRs / 16 NFRs / 29 ACs / 7 OQs in this regen). Pre-reading: `.claude/skills/agent_team/playbooks/validation.md`, `.claude/agent_refs/validation/general.md`, `.claude/agent_refs/validation/development.md`. No `validation/promoted.md` exists.
 
 ## Levels chosen
 
-7 of 7 standard levels apply to this spec. None deferred.
+| Level | Why this applies | Spec hooks | File |
+|---|---|---|---|
+| Acceptance criteria | Always — Gherkin-style runnable proofs of every AC-NN. | AC-1..AC-29 | `acceptance_criteria.md` (29 scenarios + pin-preservation) |
+| BDD scenarios | Always — feature-level behaviors covering primary journeys + edge cases. | §2 user journeys, FR-1..FR-39 | `bdd_scenarios.md` (10 Features) |
+| Unit tests | Spec has discrete logic (parsers, regex, walk-vs-shape contracts). | FR-4 / FR-11 / FR-19 / FR-21, regression coverage from prior run | `unit_tests.md` (12 groups) |
+| System tests | Multi-component (FastAPI + React + browser); per `agent_refs/validation/development.md` move #1 e2e is mandatory. | FR-1..FR-39, NFR-1..NFR-13 | `system_tests.md` (27 SYS-NN) |
+| Security | Spec touches FS sandboxing, CSRF/DNS-rebinding, content-sniffing, XSS. | FR-3..FR-9, NFR-4..NFR-9 | `security.md` (23 SEC-NN) |
+| Performance | Spec defines hard latency budgets and a size policy with discrete tiers. | NFR-1..NFR-3, FR-12 | `performance.md` (8 PERF-NN) |
+| Accessibility | UI-heavy spec with explicit ARIA / keyboard / contrast claims. | NFR-14..NFR-16, FR-24..FR-36 | `accessibility.md` (17 A11Y-NN) |
 
-| Level | Output file | Items | Why this spec needs it |
-|-------|-------------|-------|------------------------|
-| **acceptance_criteria** | `acceptance_criteria.md` | 27 Gherkin scenarios | Mandatory per contract. Spec defines AC-1..AC-27 mapped 1:1 to primary flows + spec-summary items. |
-| **bdd_scenarios** | `bdd_scenarios.md` | 18 Features / 70 scenarios | Mandatory. Captures end-to-end behaviors that span multiple FRs (cross-link follow = FR-15+FR-17+FR-33; editor save = FR-40+FR-14a). 14 per-flow Features + 4 cross-cutting. |
-| **unit_tests** | `unit_tests.md` | 12 groups / 129 cases | Spec has substantial discrete logic — `safe_resolve`, `EXPOSED_TREE` glob membership, GFM slug, link classifier 4-case chain, JSONL per-line parser, file-read error mapping, sidebar localStorage, long-name truncation, regen-prompt size policy, editor dirty state. All pure functions, framework-independent. |
-| **system_tests** | `system_tests.md` | 24 scenarios (SYS-01..SYS-24) | Spec is fundamentally backend+frontend+filesystem+browser integration. `make run` build+serve, path traversal end-to-end, dogfood self-render, refresh-after-external-write, browser back-button, concurrent writes, editor round-trip, regen warn-don't-truncate, read-zero constraint surfacing — all cross-component. |
-| **performance** | `performance.md` | 8 checks (PERF-01..PERF-08) | Spec calls out concrete latency budgets — NFR-1 (`/api/tree` <200ms), NFR-2 (`/api/file` <100ms), NFR-3 (initial load <2s). Plus regen-prompt assembly time and cold-load. |
-| **security** | `security.md` | 20 probes (SEC-01..SEC-20) + threat model | Security is load-bearing in v1: path-traversal sandbox, symlink refusal, GET/PUT/POST verb whitelist, localhost-bind, no-CORS-wildcard, binary-content rejection, size cap, atomic-write race, regen-prompt hard-ceiling, read-zero contract surfacing. CVE-2023-29159 lessons baked in. |
-| **accessibility** | `accessibility.md` | 25 checks (A11Y-01..A11Y-25) | Spec is UI-heavy with explicit ARIA APG TreeView pattern (FR-18..FR-20, FR-24..FR-26), WCAG 2.1 AA contrast (NFR-10), keyboard nav per W3C APG (FR-19), editor a11y (FR-40), regen-warning a11y. Tooling-specific (axe-core, NVDA, Colour Contrast Analyzer) — distinct level. |
-
-**Total: 27 + 70 + 129 + 24 + 8 + 20 + 25 = 303 testable items across 7 levels.**
+303 testable items total: 29 AC + 70 BDD scenarios + 129 unit cases + 27 SYS-NN + 23 SEC-NN + 8 PERF-NN + 17 A11Y-NN. (Counts cross-checked against the level files.)
 
 ## Per-level summary
 
-### Acceptance criteria
+### Acceptance criteria — 29 scenarios
 
-- **AC-1..AC-27** map 1:1 to the spec's `## Acceptance criteria summary`. Each scenario has concrete Windows absolute paths, exact HTTP status codes / error keys, DOM attributes, CSS classes, tooltip strings — and a `Spec refs:` traceability footer.
-- Grouped under 8 Features: routing, sidebar, settings, reader/links, file API, editor, regeneration, deployment.
-- 73 spec-id mentions total — every FR/NFR is touched somewhere.
+- One Gherkin scenario per AC-NN with concrete URLs (`http://127.0.0.1:8765/api/...`), exact status codes (200/403/404/405/413/415), real file paths, and exact `data-testid` selectors (`sidebar`, `tree-leaf`, `project-link`, `qa-view`, `qa-q-block`, `qa-a-block`, `regen-prompt-block`, `link-broken`).
+- Final `## Feature: Pin preservation` Scenario asserts pin-001 (Round 1 / functional-scope / "All discovered (Recommended)") from `interview/promoted.md` appears verbatim in regenerated `interview/qa.md`. No `## Pinned items (orphaned)` section emitted.
+- Each scenario carries a `Spec refs:` line traceable back to FR-N / NFR-N / AC-N.
 
-### BDD scenarios
+### BDD scenarios — 10 Features
 
-- **14 per-flow Features**, one per primary flow (Flows 1–14 from the spec). Each has `Background:` (running app, REPO_ROOT, prior stages on disk), happy-path `Scenario:`, parametric `Scenario Outline:` with `Examples:` table where applicable, and edge cases.
-- **4 cross-cutting Features**: Markdown rendering (Shiki + GFM with language/file-type/image Examples + malformed `.jsonl` line), Sidebar tree shape & ordering (FR-7/8/9/10 incl. validation/ priority), Dogfood self-render, Read-zero regeneration contract.
-- **Scenario Outlines with Examples tables** for: external-scheme classification (https/http/mailto/ftp/`//cdn`), save-error code matrix (400/403/404/413/415/500), Shiki language fallback, stage-folder URL redirect target, validation/ priority order, read-zero coverage across stage subsets.
-- 70 scenarios total. All use real URLs, real localStorage keys, real ports.
+- Sidebar tree + render dispatch (5 paths via Scenario Outline → MarkdownView/QaView/JsonlView/CodeView/ImagePlaceholder).
+- File reader + safe_resolve sandbox (Scenario Outline for 404 cases: `..`, `CON.md`, `::$DATA`, junctions, etc.).
+- File editor (toolbar, dirty-dot, persistent error banner, Ctrl+S; Save never disabled during error).
+- Structured Q/A view + per-block edit, mutually exclusive with file-level edit.
+- Per-stage Regenerate panel (with the FR-33(f) inline `regen-prompt-block` + header bar Copy + Wrap toggle).
+- Project-page master Regenerate.
+- Autonomous-mode toggle persistence + cross-tab `storage` event sync.
+- QaView Error-Boundary fallback.
+- Promotion (pin/unpin) with `stage_folder` allowlist + Stage-6 exclusion.
+- Boot smoke.
 
-### Unit tests
+### Unit tests — 12 groups, 129 cases
 
-- **12 groups, 129 cases total**. Groups: `safe_resolve` (15), `EXPOSED_TREE` membership (32), tree ordering (8), stage presence (3), GFM slug (12), link classifier (16), JSONL renderer (8), file-read error mapping (8), sidebar localStorage (6), long-name truncation (5), regen-prompt size + breakdown (10), editor dirty + save (6).
-- Each case has `Test name:`, `Inputs:`, `Expected output:`, `Edge cases handled:`, `Spec refs:` — no test-framework code.
-- File opens with required-fixture inventory.
+- Backend: `safe_resolve` (10 cases including all OWASP / Vite-CVE-2025-62522 traversal classes), `file_reader` (extension whitelist, size cap, single-404, header-set check), `file_writer` (atomic temp+rename, body cap, UTF-8 first-16 check), `regen_prompt` (header verbatim, autonomous imperative line, follow-up ordering, promoted.md inline, 50KB-warn / 1MB-413 size policy, read-zero in constraints), `promotions` (POST/DELETE roundtrip, idempotence), `tree_walker` (uniform `children` field, `test_tree_consumer_walk` walking the way the frontend Sidebar does), `api` (verb whitelist, Origin/Host validation, 413/415/404 mapping).
+- Frontend: `Sidebar` (recursive `node.children`), `Editor` (dirty-dot / error-banner / Save-never-disabled), `QaView` parser (accepts BOTH `- A:` and `- A *(judgment call — chose X because Y)*:`; fixture rotation against a real on-disk autonomous-mode qa.md), `RegeneratePanel` (breakdown line shape, soft-wrap toggle, Copy label flip, no-render on 413), `autonomousMode` (key, default, storage-event subscription).
+- All three `spec_driven-20260502-clean` regressions are encoded with `[regression-2026-05-02-clean]` tags + a regression-coverage table at the file's bottom.
 
-### System tests
+### System tests — 27 SYS-NN
 
-- **24 end-to-end scenarios** covering: `make run` build+serve (SYS-01), `make dev` two-process (SYS-02), port override + unavailable-port exit (SYS-03), `REPO_ROOT` walk-upward + failure (SYS-04), `/` redirect with spec.md fallback (SYS-05), path traversal end-to-end across encodings (SYS-06), symlink rejection (SYS-07, with Windows skip), `127.0.0.1` bind (SYS-08), no CORS wildcard (SYS-09), GET/PUT/POST verb whitelist (SYS-10), dogfood self-render (SYS-11), cross-link + back-button (SYS-12), folder-only-URL replace-history redirect (SYS-13), refresh after external write (SYS-14), stale-tree click inline refresh (SYS-15), concurrent-write tolerance (SYS-16), session restore on reload (SYS-17), Section 1 navigation (SYS-18), image placeholder + non-image-bytes (SYS-19), JSONL render (SYS-20), editor round-trip (SYS-21), editor save failure persistent banner (SYS-22), regen-prompt warn-don't-truncate (SYS-23), read-zero constraint surfacing (SYS-24).
-- Each has `Setup / Action / Assertions / Spec refs / Components exercised`.
-- `STATUS=SKIPPED-...` policy noted on SYS-07 (Windows symlink privilege) and SYS-08 LAN-reachability subcase (no second host).
+- SYS-1 boot smoke (`make run-prod` → `/api/tree` 200 → SPA loads → ≥1 leaf under each top-level section).
+- SYS-2..6: every render mode via Playwright deep-link (one file per mode, asserts on rendered DOM, `consoleErrors == []`).
+- SYS-7..8: editor save round-trip + per-Q inline edit; mutual-exclusion with file-level edit; reload preserves disk state.
+- SYS-9..11: regen-prompt small / medium-warning / large-413 (the >1 MB case proves `regen-prompt-block` is NOT rendered).
+- SYS-12: autonomous toggle persistence + native `storage` event cross-tab.
+- SYS-13: QaView Error Boundary fallback against a deliberately-malformed real-shape qa.md.
+- SYS-14..15: safe_resolve probes (traversal / junctions / ADS / Windows-reserved / 8.3-short — all return single 404).
+- SYS-16: Origin/Host validation including DNS-rebind probe.
+- SYS-17: `make run` binds 127.0.0.1 only (LAN unreachable + `netstat`/`ss` socket inspection + `0.0.0.0` source-grep).
+- SYS-18..27: verb whitelist, extension/size caps, sidebar structural sanity, project-parent master Regenerate Copy + Wrap, broken-link span (NOT `<a>`), editor save-error banner persistence, pin survival in regen prompts, autonomous header verbatim, promotion roundtrip, NFR-3 latency budget.
+- A `validation.requires_manual_walkthrough` trigger covers visual-only checks.
 
-### Performance
+### Security — 23 SEC-NN
 
-- **8 checks** total. **3 hard-budget gates**: PERF-01, PERF-03, PERF-05 (mapped to NFR-1/2/3).
-- **1 derived sanity gate**: PERF-02 (single-project tree baseline <50 ms).
-- **1 regression guard**: PERF-06 (10 concurrent `/api/tree`, p95 <500 ms, no errors).
-- **2 observe-only metrics**: PERF-04 (2 MB file boundary), PERF-07 (100-line `events.jsonl` Shiki freeze).
-- **1 added by autonomous regen**: PERF-08 (`POST /api/regen-prompt` for full 6-stage prompt < 200 ms).
-- Each check has fixture-generation pseudocode under `tests/fixtures/perf_*`. Regression cadence: "manually before release".
+- Path traversal classes including the canonical Vite CVE-2025-62522 `\` deny-list bypass on both platforms.
+- Windows reserved device names, ADS, 8.3 short names, junctions, symlinks (POSIX) — all → single 404.
+- Disallowed extensions / oversized read / oversized write / binary write to `.md` / write to `.png` / verb whitelist.
+- DNS rebinding (`Host: 127.0.0.1.evil.com` → 403) + Origin validation.
+- Markdown XSS via raw `<script>` and via event-handler / `javascript:` URIs — both stripped.
+- Single-404 enumeration policy.
+- Header pair (`X-Content-Type-Options: nosniff` + `Content-Disposition: attachment`) on every `GET /api/file`.
+- `0.0.0.0` source-grep audit.
+- Read-zero contract sentence verbatim in every assembled regen prompt across the autonomous + interactive matrix.
+- Severity floor: any traversal/sandbox-escape success = `critical`; missing security header = `blocker`. CWE ids attached (CWE-22, 59, 79, 83, 138, 203, 204, 350, 352, 434, 538, 693, 749, 770, 918, 1327).
 
-### Security
+### Performance — 8 PERF-NN
 
-- **20 probes** organized by attack vector: path traversal in 4 forms (SEC-01..SEC-04), symlinks in 3 sub-cases (SEC-05), extension/binary/size limits (SEC-06/07/08), tree-walk DoS at 10K files (SEC-09), GET/PUT/POST verb whitelist (SEC-10), bind address (SEC-11), no CORS wildcard (SEC-12), no auth code paths greppable (SEC-13), markdown XSS `javascript:` URL sanitization (SEC-14), SSRF surface absence (SEC-15), error leakage (SEC-16), FR-37 outside-tree link rejection (SEC-17), PUT atomic-write race (SEC-18), regen-prompt 1 MB hard ceiling (SEC-19), read-zero constraint surfacing in assembled prompt (SEC-20).
-- Each probe is curl-runnable with inline fixture descriptions.
-- **Threat model section** distinguishes in-scope local attacker (malicious file content from upstream Claude, cross-origin local browser tabs) from out-of-scope remote attacker (mitigation = NFR-7 loopback bind).
+- NFR-1 `/api/tree` p95 < 200 ms at locked scale.
+- NFR-2 `/api/file` p95 < 100 ms parameterized over CLAUDE.md / qa.md / spec.md / dossier.md.
+- NFR-3 cold initial load p95 < 2 s.
+- FR-12 size policy: 49 / 51 / 100 / 999 KB warning behavior + 1.0 / 1.1 MB hard ceiling (1.1 MB → 413 `kind: "too_large"`).
+- Editor save round-trip < 250 ms; regen-prompt assemble at ~50 KB < 300 ms; sidebar first-paint < 100 ms.
+- Severity: hard NFR misses + FR-12 contract violations = `blocker`; perceptual budgets / observe-only paint timings = `warning` (never halts).
 
-### Accessibility
+### Accessibility — 17 A11Y-NN
 
-- **25 checks** total, each tagged `[Spec-mandated]` (22) or `[Recommended]` (3).
-- Mandated coverage: tree container roles + multiselectable + tab stop, treeitem attributes incl. aria-level, aria-selected matches URL, full APG TreeView keyboard map (incl. Home/End), missing-state arrow-skip, focus + selection visuals simultaneously visible, WCAG 2.1 AA contrast on every interactive state, heading semantics observational, long-name truncation accessible name, folder-click toggle-only, breadcrumb landmark + nav element + `aria-current="page"`, broken-link span with `aria-disabled="true"`, external-link new-tab announcement, refresh button keyboard-activatable, reduced-motion preference, image placeholder accessible name, code-block AT compatibility, markdown link semantics, editor textarea aria-label + aria-live for dirty state, editor error banner role="alert", single tab stop with roving tabindex, regen-prompt warning banner role="status".
-- Cited WCAG SC numbers and ARIA APG section names throughout. Tooling: axe-core, Chrome Lighthouse, NVDA + Chrome, Colour Contrast Analyzer, manual keyboard.
+- Each case cites a named WCAG criterion (2.1.1 Keyboard, 2.4.1 Bypass Blocks, 2.4.3 Focus Order, 2.4.7 Focus Visible, 1.3.1 Info & Relationships, 1.4.3 Contrast Min, 1.4.10 Reflow, 4.1.2 Name/Role/Value, 4.1.3 Status Messages, 2.3.3 Animation, 3.3.2 Labels).
+- Anchored to NFR-14/15/16 plus FR-16, FR-17, FR-24, FR-25, FR-26, FR-27, FR-29, FR-30, FR-33, FR-36 and AC-21/22/24.
+- A11Y-17 is a dedicated `validation.requires_manual_walkthrough` pass (visual hierarchy, keyboard focus visibility, NVDA sanity, forced-colors, 200% zoom, `prefers-reduced-motion`, tooltip-on-focus).
+- A11Y-01..A11Y-16 are automatable via `@axe-core/playwright` + DOM snapshot assertions.
+- Severity: structural ARIA / mandatory checks = `blocker`; recommended-tier gaps = `warning`.
 
 ## Cross-cutting concerns
 
-These concerns span multiple levels and require coordinated test design.
-
-### 1. The "exposed tree" concept is referenced by every level
-
-`EXPOSED_TREE` (FR-1) is named in unit tests (glob membership), system tests (SYS-06/07/14), security (SEC-04/17/18), and is the implicit basis for AC-7, AC-11, and the broken-link tooltip strings. **Inconsistency between the renderer's view and the file server's view is exactly the CVE-2023-29159 bug class.** Implementation MUST surface `EXPOSED_TREE` as a single named constant; tests at every level reference that constant.
-
-### 2. The path-traversal sandbox spans security / system / unit
-
-`safe_resolve` is unit-tested (15 cases), system-tested end-to-end (SYS-06 with curl), and security-probed across multiple attack vectors (SEC-01..SEC-05). All three must agree. A unit test that passes but a system test that fails means the helper is correct in isolation but the API endpoint isn't routing through it.
-
-### 3. The ARIA APG TreeView pattern spans accessibility / system / BDD
-
-A11Y-01..A11Y-06 verify DOM structure (axe-core + manual keyboard); SYS-11/SYS-17/SYS-18 verify rendering during navigation; BDD Flow 1, 2, 3, 14 cover user-facing keyboard sequences. The `aria-selected` / focus / URL triple must move atomically.
-
-### 4. Concurrent-write / stale-tree handling
-
-System-tested (SYS-15, SYS-16), BDD edge-cased (Flow 12, 13), unit-tested (FR-5 file-read error mapping). The implementation must NEVER produce a 500 from `/api/tree` or `/api/file` for any of the FR-5.7 enumerated cases.
-
-### 5. Editor + write-endpoint independence
-
-The editor (FR-40) and `PUT /api/file` (FR-14a) must NOT trust each other. Editor dirty state is unit-tested (Group 12); PUT atomic-write race is security-probed (SEC-18); save round-trip is system-tested (SYS-21); save failure is system-tested (SYS-22) and BDD-covered (Flow 8). Same path-sandbox and extension-whitelist rules MUST apply to both endpoints.
-
-### 6. Regen-prompt size policy + read-zero contract
-
-Three-level coverage: unit test for size thresholds + breakdown formatter (Group 11); system test for warn-don't-truncate (SYS-23) and read-zero constraint surfacing (SYS-24); security probe for hard-ceiling 413 (SEC-19) and constraint-string presence (SEC-20). All three levels share a 60 KB and 1.2 MB fixture for the size-policy boundary.
-
-### 7. localStorage state restoration
-
-System-tested (SYS-17), unit-tested (sidebar localStorage group), BDD edge-cased (Flow 14 corrupted localStorage). Single key `spec_driven.sidebar.v1`. Corrupted JSON falls back to defaults with NO console error.
-
-### 8. State to reset between test runs
-
-- **Backend**: process restart between SYS scenarios that mutate fixture filesystem; `localStorage.clear()` between BDD/system scenarios that exercise persistence.
-- **Frontend**: full hard-reload between scenarios that test session restore (SYS-17, BDD Flow 14).
-- **Fixtures**: tests under `tests/fixtures/` are checked-in, never auto-mutated by tests; perf fixtures are generated by setup scripts before run.
+1. **Frontend ↔ backend field-name mirroring (`agent_refs/validation/development.md` move #3).** Single canonical `node.children` field across `/api/tree`. Pure-shape unit tests are insufficient; `test_tree_consumer_walk` (in `unit_tests.md` group 6) walks the response the way the Sidebar does.
+2. **Cross-platform fixture matrix.** Windows + Git Bash is the canonical dev host. POSIX symlinks (skipif `win32`), NTFS case-folding (skipif `!= "win32"`), `os.replace` atomicity (skipif `win32`), backslash conversion (win32-only) are all called out per case in `unit_tests.md` and `system_tests.md`.
+3. **Consumer-walk e2e per render mode.** SYS-2..6 each open a real file that triggers exactly one render mode and assert on rendered DOM (`agent_refs/validation/development.md` move #8). The QaView fixture for SYS-13 is a malformed real-shape qa.md, not a synthetic one.
+4. **Parse-on-render boundary discipline.** FR-19 + unit case 10.6 + SYS-13 jointly enforce a real React Error Boundary class, NOT `try { return <Foo/> } catch`.
+5. **Regen prompt size policy is observable end-to-end.** PERF-6/PERF-7 + SYS-9..11 + AC-13 + SEC-23 jointly verify warn-don't-truncate / 413-no-block / read-zero-in-constraints.
+6. **`make run` localhost binding.** SYS-17 + SEC-20 + AC-29 jointly assert `127.0.0.1` and forbid `0.0.0.0`.
+7. **`agent_refs/validation/development.md` move #6 — no `uv` without pip fallback.** A static Makefile review during runtime validation flags any `uv run` without pip equivalent as `blocker`.
 
 ## How runtime validation will use this
 
-Stage 6 (Execution + streaming validation) decomposes the spec into work units. Each work unit has a `work_unit_kind`, which determines which validation levels apply. Per the patched contract in CLAUDE.md, the parent does the actual `Agent` spawns; the manager defines the validator team and consolidates results.
+| Stage 6 work_unit_kind | Levels run | Pass criterion |
+|---|---|---|
+| `boot_smoke` | system_tests SYS-1, SYS-17 | Process up, /api/tree 200, bound to 127.0.0.1, ≥1 leaf under each top-level section. Failure = `critical`, no revision rounds. |
+| `backend_api` | acceptance_criteria + unit_tests + security + performance | All ACs in scope pass; consumer-walk tests pass; SEC traversal probes return single 404; PERF budgets within tolerance. |
+| `frontend_component` | bdd_scenarios + unit_tests + accessibility | Render-mode-specific scenario passes (Playwright + DOM); axe-core scan green; Error Boundary fallback path reachable for parse-on-render components. |
+| `e2e_walk` | system_tests SYS-2..27 | Every Playwright deep-link scenario passes; `consoleErrors == []`; manual walkthrough event emitted for visual checks. |
 
-### Mapping: work_unit_kind → applicable levels
+Iteration bounds: 3 revision rounds per unit (per CLAUDE.md). 30-min wall clock per unit. If the same `issue_id` repeats across two iterations, append `pipeline.halted` to `events.jsonl` and escalate.
 
-| Work unit kind | Levels that run | Pass/fail rule |
-|----------------|-----------------|----------------|
-| `backend_api` (file endpoints, tree endpoint, regen endpoint, error mapping) | acceptance_criteria + system_tests + unit_tests + security + performance | All scenarios at all 5 levels must pass. Performance: PERF-01/03/05/08 budgets are gates; PERF-04/06/07 observe-only. |
-| `backend_infra` (REPO_ROOT discovery, port binding, startup, Makefile) | system_tests + security | SYS-01/02/03/04/08 + SEC-11/13. Pass = all green. |
-| `backend_writer` (PUT /api/file atomic write) | unit_tests + system_tests + security | Editor round-trip + SYS-21/22 + SEC-18. |
-| `frontend_component_sidebar` (FR-18..FR-28) | acceptance_criteria + bdd_scenarios + accessibility + unit_tests | Sidebar AC group + BDD Flows 2/3/14 + A11Y-01..A11Y-10/A11Y-21 + unit (localStorage, truncation). |
-| `frontend_component_reader` (FR-29..FR-39) | acceptance_criteria + bdd_scenarios + accessibility + unit_tests | Reader AC group + BDD Flows 4/5/6 + Markdown rendering Feature + A11Y-11..A11Y-18 + unit (slug generator, link classifier, JSONL renderer). |
-| `frontend_component_editor` (FR-40, FR-41) | acceptance_criteria + bdd_scenarios + system_tests + accessibility + unit_tests | Editor AC group + BDD Flows 7/8/9 + SYS-21/22 + A11Y-19/20 + unit Group 12. |
-| `frontend_component_regen_panel` (FR-42, FR-43, FR-44) | acceptance_criteria + bdd_scenarios + accessibility + unit_tests | Regen AC group + BDD Flows 10/11 + A11Y-22 + unit Group 11. |
-| `frontend_routing` (FR-15, FR-16, FR-17) | bdd_scenarios + system_tests | BDD Flow 1 + SYS-05/12/13/17. |
-| `markdown_renderer` (Shiki + link classifier + GFM slug + image placeholder) | unit_tests + acceptance_criteria + accessibility + security (XSS) | Unit (slug, link classifier branches) + AC (broken/external/internal flow) + A11Y-13/16 + SEC-14. |
-| `build_deploy` (Makefile, packaging, README) | system_tests | SYS-01/02. |
-| End-to-end / integration | bdd_scenarios + system_tests + performance + accessibility | Full BDD suite + all SYS-* + PERF-01/03/05 + A11Y full sweep. |
+## Promotion-preservation check
 
-### Severity policy for runtime issues
+For each of the four spec-pipeline stages with a non-empty `<stage>/promoted.md`, every pin MUST appear verbatim in the regenerated artifact. Severity: missing pin = `critical`. Implemented by `parse_promoted_text` (in `libs/promotions.py`) parsing both `<stage>/promoted.md` and the regenerated artifact, then asserting each pin's body appears as a substring of the artifact, modulo whitespace normalization. Stage 6 (project code under `projects/{name}/`) is excluded from this check in v1.
 
-- **`critical`** — security failures (any SEC-* failure), path-traversal escapes, exposed-tree consistency violations, 500-instead-of-structured-error in any FR-5 case, atomic-write race producing torn file. Halts the work unit immediately.
-- **`blocker`** — acceptance-criteria failures, system-test failures, hard performance budgets (PERF-01/03/05/08) missed, ARIA tree pattern violations from A11Y-01..A11Y-06. Standard 3-revision-round cap applies.
-- **`warning`** — accessibility "Recommended" gaps, observe-only performance metrics out-of-band. Logged but does not halt; tracked into v2 backlog.
+For this run: `interview/promoted.md` contains pin-001 (Round 1 / functional-scope / "All discovered (Recommended)"). Validation under `acceptance_criteria.md` "Pin preservation" Feature confirms the pin appears verbatim in regenerated `interview/qa.md`.
 
-### Halt conditions (per CLAUDE.md "Iteration bounds")
+## Audit log contract
 
-- 3 revision rounds per work unit before halting.
-- Same `issue_id` repeating across two iterations on the same unit → halt.
-- Wall-clock exceeds 30 minutes on a single unit → halt.
-- After halt, emit `pipeline.halted` event with reason; escalate to user.
+Every level run MUST emit, to `.audit/adhoc_agents/{date}/{task_id}/events.jsonl`:
+- `validation.started` (with `levels[]` + `pre_reading_consulted[]`)
+- `validation.pass` OR one or more `validation.issue.raised` (with severity, level, location, description)
+- `validation.requires_manual_walkthrough` for the visual-only A11Y-17 + system manual-walkthrough trigger.
 
-## Open questions surviving Stage 5
-
-- **OQ-1..OQ-9 from spec.md** are unchanged. Validation strategy doesn't close these.
-- **CI integration for performance and security checks** — spec is silent on whether PERF-01..PERF-08 and SEC-01..SEC-20 run in CI or only manually. Performance level recommends "manually before release" as default; security recommends the same, with a stronger suggestion that path-traversal probes (SEC-01..SEC-05) run in CI on every backend PR.
-- **mtime-based 409-on-conflict for `PUT /api/file`** — flagged in OQ-4 of the spec; validation strategy defers to v2 implementation decision.
-
-End of strategy.
+A level that ran without audit events is treated as if it didn't run.

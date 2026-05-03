@@ -1,226 +1,207 @@
-import { test, expect } from "@playwright/test";
+// e2e — Playwright system-test scenarios.
+//
+// Maps to SYS-1..SYS-27 in specs/development/spec_driven/validation/system_tests.md.
+// `make run-prod` is started by playwright.config.ts via the webServer fixture.
+//
+// Console-error tracking is per-test: each scenario asserts consoleErrors is empty
+// (modulo the explicit allow-list for SYS-23 where a 500 is intentionally injected).
 
-/**
- * Dogfood golden-path e2e.
- *
- * Exists because frontend↔backend contract drift on the tree shape (run
- * spec_driven-20260502-clean: backend used `projects`/`stages`, frontend
- * walked `children`) shipped past green unit tests. A real browser pass is
- * the cheapest way to catch that class of bug.
- *
- * Pre-req: `make run-prod` is up on http://127.0.0.1:8765 with the
- * spec_driven project's full pipeline output on disk.
- */
+import { expect, test, type Page } from "@playwright/test";
 
-test.describe("spec_driven dogfood", () => {
-  test("landing page redirects to spec.md and renders the rendered file H1", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/file\/specs\/development\/spec_driven\/final_specs\/spec\.md/);
-
-    // The sidebar's title is also an H1; pick the H1 inside the reader pane
-    // specifically. The reader is a <main> landmark.
-    const readerHeading = page.locator("main").getByRole("heading", { level: 1 }).first();
-    await expect(readerHeading).toContainText(/Spec.*spec_driven/i);
+function trackConsoleErrors(page: Page, allowed: RegExp[] = []): string[] {
+  const errs: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() !== "error") return;
+    const t = msg.text();
+    if (allowed.some((re) => re.test(t))) return;
+    errs.push(t);
   });
+  return errs;
+}
 
-  test("Projects > development > spec_driven > [5 stages] all render in the tree", async ({
-    page,
-  }) => {
+test.describe("SYS-1 boot smoke", () => {
+  test("GET /api/tree returns 200 with both top-level sections; SPA loads at /", async ({ page, request }) => {
+    const tree = await request.get("/api/tree");
+    expect(tree.status()).toBe(200);
+    const body = await tree.json();
+    expect(body.children).toBeTruthy();
+    const names = body.children.map((c: any) => c.name);
+    expect(names).toContain("Claude Settings & Shared Context");
+    expect(names).toContain("Projects");
+
+    const errs = trackConsoleErrors(page);
     await page.goto("/");
-    await page.waitForSelector('[role="tree"]');
-
-    // The five stage folder rows must all be present as treeitems at level 4.
-    const stages = ["user_input", "interview", "findings", "final_specs", "validation"];
-    for (const stage of stages) {
-      const row = page.getByRole("treeitem", { name: new RegExp(`^${stage}`) });
-      await expect(row, `stage row '${stage}' must be present`).toBeVisible();
-    }
+    await page.waitForSelector('[data-testid="sidebar"]');
+    expect(errs).toEqual([]);
   });
+});
 
-  test("clicking dossier.md via sidebar navigates the reader pane", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForSelector('[role="tree"]');
-
-    // findings is collapsed by default — click to expand.
-    const findings = page.getByRole("treeitem", { name: /^findings/ });
-    await findings.click();
-
-    // After expand, the dossier.md leaf is a treeitem at level 5 (not an
-    // anchor) — the Sidebar's leaves use onClick + push-history, not <a>.
-    const dossierLeaf = page.getByRole("treeitem", { name: "dossier.md" });
-    await expect(dossierLeaf).toBeVisible();
-    await dossierLeaf.click();
-
-    await expect(page).toHaveURL(/\/file\/specs\/development\/spec_driven\/findings\/dossier\.md/);
-    const readerHeading = page.locator("main").getByRole("heading", { level: 1 }).first();
-    await expect(readerHeading).toContainText(/Findings dossier/i);
+test.describe("SYS-2 markdown render", () => {
+  test("deep-link to spec.md mounts MarkdownView", async ({ page }) => {
+    const errs = trackConsoleErrors(page);
+    await page.goto("/file/specs/development/spec_driven/final_specs/spec.md");
+    await page.waitForSelector('[data-testid="markdown-view"]', { timeout: 10_000 });
+    await expect(page.locator('[data-testid="qa-view"]')).toHaveCount(0);
+    await expect(page.locator("main h1").first()).toContainText("Specification");
+    expect(errs).toEqual([]);
   });
+});
 
-  test("Settings section shows agent_refs subgroup with both validation refs", async ({
-    page,
-  }) => {
-    await page.goto("/");
-
-    // The Settings section is always expanded; the agent_refs subgroup
-    // appears as a subgroup beneath CLAUDE.md / Skills / Playbooks.
-    const refsHeader = page.getByRole("heading", { level: 3, name: "Agent refs" });
-    await expect(refsHeader).toBeVisible();
-
-    // Both validation refs files are clickable as direct sidebar leaves.
-    const dev = page.locator(
-      'a[href="/file/.claude/agent_refs/validation/development.md"]',
-    );
-    const general = page.locator(
-      'a[href="/file/.claude/agent_refs/validation/general.md"]',
-    );
-    await expect(dev).toBeVisible();
-    await expect(general).toBeVisible();
-  });
-
-  test("agent_refs file opens in the reader and shows its H1", async ({ page }) => {
-    await page.goto("/");
-    const dev = page.locator(
-      'a[href="/file/.claude/agent_refs/validation/development.md"]',
-    );
-    await dev.click();
-
-    await expect(page).toHaveURL(
-      /\/file\/\.claude\/agent_refs\/validation\/development\.md/,
-    );
-    const readerHeading = page.locator("main").getByRole("heading", { level: 1 }).first();
-    await expect(readerHeading).toContainText(/Validation playbook/i);
-  });
-
-  test("Playbooks subgroup is visible and the interview playbook opens", async ({
-    page,
-  }) => {
-    await page.goto("/");
-
-    const playbooksHeader = page.getByRole("heading", { level: 3, name: "Playbooks" });
-    await expect(playbooksHeader).toBeVisible();
-
-    const interview = page.locator(
-      'a[href="/file/.claude/skills/agent_team/playbooks/interview.md"]',
-    );
-    await expect(interview).toBeVisible();
-    await interview.click();
-
-    await expect(page).toHaveURL(
-      /\/file\/\.claude\/skills\/agent_team\/playbooks\/interview\.md/,
-    );
-    const readerHeading = page.locator("main").getByRole("heading", { level: 1 }).first();
-    await expect(readerHeading).toContainText(/Interview playbook/i);
-  });
-
-  test("opening qa.md renders the structured Q/A view (or markdown fallback) without blank page", async ({
-    page,
-  }) => {
-    // Regression guard: deep-linking to qa.md previously produced a blank
-    // page because (a) the answer regex didn't match the autonomous-mode
-    // form `- A *(judgment call ...)*:` and (b) the QaViewSafe try/catch
-    // didn't actually catch parse errors thrown during React rendering.
-    const consoleErrors: string[] = [];
-    page.on("pageerror", (err) => consoleErrors.push(String(err)));
-    page.on("console", (msg) => {
-      if (msg.type() === "error") consoleErrors.push(msg.text());
-    });
-
+test.describe("SYS-3 QaView render", () => {
+  test("deep-link to qa.md mounts QaView with Q/A blocks", async ({ page }) => {
+    const errs = trackConsoleErrors(page);
     await page.goto("/file/specs/development/spec_driven/interview/qa.md");
-    // Reader pane must contain SOMETHING — either the structured Q/A view
-    // (`.qa-view`) or the markdown fallback (a heading from qa.md).
-    const main = page.locator("main");
-    await expect(main).toBeVisible();
-    const qaView = main.locator(".qa-view");
-    const fallbackHeading = main.getByRole("heading", { name: /Interview/i }).first();
-    // Whichever path renders, the reader must show real content, not be empty.
-    const eitherVisible = await Promise.race([
-      qaView.waitFor({ state: "visible", timeout: 5000 }).then(() => "qaView"),
-      fallbackHeading
-        .waitFor({ state: "visible", timeout: 5000 })
-        .then(() => "markdown"),
-    ]).catch(() => null);
-    expect(
-      eitherVisible,
-      "qa.md must render either the structured Q/A view or the markdown fallback — never a blank page",
-    ).not.toBeNull();
+    await page.waitForSelector('[data-testid="qa-view"]', { timeout: 10_000 });
+    await expect(page.locator('[data-testid="qa-q-block"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="qa-a-block"]').first()).toBeVisible();
+    expect(errs).toEqual([]);
+  });
+});
 
-    // No uncaught render errors during the load.
-    expect(consoleErrors).toEqual([]);
+test.describe("SYS-9 regen-prompt small (<50 KB)", () => {
+  test("warning is null on a small interactive prompt", async ({ request }) => {
+    const r = await request.post("/api/regen-prompt", {
+      headers: { Origin: "http://127.0.0.1:8765" },
+      data: {
+        project_type: "development",
+        project_name: "spec_driven",
+        stages: ["interview"],
+        modules: { interview: [] },
+        autonomous: false,
+      },
+    });
+    expect(r.status()).toBe(200);
+    const body = await r.json();
+    expect(body.bytes).toBeLessThan(50 * 1024);
+    expect(body.warning).toBeNull();
+    expect(body.prompt).toMatch(/^# EXECUTION MODE: INTERACTIVE/);
+    expect(body.prompt).toContain("regeneration deletes prior outputs first; new generation reads only the inputs.");
+  });
+});
+
+test.describe("SYS-14 traversal probes return single 404", () => {
+  for (const probe of [
+    "../etc/passwd",
+    "specs/../../etc/passwd",
+    "/etc/passwd",
+    "specs/development/spec_driven/CON.md",
+    "specs/development/spec_driven/final_specs/spec.md::$DATA",
+  ]) {
+    test(`probe: ${probe}`, async ({ request }) => {
+      const r = await request.get(`/api/file?path=${encodeURIComponent(probe)}`);
+      expect(r.status()).toBe(404);
+    });
+  }
+});
+
+test.describe("SYS-16 origin validation", () => {
+  test("PUT from foreign origin returns 403", async ({ request }) => {
+    const r = await request.put("/api/file", {
+      headers: { Origin: "http://evil.example.com", Host: "127.0.0.1:8765" },
+      data: { path: "specs/development/spec_driven/__scratch__/sys16.md", content: "x" },
+    });
+    expect(r.status()).toBe(403);
   });
 
-  test("pin a Q/A on qa.md and see it appear on the promoted.md page", async ({
-    page,
-    request,
-  }) => {
-    // Clean state: remove any pre-existing promoted.md so this test is hermetic.
-    // We do this by deleting any pre-existing pins via the API.
-    const stagePath = "specs/development/spec_driven/interview";
-    const existing = await request.get(
-      `/api/promotions?stage_path=${encodeURIComponent(stagePath)}`,
-    );
-    if (existing.ok()) {
-      const body = (await existing.json()) as {
-        pins: Array<{ pin_id: string }>;
-      };
-      for (const p of body.pins) {
-        await request.delete("/api/promote", {
-          data: { stage_path: stagePath, pin_id: p.pin_id },
-        });
-      }
-    }
-
-    // Open qa.md and pin the FIRST Q/A pair.
-    await page.goto("/file/specs/development/spec_driven/interview/qa.md");
-    const qaView = page.locator(".qa-view");
-    await expect(qaView).toBeVisible();
-    const firstPinToggle = page.locator(".pin-toggle").first();
-    await expect(firstPinToggle).toBeVisible();
-    // Click the toggle and wait for the on-state to take effect (the button
-    // gains aria-pressed="true").
-    await firstPinToggle.click();
-    await expect(firstPinToggle).toHaveAttribute("aria-pressed", "true", {
-      timeout: 5000,
+  test("PUT with bad Host returns 403", async ({ request }) => {
+    const r = await request.put("/api/file", {
+      headers: { Origin: "http://127.0.0.1:8765", Host: "evil.com" },
+      data: { path: "specs/development/spec_driven/__scratch__/sys16.md", content: "x" },
     });
+    expect(r.status()).toBe(403);
+  });
+});
 
-    // Navigate to the promoted.md page and confirm the pin appears.
-    await page.goto("/file/specs/development/spec_driven/interview/promoted.md");
-    const promotedView = page.locator(".promoted-view");
-    await expect(promotedView).toBeVisible();
-    const pinCard = page.locator(".promoted-pin-card").first();
-    await expect(pinCard).toBeVisible();
-    await expect(pinCard.locator(".promoted-pin-id")).toContainText(/^pin-\d+/);
-
-    // Unpin from the promoted page and confirm it disappears.
-    await pinCard.locator(".promoted-pin-unpin").click();
-    await expect(page.locator(".promoted-pin-card")).toHaveCount(0, {
-      timeout: 5000,
-    });
-
-    // Cleanup: ensure no stray pins linger for the next test run.
-    const after = await request.get(
-      `/api/promotions?stage_path=${encodeURIComponent(stagePath)}`,
-    );
-    expect(after.ok()).toBe(true);
+test.describe("SYS-18 verb whitelist", () => {
+  test("PATCH /api/file returns 405", async ({ request }) => {
+    const r = await request.fetch("/api/file", { method: "PATCH" });
+    expect(r.status()).toBe(405);
   });
 
-  test("Sidebar walks the live /api/tree shape without errors", async ({ page }) => {
-    // Smoke test that catches the children/projects/stages contract drift class.
-    // If the backend regresses to emitting non-children descent fields, the tree
-    // would render as empty under Projects and this test fails.
-    const consoleErrors: string[] = [];
-    page.on("pageerror", (err) => consoleErrors.push(String(err)));
-    page.on("console", (msg) => {
-      if (msg.type() === "error") consoleErrors.push(msg.text());
-    });
+  test("DELETE /api/file returns 405", async ({ request }) => {
+    const r = await request.fetch("/api/file?path=foo.md", { method: "DELETE" });
+    expect(r.status()).toBe(405);
+  });
+});
 
+test.describe("SYS-20 sidebar structural sanity", () => {
+  test("≥1 leaf under each top-level section", async ({ page }) => {
+    const errs = trackConsoleErrors(page);
     await page.goto("/");
-    await page.waitForSelector('[role="tree"]');
+    await page.waitForSelector('[data-testid="sidebar"]');
+    await page.evaluate(() => {
+      document.querySelectorAll('[data-testid="sidebar"] details').forEach((d) => {
+        (d as HTMLDetailsElement).open = true;
+      });
+    });
+    await expect(
+      page.locator('[data-section="claude"] [data-testid="tree-leaf"]'),
+    ).not.toHaveCount(0);
+    await expect(
+      page.locator('[data-section="projects"] [data-testid="tree-leaf"]'),
+    ).not.toHaveCount(0);
+    await expect(page.locator('[data-testid="project-link"]').first()).toBeVisible();
+    expect(errs).toEqual([]);
+  });
+});
 
-    // Projects section MUST contain at least one project row at level 3.
-    const projectRow = page.getByRole("treeitem", { name: /^spec_driven/ });
-    await expect(projectRow).toBeVisible();
+test.describe("SYS-22 broken-link rendering", () => {
+  test.beforeAll(async ({ request }) => {
+    await request.put("/api/file", {
+      headers: { Origin: "http://127.0.0.1:8765" },
+      data: {
+        path: "specs/development/spec_driven/__scratch__/sys22.md",
+        content:
+          "This is [a broken link](does-not-exist.md) and this is [a real one](../final_specs/spec.md).",
+      },
+    });
+  });
 
-    // No console errors during initial render.
-    expect(consoleErrors).toEqual([]);
+  test("relative link to a non-existent file renders as muted span (NOT anchor)", async ({ page }) => {
+    await page.goto("/file/specs/development/spec_driven/__scratch__/sys22.md");
+    await page.waitForSelector('[data-testid="markdown-view"]');
+    const broken = page.locator('[data-testid="markdown-view"] .link-broken').first();
+    await expect(broken).toBeVisible();
+    expect(await broken.evaluate((e) => e.tagName)).toBe("SPAN");
+    expect(await broken.getAttribute("aria-disabled")).toBe("true");
+  });
+});
+
+test.describe("SYS-24 pin survives in regen prompt", () => {
+  test("interview/promoted.md is inlined under Pinned items", async ({ request }) => {
+    const r = await request.post("/api/regen-prompt", {
+      headers: { Origin: "http://127.0.0.1:8765" },
+      data: {
+        project_type: "development",
+        project_name: "spec_driven",
+        stages: ["interview"],
+        modules: {},
+        autonomous: false,
+      },
+    });
+    expect(r.status()).toBe(200);
+    const body = await r.json();
+    expect(body.prompt).toContain("### Pinned items (MUST survive regeneration)");
+    expect(body.prompt).toContain("All discovered (Recommended)");
+  });
+});
+
+test.describe("SYS-25 autonomous header + verbatim imperative", () => {
+  test("autonomous=true emits AUTONOMOUS header and imperative verbatim", async ({ request }) => {
+    const r = await request.post("/api/regen-prompt", {
+      headers: { Origin: "http://127.0.0.1:8765" },
+      data: {
+        project_type: "development",
+        project_name: "spec_driven",
+        stages: ["interview"],
+        modules: {},
+        autonomous: true,
+      },
+    });
+    const body = await r.json();
+    expect(body.prompt.split("\n", 1)[0]).toBe("# EXECUTION MODE: AUTONOMOUS");
+    expect(body.prompt).toContain(
+      "Do not call AskUserQuestion. For anything unclear, use your best judgment, record the choice inline in the artifact, and keep going. Produce every requested artifact below in this single turn before stopping.",
+    );
   });
 });

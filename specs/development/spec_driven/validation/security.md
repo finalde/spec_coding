@@ -1,324 +1,241 @@
-# Validation — Security
+# Validation — Security level
 
-Run: spec_driven-20260502-clean
-Stage: 5
-Source spec: `specs/development/spec_driven/final_specs/spec.md`
-Inputs read: spec.md only (read-zero)
+Stage: 5 (Validation strategy) — clean-state regeneration
+Run: spec_driven-20260503-030434
+Specialist: level-specialist-05-security
+Inputs read: `final_specs/spec.md` (FR-3..9, NFR-4..9, AC-3..12, AC-29), `findings/angle-localhost-fs-sandbox-risks.md`, `CLAUDE.md`, `.claude/skills/agent_team/playbooks/validation.md`, `.claude/agent_refs/validation/general.md`, `.claude/agent_refs/validation/development.md`.
 
-## Threat model
+This catalogue defines the security probes that exercise the spec's hardening claims. Each entry is a single test the validator runs against a live `127.0.0.1:8765` instance (or against the underlying `safe_resolve` / sanitizer for unit-shape probes that do not require HTTP). All HTTP probes default to a benign `Origin: http://127.0.0.1:8765` and `Host: 127.0.0.1:8765` unless the probe explicitly tests CSRF / DNS rebinding.
 
-The deployment posture is **single-user, localhost-bound, no authentication** (NFR-7, NFR-8). The spec explicitly takes auth, sessions, and access control out of scope. Threats decompose into:
+Severity contract (per `.claude/agent_refs/validation/general.md` and prompt rules):
+- `critical` — any path-traversal / sandbox-escape success, ADS bypass, reparse-point bypass, sanitizer XSS that reaches the DOM.
+- `blocker` — missing security header on the success path, or `0.0.0.0` bind in any default config.
+- `high` — verb / extension / size-cap / Origin-Host enforcement gap that does NOT escape the sandbox but trivially bypasses the documented rule.
+- `medium` — enumeration side-channel (403/404 split, error-message leakage).
 
-### In-scope (must be defended against in code)
+---
 
-1. **Malicious file content from upstream Claude.** Claude Code or other tooling writes files into the exposed tree. Markdown and JSON content is therefore semi-trusted: it can contain `javascript:` URIs, traversal-shaped link hrefs, oversized payloads, NUL bytes, and links pointing outside the tree. Defense lives in the link classifier (FR-33), the file-read pipeline (FR-5), and the markdown sanitization layer.
-2. **Cross-origin local browser tab.** Another tab on the same machine could try to issue requests to `http://127.0.0.1:8765/`. Defense: no permissive CORS (NFR-8), GET-only verbs are read-only, and the mutation endpoints reuse the same `safe_resolve` + `EXPOSED_TREE` membership checks as reads (FR-14a).
-3. **Confused-deputy traversal.** A path query parameter (`/api/file?path=...`, `/api/regen-prompt` body) is the user-controlled surface. Anything that joins user input to `REPO_ROOT` outside the single `safe_resolve` helper is a vulnerability (FR-6, NFR-4).
-4. **Filesystem races during write.** `PUT /api/file` must not produce a torn file under concurrent writers (FR-14a atomic-replace via `os.replace`).
-5. **DoS via tree shape.** A pathological repo (10K files, deep nesting) must not 500 the `/api/tree` endpoint.
+## SEC-01 — Path traversal via `..` (POSIX form)
+- **Attack vector:** `GET /api/file?path=../etc/passwd`, `GET /api/file?path=specs/../../etc/passwd`, `GET /api/file?path=specs/development/../../../CLAUDE.md` (last form deliberately resolves *back inside* the tree to confirm the rule is "containment after canonicalization", not "any `..` is rejected outright").
+- **Expected behavior:** Every request returns **404** with no body that names whether the file exists. `safe_resolve` rejects on `..` after normalization for the first two; the third resolves back into the EXPOSED_TREE and MAY return 200 (containment-based rule per FR-4) — flag as informational, not a failure.
+- **Pass criterion:** Status `404` for the first two probes; no `Content-Disposition` containing the absolute attacker path; response identical (modulo timing) to the "outside EXPOSED_TREE" probe in SEC-18.
+- **Severity:** `critical` if any of the first two returns 200 or leaks bytes from outside the tree.
+- **CWE:** CWE-22 (Path Traversal).
+- **Components exercised:** FR-3, FR-4, AC-3, NFR-4.
 
-### Out-of-scope (explicitly accepted as residual risk)
+## SEC-02 — Path traversal via URL-encoded `..` (`..%2f`, `%2e%2e/`, `%2e%2e%2f`)
+- **Attack vector:** `GET /api/file?path=..%2fetc%2fpasswd`, `GET /api/file?path=%2e%2e%2fetc%2fpasswd`, `GET /api/file?path=specs%2f..%2f..%2fetc%2fpasswd`.
+- **Expected behavior:** FastAPI / Starlette decodes the query string before the handler sees it, so `safe_resolve` receives literal `..` and rejects per SEC-01.
+- **Pass criterion:** All return **404**. No 200 / 500.
+- **Severity:** `critical` on any 200.
+- **CWE:** CWE-22.
+- **Components exercised:** FR-3, FR-4, AC-3.
 
-- **Remote network attacker.** Mitigated entirely by NFR-7 (loopback bind). If the deployer overrides `--host` to `0.0.0.0`, that is operator error, not a code defect — but SEC-11 verifies the default.
-- **Trusted local user privilege escalation.** The single user can already write any file in the repo without the app; the app does not expand their authority.
-- **TOCTOU between `safe_resolve` and `open()`.** Symlinks created in the microsecond gap are treated as the OS treats them; we do not lock the tree. NFR-12 explicitly accepts torn-read UX.
+## SEC-03 — Path traversal via Windows backslash (`..\`, `..%5c`)
+- **Attack vector:** `GET /api/file?path=..\etc\passwd`, `GET /api/file?path=..%5cetc%5cpasswd`, `GET /api/file?path=specs%5c..%5c..%5cCLAUDE.md` — the canonical Vite CVE-2025-62522 regression. Run on both Windows and POSIX (POSIX should still treat `\` as a valid path char and refuse, because `safe_resolve` normalizes BEFORE checking traversal per FR-4 / findings 2b).
+- **Expected behavior:** `safe_resolve` normalizes `\` → `/` first, then applies `..` rejection. Both forms return 404.
+- **Pass criterion:** Status `404`; no platform divergence.
+- **Severity:** `critical` on any 200; `high` on a platform-divergent result (POSIX rejects, Windows accepts) — that is the exact Vite regression class.
+- **CWE:** CWE-22.
+- **Components exercised:** FR-4, NFR-13.
 
-## Probes
+## SEC-04 — Absolute path outside EXPOSED_TREE
+- **Attack vector:** `GET /api/file?path=/etc/passwd` (POSIX), `GET /api/file?path=C:\Windows\System32\drivers\etc\hosts` (Windows), `GET /api/file?path=/proc/self/environ`.
+- **Expected behavior:** `safe_resolve` rejects absolute paths (FR-4 explicit clause).
+- **Pass criterion:** Status `404`. Body MUST NOT differ from the SEC-08 (extension-disallowed inside tree) body in a way that lets an attacker enumerate which case they hit — see SEC-18.
+- **Severity:** `critical` on any 200.
+- **CWE:** CWE-22.
+- **Components exercised:** FR-4, AC-3, NFR-4.
 
-### SEC-01 — Dot-dot path traversal (multiple forms)
+## SEC-05 — Windows reserved device names
+- **Attack vector:** `GET /api/file?path=specs/development/spec_driven/CON.md`, `…/PRN.md`, `…/AUX.md`, `…/NUL.md`, `…/COM1.md`, `…/LPT1.md`. Also case-mixed (`Con.MD`, `nUl.md`) and bare (`specs/CON`).
+- **Expected behavior:** `safe_resolve` rejects on the basename allow-list per FR-4 regardless of extension or case.
+- **Pass criterion:** Status `404` for every variant. AC-4 is the spec's anchor for this probe.
+- **Severity:** `critical` on any 200 or 500 (a 500 means the OS device alias was actually opened).
+- **CWE:** CWE-22 (alias resolution into a non-file device).
+- **Components exercised:** FR-4, AC-4.
 
-- **Attack vector.** `path` query param crafted to escape `REPO_ROOT`.
-- **Method.** Run each curl sequentially:
-  ```
-  curl -i "http://127.0.0.1:8765/api/file?path=../../../etc/hosts"
-  curl -i "http://127.0.0.1:8765/api/file?path=..%2F..%2F..%2Fetc%2Fhosts"
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/../../../etc/hosts"
-  curl -i "http://127.0.0.1:8765/api/file?path=specs%2F..%2F..%2F..%2Fetc%2Fhosts"
-  curl -i "http://127.0.0.1:8765/api/file?path=./.././../etc/hosts"
-  ```
-- **Expected behavior.** Each call returns HTTP 400 with JSON body `{"detail": {"kind": "outside_sandbox", ...}}`. No filesystem read of `/etc/hosts` occurs.
-- **Pass criterion.** Status == 400 for every variant; response body's `kind` is `outside_sandbox`; no `/etc/hosts` content appears in the response.
-- **Spec refs.** FR-5.1, FR-6, AC-7.
+## SEC-06 — Alternate Data Streams (ADS)
+- **Attack vector:** `GET /api/file?path=specs/development/spec_driven/final_specs/spec.md::$DATA`, `…/spec.md:hidden`, `…/spec.md:hidden.txt`, URL-encoded `…/spec.md%3a%3a%24DATA`.
+- **Expected behavior:** `safe_resolve` rejects any path segment with `:` other than the drive-letter colon at index 1, AND rejects `::$DATA` literally (FR-4).
+- **Pass criterion:** Status `404` for every form. AC-5 is the spec's anchor.
+- **Severity:** `critical` on any 200 — ADS exposes alternate metadata streams that the user did not consent to expose.
+- **CWE:** CWE-22 / CWE-538 (file/directory information exposure).
+- **Components exercised:** FR-4, AC-5.
 
-### SEC-02 — Absolute paths including UNC
+## SEC-07 — 8.3 short-name aliases (`PROGRA~1`)
+- **Attack vector:** `GET /api/file?path=PROGRA~1/something.md`, `GET /api/file?path=specs/DEVELO~1/spec_driven/final_specs/spec.md` (where `DEVELO~1` is the 8.3 alias for `development`). On filesystems where 8.3 generation is disabled, this probe MAY natively 404 — the test runner injects a synthetic alias via a fixture directory or skips with a recorded reason.
+- **Expected behavior:** `safe_resolve` rejects any segment containing `~<digit>` smell BEFORE resolution, OR resolves and re-checks containment after canonicalization (the spec's preferred form per findings 2b).
+- **Pass criterion:** Status `404`. If the alias would otherwise resolve into the tree, the test fails — short-name canonicalization MUST not be a back-door.
+- **Severity:** `critical` on a successful read; `high` on a successful read of a file that would also be reachable by its long name (still a rule violation even if the bytes are the same).
+- **CWE:** CWE-22.
+- **Components exercised:** FR-4.
 
-- **Attack vector.** `path` is an absolute path or Windows UNC share.
-- **Method.**
-  ```
-  curl -i "http://127.0.0.1:8765/api/file?path=/etc/passwd"
-  curl -i "http://127.0.0.1:8765/api/file?path=C:%5CWindows%5Cwin.ini"
-  curl -i "http://127.0.0.1:8765/api/file?path=%5C%5Cattacker%5Cshare%5Cfile.md"
-  curl -i "http://127.0.0.1:8765/api/file?path=//attacker/share/file.md"
-  ```
-- **Expected behavior.** `safe_resolve` rejects (the `relative_to(REPO_ROOT)` step raises `ValueError`).
-- **Pass criterion.** Each returns 400 `outside_sandbox`. No outbound SMB connection observed in OS-level network trace.
-- **Spec refs.** FR-5.1, FR-6.
+## SEC-08 — Reparse points / NTFS junctions
+- **Attack vector:** Set up a junction `specs/development/spec_driven/_junc -> C:\Windows` (test fixture, Windows-only). Then `GET /api/file?path=specs/development/spec_driven/_junc/win.ini`.
+- **Expected behavior:** `safe_resolve` lstats every segment of the resolved path and refuses if `FILE_ATTRIBUTE_REPARSE_POINT` is set on any segment (FR-4, NFR-5).
+- **Pass criterion:** Status `404`. AC-6 is the spec's anchor.
+- **Severity:** `critical` on any 200 — junctions are the canonical Windows sandbox-escape vector.
+- **CWE:** CWE-59 (Link Following).
+- **Components exercised:** FR-4, NFR-5, AC-6.
+- **Platform note:** Windows-only setup; on POSIX the test is skipped with `pytest.mark.skipif(sys.platform != "win32", reason="junction setup is Windows-specific")` per NFR-12. Skipping is fine; silent passing is not.
 
-### SEC-03 — Null-byte injection in path
+## SEC-09 — POSIX symlink crossing the sandbox
+- **Attack vector:** `ln -s /etc/passwd specs/development/spec_driven/_link.md` then `GET /api/file?path=specs/development/spec_driven/_link.md`. POSIX-only; on Windows substitute SEC-08 junction.
+- **Expected behavior:** `safe_resolve` is_symlink check rejects the resolved path before reading bytes (FR-4, NFR-5).
+- **Pass criterion:** Status `404`.
+- **Severity:** `critical` on any 200.
+- **CWE:** CWE-59.
+- **Components exercised:** FR-4, NFR-5.
+- **Platform note:** `pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink setup")`. Use SEC-08 instead on Windows.
 
-- **Attack vector.** Embed `%00` to truncate path interpretation in legacy stacks.
-- **Method.**
-  ```
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/final_specs/spec.md%00.png"
-  curl -i "http://127.0.0.1:8765/api/file?path=CLAUDE.md%00"
-  ```
-- **Expected behavior.** Either Python's `Path` constructor raises (caught and mapped to 400) or `safe_resolve` rejects on extension whitelist; never reads the truncated form.
-- **Pass criterion.** Status is 4xx (400 or 415). Response body contains no file contents. No 500.
-- **Spec refs.** FR-5.1, FR-5.4.
+## SEC-10 — Disallowed extension on read
+- **Attack vector:** `GET /api/file?path=evil.exe`, `…/scratch.bat`, `…/payload.ps1`, `…/x.svg` (SVG explicitly NOT in the allowlist per NFR-9 / FR-3), `…/x.dll`, `…/x.com` (also doubles as SEC-05 device-name check via the `.com` suffix). Run with the file actually present inside the tree (fixture write) to ensure the rejection is on extension, not on existence.
+- **Expected behavior:** Status `415` (FR-3 disallowed-extension contract). Body matches the documented error shape (no leakage of which directory was probed).
+- **Pass criterion:** Status `415` exactly; not `404`, not `403`, not `200`. AC-8 is the spec's anchor.
+- **Severity:** `high` on `200` (extension allowlist failed); `medium` on `404` (consistent with SEC-18 enumeration policy but inconsistent with FR-3, which mandates `415`).
+- **CWE:** CWE-434 (Unrestricted Upload — applied here in the read direction as "served what we should not serve").
+- **Components exercised:** FR-3, NFR-9, AC-8.
 
-### SEC-04 — OS-specific path tricks (Windows)
+## SEC-11 — File >1 MB on read
+- **Attack vector:** Fixture-write a 1.5 MB `.md` file inside the tree, then `GET /api/file?path=<that path>`.
+- **Expected behavior:** Status `413` (FR-3 size-cap contract). AC-7 anchor.
+- **Pass criterion:** Status `413` and `Content-Length` of response is small (no streaming of the file's prefix before the cap fires).
+- **Severity:** `high` on `200` (size cap failed); `medium` on `413` that arrives only after the full file was read into memory (DoS risk).
+- **CWE:** CWE-770 (Allocation of Resources Without Limits).
+- **Components exercised:** FR-3, AC-7.
 
-- **Attack vector.** Alternate Data Streams, 8.3 short names, case-insensitive matching that bypasses an exact-suffix check.
-- **Method.** On Windows host:
-  ```
-  curl -i "http://127.0.0.1:8765/api/file?path=CLAUDE.md::%24DATA"
-  curl -i "http://127.0.0.1:8765/api/file?path=CLAUDE.MD"
-  curl -i "http://127.0.0.1:8765/api/file?path=PROGRA~1/foo.md"
-  ```
-  Plus DOM check: requesting `/api/file?path=claude.md` (lowercase) on a case-insensitive volume should still produce a deterministic outcome — either resolves to the canonical path OR returns 404, never returns content under a path that disagrees with the on-disk casing.
-- **Expected behavior.** ADS form returns 415 (`::$DATA` is not in the extension whitelist) or 404 (resolved path not under EXPOSED_TREE source globs). 8.3 short-name form returns 400/404. Case mismatch matches the OS reality but is documented in FR-33's "Windows-aware case-mismatch tooltip".
-- **Pass criterion.** No `::DATA` content served. 8.3 form does not bypass the whitelist. No 500.
-- **Spec refs.** FR-5.4, FR-33.
+## SEC-12 — PUT body >1 MB
+- **Attack vector:** `PUT /api/file` with a 1.5 MB body (`{path: "…/scratch.md", content: "<1.5 MB of 'a'>"}`).
+- **Expected behavior:** Status `413` with body `{detail: {kind: "too_large"}}` (FR-7, AC-10). The cap is enforced at FastAPI level (and at any reverse-proxy layer per FR-7) BEFORE the full body lands in memory, per OWASP File Upload Cheat Sheet (findings 2c).
+- **Pass criterion:** Status `413` AND `response.json()["detail"]["kind"] == "too_large"`. The verbatim `kind` key is the contract — string comparison, not regex.
+- **Severity:** `high` on `200` (write succeeded); `high` on `413` without the `kind: "too_large"` discriminator (rule violated even if status is right).
+- **CWE:** CWE-770.
+- **Components exercised:** FR-7, NFR-11, AC-10.
 
-### SEC-05 — Symlinks (file, parent, target inside vs outside)
+## SEC-13 — PUT with binary content (NUL bytes) to a `.md` path
+- **Attack vector:** `PUT /api/file {path: "…/scratch.md", content: " <arbitrary bytes>"}` — the first 16 bytes contain NUL.
+- **Expected behavior:** Status `415` (FR-8 first-16-bytes plain-text check rejects NUL).
+- **Pass criterion:** Status `415`; on-disk file is unchanged (`mtime` unchanged from a baseline `GET` taken before the probe). The probe is a write-attempt; assert no partial write.
+- **Severity:** `critical` on `200` AND on-disk content actually now contains NUL bytes (corruption + content-type smuggling); `high` on `200` with the NUL stripped (silent rewriting); `high` on `400` (wrong status — spec mandates `415` to keep the discriminator consistent with FR-3).
+- **CWE:** CWE-434, CWE-138 (Improper Neutralization of Special Elements).
+- **Components exercised:** FR-8.
 
-- **Attack vector.** Symlink under `EXPOSED_TREE` pointing inside or outside the tree.
-- **Method.** Set up four fixtures inside a sandbox repo:
-  1. `specs/dev/x/user_input/inside_link.md` → `specs/dev/x/user_input/raw_prompt.md` (target inside tree).
-  2. `specs/dev/x/user_input/outside_link.md` → `/etc/hosts` (target outside tree).
-  3. `specs/dev/x/user_input/link_dir/raw_prompt.md` where `link_dir` is a symlink to a directory inside the tree.
-  4. `specs/dev/x/user_input/link_dir2/raw_prompt.md` where `link_dir2` symlinks outside the tree.
-  Then:
-  ```
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/dev/x/user_input/inside_link.md"
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/dev/x/user_input/outside_link.md"
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/dev/x/user_input/link_dir/raw_prompt.md"
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/dev/x/user_input/link_dir2/raw_prompt.md"
-  curl -s "http://127.0.0.1:8765/api/tree" | jq '.. | .name? // empty' | grep -E "(inside_link|outside_link)"
-  ```
-- **Expected behavior.** All four file requests return 400 `outside_sandbox` (FR-5.2 rejects symlinks AND walks parent segments). Tree response omits all symlinked entries (FR-4).
-- **Pass criterion.** Zero file bytes served from any symlink case, including the inside-tree target. Tree grep returns empty.
-- **Spec refs.** FR-4, FR-5.2, NFR-5.
+## SEC-14 — PUT to a `.png` / `.jpg` path
+- **Attack vector:** `PUT /api/file {path: "…/scratch.png", content: "<base64 png bytes>"}` and `…/scratch.jpg` likewise. Run with both a real PNG payload and a text payload to confirm the rule rejects on extension, not on magic-bytes.
+- **Expected behavior:** Status `415` (FR-8 — image extensions are NOT writable in v1).
+- **Pass criterion:** Status `415` for every payload; on-disk file (if it pre-existed) unchanged.
+- **Severity:** `high` on `200`; `medium` on `400` (rejection is right, status is wrong — discriminator drift).
+- **CWE:** CWE-434.
+- **Components exercised:** FR-8, NFR-9.
 
-### SEC-06 — Extension whitelist enforcement
+## SEC-15 — PATCH and DELETE on `/api/file` return 405
+- **Attack vector:** `PATCH /api/file?path=…/spec.md` with a JSON-merge-patch body, `DELETE /api/file?path=…/spec.md`. Also `OPTIONS` and `TRACE` for completeness — `OPTIONS` MAY return 200 with `Allow: GET, PUT`; `TRACE` MUST be `405` or disabled.
+- **Expected behavior:** `405 Method Not Allowed` for `PATCH`, `DELETE`, `TRACE`. `Allow` response header lists the accepted methods (`GET, PUT`) so clients can self-correct (NFR-6, AC-12).
+- **Pass criterion:** Status `405` AND `Allow: GET, PUT` (case-insensitive header value comparison; both methods must be present).
+- **Severity:** `high` on any non-405 (especially `200` on `DELETE` — that would be a sandbox-escape via verb).
+- **CWE:** CWE-749 (Exposed Dangerous Method).
+- **Components exercised:** FR-6, NFR-6, AC-12.
 
-- **Attack vector.** Request a non-whitelisted extension hoping to trigger the file-read path.
-- **Method.**
-  ```
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/final_specs/spec.png"
-  curl -i "http://127.0.0.1:8765/api/file?path=CLAUDE.MD.bak"
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/note.txt"
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/script.py"
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/.env"
-  ```
-- **Expected behavior.** Each returns 415 with `unsupported_extension`. Whitelist is `{.md, .yaml, .yml, .json, .jsonl}` only.
-- **Pass criterion.** Status 415 every time; body contains the structured error key; no file bytes leaked.
-- **Spec refs.** FR-5.4, AC-8.
+## SEC-16 — POST without `Origin` from bound localhost
+- **Attack vector:** `POST /api/regen-prompt` (and equivalently `PUT /api/file`, `POST /api/promote`, `DELETE /api/promote`) with the `Origin` header omitted entirely; also with `Origin: null` (browsers send this for `file://` and sandboxed iframes); also with `Origin: http://attacker.example.com`.
+- **Expected behavior:** Status `403` for every form per FR-9 / NFR-7 (defense against DNS-rebinding / browser-driven CSRF). Tooling-style requests (curl, server-to-server) that legitimately have no `Origin` are NOT supported by v1 — the webapp's only client is a browser bound to `http://127.0.0.1:8765`.
+- **Pass criterion:** Status `403` AND no side-effect (write not applied; promoted.md unchanged; no audit event of type `regen.delete.planned`).
+- **Severity:** `high` on `200` (rule violation); `high` on `403` with side-effect (audit log shows the action ran before the rejection).
+- **CWE:** CWE-352 (CSRF), CWE-918 (SSRF — partial, since DNS rebinding is the SSRF-cousin attack).
+- **Components exercised:** FR-9, NFR-7, AC-11.
 
-### SEC-07 — Binary content (`\x00`) rejection
+## SEC-17 — POST with `Host: 127.0.0.1.evil.com` (DNS-rebinding pattern)
+- **Attack vector:** `POST /api/regen-prompt` with `Origin: http://127.0.0.1:8765` (looks legitimate) AND `Host: 127.0.0.1.evil.com` (the rebinding pattern — attacker domain that previously resolved to `127.0.0.1`). Also `Host: 127.0.0.1:8765.evil.com`, `Host: localhost.attacker.com`.
+- **Expected behavior:** Status `403` per FR-9 — the `Host` allowlist is exactly `127.0.0.1:<bound-port>` (string equality, NOT suffix match). This is the load-bearing OWASP DNS-rebinding mitigation (findings 2a, 2c).
+- **Pass criterion:** Status `403` and no side-effect, identical to SEC-16 contract.
+- **Severity:** `critical` on `200` — DNS rebinding succeeded, attacker's tab now drives the user's local repo. This is the highest-severity browser-driven attack the spec explicitly defends against.
+- **CWE:** CWE-918, CWE-350 (Reliance on Reverse DNS Resolution).
+- **Components exercised:** FR-9, NFR-7.
 
-- **Attack vector.** A `.md` extension hides binary payload that could trip downstream renderers.
-- **Method.** Create fixture `specs/development/spec_driven/user_input/binary.md` whose content is `b"# Header\x00\x01evil"`. Then:
-  ```
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/user_input/binary.md"
-  ```
-- **Expected behavior.** 415 `binary_content`. Read uses `errors="replace"` so the NUL byte survives the decode and the post-decode check fires.
-- **Pass criterion.** Status 415; body's `kind` is `binary_content`; no part of the binary data appears in the response.
-- **Spec refs.** FR-5.6, NFR-13, AC-9.
+## SEC-18 — Single 404 for "outside tree" vs "exists but disallowed"
+- **Attack vector:** Run three probes back-to-back: (a) `GET /api/file?path=../etc/passwd` (outside tree, doesn't exist there), (b) `GET /api/file?path=specs/development/no-such-project/spec.md` (inside tree, file doesn't exist), (c) `GET /api/file?path=specs/development/spec_driven/final_specs/_secret_payload.md` (inside tree, file exists on disk via fixture but with a disallowed extension via a separate fixture for the disallowed-case). Diff the response bodies and status lines.
+- **Expected behavior:** (a) and (b) both return **404** with byte-identical bodies (or differing only in dynamic fields the spec does not promise — empty body is preferred). (c) returns `415` per FR-3 — that distinction is intentional and is the only one the API discloses.
+- **Pass criterion:** `status[a] == status[b] == 404`; `body[a] == body[b]`; no `WWW-Authenticate` / `X-Sandbox-Reason` / response-time delta > 5 ms median across N=20 trials.
+- **Severity:** `medium` on a 403/404 split (enumeration side-channel — findings 2c bullet 7); `medium` on body-text divergence ("file not found" vs "outside sandbox") even with matching status.
+- **CWE:** CWE-204 (Observable Response Discrepancy), CWE-203 (Observable Discrepancy).
+- **Components exercised:** FR-3, FR-4, AC-3.
 
-### SEC-08 — Size limit (>2 MB)
+## SEC-19 — Response-header check on every successful `GET /api/file`
+- **Attack vector:** `GET /api/file?path=specs/development/spec_driven/final_specs/spec.md` (200 path). Also exercise `.json`, `.yaml`, `.jsonl`, `.txt`, `.png` to confirm the rule is universal across content types.
+- **Expected behavior:** Response carries BOTH `X-Content-Type-Options: nosniff` AND `Content-Disposition: attachment` per FR-5 / NFR-8. Image responses (`.png`, `.jpg`) MUST also carry `attachment` — the spec does not exempt them.
+- **Pass criterion:** Both headers present (case-insensitive name match, exact value match) on every 200 response. AC-2 is the spec's anchor.
+- **Severity:** `blocker` on missing-header (per prompt rule; this is the load-bearing browser-MIME-sniffing defense).
+- **CWE:** CWE-693 (Protection Mechanism Failure), CWE-79 (XSS — the downstream attack the headers prevent).
+- **Components exercised:** FR-5, NFR-8, AC-2.
 
-- **Attack vector.** Oversize file used as DoS or to exhaust client memory.
-- **Method.** Create `specs/development/spec_driven/user_input/huge.md` of `2_500_000` bytes (`python -c "open('huge.md','wb').write(b'a' * 2_500_000)"`). Then:
-  ```
-  curl -i "http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/user_input/huge.md"
-  ```
-- **Expected behavior.** 413 `too_large` BEFORE the file body is read into memory (the size check uses `Path.stat().st_size`).
-- **Pass criterion.** Status 413; the response body length is < 1 KB (no file leakage); server RSS does not jump by 2.5 MB during the call.
-- **Spec refs.** FR-5.5, AC-10, NFR-15.
+## SEC-20 — `0.0.0.0` bind audit
+- **Attack vector:** Static-grep the project source for the literal string `0.0.0.0` in every default-config code path: `projects/spec_driven/main.py`, `projects/spec_driven/Makefile`, `projects/spec_driven/backend/**/*.py`, any `uvicorn.run(...)` call site, any `.env*` template. Also runtime-grep: launch `python main.py` and `make run` / `make run-prod`, capture the Uvicorn startup line, assert it contains `127.0.0.1:8765` and NOT `0.0.0.0`.
+- **Expected behavior:** No occurrence in source; runtime startup line names `127.0.0.1` (FR-38, AC-29).
+- **Pass criterion:** Static grep returns zero hits; runtime startup line matches `Uvicorn running on http://127.0.0.1:8765`.
+- **Severity:** `blocker` on any hit (per prompt rule + AC-29) — a `0.0.0.0` bind exposes the editor to the LAN, breaking the entire localhost-only threat model.
+- **CWE:** CWE-1327 (Binding to an Unrestricted IP Address).
+- **Components exercised:** FR-38, NFR-7, AC-29.
 
-### SEC-09 — Tree-walk DoS at 10K files
+## SEC-21 — Markdown XSS: raw `<script>` in source
+- **Attack vector:** Fixture-write `specs/development/spec_driven/_xss_script.md` containing literal `<script>window.__pwned=1;alert(1)</script>` inline and inside fenced code blocks (the latter must be preserved as text, not rendered as HTML). Open the file via the SPA at `/file/specs/development/spec_driven/_xss_script.md`.
+- **Expected behavior:** `react-markdown` + `rehype-sanitize` (default schema, no raw-HTML escape hatch — per NFR-8 / FR-22) drops the `<script>` tag entirely. Inline form: tag stripped, no `<script>` element in the rendered DOM, `window.__pwned` is `undefined` after render, console has no errors. Fenced form: rendered as `<code>` text inside `<pre>`, never as a live element.
+- **Pass criterion:** Playwright assertion: `await page.evaluate(() => window.__pwned) === undefined` AND `await page.locator('script:not([src])').count() === 0` (excluding the SPA's own scripts in the head). Console errors empty.
+- **Severity:** `critical` on a successful XSS execution; `blocker` on a sanitizer failure that DOES NOT execute but DOES leave the tag in the DOM (rule violated regardless of exploitability).
+- **CWE:** CWE-79.
+- **Components exercised:** FR-22, NFR-8.
 
-- **Attack vector.** Pathological-but-legitimate repo shape causes uncaught exception → 500.
-- **Method.** Generate fixture `tests/fixtures/big_repo/` with 50 projects × 200 files of size 1 KB across the five stage subfolders. Point `REPO_ROOT` discovery at it. Then:
-  ```
-  for i in $(seq 1 5); do curl -s -o /dev/null -w "%{http_code} %{time_total}\n" "http://127.0.0.1:8765/api/tree"; done
-  ```
-- **Expected behavior.** Every response is 200, JSON well-formed, p95 within performance budget (cross-ref PERF-01). No 500. Memory peak < 200 MB during the walk.
-- **Pass criterion.** Five consecutive 200s with non-empty `projects` array; zero 500s.
-- **Spec refs.** FR-3, NFR-1, NFR-15.
+## SEC-22 — Markdown XSS: `<img onerror>` and `<a javascript:>`
+- **Attack vector:** Fixture-write `_xss_event.md` containing `<img src=x onerror="window.__pwned=1">`, `<a href="javascript:window.__pwned=1">click</a>`, `<svg onload="window.__pwned=1">` (SVG inline as a sanity-check that `rehype-sanitize` strips the SVG element, not just the file extension), and the markdown form `[click](javascript:window.__pwned=1)`. Open via SPA.
+- **Expected behavior:** Sanitizer drops `onerror` / `onload` attributes and rejects `javascript:` URIs. The markdown `[click](javascript:...)` form is rewritten to a broken-link span per FR-24 (`<span class="link-broken" aria-disabled="true" title="...">`), NOT an `<a>` element.
+- **Pass criterion:** `window.__pwned === undefined`; no element matches `[onerror], [onload]`; no `<a>` whose `href` starts with `javascript:`; the markdown-`javascript:`-link renders as the broken-link span.
+- **Severity:** `critical` on execution; `blocker` on attribute survival without execution.
+- **CWE:** CWE-79, CWE-83 (Improper Neutralization of Script in Attributes).
+- **Components exercised:** FR-22, FR-24, NFR-8.
 
-### SEC-10 — GET-only verb confusion
+## SEC-23 — Read-zero contract surfacing in regen prompts
+- **Attack vector:** `POST /api/regen-prompt` with each of: `{stages: ["interview"], autonomous: false}`, `{stages: ["research"], autonomous: true}`, `{stages: ["interview","research","spec","validation"], autonomous: true}` (the full interactive + autonomous matrix across stages). Parse the returned `prompt` body.
+- **Expected behavior:** Every returned `prompt` contains a `### Constraints` section, and that section contains the verbatim sentence `regeneration deletes prior outputs first; new generation reads only the inputs.` (FR-11(g), AC-16). Substring match (whitespace-normalized) is acceptable; case-sensitive on the sentence body, lenient on surrounding markdown.
+- **Pass criterion:** All N matrix cells contain the sentence verbatim. None drops it under autonomous mode (regression surface).
+- **Severity:** `high` on a missing sentence (the read-zero contract is the load-bearing rule that makes regen runs idempotent — silently dropping it makes the assembled prompt drift from intent, which is the failure mode the workflow exists to prevent).
+- **CWE:** N/A (workflow-integrity probe, not a classical web vuln).
+- **Components exercised:** FR-11(g), AC-16.
 
-- **Attack vector.** Attempt to use unsanctioned HTTP methods on the file endpoint.
-- **Method.**
-  ```
-  curl -i -X PATCH "http://127.0.0.1:8765/api/file?path=CLAUDE.md"
-  curl -i -X DELETE "http://127.0.0.1:8765/api/file?path=CLAUDE.md"
-  curl -i -X POST "http://127.0.0.1:8765/api/file" -H "Content-Type: application/json" -d '{"path":"CLAUDE.md","text":"x"}'
-  curl -i -X OPTIONS "http://127.0.0.1:8765/api/file"
-  ```
-- **Expected behavior.** PATCH and DELETE return 405. POST returns 405 (sanctioned mutator is PUT). OPTIONS may return 405 or 200 with empty Allow as long as no CORS wildcard appears.
-- **Pass criterion.** PATCH=405, DELETE=405, POST=405. No file mutation occurred (verify CLAUDE.md mtime is unchanged).
-- **Spec refs.** NFR-6, AC-23.
+---
 
-### SEC-11 — Bind address verification
+## Cross-cutting test moves
 
-- **Attack vector.** Process listens on `0.0.0.0` exposing the API to LAN.
-- **Method.** With the server running, run:
-  ```
-  netstat -an | grep 8765
-  python -c "import socket; s=socket.socket(); s.settimeout(1); s.connect(('127.0.0.1',8765)); print('lo ok')"
-  python -c "import socket,subprocess; ip=subprocess.check_output('hostname -I',shell=True).decode().split()[0]; s=socket.socket(); s.settimeout(1); s.connect((ip,8765))"
-  ```
-- **Expected behavior.** `netstat` shows listen on `127.0.0.1:8765`, NOT `0.0.0.0:8765`. The third connect raises `ConnectionRefusedError` or times out.
-- **Pass criterion.** Bind line contains `127.0.0.1`; LAN-IP connect fails.
-- **Spec refs.** FR-12, NFR-7, AC-24.
+These are not numbered SEC entries but apply to the whole suite:
 
-### SEC-12 — No `Access-Control-Allow-Origin: *`
+- **Run every probe twice — once on Windows, once on POSIX (Git Bash on Windows runs both via WSL or native, per NFR-12). Skip-with-reason is acceptable for SEC-08 (POSIX) and SEC-09 (Windows); silent passing is not.**
+- **Every probe asserts no audit-event leakage on rejection paths.** A `403`/`404`/`405`/`413`/`415` response MUST NOT have caused a `regen.delete.planned` / `fs.write.accepted` event in `events.jsonl`. The probe diffs the audit log before and after.
+- **Replay every state-changing probe with the documented benign Origin/Host once it has been rejected by SEC-16/SEC-17 — confirm the SAME inputs succeed when the headers are correct.** This is the negative-control that catches an over-broad rejection rule.
+- **Snapshot the response-body bytes for every 4xx response and diff across the suite** to detect enumeration side-channels beyond the explicit SEC-18 probe.
 
-- **Attack vector.** Wildcard CORS lets any local origin make authenticated requests.
-- **Method.**
-  ```
-  curl -is "http://127.0.0.1:8765/api/tree" | grep -i "^access-control"
-  curl -is -H "Origin: http://evil.example" "http://127.0.0.1:8765/api/tree" | grep -i "^access-control"
-  ```
-- **Expected behavior.** Neither call emits any `Access-Control-Allow-Origin` header (the spec is single-origin). If headers are present, none equal `*` and none reflect arbitrary origins.
-- **Pass criterion.** First grep is empty. Second grep is empty (no reflected origin).
-- **Spec refs.** NFR-8, AC-25.
+## Severity rollup
 
-### SEC-13 — No auth code paths greppable
+| Severity | SEC entries that can hit this severity at peak |
+|---|---|
+| `critical` | SEC-01, SEC-02, SEC-03, SEC-04, SEC-05, SEC-06, SEC-07, SEC-08, SEC-09, SEC-13, SEC-17, SEC-21, SEC-22 |
+| `blocker`  | SEC-19, SEC-20, SEC-21 (sanitizer leak without execution), SEC-22 (sanitizer leak without execution) |
+| `high`     | SEC-10, SEC-11, SEC-12, SEC-14, SEC-15, SEC-16, SEC-23 |
+| `medium`   | SEC-18 (enumeration side-channel) |
 
-- **Attack vector.** Half-built auth scaffolding gives a false sense of security and may be partially bypassable.
-- **Method.** Static check at repo root:
-  ```
-  rg -ni "(authenticate|authorization|bearer|jwt|session|login|password|api[_-]?key)" projects/spec_driven/backend/
-  ```
-- **Expected behavior.** Zero matches in production code (test fixtures verifying absence are OK).
-- **Pass criterion.** `rg` exits with status 1 (no matches) when run against the backend `libs/` and `main.py`.
-- **Spec refs.** NFR-7.
+A `critical` or `blocker` finding halts the pipeline and emits `pipeline.halted` per `CLAUDE.md` § Iteration bounds.
 
-### SEC-14 — Markdown XSS / `javascript:` URL sanitization
+## Background
 
-- **Attack vector.** A markdown link `[click](javascript:alert(1))` turns into a working JS-execution sink.
-- **Method.** Create fixture `specs/development/spec_driven/user_input/xss.md` containing:
-  ```
-  [click](javascript:alert(1))
-  [data](data:text/html,<script>alert(1)</script>)
-  [vbs](vbscript:msgbox(1))
-  [legit](https://example.com)
-  ```
-  Open `http://127.0.0.1:8765/file/specs/development/spec_driven/user_input/xss.md` in DevTools. For each link:
-  - Inspect the rendered DOM via `document.querySelectorAll('a').forEach(a => console.log(a.href, a.textContent))`.
-  - Click each `javascript:` / `data:` / `vbscript:` link.
-- **Expected behavior.** FR-33 case 1 classifies any `^[a-z][a-z0-9+.-]*:` href as external. Then the link classifier or sanitizer must drop dangerous schemes — they should render either as a broken-link span (FR-34) or as an `<a>` whose `href` has been stripped to `#` / `about:blank`. Clicking executes nothing.
-- **Pass criterion.** No alert dialog appears. Rendered DOM contains no anchor with `href` starting `javascript:`, `data:`, or `vbscript:`. The legitimate `https://example.com` link DOES render as an `<a target="_blank" rel="noopener noreferrer">`.
-- **Spec refs.** FR-33, FR-34.
+Sources cited from `findings/angle-localhost-fs-sandbox-risks.md`:
 
-### SEC-15 — SSRF surface absence
-
-- **Attack vector.** A backend endpoint that fetches arbitrary URLs would let a local attacker pivot via the loopback service.
-- **Method.** Static check:
-  ```
-  rg -ni "(httpx|aiohttp|urllib\.request|requests\.(get|post)|fetch\()" projects/spec_driven/backend/libs/
-  rg -ni "(httpx|aiohttp|urllib\.request|requests\.(get|post))" projects/spec_driven/backend/main.py
-  ```
-- **Expected behavior.** Zero matches. The backend never makes outbound HTTP.
-- **Pass criterion.** Both greps exit 1.
-- **Spec refs.** Out-of-scope list (no model invocation, no external fetches), NFR-7.
-
-### SEC-16 — Error leakage (no stack traces, no Python class names, no local paths)
-
-- **Attack vector.** 4xx/5xx response bodies leak filesystem paths or internal class names.
-- **Method.** Provoke each error class and inspect bodies:
-  ```
-  curl -s "http://127.0.0.1:8765/api/file?path=../../../etc/hosts" | jq .
-  curl -s "http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/missing.md" | jq .
-  curl -s "http://127.0.0.1:8765/api/file?path=specs/development/spec_driven/final_specs/spec.png" | jq .
-  curl -s -X PUT "http://127.0.0.1:8765/api/file" -H "Content-Type: application/json" -d '{}' | jq .
-  ```
-  Grep responses for forbidden tokens:
-  ```
-  ... | grep -E "(Traceback|File \"|line [0-9]+|FastAPI|ValueError|FileNotFoundError|/home/|C:\\\\Users|REPO_ROOT)"
-  ```
-- **Expected behavior.** Each body is `{"detail": {"kind": "<error_key>", "message": "<short, no path>"}}`. No stack frames, no exception class names, no absolute filesystem paths.
-- **Pass criterion.** Forbidden-token grep returns empty. Each response is valid JSON with a `kind` field from the documented set.
-- **Spec refs.** FR-5.7 ("Never let these bubble into a 500"), FR-14a error mapping.
-
-### SEC-17 — Outside-tree link rejection (FR-37)
-
-- **Attack vector.** A link from `CLAUDE.md` or an agent file points outside `EXPOSED_TREE` (e.g., `../../etc/hosts` or `projects/spec_driven/backend/main.py`) — clicking should not navigate.
-- **Method.** Add to a sandbox `CLAUDE.md`:
-  ```
-  [outside1](../../../etc/hosts)
-  [outside2](projects/spec_driven/backend/main.py)
-  [outside3](.audit/adhoc_agents/2026-05-02/x/events.jsonl)
-  [inside](specs/development/spec_driven/final_specs/spec.md)
-  ```
-  Render `/file/CLAUDE.md`. For each link, check via DOM:
-  ```
-  document.querySelectorAll('.link-broken[aria-disabled="true"]').forEach(s => console.log(s.title, s.textContent))
-  document.querySelectorAll('a[href^="/file/"]').forEach(a => console.log(a.href))
-  ```
-- **Expected behavior.** `outside1`, `outside2`, `outside3` all render as `<span class="link-broken" aria-disabled="true">` with title "outside exposed tree" or "file not found" depending on existence. `inside` renders as a navigable `<a href="/file/...">`.
-- **Pass criterion.** Three broken spans, one navigable link. No anchor whose href escapes EXPOSED_TREE.
-- **Spec refs.** FR-33 case 3, FR-34, FR-37.
-
-### SEC-18 — PUT atomic-write race
-
-- **Attack vector.** Two concurrent `PUT /api/file` calls on the same path interleave their writes, producing a torn file.
-- **Method.** With a 500 KB target file `specs/development/spec_driven/user_input/race.md`, run:
-  ```
-  python -c "
-  import concurrent.futures, requests, hashlib
-  A = 'A' * 500_000
-  B = 'B' * 500_000
-  url = 'http://127.0.0.1:8765/api/file'
-  def put(text): return requests.put(url, json={'path':'specs/development/spec_driven/user_input/race.md','text':text}).status_code
-  for _ in range(50):
-      with concurrent.futures.ThreadPoolExecutor(2) as ex:
-          fA, fB = ex.submit(put, A), ex.submit(put, B)
-          print(fA.result(), fB.result())
-      with open('specs/development/spec_driven/user_input/race.md') as f: c = f.read()
-      assert c == A or c == B, f'TORN: len={len(c)} prefix={c[:5]} suffix={c[-5:]}'
-      assert hashlib.md5(c.encode()).hexdigest() in (hashlib.md5(A.encode()).hexdigest(), hashlib.md5(B.encode()).hexdigest())
-  print('OK')
-  "
-  ```
-- **Expected behavior.** Across 50 rounds, the file content always equals exactly one of the two payloads — never a hybrid. Both PUTs return 200. `os.replace` provides POSIX/NTFS atomicity.
-- **Pass criterion.** Script prints `OK` (no `TORN` AssertionError); 100 of 100 PUTs returned 200.
-- **Spec refs.** FR-14a (atomic-replace via `tempfile.mkstemp` + `os.fsync` + `os.replace`).
-
-### SEC-19 — Regen-prompt size hard ceiling
-
-- **Attack vector.** A bloated revised_prompt + many follow-ups yields a >1 MB assembled prompt; the endpoint must 413 rather than silently truncate (warn-don't-truncate threshold is 50 KB; hard ceiling is 1 MB).
-- **Method.** Plant fixture project `specs/development/_oversize/` with:
-  - `user_input/revised_prompt.md` of 1.2 MB.
-  - One follow-up of 100 KB.
-  Then:
-  ```
-  curl -is -X POST "http://127.0.0.1:8765/api/regen-prompt" \
-    -H "Content-Type: application/json" \
-    -d '{"project_type":"development","project_name":"_oversize","stages":["spec"],"modules":{"spec":["spec.md"]},"autonomous":false}'
-  ```
-- **Expected behavior.** Status 413 with `kind: "too_large"`. Response body length is small (no truncated prompt body included).
-- **Pass criterion.** Status == 413; body's `kind` is `too_large`; response body < 1 KB.
-- **Spec refs.** FR-14c size policy, AC-19.
-
-### SEC-20 — Read-zero contract surfaced in regen prompt
-
-- **Attack vector.** The webapp silently drops the read-zero constraint, causing downstream Claude to read prior outputs and reintroduce stale assumptions — a correctness failure with security flavor (the constraint is what guarantees regeneration is genuinely from-scratch).
-- **Method.**
-  ```
-  curl -s -X POST "http://127.0.0.1:8765/api/regen-prompt" \
-    -H "Content-Type: application/json" \
-    -d '{"project_type":"development","project_name":"spec_driven","stages":["spec"],"modules":{"spec":["spec.md"]},"autonomous":true}' \
-    | jq -r .prompt | grep -i "read-zero\|delete prior outputs first\|reads only the inputs"
-  ```
-- **Expected behavior.** The grep returns at least one match — the assembled prompt's `### Constraints` section spells out "regeneration deletes prior outputs first; new generation reads only the inputs."
-- **Pass criterion.** Non-empty grep output. The autonomous header `# EXECUTION MODE: AUTONOMOUS` is on line 1 of the prompt; the read-zero string appears in the constraints section.
-- **Spec refs.** FR-14c (f), AC-20, AC-21.
-
-## Reporting
-
-A failure on **any** of SEC-01..SEC-20 is a release blocker. Re-run the full suite manually before each release. No CI infrastructure required (per the locked scope — single-user dogfood).
+- Vite path-traversal CVEs (Windows backslash bypass): `https://www.miggo.io/vulnerability-database/cve/CVE-2025-62522` (motivates SEC-03).
+- Vite `server.fs.deny` bypass via `/.` prefix: `https://security.snyk.io/vuln/SNYK-JS-VITE-9919777` (motivates SEC-01, SEC-02).
+- Vite `/@fs/...?import&raw??` traversal: `https://www.offsec.com/blog/cve-2025-30208/` (motivates SEC-01).
+- MkDocs serve directory traversal: `https://github.com/mkdocs/mkdocs/issues/2601` (general traversal-on-localhost prior art).
+- DNS-rebinding against MCP localhost servers: `https://rafter.so/blog/mcp-dns-rebinding-localhost` and `https://crypto.stanford.edu/dns/dns-rebinding.pdf` (motivate SEC-16, SEC-17).
+- OWASP Path Traversal canonical guidance: `https://owasp.org/www-community/attacks/Path_Traversal` (motivates SEC-01..SEC-09).
+- OWASP Windows Alternate Data Stream: `https://owasp.org/www-community/attacks/Windows_alternate_data_stream` (motivates SEC-06).
+- Microsoft Win32 reserved-name docs: `https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file` (motivates SEC-05).
+- OWASP File Upload Cheat Sheet (size caps, headers, content-type spoofing): `https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html` (motivates SEC-10..SEC-14, SEC-19).
+- OWASP CSRF Prevention Cheat Sheet: `https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html` (motivates SEC-16, SEC-17).
+- FastAPI body-size cap discussion: `https://github.com/fastapi/fastapi/discussions/8167` (motivates SEC-11, SEC-12).
+- VS Code extension localhost CVEs: `https://blog.trailofbits.com/2023/02/21/vscode-extension-escape-vulnerability/` (general "localhost is not a boundary" prior art motivating the whole SEC-16/SEC-17/SEC-20 trio).

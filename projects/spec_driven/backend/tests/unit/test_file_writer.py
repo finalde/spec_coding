@@ -1,62 +1,73 @@
-from __future__ import annotations
+"""
+Group 3 — file_writer (FR-6, FR-7, FR-8, NFR-10).
+"""
 
-import os
-import sys
-from pathlib import Path
-from unittest import mock
+from __future__ import annotations
 
 import pytest
 
-from libs.file_reader import FileReadError, read_file
-from libs.file_writer import write_file
+from libs.file_reader import TooLargeError, UnsupportedExtensionError
+from libs.file_writer import FileWriter, NotTextError
 
 
-def test_put_happy_path_round_trip(fake_repo: Path) -> None:
-    rel = "specs/development/spec_driven/final_specs/spec.md"
-    result = write_file(rel, "# replaced\n", fake_repo)
-    assert result.path == rel
-    out = read_file(rel, fake_repo)
-    assert "replaced" in out.text
+def test_atomic_write_temp_then_rename(resolver, scratch_dir):
+    writer = FileWriter(resolver=resolver)
+    rel = "specs/development/spec_driven/__scratch__/atomic.md"
+    r = writer.write(rel, "hello")
+    assert r.bytes == 5
+    assert (scratch_dir / "atomic.md").read_text(encoding="utf-8") == "hello"
+    leftovers = list(scratch_dir.glob(".tmp-*"))
+    assert leftovers == []
 
 
-def test_outside_sandbox_400(fake_repo: Path) -> None:
-    with pytest.raises(FileReadError) as ei:
-        write_file("../../etc/hosts", "x", fake_repo)
-    assert ei.value.status == 400
-    assert ei.value.kind == "outside_sandbox"
+def test_body_cap_at_1mb(resolver, scratch_dir):
+    writer = FileWriter(resolver=resolver)
+    rel = "specs/development/spec_driven/__scratch__/cap.md"
+    with pytest.raises(TooLargeError):
+        writer.write(rel, "a" * (1024 * 1024 + 1))
 
 
-def test_binary_content_415(fake_repo: Path) -> None:
-    rel = "specs/development/spec_driven/final_specs/spec.md"
-    with pytest.raises(FileReadError) as ei:
-        write_file(rel, "head\x00tail", fake_repo)
-    assert ei.value.status == 415
-    assert ei.value.kind == "binary_content"
+def test_extension_validation_md_allowed(resolver, scratch_dir):
+    writer = FileWriter(resolver=resolver)
+    r = writer.write("specs/development/spec_driven/__scratch__/ok.md", "hi")
+    assert r.bytes == 2
 
 
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="permission semantics differ on Windows",
-)
-def test_atomic_temp_file_cleaned_up_on_permission_error(fake_repo: Path) -> None:
-    rel = "specs/development/spec_driven/final_specs/spec.md"
-    parent = fake_repo / "specs" / "development" / "spec_driven" / "final_specs"
-
-    def boom(*args, **kwargs):
-        raise PermissionError("nope")
-
-    with mock.patch("libs.file_writer.os.replace", side_effect=boom):
-        with pytest.raises(FileReadError) as ei:
-            write_file(rel, "# replaced\n", fake_repo)
-        assert ei.value.status == 403
-
-    leftover = [p for p in parent.iterdir() if p.name.startswith(".tmp-")]
-    assert leftover == []
+@pytest.mark.parametrize("ext", [".png", ".jpg", ".svg", ".exe", ".html"])
+def test_extension_validation_rejects(resolver, scratch_dir, ext):
+    writer = FileWriter(resolver=resolver)
+    rel = f"specs/development/spec_driven/__scratch__/x{ext}"
+    with pytest.raises(UnsupportedExtensionError):
+        writer.write(rel, "data")
 
 
-def test_unsupported_extension_415(fake_repo: Path) -> None:
-    findings = fake_repo / "specs" / "development" / "spec_driven" / "findings"
-    rel = "specs/development/spec_driven/findings/diagram.png"
-    with pytest.raises(FileReadError) as ei:
-        write_file(rel, "x", fake_repo)
-    assert ei.value.status in (404, 415)
+def test_first_16_bytes_must_be_valid_utf8_no_nul(resolver, scratch_dir):
+    writer = FileWriter(resolver=resolver)
+    rel = "specs/development/spec_driven/__scratch__/binary.md"
+    with pytest.raises(NotTextError):
+        writer.write(rel, "\x00abcdefghij")
+
+
+def test_returns_path_bytes_mtime(resolver, scratch_dir):
+    writer = FileWriter(resolver=resolver)
+    r = writer.write("specs/development/spec_driven/__scratch__/r.md", "abc\n")
+    assert r.path == "specs/development/spec_driven/__scratch__/r.md"
+    assert r.bytes == 4
+    assert "T" in r.mtime
+
+
+def test_overwrite_advances_mtime(resolver, scratch_dir):
+    import time
+
+    writer = FileWriter(resolver=resolver)
+    rel = "specs/development/spec_driven/__scratch__/owr.md"
+    r1 = writer.write(rel, "v1")
+    time.sleep(1.05)
+    r2 = writer.write(rel, "v2")
+    assert r2.mtime > r1.mtime
+
+
+def test_zero_byte_md_allowed(resolver, scratch_dir):
+    writer = FileWriter(resolver=resolver)
+    r = writer.write("specs/development/spec_driven/__scratch__/empty.md", "")
+    assert r.bytes == 0

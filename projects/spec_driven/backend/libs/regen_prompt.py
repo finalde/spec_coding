@@ -1,473 +1,230 @@
+"""
+regen_prompt — POST /api/regen-prompt assembler (FR-10, FR-11, FR-12).
+
+Output prompt structure:
+
+    # EXECUTION MODE: AUTONOMOUS|INTERACTIVE
+    [Do not call AskUserQuestion ... single turn before stopping.]   # AUTONOMOUS only
+
+    ## Project — {project_type}/{project_name}
+
+    ## Revised prompt
+    <inline revised_prompt.md or raw_prompt.md>
+
+    ## Follow-ups
+    - 001-...md
+    - 002-...md
+
+    ## Stage: {stage.label} ({stage.id})
+    Invocation: {stage.invocation}
+    Modules:
+    - {module.label}: {module.relative_path}
+    ### Pinned items (MUST survive regeneration)        # if <stage>/promoted.md non-empty
+    <verbatim contents of promoted.md>
+    [...next stage...]
+
+    ### Constraints
+    [State surfaces, parent-direct contract, audit events, read-zero contract, ...]
+
+Size policy (FR-12):
+- bytes <= 50 KB        -> warning: null
+- 50 KB < bytes <= 1 MB -> warning: human-readable
+- bytes > 1 MB          -> 413 with {detail: {kind: "too_large", bytes: <count>}}
+"""
+
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from libs.file_reader import FileReadError
+from .stages import STAGES, stage_by_id
 
-
-REGEN_WARN_BYTES: int = 50 * 1024
-REGEN_HARD_CEILING_BYTES: int = 1024 * 1024
-
-
-AUTONOMOUS_IMPERATIVE: str = (
+AUTONOMOUS_IMPERATIVE = (
     "Do not call AskUserQuestion. For anything unclear, use your best judgment, "
-    "record the choice inline in the artifact, and keep going. Produce every "
-    "requested artifact below in this single turn before stopping."
+    "record the choice inline in the artifact, and keep going. "
+    "Produce every requested artifact below in this single turn before stopping."
 )
+WARN_THRESHOLD = 50 * 1024
+HARD_LIMIT = 1024 * 1024
+READ_ZERO_SENTENCE = "regeneration deletes prior outputs first; new generation reads only the inputs."
+
+
+class RegenInputError(Exception):
+    pass
+
+
+class TooLargePromptError(Exception):
+    def __init__(self, bytes_count: int) -> None:
+        super().__init__(f"prompt too large: {bytes_count} bytes")
+        self.bytes_count = bytes_count
 
 
 @dataclass(frozen=True)
-class StageModule:
-    id: str
-    label: str
-    relative_path: str
-    description: str
-
-
-@dataclass(frozen=True)
-class StageDef:
-    id: str
-    label: str
-    folder: str
-    modules: tuple[StageModule, ...]
-    invocation: str
-
-
-STAGE_DEFS: tuple[StageDef, ...] = (
-    StageDef(
-        id="intake",
-        label="Intake",
-        folder="user_input",
-        invocation=(
-            "Stage 1 (Intake): Claude reads raw_prompt.md and writes a cleaned "
-            "revised_prompt.md. No agent."
-        ),
-        modules=(
-            StageModule(
-                id="raw_prompt",
-                label="raw_prompt.md",
-                relative_path="user_input/raw_prompt.md",
-                description="User's verbatim original prompt.",
-            ),
-            StageModule(
-                id="revised_prompt",
-                label="revised_prompt.md",
-                relative_path="user_input/revised_prompt.md",
-                description="Cleaned, expanded prompt; raw + every follow-up.",
-            ),
-        ),
-    ),
-    StageDef(
-        id="interview",
-        label="Interview",
-        folder="interview",
-        invocation=(
-            "Stage 2 (Interview): the parent reads "
-            ".claude/skills/agent_team/playbooks/interview.md plus "
-            ".claude/agent_refs/interview/general.md (and <task_type>.md if "
-            "present) and runs the stage parent-direct — picks probe categories, "
-            "generates the multi-choice question pool (directly or via parallel "
-            "category workers), calls AskUserQuestion, iterates up to 3 rounds, "
-            "and writes interview/qa.md."
-        ),
-        modules=(
-            StageModule(
-                id="qa",
-                label="qa.md",
-                relative_path="interview/qa.md",
-                description="Multi-round multi-choice interview transcript.",
-            ),
-        ),
-    ),
-    StageDef(
-        id="research",
-        label="Research",
-        folder="findings",
-        invocation=(
-            "Stage 3 (Research): the parent reads "
-            ".claude/skills/agent_team/playbooks/research.md plus "
-            ".claude/agent_refs/research/general.md (and <task_type>.md if "
-            "present) and runs the stage parent-direct — picks 3-6 angles, "
-            "spawns one researcher worker per angle in parallel via the Agent "
-            "tool (single message, multiple tool calls), then synthesizes "
-            "findings/dossier.md."
-        ),
-        modules=(
-            StageModule(
-                id="dossier",
-                label="dossier.md",
-                relative_path="findings/dossier.md",
-                description="Consolidated research dossier.",
-            ),
-            StageModule(
-                id="angles",
-                label="angle-*.md",
-                relative_path="findings/",
-                description="Per-angle research notes (one file per angle).",
-            ),
-        ),
-    ),
-    StageDef(
-        id="spec_compilation",
-        label="Spec compilation",
-        folder="final_specs",
-        invocation=(
-            "Stage 4 (Spec compilation): Claude reads revised_prompt + qa + dossier "
-            "and writes final_specs/spec.md directly. No agent."
-        ),
-        modules=(
-            StageModule(
-                id="spec",
-                label="spec.md",
-                relative_path="final_specs/spec.md",
-                description="Canonical compiled specification.",
-            ),
-        ),
-    ),
-    StageDef(
-        id="validation_strategy",
-        label="Validation strategy",
-        folder="validation",
-        invocation=(
-            "Stage 5 (Validation strategy): the parent reads "
-            ".claude/skills/agent_team/playbooks/validation.md (strategy mode) "
-            "plus .claude/agent_refs/validation/general.md (and <task_type>.md "
-            "if present) and runs the stage parent-direct — picks the validation "
-            "levels that apply, spawns one level-specialist worker per level in "
-            "parallel via the Agent tool, then synthesizes validation/strategy.md "
-            "plus per-level files."
-        ),
-        modules=(
-            StageModule(
-                id="strategy",
-                label="strategy.md",
-                relative_path="validation/strategy.md",
-                description="Top-level validation strategy.",
-            ),
-            StageModule(
-                id="acceptance_criteria",
-                label="acceptance_criteria.md",
-                relative_path="validation/acceptance_criteria.md",
-                description="Gherkin acceptance scenarios.",
-            ),
-            StageModule(
-                id="bdd_scenarios",
-                label="bdd_scenarios.md",
-                relative_path="validation/bdd_scenarios.md",
-                description="BDD scenario set.",
-            ),
-            StageModule(
-                id="system_tests",
-                label="system_tests.md",
-                relative_path="validation/system_tests.md",
-                description="System-level test descriptions.",
-            ),
-            StageModule(
-                id="unit_tests",
-                label="unit_tests.md",
-                relative_path="validation/unit_tests.md",
-                description="Unit-level test descriptions.",
-            ),
-            StageModule(
-                id="security",
-                label="security.md",
-                relative_path="validation/security.md",
-                description="Security probes and threat model.",
-            ),
-        ),
-    ),
-    StageDef(
-        id="execution",
-        label="Execution",
-        folder="(projects)",
-        invocation=(
-            "Stage 6 (Execution + streaming validation): Claude implements work "
-            "units against the spec. For each unit, the parent runs the validation "
-            "playbook in runtime mode parent-direct — spawns validators in parallel "
-            "via the Agent tool against the strategy, applies severity policy, and "
-            "loops issues back as revisions, capped at 3 rounds per unit."
-        ),
-        modules=(
-            StageModule(
-                id="implementation",
-                label="implementation",
-                relative_path="(projects/{name}/...)",
-                description="Code, tests, README under projects/{name}/.",
-            ),
-        ),
-    ),
-)
-
-
-@dataclass(frozen=True)
-class RegenPromptResult:
+class RegenResult:
     prompt: str
     warning: str | None
     selected_stages_count: int
     follow_ups_count: int
     autonomous: bool
+    bytes: int
+
+    def to_dict(self) -> dict:
+        return {
+            "prompt": self.prompt,
+            "warning": self.warning,
+            "selected_stages_count": self.selected_stages_count,
+            "follow_ups_count": self.follow_ups_count,
+            "autonomous": self.autonomous,
+            "bytes": self.bytes,
+        }
 
 
-def list_stages(project_type: str, project_name: str) -> dict[str, object]:
-    stages: list[dict[str, object]] = []
-    for stage in STAGE_DEFS:
-        stages.append({
-            "id": stage.id,
-            "label": stage.label,
-            "folder": stage.folder,
-            "invocation": stage.invocation,
-            "modules": [
-                {
-                    "id": m.id,
-                    "label": m.label,
-                    "relative_path": m.relative_path,
-                    "description": m.description,
-                }
-                for m in stage.modules
-            ],
-        })
-    return {
-        "project_type": project_type,
-        "project_name": project_name,
-        "stages": stages,
-    }
+_FOLLOW_UP_RE = re.compile(r"^(\d+)-")
 
 
-def _project_dir(project_type: str, project_name: str, repo_root: Path) -> Path:
-    return repo_root / "specs" / project_type / project_name
-
-
-def _read_or_empty(path: Path) -> str:
-    try:
-        if path.exists() and path.is_file():
-            return path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
-    return ""
-
-
-def _list_followups(project_dir: Path) -> list[Path]:
+def _list_follow_ups(project_dir: Path) -> list[Path]:
     fu_dir = project_dir / "user_input" / "follow_ups"
     if not fu_dir.is_dir():
         return []
-    try:
-        files = [p for p in fu_dir.iterdir() if p.is_file() and p.suffix.lower() == ".md"]
-    except OSError:
-        return []
-    return sorted(files, key=lambda p: p.name)
-
-
-_PROMOTABLE_STAGE_FOLDERS: frozenset[str] = frozenset(
-    {"interview", "findings", "final_specs", "validation"}
-)
-
-
-def _collect_promoted_blocks(
-    project_dir: Path,
-    selected_defs: list[StageDef],
-) -> list[tuple[str, str]]:
-    """For each selected stage with a non-empty promoted.md, return
-    (stage_folder, file_text) tuples in stage order. Only the four
-    spec-pipeline stages support promotion; intake (user_input) and
-    stage 6 (execution) are skipped per CLAUDE.md."""
-    out: list[tuple[str, str]] = []
-    for stage in selected_defs:
-        folder = stage.folder
-        if folder not in _PROMOTABLE_STAGE_FOLDERS:
+    keyed: list[tuple[int, str, Path]] = []
+    for p in fu_dir.iterdir():
+        if not p.is_file() or p.suffix.lower() != ".md":
             continue
-        promoted_path = project_dir / folder / "promoted.md"
-        if not promoted_path.is_file():
+        m = _FOLLOW_UP_RE.match(p.name)
+        if not m:
             continue
-        try:
-            text = promoted_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        if not text.strip():
-            continue
-        out.append((folder, text))
-    return out
+        keyed.append((int(m.group(1)), p.name, p))
+    keyed.sort(key=lambda t: (t[0], t[1]))
+    return [t[2] for t in keyed]
 
 
-def build_regen_prompt(
-    project_type: str,
-    project_name: str,
-    stage_ids: list[str],
-    module_ids: dict[str, list[str]],
-    autonomous: bool,
-    repo_root: Path,
-) -> str:
-    project_dir = _project_dir(project_type, project_name, repo_root)
-
-    revised_path = project_dir / "user_input" / "revised_prompt.md"
-    raw_path = project_dir / "user_input" / "raw_prompt.md"
-    intent_text = _read_or_empty(revised_path)
-    intent_label = "user_input/revised_prompt.md"
-    if not intent_text:
-        intent_text = _read_or_empty(raw_path)
-        intent_label = "user_input/raw_prompt.md"
-
-    followups = _list_followups(project_dir)
-
-    parts: list[str] = []
-    if autonomous:
-        parts.append("# EXECUTION MODE: AUTONOMOUS")
-        parts.append("")
-        parts.append(AUTONOMOUS_IMPERATIVE)
-    else:
-        parts.append("# EXECUTION MODE: INTERACTIVE")
-    parts.append("")
-    parts.append(f"## Project: {project_type}/{project_name}")
-    parts.append(f"Project root: `specs/{project_type}/{project_name}/`")
-    parts.append("")
-
-    parts.append("### Current intent")
-    parts.append(f"Inlined from `{intent_label}`:")
-    parts.append("")
-    parts.append("```markdown")
-    parts.append(intent_text if intent_text else "(no intent file present)")
-    parts.append("```")
-    parts.append("")
-    parts.append("Follow-ups in numerical order:")
-    if followups:
-        for f in followups:
-            parts.append(
-                f"- `specs/{project_type}/{project_name}/user_input/follow_ups/{f.name}`"
-            )
-    else:
-        parts.append("- (none)")
-    parts.append("")
-
-    parts.append("### Stages to regenerate")
-    selected_defs = [s for s in STAGE_DEFS if s.id in stage_ids]
-    if not selected_defs:
-        parts.append("- (no stages selected)")
-    for stage in selected_defs:
-        parts.append(f"#### {stage.label} (`{stage.id}`)")
-        parts.append(stage.invocation)
-        parts.append("")
-        chosen_module_ids = module_ids.get(stage.id) or [m.id for m in stage.modules]
-        parts.append("Modules in scope:")
-        for module in stage.modules:
-            if module.id in chosen_module_ids:
-                target = (
-                    f"specs/{project_type}/{project_name}/{module.relative_path}"
-                    if not module.relative_path.startswith("(")
-                    else module.relative_path
-                )
-                parts.append(f"- **{module.label}** — `{target}` — {module.description}")
-        parts.append("")
-
-    # Pinned items: inline every promoted.md whose stage is in the selected set.
-    promoted_blocks = _collect_promoted_blocks(project_dir, selected_defs)
-    if promoted_blocks:
-        parts.append("### Pinned items (MUST survive regeneration)")
-        parts.append("")
-        parts.append(
-            "The following items have been pinned by the user via the spec_driven "
-            "webapp. Each pin is an INPUT to this regeneration: it MUST appear "
-            "**verbatim** in the regenerated artifact. Promoted always wins — if "
-            "your generation would produce a different version of a pinned item, "
-            "discard the new version and use the pinned text instead. If a pinned "
-            "item's natural insertion point no longer exists in the regenerated "
-            "structure, append it to a `## Pinned items (orphaned)` section at "
-            "the end of the originally-pinned source file. NEVER silently drop a "
-            "pin. See CLAUDE.md → ## Regeneration prompts & autonomous mode → "
-            "### Regeneration semantics → ### Pinned items survive regeneration."
-        )
-        parts.append("")
-        for stage_folder, content in promoted_blocks:
-            parts.append(
-                f"#### From `specs/{project_type}/{project_name}/{stage_folder}/promoted.md`"
-            )
-            parts.append("")
-            parts.append("```markdown")
-            parts.append(content.rstrip())
-            parts.append("```")
-            parts.append("")
-
-    parts.append("### Constraints")
-    parts.append(
-        "- Honor every rule in `CLAUDE.md`: state surfaces (CLAUDE.md, .claude/settings*, "
-        "specs/{type}/{name}/, .audit/...), iteration bounds (3 revisions / 30 minutes "
-        "per unit)."
-    )
-    parts.append(
-        "- Persist artifacts at canonical paths under "
-        f"`specs/{project_type}/{project_name}/...`. No sidecar caches, no hidden state."
-    )
-    parts.append(
-        "- For stages 2 (interview), 3 (research), 5 (validation strategy), and 6 "
-        "(runtime validation), the parent runs the stage parent-direct: read the "
-        "matching playbook under `.claude/skills/agent_team/playbooks/{interview|"
-        "research|validation}.md` plus the matching `.claude/agent_refs/{interview|"
-        "research|validation}/{general.md, <task_type>.md}` BEFORE acting, then spawn "
-        "workers in parallel via the `Agent` tool (single message, multiple tool "
-        "calls). Record the absolute paths read in a `pre_reading_consulted` array "
-        "on the run's first event.jsonl entry for the stage. There is no separate "
-        "manager subagent — the parent IS the manager."
-    )
-    parts.append(
-        "- **Read-zero contract**: regeneration deletes prior outputs first; new "
-        "generation reads only the inputs. Do not read prior `final_specs/spec.md`, "
-        "prior `validation/*`, or any prior generated artifact in the stages being "
-        "regenerated. Each stage starts from a clean slate so stale assumptions cannot "
-        "leak forward. **Exception:** every `<stage>/promoted.md` is an INPUT, NOT an "
-        "output. Never delete `promoted.md`. Always read it before generating; its "
-        "pinned items must appear verbatim in the regenerated artifact."
-    )
-    parts.append(
-        "- Emit `regen.delete.planned`, `regen.delete.completed`, and "
-        "`regen.write.completed` events to the run's `events.jsonl` under "
-        ".audit/adhoc_agents/{date}/{task_id}/."
-    )
-    if autonomous:
-        parts.append(
-            "- Autonomous mode: do NOT call `AskUserQuestion`. Do not stop to ask. "
-            "Use best judgment for ambiguous choices and record the decision inline "
-            "in the produced artifact."
-        )
-    else:
-        parts.append(
-            "- Interactive mode: `AskUserQuestion` is permitted only when intent "
-            "cannot be inferred from the existing artifacts."
-        )
-    parts.append("")
-
-    return "\n".join(parts)
+def _read_intent_block(project_dir: Path) -> tuple[str, str]:
+    revised = project_dir / "user_input" / "revised_prompt.md"
+    raw = project_dir / "user_input" / "raw_prompt.md"
+    if revised.is_file() and revised.stat().st_size > 0:
+        return ("revised_prompt.md", revised.read_text(encoding="utf-8"))
+    if raw.is_file():
+        return ("raw_prompt.md", raw.read_text(encoding="utf-8"))
+    raise RegenInputError("project has neither revised_prompt.md nor raw_prompt.md")
 
 
-def build_regen_prompt_result(
-    project_type: str,
-    project_name: str,
-    stage_ids: list[str],
-    module_ids: dict[str, list[str]],
-    autonomous: bool,
-    repo_root: Path,
-) -> RegenPromptResult:
-    prompt = build_regen_prompt(
-        project_type, project_name, stage_ids, module_ids, autonomous, repo_root
-    )
-    encoded_size = len(prompt.encode("utf-8"))
-    if encoded_size > REGEN_HARD_CEILING_BYTES:
-        raise FileReadError(413, "too_large", kind="too_large")
+@dataclass(frozen=True)
+class RegenPromptAssembler:
+    repo_root: Path
 
-    project_dir = _project_dir(project_type, project_name, repo_root)
-    follow_ups_count = len(_list_followups(project_dir))
-    selected_stages_count = len([s for s in STAGE_DEFS if s.id in stage_ids])
+    def assemble(
+        self,
+        project_type: str,
+        project_name: str,
+        stage_ids: list[str],
+        modules: dict[str, list[str]],
+        autonomous: bool,
+    ) -> RegenResult:
+        if not stage_ids:
+            raise RegenInputError("at least one stage required")
+        for sid in stage_ids:
+            if stage_by_id(sid) is None:
+                raise RegenInputError(f"unknown stage id: {sid!r}")
 
-    warning: str | None = None
-    if encoded_size > REGEN_WARN_BYTES:
-        kb = encoded_size / 1024
-        warning = (
-            f"prompt is {kb:.1f} KB (> 50 KB threshold) — verify your selection "
-            "before pasting"
+        project_dir = self.repo_root / "specs" / project_type / project_name
+        if not project_dir.is_dir():
+            raise RegenInputError(f"project not found: {project_type}/{project_name}")
+
+        intent_label, intent_body = _read_intent_block(project_dir)
+        follow_ups = _list_follow_ups(project_dir)
+
+        out: list[str] = []
+        out.append("# EXECUTION MODE: AUTONOMOUS\n" if autonomous else "# EXECUTION MODE: INTERACTIVE\n")
+        out.append("\n")
+        if autonomous:
+            out.append(AUTONOMOUS_IMPERATIVE)
+            out.append("\n\n")
+
+        out.append(f"## Project — {project_type}/{project_name}\n\n")
+
+        out.append(f"## Revised prompt — `{intent_label}`\n\n")
+        out.append(intent_body.rstrip())
+        out.append("\n\n")
+
+        out.append(f"## Follow-ups ({len(follow_ups)})\n\n")
+        if follow_ups:
+            for fu in follow_ups:
+                out.append(f"- `user_input/follow_ups/{fu.name}`\n")
+            out.append("\n")
+            for fu in follow_ups:
+                out.append(f"### `{fu.name}`\n\n")
+                out.append(fu.read_text(encoding="utf-8").rstrip())
+                out.append("\n\n")
+        else:
+            out.append("_No follow-ups recorded._\n\n")
+
+        for sid in stage_ids:
+            stage = stage_by_id(sid)
+            assert stage is not None
+            out.append(f"## Stage: {stage.label} (`{stage.id}`)\n\n")
+            out.append(f"_Invocation_: {stage.invocation}\n\n")
+
+            selected_module_ids = modules.get(sid, [])
+            picked = [m for m in stage.modules if not selected_module_ids or m.id in selected_module_ids]
+            if not picked:
+                picked = list(stage.modules)
+            out.append("Modules selected:\n")
+            for m in picked:
+                out.append(f"- **{m.label}** (`{m.relative_path}`) — {m.description}\n")
+            out.append("\n")
+
+            promoted_path = project_dir / stage.folder / "promoted.md"
+            if promoted_path.is_file():
+                promoted_text = promoted_path.read_text(encoding="utf-8").strip()
+                if promoted_text:
+                    out.append("### Pinned items (MUST survive regeneration)\n\n")
+                    out.append(promoted_text)
+                    out.append("\n\n")
+
+        out.append(self._constraints_section(autonomous))
+
+        prompt = "".join(out)
+        encoded = prompt.encode("utf-8")
+        size = len(encoded)
+        if size > HARD_LIMIT:
+            raise TooLargePromptError(size)
+
+        warning: str | None = None
+        if size > WARN_THRESHOLD:
+            warning = f"prompt is {size / 1024:.1f} KB; review before pasting"
+
+        return RegenResult(
+            prompt=prompt,
+            warning=warning,
+            selected_stages_count=len(stage_ids),
+            follow_ups_count=len(follow_ups),
+            autonomous=autonomous,
+            bytes=size,
         )
 
-    return RegenPromptResult(
-        prompt=prompt,
-        warning=warning,
-        selected_stages_count=selected_stages_count,
-        follow_ups_count=follow_ups_count,
-        autonomous=autonomous,
-    )
+    @staticmethod
+    def _constraints_section(autonomous: bool) -> str:
+        lines = [
+            "### Constraints\n",
+            "\n",
+            "- **State surfaces (CLAUDE.md).** Pipeline state lives in exactly four places: `CLAUDE.md`, "
+            "`.claude/settings.json` / `settings.local.json`, `specs/{type}/{name}/`, and "
+            "`.audit/adhoc_agents/{date}/{task_id}/`. No hidden state outside these.\n",
+            "- **Canonical paths.** Per-task pipeline artifacts live under `specs/{task_type}/{task_name}/`. "
+            "Generated outputs land in `projects/{name}/` (development) or `ai_videos/{name}/` (ai_video).\n",
+            "- **Parent-direct manager-spawn contract.** The parent (Claude) reads each stage's playbook + "
+            "agent_refs inline and spawns workers itself via the `Agent` tool. There is no manager-subagent "
+            "layer; subagents cannot themselves spawn further subagents.\n",
+            f"- **Read-zero contract.** {READ_ZERO_SENTENCE} Surgical edits to or preservation of prior "
+            "outputs is forbidden during regeneration.\n",
+            "- **Audit-event protocol.** Before deletion, list each file to be deleted and emit one "
+            "`regen.delete.planned` event per line into the run's `events.jsonl`. After deletion, emit "
+            "`regen.delete.completed` with the count. After each new file is written, emit "
+            "`regen.write.completed` with the path and size.\n",
+            "- **AskUserQuestion in autonomous mode is forbidden** (already enforced at the top of this "
+            "prompt for AUTONOMOUS runs; restated here so it survives any sectional reading).\n",
+            "- **Pinned items survive regeneration.** Any `<stage>/promoted.md` listed above MUST appear "
+            "verbatim in the regenerated artifact. Missing pin = critical.\n",
+        ]
+        return "".join(lines)

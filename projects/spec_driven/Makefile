@@ -1,47 +1,53 @@
-.PHONY: help install run-backend run-frontend run-prod test e2e clean
+# Makefile for spec_driven (FR-39).
+#
+# Targets do NOT use `uv run` without a pip fallback (per agent_refs/validation/development.md move #6).
+# All runtime targets bind to 127.0.0.1:8765 only (FR-38, AC-29). LAN binds are forbidden.
 
-# Resolve the repo's pre-configured venv. This Makefile lives at projects/spec_driven/,
-# so the repo root is two levels up.
-REPO_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
-PY := $(REPO_ROOT)/.venv/Scripts/python
-PIP := $(REPO_ROOT)/.venv/Scripts/pip
-BACKEND_PORT ?= 8765
-FRONTEND_PORT ?= 5173
+PY ?= python
+PIP ?= pip
+NPM ?= npm
+HOST := 127.0.0.1
+PORT := 8765
+
+.PHONY: help install install-backend install-frontend run run-backend run-frontend run-prod build-frontend test-backend test-frontend e2e boot-smoke clean
 
 help:
-	@echo "spec_driven targets:"
-	@echo "  make install        -- pip install backend deps + npm install frontend deps"
-	@echo "  make run-backend    -- start FastAPI on http://127.0.0.1:$(BACKEND_PORT) with --reload"
-	@echo "  make run-frontend   -- start Vite dev server on http://127.0.0.1:$(FRONTEND_PORT) (proxies /api -> 8765)"
-	@echo "  make run-prod       -- build frontend bundle into backend/static/ and start a single FastAPI process"
-	@echo "  make test           -- run backend pytest"
-	@echo "  make e2e            -- run Playwright dogfood e2e (requires run-prod up on $(BACKEND_PORT))"
-	@echo "  make clean          -- remove backend/static/ and frontend/dist/"
-	@echo ""
-	@echo "Use run-backend and run-frontend in two terminals during development."
+	@echo "Targets: install run run-backend run-frontend run-prod build-frontend test-backend test-frontend e2e boot-smoke clean"
 
-install:
-	$(PIP) install -r backend/requirements.txt
-	$(PIP) install pytest httpx
-	cd frontend && npm install
+install: install-backend install-frontend
+
+install-backend:
+	$(PY) -m $(PIP) install -r backend/requirements.txt
+
+install-frontend:
+	cd frontend && $(NPM) install
+
+run: run-backend
 
 run-backend:
-	cd backend && $(PY) -m uvicorn --factory libs.api:create_app --host 127.0.0.1 --port $(BACKEND_PORT) --reload
+	cd backend && $(PY) main.py
 
 run-frontend:
-	cd frontend && npm run dev -- --host 127.0.0.1 --port $(FRONTEND_PORT)
+	cd frontend && $(NPM) run dev
 
-run-prod:
-	cd frontend && npm run build
-	mkdir -p backend/static
-	cp -r frontend/dist/. backend/static/
-	cd backend && SPEC_DRIVEN_PORT=$(BACKEND_PORT) $(PY) main.py
+run-prod: build-frontend
+	cd backend && $(PY) main.py
 
-test:
-	cd backend && $(PY) -m pytest
+build-frontend:
+	cd frontend && $(NPM) run build
+
+test-backend:
+	cd backend && $(PY) -m pytest tests/ -v
+
+test-frontend:
+	cd frontend && $(NPM) test
 
 e2e:
-	cd frontend && npm run e2e
+	cd frontend && $(NPM) run test:e2e
+
+boot-smoke:
+	cd backend && $(PY) -m pytest tests/system/test_sys1_boot_smoke.py -v
 
 clean:
-	rm -rf backend/static frontend/dist
+	rm -rf backend/__pycache__ backend/libs/__pycache__ backend/tests/__pycache__
+	rm -rf frontend/dist frontend/node_modules frontend/.vite

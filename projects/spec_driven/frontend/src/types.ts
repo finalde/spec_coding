@@ -1,40 +1,52 @@
+export type NodeType = "section" | "type" | "project" | "stage" | "file";
+
 export interface TreeNode {
-  kind: "file" | "folder" | "missing-folder";
   name: string;
   path: string;
-  children?: TreeNode[];
-  present?: boolean;
+  type: NodeType;
+  children: TreeNode[];
 }
 
-export interface TreeResponse {
-  settings: {
-    claude_md: TreeNode[];
-    skills: TreeNode[];
-    playbooks?: TreeNode[];
-    agent_refs?: TreeNode[];
-  };
-  projects: TreeNode[];
-}
-
-export interface FileResponse {
+export interface FileResult {
   path: string;
-  extension: string;
+  content: string;
+  mtime: string;
   bytes: number;
-  text: string;
+  data_encoding?: "base64";
 }
 
-export interface FileError {
-  error: string;
-  kind?: string;
+export interface WriteResult {
+  path: string;
+  bytes: number;
+  mtime: string;
 }
 
-export interface Pin {
-  pin_id: string;
-  location: string;
-  body: string;
+export interface Module {
+  id: string;
+  label: string;
+  relative_path: string;
+  description: string;
 }
 
-export interface PromotionsResponse {
-  stage_path: string;
-  pins: Pin[];
+export interface Stage {
+  id: string;
+  label: string;
+  folder: string;
+  invocation: string;
+  modules: Module[];
 }
+
+export interface RegenResult {
+  prompt: string;
+  warning: string | null;
+  selected_stages_count: number;
+  follow_ups_count: number;
+  autonomous: boolean;
+  bytes: number;
+}
+
+export type BrokenLinkCause =
+  | "file not found"
+  | "outside exposed tree"
+  | "case mismatch"
+  | "anchor not in document";

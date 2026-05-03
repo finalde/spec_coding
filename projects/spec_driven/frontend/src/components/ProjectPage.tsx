@@ -1,80 +1,47 @@
 import { useEffect, useState } from "react";
-import { fetchStages, StagesResponse } from "../api";
+import { useParams } from "react-router-dom";
+import { fetchStages } from "../api";
 import { RegeneratePanel } from "./RegeneratePanel";
+import type { Stage } from "../types";
 
-interface ProjectPageProps {
-  projectType: string;
-  projectName: string;
-}
-
-export function ProjectPage({
-  projectType,
-  projectName,
-}: ProjectPageProps): JSX.Element {
-  const [stages, setStages] = useState<StagesResponse | null>(null);
+export function ProjectPage() {
+  const { type = "", name = "" } = useParams<{ type: string; name: string }>();
+  const [stages, setStages] = useState<Stage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    fetchStages(projectType, projectName)
-      .then((s) => {
-        if (!cancelled) setStages(s);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "stages fetch failed");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectType, projectName]);
+    fetchStages(type, name)
+      .then(setStages)
+      .catch((e) => setError(String(e)));
+  }, [type, name]);
 
   return (
-    <div className="project-page">
-      <header className="project-header">
-        <h1 className="project-title">
-          <span className="project-type-label">{projectType}</span>
-          <span className="project-sep">/</span>
-          <span className="project-name-label">{projectName}</span>
-        </h1>
-      </header>
-      {error && (
-        <div className="editor-error-banner" role="alert">
-          {error}
-        </div>
+    <main id="main" tabIndex={-1} className="project-page">
+      <h1>
+        Project — <code>{type}</code> / <code>{name}</code>
+      </h1>
+      {error && <div role="alert">Could not load stages: {error}</div>}
+      {stages && (
+        <>
+          <h2>Stages</h2>
+          <ul className="stage-list">
+            {stages.map((s) => (
+              <li key={s.id} data-testid="project-stage">
+                <strong>{s.label}</strong>
+                <p className="stage-invocation">{s.invocation}</p>
+                <ul>
+                  {s.modules.map((m) => (
+                    <li key={m.id}>
+                      <code>{m.relative_path}</code> — {m.description}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+          <RegeneratePanel projectType={type} projectName={name} master />
+        </>
       )}
-      <section className="project-stages">
-        <h2>Stages</h2>
-        {stages?.stages.map((st) => (
-          <article key={st.id} className="project-stage">
-            <h3 className="project-stage-header">
-              <span className="project-stage-label">{st.label}</span>
-              <span className="project-stage-folder">{st.folder}</span>
-            </h3>
-            <p className="project-stage-invocation">{st.invocation}</p>
-            <ul className="project-stage-modules">
-              {st.modules.map((m) => (
-                <li key={m.relative_path}>
-                  <span className="project-module-label">{m.label}</span>
-                  <span className="project-module-path">{m.relative_path}</span>
-                  {m.description && (
-                    <span className="project-module-desc">{m.description}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </article>
-        ))}
-      </section>
-      <section className="project-master-regen">
-        <h2>Regenerate prompt builder</h2>
-        <RegeneratePanel
-          projectType={projectType}
-          projectName={projectName}
-          showAll
-        />
-      </section>
-    </div>
+    </main>
   );
 }

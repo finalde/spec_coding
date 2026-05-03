@@ -1,26 +1,32 @@
+"""
+spec_driven backend entrypoint (FR-38, AC-29).
+
+Binds 127.0.0.1:8765 only (loopback). Run with:
+
+    python main.py
+"""
+
 from __future__ import annotations
 
-import os
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+import uvicorn
 
-from libs.api import build_app
-from libs.repo_root import RepoRootNotFound, discover_repo_root
+from libs.api import create_app
+from libs.api_security import BoundOrigin
+from libs.repo_root import RepoRoot
+
+HOST = "127.0.0.1"
+PORT = 8765
 
 
 def main() -> int:
-    try:
-        repo_root = discover_repo_root(Path(__file__).resolve().parent)
-    except RepoRootNotFound as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-    import uvicorn
-    port = int(os.environ.get("SPEC_DRIVEN_PORT", "8765"))
-    uvicorn.run(build_app(repo_root), host="127.0.0.1", port=port)
+    repo_root = RepoRoot.find()
+    bound = BoundOrigin(host=HOST, port=PORT)
+    app = create_app(repo_root=repo_root, bound=bound, serve_static=True)
+    uvicorn.run(app, host=HOST, port=PORT, log_level="info")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

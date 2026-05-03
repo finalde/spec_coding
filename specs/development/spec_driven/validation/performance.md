@@ -1,169 +1,222 @@
-# Validation — Performance
+# Validation — Performance level
 
-Run: spec_driven-20260502-clean
-Stage: 5
-Source spec: `specs/development/spec_driven/final_specs/spec.md`
-Inputs read: spec.md only (read-zero)
+Stage: 5 (Validation strategy) — clean-state regeneration
+Run: spec_driven-20260503-030434
+Specialist: level-specialist-06-performance
+Inputs read:
+- `specs/development/spec_driven/final_specs/spec.md` (NFR-1, NFR-2, NFR-3, FR-12)
+- `.claude/agent_refs/validation/general.md` (severity table; observe-only → `warning`)
 
-## Scope and posture
+## Scope
 
-The spec locks the scale ceiling at NFR-15: ≤50 projects, ≤200 files per project, individual files <500 KB, hard cap <2 MB. Budgets in NFR-1..NFR-3 apply at the locked scale on a "typical developer laptop" and on localhost. There is no CI infrastructure for performance regression — the regression cadence is **manual, before each release**, on the developer's primary machine.
+Performance validation covers four budgets defined in the spec:
 
-For each check below, "p95" means: run the workload N=20 times sequentially after one warm-up call (which is discarded), sort timings, take the 19th value. Wall-clock measurements use `curl -o /dev/null -w "%{time_total}\n"` for HTTP probes and the browser Performance panel for cold-load probes.
+- **NFR-1.** `GET /api/tree` < 200 ms p95 at locked scale (≤50 projects, ≤200 files/project).
+- **NFR-2.** `GET /api/file` < 100 ms p95 for files <500 KB.
+- **NFR-3.** Initial app load < 2 s p95 on localhost.
+- **FR-12.** `POST /api/regen-prompt` size-policy thresholds (50 KB warning, 1 MB hard ceiling, warn-don't-truncate).
 
-## Fixture generation
+Plus three derived budgets surfaced by the consumer-contract review (editor save round-trip, regen-prompt latency at worst-case in-spec size, sidebar tree first-paint).
 
-Three fixture trees live under `tests/fixtures/`. They are checked in (small total size) so anyone can reproduce.
+## Tooling
 
+- **Backend latency / status:** `httpx.Client` (sync) for repeatable wall-clock measurements over loopback. Per-case loop runs ≥30 iterations to compute p50 / p95. Warm-cache runs are taken AFTER one untimed warm-up request; cold-cache runs spawn a fresh process.
+- **Frontend timings:** Playwright with `page.evaluate(() => performance.getEntriesByType('navigation')[0])` for navigation timings (`domContentLoaded`, `loadEventEnd`), `performance.getEntriesByType('paint')` for `first-contentful-paint` / `first-paint`, and `performance.now()` deltas around explicit user actions (Save click → 200 → re-render).
+- **Workload generation:** for tree / file scale tests, a fixture builder seeds `specs/_perf_fixture/{project_NN}/...` with synthetic stage subfolders sized to the locked scale. The fixture root is added to the EXPOSED_TREE only under `PYTEST_CURRENT_TEST` (or an explicit env flag); never in production runs.
+- **Threshold sources:** budgets quote NFR-1/2/3 verbatim; derived budgets cite the user-experience floor surfaced under `findings/` (markdown-editor-ux angle: <250 ms save roundtrip is the perceptual "instant" threshold).
+
+## Severity policy (specialization of `agent_refs/validation/general.md`)
+
+| Class | Severity | Halt? |
+|---|---|---|
+| Hard NFR budget missed at p95 (NFR-1, NFR-2, NFR-3) | `blocker` | Standard 3-revision-round cap. |
+| FR-12 size-policy contract violation (truncation, missing warning, wrong status) | `blocker` | Standard. The size-policy is functional, not observe-only. |
+| Derived UX budget missed at p95 (PERF-4, PERF-5, PERF-8) | `warning` | Logged; never halts. UX budgets are perceptual floors, not contracts. |
+| p50 within budget but p95 outside on observe-only metric (paint times in CI) | `warning` | Logged; never halts. |
+| Non-deterministic CI variance pushing p95 over budget on a non-blocker case | `warning` | Logged; flagged for fixture / harness review. |
+
+## Cases
+
+Each case names: workload, budget, measurement window (cold vs. warm), failure semantics, and the `events.jsonl` event the runner emits on miss.
+
+---
+
+### PERF-1 — `GET /api/tree` p95 < 200 ms at locked scale
+
+**Source.** NFR-1.
+**Workload.** Tree fixture seeded to the locked scale (50 projects × 200 files/project = 10 000 leaf files plus their stage-folder ancestors). Single `httpx.Client` over loopback. 50 iterations after one warm-up.
+**Budget.** p95 < 200 ms; p50 < 80 ms (sanity floor — if p50 is also pushing 200 ms, the implementation is doing work it shouldn't).
+**Measurement window.** Warm — the server has already walked the tree once during warm-up. The cold-cache case is covered by PERF-3 (which subsumes the first `/api/tree` call into the initial load budget).
+**Failure semantics.** p95 ≥ 200 ms → `blocker` per severity table. Emit `validation.issue.raised` with `case_id: PERF-1, observed_p95_ms: <n>, budget_ms: 200`.
+**Test pseudocode.**
+
+```python
+import httpx, time
+samples_ms: list[float] = []
+client = httpx.Client(base_url="http://127.0.0.1:8765")
+client.get("/api/tree")  # warm-up, untimed
+for _ in range(50):
+    t0 = time.perf_counter()
+    r = client.get("/api/tree")
+    samples_ms.append((time.perf_counter() - t0) * 1000)
+    assert r.status_code == 200
+assert percentile(samples_ms, 95) < 200, f"PERF-1: p95={percentile(samples_ms,95):.1f}ms"
 ```
-# tests/fixtures/perf_tree/  — locked-scale repo for PERF-01 / PERF-06
-# Generated by tools/gen_perf_tree.py, idempotent.
-def gen_perf_tree(root: Path) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    (root / "CLAUDE.md").write_text("# CLAUDE.md\n")
-    (root / ".claude" / "agents").mkdir(parents=True, exist_ok=True)
-    (root / ".claude" / "skills" / "x").mkdir(parents=True, exist_ok=True)
-    (root / ".claude" / "skills" / "x" / "SKILL.md").write_text("# SKILL\n")
-    for p in range(50):                                  # 50 projects
-        base = root / "specs" / "development" / f"proj_{p:02d}"
-        for stage in ("user_input","interview","findings","final_specs","validation"):
-            (base / stage).mkdir(parents=True, exist_ok=True)
-            for f in range(40):                          # 40 files per stage = 200 / project
-                (base / stage / f"f_{f:03d}.md").write_text("# F\n" + ("body line\n" * 50))
 
-# tests/fixtures/perf_file/single_500kb.md — 500 KB markdown for PERF-03
-# tests/fixtures/perf_file/single_2mb.md   — 2 MB - 1 byte for PERF-04
-def gen_perf_file(root: Path) -> None:
-    (root / "perf_file").mkdir(parents=True, exist_ok=True)
-    body_500 = "# Heading\n\n" + ("Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 8000)
-    (root / "perf_file" / "single_500kb.md").write_text(body_500[:500_000])
-    body_2m = body_500 * 5
-    (root / "perf_file" / "single_2mb.md").write_text(body_2m[: 2 * 1024 * 1024 - 1])
+---
 
-# tests/fixtures/perf_jsonl/events_100.jsonl — 100-line JSONL for PERF-07
-def gen_perf_jsonl(root: Path) -> None:
-    (root / "perf_jsonl").mkdir(parents=True, exist_ok=True)
-    lines = [json.dumps({"i": i, "ts": "2026-05-02T00:00:00Z", "kind": "exec.unit.completed", "payload": "x" * 200}) for i in range(100)]
-    (root / "perf_jsonl" / "events_100.jsonl").write_text("\n".join(lines) + "\n")
+### PERF-2 — `GET /api/file` p95 < 100 ms for files <500 KB
+
+**Source.** NFR-2.
+**Workload.** Parameterized over four representative artifacts (each <500 KB):
+- `CLAUDE.md`
+- `specs/development/spec_driven/interview/qa.md`
+- `specs/development/spec_driven/final_specs/spec.md`
+- `specs/development/spec_driven/findings/dossier.md`
+30 iterations per file, after one warm-up per file.
+**Budget.** p95 < 100 ms per file. p50 < 40 ms (floor).
+**Measurement window.** Warm. (Cold-cache file reads are typically dominated by OS page cache misses, which are out of the application's control on Windows; observing them here would be observe-only.)
+**Failure semantics.** p95 ≥ 100 ms on any of the four files → `blocker`. Emit `validation.issue.raised` per file.
+**Note.** Run separately for each fixture file; a single per-file failure is enough to halt — the spec budget is "<100 ms for files <500 KB," singular.
+
+---
+
+### PERF-3 — Initial app load p95 < 2 s on localhost
+
+**Source.** NFR-3.
+**Workload.** Cold-start scenario: launch a fresh uvicorn process, then drive Playwright to `http://127.0.0.1:8765/` with `cache: 'no-cache'` (browser cache cleared between runs). Measure window: from `navigation.startTime` to the moment `[data-testid="sidebar"]` AND the first `<main>` content node have been painted (i.e., HTML + bundle + first `/api/tree` + first `/api/file` all completed). 10 iterations (cold start is expensive; sample size is the realistic cost).
+**Budget.** p95 < 2 000 ms; p50 < 1 200 ms (floor).
+**Measurement window.** Cold — explicitly. The point of NFR-3 is the first-load experience; warm cache is covered by PERF-1 + PERF-2.
+**Failure semantics.** p95 ≥ 2 000 ms → `blocker`. Emit `validation.issue.raised` with breakdown attached: `domContentLoaded_ms`, `loadEventEnd_ms`, `first-contentful-paint_ms`, `tree_response_ms`, `first_file_response_ms`. The breakdown is what makes the regression actionable.
+**Test pseudocode.**
+
+```python
+async def test_perf_3_initial_load(page):
+    samples_ms: list[float] = []
+    for _ in range(10):
+        await restart_server()  # fresh uvicorn process
+        t0 = time.perf_counter()
+        await page.goto("http://127.0.0.1:8765/", wait_until="networkidle")
+        await page.wait_for_selector('[data-testid="sidebar"] [data-testid="tree-leaf"]')
+        await page.wait_for_selector("main :not(:empty)")
+        samples_ms.append((time.perf_counter() - t0) * 1000)
+    assert percentile(samples_ms, 95) < 2000
 ```
 
-The single-project baseline (PERF-02) reuses the dogfood `specs/development/spec_driven/` tree as-is — no fixture needed.
+---
 
-## Checks
+### PERF-4 — Editor save round-trip p95 < 250 ms (typical files)
 
-### PERF-01 — `/api/tree` p95 < 200 ms at locked scale (HARD GATE — NFR-1)
+**Source.** Derived. Markdown-editor-ux research angle: 250 ms is the perceptual floor where a save feels "instant."
+**Workload.** Open a stage file (`interview/qa.md`, ~30–80 KB), enter edit mode, append one line, click **Save** (Ctrl+S). Measure: `performance.now()` at click → 200 response received → editor re-renders with new baseline (dirty dot cleared). 30 iterations; warm cache.
+**Budget.** p95 < 250 ms.
+**Measurement window.** Warm.
+**Failure semantics.** p95 ≥ 250 ms → `warning` (perceptual floor, not a hard NFR). Logged; never halts.
+**Why warning, not blocker.** The spec's hard NFRs are NFR-1/2/3; this is a UX floor surfaced by research. Per `agent_refs/validation/general.md` standard severity table, observe-only metrics outside expected range are `warning`.
 
-- **Workload fixture.** `tests/fixtures/perf_tree/` (50 projects × 200 files generated above), `REPO_ROOT` pointed at it.
-- **Method.**
-  ```
-  for i in $(seq 1 21); do
-    curl -s -o /dev/null -w "%{time_total}\n" "http://127.0.0.1:8765/api/tree"
-  done | tail -n 20 | sort -n | sed -n '19p'
-  ```
-- **Measurement window.** Each call is a single fresh request, no `keep-alive` benefit assumed. Server warm (first call discarded).
-- **Pass criterion.** p95 (the 19th of 20 sorted timings) < 0.200 s. All 20 returns are HTTP 200 with non-empty `projects[]`.
-- **Spec refs.** NFR-1, NFR-15.
+---
 
-### PERF-02 — `/api/tree` p95 < 50 ms for spec_driven only (DERIVED SANITY)
+### PERF-5 — `POST /api/regen-prompt` p95 < 300 ms at worst-case in-spec size
 
-- **Workload fixture.** Real repo as it currently exists (one project, the dogfood). `REPO_ROOT` is the actual `c:\workspace\spec_coding\`.
-- **Method.** Same 20-call loop as PERF-01.
-- **Measurement window.** Same.
-- **Pass criterion.** p95 < 0.050 s. This is a sanity floor — if a single-project tree-walk takes ≥50 ms there is a structural problem (e.g., re-resolving paths per node, accidental N² scan).
-- **Spec refs.** NFR-1 (derived).
+**Source.** Derived. The 50 KB threshold (FR-12) is the boundary where the response is still "in-spec" without a warning; the assembler must remain responsive at that size.
+**Workload.** Build a regen request that produces a ~49–50 KB prompt (full pipeline regen, all six stages selected, all modules, all follow-ups inlined; project fixture sized to hit ~50 KB on disk). 30 iterations after one warm-up.
+**Budget.** p95 < 300 ms; p50 < 150 ms (floor).
+**Measurement window.** Warm.
+**Failure semantics.** p95 ≥ 300 ms → `warning`. Logged; never halts. The latency budget is a UX target, not an NFR.
+**Note.** This case is paired with PERF-6/7 which test the size-policy *contract* (those are blockers). PERF-5 is about latency at the worst in-spec size.
 
-### PERF-03 — `/api/file` p95 < 100 ms for 500 KB markdown (HARD GATE — NFR-2)
+---
 
-- **Workload fixture.** `tests/fixtures/perf_file/single_500kb.md` exposed under the EXPOSED_TREE globs (place it at `specs/development/perf/user_input/single_500kb.md` so the extension whitelist + tree membership accept it).
-- **Method.**
-  ```
-  for i in $(seq 1 21); do
-    curl -s -o /dev/null -w "%{time_total}\n" "http://127.0.0.1:8765/api/file?path=specs/development/perf/user_input/single_500kb.md"
-  done | tail -n 20 | sort -n | sed -n '19p'
-  ```
-- **Measurement window.** Per-call wall clock; size-check, decode, and JSON serialization included.
-- **Pass criterion.** p95 < 0.100 s. All 20 are HTTP 200 with `Content-Length` ≥ 500 KB worth of payload.
-- **Spec refs.** NFR-2.
+### PERF-6 — 50 KB warning threshold check (warn-don't-truncate)
 
-### PERF-04 — `/api/file` at 2 MB boundary (OBSERVE-ONLY)
+**Source.** FR-12.
+**Workload.** Four prompt sizes built deterministically by tuning the fixture's revised_prompt + follow-ups bulk:
+- 49 KB → expect `200`, `warning is None`, `bytes == len(prompt.encode())`.
+- 51 KB → expect `200`, `warning is not None and warning != ""`, full prompt body returned (no truncation: `len(response.json()["prompt"].encode("utf-8")) == bytes`).
+- 100 KB → expect `200`, `warning is not None`, full body returned.
+- 999 KB → expect `200`, `warning is not None`, full body returned.
+**Budget.** Functional contract; no latency assertion (latency is PERF-5's job).
+**Measurement window.** N/A — single shot per size.
+**Failure semantics.** Any of the above expectations not met → `blocker`. Truncation in particular (`len(response.json()["prompt"].encode()) != bytes` for any 50 KB < size ≤ 1 MB case) is the most severe FR-12 violation: warn-don't-truncate is the load-bearing reliability guarantee per NFR-11.
+**Test pseudocode.**
 
-- **Workload fixture.** `tests/fixtures/perf_file/single_2mb.md` (2 MB minus 1 byte) at `specs/development/perf/user_input/single_2mb.md`.
-- **Method.** Same 20-call loop as PERF-03.
-- **Measurement window.** Per-call wall clock.
-- **Pass criterion.** **Observe-only** — no hard budget per spec. Record the p50 / p95 / p99 in the release notes for trend tracking. The check FAILS only if responses time out (>5 s) or return a non-200. NFR-2's 100 ms budget is explicitly scoped to <500 KB; 2 MB is the documented cap, not a budgeted size.
-- **Spec refs.** NFR-2 (scope), NFR-15 (cap), FR-5.5.
+```python
+import httpx
+client = httpx.Client(base_url="http://127.0.0.1:8765",
+                     headers={"Origin": "http://127.0.0.1:8765"})
+for target_kb, expect_warning in [(49, False), (51, True), (100, True), (999, True)]:
+    body = build_request_targeting_kb(target_kb)
+    r = client.post("/api/regen-prompt", json=body)
+    assert r.status_code == 200
+    j = r.json()
+    if expect_warning:
+        assert j["warning"], f"PERF-6: missing warning at {target_kb} KB"
+    else:
+        assert j["warning"] is None, f"PERF-6: spurious warning at {target_kb} KB"
+    assert len(j["prompt"].encode("utf-8")) == j["bytes"], "PERF-6: bytes/prompt mismatch — truncation?"
+```
 
-### PERF-05 — Cold initial app load p95 < 2 s (HARD GATE — NFR-3)
+---
 
-- **Workload fixture.** Real repo (one project, dogfood). Server freshly started. Browser cache cleared between runs (DevTools Application → Clear storage → Clear site data).
-- **Method.** In Chrome DevTools Performance panel:
-  1. Stop the FastAPI process and any frontend dev server.
-  2. Run `make run` (single-process build).
-  3. Clear browser storage for `http://localhost:8765/`.
-  4. Open DevTools → Network → check "Disable cache".
-  5. Navigate to `http://localhost:8765/`.
-  6. Record `loadEventEnd` minus `navigationStart` from `performance.timing` (or the equivalent in `PerformanceNavigationTiming`).
-  7. Repeat 5 times with cache cleared each iteration.
-- **Measurement window.** Navigation start → `loadEventEnd` for the document, INCLUDING the first `/api/tree` and first `/api/file` (FR-15 redirect lands on `final_specs/spec.md`). Use `performance.getEntriesByType('resource')` to confirm both API calls completed before `loadEventEnd`.
-- **Pass criterion.** p95 of the 5 measurements < 2.000 s. All 5 successfully render the spec.md content above the fold (visible heading "# Spec — spec_driven").
-- **Spec refs.** NFR-3.
+### PERF-7 — 1 MB hard ceiling
 
-### PERF-06 — 10 concurrent `/api/tree` requests, p95 < 500 ms, no errors (REGRESSION GUARD)
+**Source.** FR-12.
+**Workload.** Two prompt sizes:
+- 1.0 MB (1 048 576 bytes after assembly) → expect `200` with `warning is not None` (still in the warn-don't-truncate band; the ceiling is *exclusive* of 1 MB per FR-12 language `body > 1 MB → 413`).
+- 1.1 MB → expect `413` with `response.json()["detail"] == {"kind": "too_large", "bytes": <count>}`.
+**Budget.** Functional contract; no latency assertion.
+**Measurement window.** N/A.
+**Failure semantics.** Either expectation not met → `blocker`. A `200` at 1.1 MB violates the hard ceiling; a `413` at 1.0 MB violates warn-don't-truncate.
+**Note.** The boundary at exactly 1 MB matches AC-13's "above 1 MB returns 413" — interpreted as strict `>`. If the implementation chooses `>=`, that's a spec drift to flag, not a test bug.
 
-- **Workload fixture.** Same as PERF-01 (locked-scale tree).
-- **Method.**
-  ```
-  python -c "
-  import concurrent.futures, requests, time
-  url = 'http://127.0.0.1:8765/api/tree'
-  def hit(): t=time.perf_counter(); r=requests.get(url); return r.status_code, time.perf_counter()-t
-  for batch in range(2):
-      with concurrent.futures.ThreadPoolExecutor(10) as ex:
-          results = list(ex.map(lambda _: hit(), range(10)))
-      print(batch, sorted(t for _,t in results), set(s for s,_ in results))
-  "
-  ```
-- **Measurement window.** All 10 requests issued in parallel; per-request wall clock recorded.
-- **Pass criterion.** All 10 status codes are 200. p95 (9th of 10 sorted timings) < 0.500 s in BOTH batches. Loosened from PERF-01's 200 ms because the workload is 10× concurrent on a single Uvicorn worker.
-- **Spec refs.** NFR-1, NFR-12.
+---
 
-### PERF-07 — 100-line `events.jsonl` Shiki main-thread freeze (OBSERVE-ONLY)
+### PERF-8 — Sidebar tree render perf < 100 ms after `/api/tree` resolves
 
-- **Workload fixture.** `tests/fixtures/perf_jsonl/events_100.jsonl` placed at `specs/development/perf/validation/events_100.jsonl` (this lives outside the strict five-stage scope normally, but for this fixture we leverage `validation/` since `.jsonl` is in the extension whitelist).
-- **Method.** In Chrome DevTools Performance panel: start recording, navigate to `/file/specs/development/perf/validation/events_100.jsonl`, stop recording when the page is fully painted. Inspect the `Main` track for the Shiki rendering tasks.
-- **Measurement window.** From navigation event to last paint. Sum the durations of any single task labeled "Compile Code" / "Run Microtasks" attributable to Shiki highlighter calls.
-- **Pass criterion.** **Observe-only** — record the longest single task (TBT contributor) and total Shiki time. The check FAILS only if any single main-thread task exceeds 1000 ms (a hard freeze ceiling) or if the page reports JS errors. FR-32 mandates per-line Shiki blocks; this probe quantifies the cost so OQ-8 can be revisited.
-- **Spec refs.** FR-32, OQ-8.
+**Source.** Derived. UX floor: once the tree JSON is on the wire, paint the sidebar quickly so the user sees navigation structure before any file content.
+**Workload.** Locked-scale fixture (same as PERF-1). Playwright drives `page.goto("/")` with the tree fixture loaded. Measure: from the `/api/tree` response's `responseEnd` (via `PerformanceResourceTiming`) to the moment `[data-testid="sidebar"] [data-testid="tree-leaf"]:nth-of-type(50)` is painted. 20 iterations; warm cache (browser cache primed).
+**Budget.** p95 < 100 ms; p50 < 50 ms (floor).
+**Measurement window.** Warm. Cold tree-paint is folded into PERF-3's cold-load budget.
+**Failure semantics.** p95 ≥ 100 ms → `warning`. Logged; never halts. Paint times in CI are observe-only per the standard severity table.
+**Test pseudocode.**
 
-### PERF-08 — `POST /api/regen-prompt` for full 6-stage prompt < 200 ms
+```python
+async def test_perf_8_sidebar_first_paint(page):
+    samples_ms: list[float] = []
+    for _ in range(20):
+        await page.goto("http://127.0.0.1:8765/")
+        timing = await page.evaluate("""() => {
+            const r = performance.getEntriesByType('resource')
+                .find(e => e.name.endsWith('/api/tree'));
+            const tree_end = r.responseEnd;
+            const leaf = document.querySelector('[data-testid="sidebar"] [data-testid="tree-leaf"]:nth-of-type(50)');
+            return leaf ? performance.now() - tree_end : null;
+        }""")
+        assert timing is not None
+        samples_ms.append(timing)
+    assert percentile(samples_ms, 95) < 100  # warning on miss, not blocker
+```
 
-- **Workload fixture.** Real repo (dogfood project). All six stages selected, every module checked.
-- **Method.**
-  ```
-  payload='{
-    "project_type":"development","project_name":"spec_driven",
-    "stages":["intake","interview","research","spec","validation_strategy","execution"],
-    "modules":{
-      "intake":["raw_prompt.md","revised_prompt.md"],
-      "interview":["qa.md"],
-      "research":["dossier.md"],
-      "spec":["spec.md"],
-      "validation_strategy":["strategy.md","acceptance_criteria.md","bdd_scenarios.md","system_tests.md","unit_tests.md","security.md","performance.md","accessibility.md"],
-      "execution":[]
-    },
-    "autonomous":true
-  }'
-  for i in $(seq 1 21); do
-    curl -s -o /dev/null -w "%{time_total}\n" -X POST "http://127.0.0.1:8765/api/regen-prompt" \
-      -H "Content-Type: application/json" -d "$payload"
-  done | tail -n 20 | sort -n | sed -n '19p'
-  ```
-- **Measurement window.** Per-call wall clock; includes filesystem reads of revised_prompt.md and every follow_up + assembly + JSON encode.
-- **Pass criterion.** p95 < 0.200 s. All 20 are HTTP 200 with a `prompt` body whose first line is `# EXECUTION MODE: AUTONOMOUS`.
-- **Spec refs.** FR-14c, NFR-1 (derived budget — same class as `/api/tree`).
+---
 
-## Cadence and reporting
+## Audit-event protocol
 
-- **Cadence.** Manually before each release. Recorded in `projects/spec_driven/README.md` performance table or a release-notes section.
-- **Failure policy.** Hard gates (PERF-01, PERF-03, PERF-05) failing == release blocker. Regression guard (PERF-06) failing == triage; ship-with-known-regression requires a documented note. Observe-only (PERF-04, PERF-07) failures only block on the explicit failure conditions stated above.
-- **Environment notes.** Record CPU, RAM, OS, Python version, Node version, and Chrome version alongside each measurement. Without that context, comparing across releases is meaningless.
+Per `agent_refs/validation/general.md` core principle 5, every PERF-NN run emits:
+
+- `validation.started` with `level: "performance", case_ids: [...]` at the start of the level.
+- `validation.pass` per case on success, with `observed_p50_ms`, `observed_p95_ms`, `budget_ms`, `samples_n`.
+- `validation.issue.raised` per failing case, with the same fields plus `severity: "blocker" | "warning"` and `case_id`.
+- `validation.requires_manual_walkthrough` is NOT used at this level — performance budgets are machine-measurable.
+
+A level run with no audit events is treated as if it did not run.
+
+## Out of scope (deferred)
+
+- **Concurrency / load testing.** Single-user localhost only per spec scope; multi-client throughput is out of scope for v1.
+- **Cross-origin / WAN latency.** The server binds to 127.0.0.1 (FR-38, NFR-7); LAN performance is undefined.
+- **Browser-side bundle-size budgets.** Vite produces the bundle; bundle-size budgets are a build-time concern, not a runtime perf check. Out of scope for stage-5 strategy; can be added as a build-time linter.
+- **Power-loss / I/O fault perf.** NFR-10 covers atomicity, not latency under fault. Skipped here.
+
+## Promotion preservation
+
+This run's `validation/promoted.md` is empty (clean-state regen, no pinned items). If pins land in a future run, every pin must appear verbatim in this regenerated artifact per the promotion-preservation contract.

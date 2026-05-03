@@ -1,169 +1,93 @@
+"""
+Group 5 — promotions (FR-13, FR-14, FR-37).
+"""
+
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-from fastapi.testclient import TestClient
 
-from libs.api import build_app
-from libs.file_reader import FileReadError
 from libs.promotions import (
-    Pin,
-    PROMOTED_FILENAME,
-    add_promotion,
-    list_promotions,
+    ALLOWED_STAGE_FOLDERS,
+    PromotionError,
+    Promotions,
     parse_promoted_text,
-    remove_promotion,
-    render_promoted_text,
 )
 
 
-def test_parse_empty_text_returns_empty_tuple() -> None:
-    assert parse_promoted_text("") == ()
-    assert parse_promoted_text("\n\n   \n") == ()
+@pytest.fixture()
+def temp_project(repo_root, tmp_path, monkeypatch):
+    fake_root = tmp_path / "fake_repo"
+    (fake_root / ".claude").mkdir(parents=True)
+    (fake_root / "CLAUDE.md").write_text("ok", encoding="utf-8")
+    (fake_root / "specs" / "development" / "test_proj" / "interview").mkdir(parents=True)
+    return fake_root
 
 
-def test_parse_round_trip() -> None:
-    rendered = render_promoted_text(
-        "interview",
-        (
-            Pin(
-                pin_id="pin-001",
-                location="interview/qa.md / Round 1 / functional-scope",
-                body="**Q:** Section 1?\n- A: Fixed three globs.",
-            ),
-            Pin(
-                pin_id="pin-002",
-                location="interview/qa.md / Round 2 / success-criteria",
-                body="**Q:** e2e framework?\n- A: Playwright.",
-            ),
-        ),
-    )
-    pins = parse_promoted_text(rendered)
-    assert len(pins) == 2
-    assert pins[0].pin_id == "pin-001"
-    assert "Section 1" in pins[0].body
-    assert pins[1].pin_id == "pin-002"
-    assert "Playwright" in pins[1].body
+def test_post_appends_block(temp_project):
+    p = Promotions(repo_root=temp_project)
+    p.post("development", "test_proj", "interview", "qa.md", "qa-r1-c1-q1", "First Q body.")
+    f = temp_project / "specs" / "development" / "test_proj" / "interview" / "promoted.md"
+    text = f.read_text(encoding="utf-8")
+    assert "qa-r1-c1-q1" in text
+    assert "First Q body." in text
 
 
-def test_add_first_pin_creates_file(fake_repo: Path) -> None:
-    stage_path = "specs/development/spec_driven/interview"
-    pin = add_promotion(
-        stage_path=stage_path,
-        location="interview/qa.md / Round 1 / scope",
-        body="**Q:** test?\n- A: ok.",
-        repo_root=fake_repo,
-    )
-    assert pin.pin_id == "pin-001"
-    target = fake_repo / "specs" / "development" / "spec_driven" / "interview" / PROMOTED_FILENAME
-    assert target.is_file()
-    text = target.read_text(encoding="utf-8")
-    assert "pin-001" in text
-    assert "test?" in text
+def test_post_idempotent_same_id_replaces(temp_project):
+    p = Promotions(repo_root=temp_project)
+    p.post("development", "test_proj", "interview", "qa.md", "id-1", "v1")
+    p.post("development", "test_proj", "interview", "qa.md", "id-1", "v2")
+    f = temp_project / "specs" / "development" / "test_proj" / "interview" / "promoted.md"
+    text = f.read_text(encoding="utf-8")
+    items = parse_promoted_text(text)
+    assert len([it for it in items if it.item_id == "id-1"]) == 1
+    assert "v2" in text
+    assert "v1" not in text
 
 
-def test_add_two_pins_assigns_sequential_ids(fake_repo: Path) -> None:
-    stage_path = "specs/development/spec_driven/interview"
-    p1 = add_promotion(stage_path, "loc-a", "body-a", fake_repo)
-    p2 = add_promotion(stage_path, "loc-b", "body-b", fake_repo)
-    assert p1.pin_id == "pin-001"
-    assert p2.pin_id == "pin-002"
-    listing = list_promotions(stage_path, fake_repo)
-    assert [p.pin_id for p in listing.pins] == ["pin-001", "pin-002"]
+def test_delete_removes_only_matching(temp_project):
+    p = Promotions(repo_root=temp_project)
+    p.post("development", "test_proj", "interview", "qa.md", "A", "Pin A body.")
+    p.post("development", "test_proj", "interview", "qa.md", "B", "Pin B body.")
+    p.post("development", "test_proj", "interview", "qa.md", "C", "Pin C body.")
+    p.delete("development", "test_proj", "interview", "B")
+    text = (temp_project / "specs" / "development" / "test_proj" / "interview" / "promoted.md").read_text(encoding="utf-8")
+    assert "Pin A body." in text
+    assert "Pin B body." not in text
+    assert "Pin C body." in text
 
 
-def test_remove_pin(fake_repo: Path) -> None:
-    stage_path = "specs/development/spec_driven/interview"
-    add_promotion(stage_path, "loc-a", "body-a", fake_repo)
-    p2 = add_promotion(stage_path, "loc-b", "body-b", fake_repo)
-    remove_promotion(stage_path, p2.pin_id, fake_repo)
-    listing = list_promotions(stage_path, fake_repo)
-    assert [p.pin_id for p in listing.pins] == ["pin-001"]
+def test_delete_unknown_id_raises(temp_project):
+    p = Promotions(repo_root=temp_project)
+    p.post("development", "test_proj", "interview", "qa.md", "A", "x")
+    with pytest.raises(PromotionError):
+        p.delete("development", "test_proj", "interview", "ghost")
 
 
-def test_remove_last_pin_deletes_file(fake_repo: Path) -> None:
-    stage_path = "specs/development/spec_driven/interview"
-    p = add_promotion(stage_path, "loc-a", "body-a", fake_repo)
-    target = fake_repo / "specs" / "development" / "spec_driven" / "interview" / PROMOTED_FILENAME
-    assert target.is_file()
-    remove_promotion(stage_path, p.pin_id, fake_repo)
-    assert not target.exists()
+def test_post_delete_roundtrip(temp_project):
+    p = Promotions(repo_root=temp_project)
+    p.post("development", "test_proj", "interview", "qa.md", "id-x", "Pin body.")
+    p.delete("development", "test_proj", "interview", "id-x")
+    text = (temp_project / "specs" / "development" / "test_proj" / "interview" / "promoted.md").read_text(encoding="utf-8")
+    assert "Pin body." not in text
+    assert parse_promoted_text(text) == []
 
 
-def test_remove_unknown_pin_raises(fake_repo: Path) -> None:
-    stage_path = "specs/development/spec_driven/interview"
-    add_promotion(stage_path, "loc-a", "body-a", fake_repo)
-    with pytest.raises(FileReadError) as ei:
-        remove_promotion(stage_path, "pin-999", fake_repo)
-    assert ei.value.status == 404
-    assert ei.value.kind == "pin_not_found"
+@pytest.mark.parametrize("bad", ["user_input", "projects", "../etc", "INTERVIEW", ""])
+def test_stage_folder_allowlist(temp_project, bad):
+    p = Promotions(repo_root=temp_project)
+    with pytest.raises(PromotionError):
+        p.post("development", "test_proj", bad, "qa.md", "id", "body")
 
 
-def test_invalid_stage_path_rejected(fake_repo: Path) -> None:
-    with pytest.raises(FileReadError) as ei:
-        add_promotion("specs/development/spec_driven/notes", "loc", "body", fake_repo)
-    assert ei.value.status in (400, 404)
-    assert ei.value.kind in ("not_a_stage_dir", "stage_dir_missing")
+def test_stage_folder_allowlist_constants():
+    assert ALLOWED_STAGE_FOLDERS == frozenset({"interview", "findings", "final_specs", "validation"})
 
 
-def test_path_traversal_rejected(fake_repo: Path) -> None:
-    with pytest.raises(FileReadError) as ei:
-        add_promotion("../../../etc/passwd", "loc", "body", fake_repo)
-    assert ei.value.status == 400
-
-
-def test_empty_body_rejected(fake_repo: Path) -> None:
-    with pytest.raises(FileReadError) as ei:
-        add_promotion("specs/development/spec_driven/interview", "loc", "   ", fake_repo)
-    assert ei.value.status == 400
-
-
-def test_list_returns_empty_when_no_file(fake_repo: Path) -> None:
-    payload = list_promotions("specs/development/spec_driven/interview", fake_repo)
-    assert payload.pins == ()
-
-
-def test_api_promotions_round_trip(fake_repo: Path) -> None:
-    client = TestClient(build_app(fake_repo))
-    stage_path = "specs/development/spec_driven/interview"
-
-    resp = client.get("/api/promotions", params={"stage_path": stage_path})
-    assert resp.status_code == 200
-    assert resp.json()["pins"] == []
-
-    resp = client.post(
-        "/api/promote",
-        json={
-            "stage_path": stage_path,
-            "location": "interview/qa.md / Round 1 / scope",
-            "body": "**Q:** test?\n- A: ok.",
-        },
-    )
-    assert resp.status_code == 200
-    pin1 = resp.json()
-    assert pin1["pin_id"] == "pin-001"
-
-    resp = client.get("/api/promotions", params={"stage_path": stage_path})
-    assert resp.status_code == 200
-    assert len(resp.json()["pins"]) == 1
-
-    resp = client.request(
-        "DELETE",
-        "/api/promote",
-        json={"stage_path": stage_path, "pin_id": "pin-001"},
-    )
-    assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
-
-    resp = client.get("/api/promotions", params={"stage_path": stage_path})
-    assert resp.json()["pins"] == []
-
-
-def test_api_post_promote_path_traversal_returns_400(fake_repo: Path) -> None:
-    client = TestClient(build_app(fake_repo))
-    resp = client.post(
-        "/api/promote",
-        json={"stage_path": "../../etc", "location": "x", "body": "y"},
-    )
-    assert resp.status_code == 400
+def test_parse_promoted_text_round_trips(temp_project):
+    p = Promotions(repo_root=temp_project)
+    p.post("development", "test_proj", "interview", "qa.md", "alpha", "Body A with ## inside.")
+    p.post("development", "test_proj", "interview", "qa.md", "beta", "Body B\n\nMultiline.")
+    text = (temp_project / "specs" / "development" / "test_proj" / "interview" / "promoted.md").read_text(encoding="utf-8")
+    items = parse_promoted_text(text)
+    ids = {it.item_id for it in items}
+    assert ids == {"alpha", "beta"}
