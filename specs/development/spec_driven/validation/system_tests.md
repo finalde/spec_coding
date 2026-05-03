@@ -381,6 +381,27 @@ Then repeat each request with `Origin: http://127.0.0.1:8765` and `Host: 127.0.0
 
 ---
 
+## SYS-16b — Dev-server proxy mode: Build-prompt works under `make run-frontend` (FR-9 follow-up 006)
+
+**Setup.** Boot two processes: `python backend/main.py` (backend at `127.0.0.1:8765`) AND `npm run dev` in `frontend/` (Vite at `127.0.0.1:5173`). Wait for both health endpoints to respond. Drive the SPA at `http://localhost:5173/` (the dev-server URL — different host literal AND different port from the backend bind).
+
+**Action.**
+1. Direct-to-backend control case (proves the gate is load-bearing): `httpx.post("http://127.0.0.1:8765/api/regen-prompt", headers={"Origin": "http://localhost:5173", "Host": "localhost:5173"}, json=<small valid request>)`. Capture status.
+2. Proxied case (the user's actual flow): drive Playwright at the dev-server URL, click Build-prompt for any stage, observe the `POST /api/regen-prompt` response status in the DevTools network panel (or via `page.waitForResponse`).
+3. Repeat (2) for `PUT /api/file` (editor save), `POST /api/promote`, `DELETE /api/promote` — every state-changing endpoint should round-trip cleanly through the proxy.
+
+**Assertions.**
+- (1) returns `403` — the backend gate does NOT admit the raw `localhost:5173` shape. This proves the proxy rewrite is the thing making the dev-server flow work, not a backend allow-list widening.
+- (2) returns `200` for Build-prompt. The Vite proxy rewrites `Origin` to `http://127.0.0.1:8765` and `Host` to `127.0.0.1:8765` (`changeOrigin: true` plus the `configure(proxyReq.setHeader('origin', target))` hook in `vite.config.ts`).
+- (3) returns `200` for every other state-changing endpoint — feature parity with `make run-prod`.
+- A request hand-crafted to bypass Vite (`fetch('http://127.0.0.1:8765/api/regen-prompt', ...)` from the dev-server page) is browser-blocked by SOP / 403'd by the backend, confirming the proxy is the only sanctioned cross-origin path.
+
+**Spec refs:** FR-9 (dev-server proxy contract), FR-39 (`make run-frontend` is a supported dev target), AC-11 (the proxied-shape branch).
+**Components exercised:** Vite proxy, Origin/Host middleware, every state-changing route in dev-server mode.
+**Implementation note:** the Playwright project for this scenario boots BOTH `webServer` entries (backend + Vite). Adding the second project to `playwright.config.ts` is itself a follow-on implementation task; until then, this SYS scenario is the contract that future stage-5 strategies must respect (per `agent_refs/validation/development.md` move 11).
+
+---
+
 ## SYS-17 — `make run` binds to 127.0.0.1 only (NOT 0.0.0.0; LAN IP unreachable)
 
 **Setup.** No prior server. Fresh shell. The host has at least one non-loopback IPv4 address `LAN_IP` (capture via `socket.gethostbyname(socket.gethostname())` or platform-equivalent).

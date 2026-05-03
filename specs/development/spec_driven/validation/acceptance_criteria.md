@@ -145,6 +145,10 @@ When a client issues the same `PUT` with `Origin: http://localhost:8765` and `Ho
 Then the response status is `200` (per FR-9 follow-up 004 — `localhost` and `127.0.0.1` both resolve to the same loopback socket and the allow-list admits both at the bound port)
 When a client issues the same `PUT` with `Origin: http://example.com:8765` and `Host: example.com:8765`
 Then the response status is `403` (only the two loopback literals are admitted; any other host literal at the bound port still fails)
+When a client issues the same `PUT` directly to the backend (bypassing any proxy) with `Origin: http://localhost:5173` and `Host: localhost:5173` (the raw browser shape produced by `make run-frontend`)
+Then the response status is `403` (the backend's loopback allow-list is bound-port-only; the rewrite that makes `make run-frontend` work happens at the Vite proxy, NOT at the backend gate — per FR-9 follow-up 006 dev-server proxy contract)
+When the same `PUT` is issued through `make run-frontend` (browser at `http://localhost:5173/`, fetch hits `/api/file` → Vite proxy rewrites `Origin` to `http://127.0.0.1:8765` and `Host` to `127.0.0.1:8765` → backend receives the rewritten shape)
+Then the response status is `200` (the proxy rewrite makes Build-prompt and every other mutation work uniformly under `make run-frontend` and `make run-prod`)
 And the same protection applies to `POST /api/regen-prompt`, `POST /api/promote`, and `DELETE /api/promote`
 
 ---

@@ -2,7 +2,7 @@
 
 Stage 1 output. Auto-regenerated from `raw_prompt.md` + every `user_input/follow_ups/*.md` in numerical order.
 
-Last regenerated: 2026-05-03 (follow-up 005 — light-theme rule relocated from `CLAUDE.md → Project rules` to `.claude/agent_refs/project/development.md`; this project's styles.css application of the rule is unchanged. Prior follow-up 004 — Origin/Host middleware loopback alias + light-theme application — and follow-up 003 / autonomous full-pipeline regen preserved).
+Last regenerated: 2026-05-03 (follow-up 006 — Vite dev-server proxy now rewrites `Origin` to `http://127.0.0.1:8765` so `make run-frontend` Build-prompt works uniformly with `make run-prod`; FR-9 amended with the dev-server proxy contract; AC-11 / SYS-16b extended to test both pre-rewrite-403 and proxied-200 shapes; class-of-failure captured as new principles in `agent_refs/validation/{general.md → P7-out-of-scope-carve-outs, P7.5-post-mutation-shape; development.md → moves 11-12}`. Prior follow-up 005 — light-theme rule relocation — and 004 — loopback-alias backend fix — preserved).
 
 ---
 
@@ -70,7 +70,7 @@ This contract is documented under a `## Regeneration prompts & autonomous mode` 
 - **Manager agents do not do the work themselves.** All three managers (interview, research, validation) build dynamic teams and coordinate them. Sub-agents are general-purpose, ephemeral, and captured in the audit log — not permanent agent files.
 - **Three permanent agents only.** No prompt-revision agent, no spec-compilation agent, no executor agent — Claude does those directly.
 - **Streaming validation during execution.** Validation runs per work unit, results stream back as the build progresses, revisions loop until pass.
-- **Localhost-only security model still holds.** Editing endpoints inherit the same sandbox (exposed tree, allowed extensions, symlink refusal, size cap) as the reader. The Origin/Host CSRF gate admits the `localhost` ↔ `127.0.0.1` loopback alias at the bound port (per follow-up 004); foreign domains and other hosts continue to return 403.
+- **Localhost-only security model still holds.** Editing endpoints inherit the same sandbox (exposed tree, allowed extensions, symlink refusal, size cap) as the reader. The Origin/Host CSRF gate admits the `localhost` ↔ `127.0.0.1` loopback alias at the bound port (per follow-up 004); foreign domains and other hosts continue to return 403. Under `make run-frontend` (Vite at 5173), the dev-server proxy rewrites `Origin` to `http://127.0.0.1:8765` and `Host` to `127.0.0.1:8765` so the backend gate sees a same-shape request in both runtime modes (per follow-up 006); the backend allow-list is NOT widened to the dev-server port.
 - **Light-theme app chrome.** Per the cross-cutting project-output rule in `.claude/agent_refs/project/development.md` (relocated from `CLAUDE.md → Project rules` by follow-up 005), the spec_driven webapp's body / sidebar / toolbar / panels / buttons stay light regardless of the OS `prefers-color-scheme`. Intentional dark surfaces on syntax-highlighted `<pre>` blocks and the assembled-prompt panel are preserved.
 
 ## Out of scope (still / clarified)

@@ -1,5 +1,5 @@
 /// <reference types="vitest" />
-import { defineConfig } from "vite";
+import { defineConfig, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 
@@ -14,11 +14,23 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: 5173,
-    proxy: {
-      "/api": "http://127.0.0.1:8765",
-      "/file": "http://127.0.0.1:8765",
-      "/project": "http://127.0.0.1:8765",
-    },
+    proxy: (() => {
+      const target = "http://127.0.0.1:8765";
+      const rewriteOrigin: ProxyOptions = {
+        target,
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.setHeader("origin", target);
+          });
+        },
+      };
+      return {
+        "/api": rewriteOrigin,
+        "/file": rewriteOrigin,
+        "/project": rewriteOrigin,
+      };
+    })(),
   },
   test: {
     environment: "jsdom",

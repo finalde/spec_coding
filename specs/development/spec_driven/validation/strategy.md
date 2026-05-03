@@ -55,6 +55,7 @@ Inputs: `final_specs/spec.md` (44 FRs / 16 NFRs / 29 ACs / 7 OQs in this regen).
 - SYS-13: QaView Error Boundary fallback against a deliberately-malformed real-shape qa.md.
 - SYS-14..15: safe_resolve probes (traversal / junctions / ADS / Windows-reserved / 8.3-short — all return single 404).
 - SYS-16: Origin/Host validation including DNS-rebind probe.
+- SYS-16b (follow-up 006): Dev-server proxy mode under `make run-frontend` — Build-prompt and every state-changing route round-trip through the Vite proxy with the `Origin`-rewrite hook; backend gate stays strict. Closes the multi-mode-runtime-feature-parity gap surfaced in run `spec_driven-006`. Per `agent_refs/validation/development.md` move 11, every runtime mode the spec advertises (here: `make run-prod` AND `make run-frontend`) MUST have its own e2e profile; missing-profile is `blocker`-severity at stage 5. Wiring the second Playwright `webServer` / project entry is a follow-on implementation task tracked separately.
 - SYS-17: `make run` binds 127.0.0.1 only (LAN unreachable + `netstat`/`ss` socket inspection + `0.0.0.0` source-grep).
 - SYS-18..27: verb whitelist, extension/size caps, sidebar structural sanity, project-parent master Regenerate Copy + Wrap, broken-link span (NOT `<a>`), editor save-error banner persistence, pin survival in regen prompts, autonomous header verbatim, promotion roundtrip, NFR-3 latency budget.
 - A `validation.requires_manual_walkthrough` trigger covers visual-only checks.

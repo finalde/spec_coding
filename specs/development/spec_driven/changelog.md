@@ -1,5 +1,28 @@
 # Changelog — spec_driven
 
+## Follow-up 006 — 2026-05-03 14:27:03
+Source: user_input/follow_ups/006-20260503-142703-vite-proxy-origin-rewrite-and-validation-gap-prevention.md
+Summary: User reported that "Build prompt" still 403'd when the SPA was driven via `make run-frontend` (Vite at 5173 → backend at 8765). Two coupled fixes: (a) Option A — Vite proxy rewrites the `Origin` header to `http://127.0.0.1:8765` so the backend's strict-Origin gate (untouched) sees a same-shape request in both runtime modes; (b) capture the class of failure as institutional memory in `agent_refs/validation/{general.md, development.md}` so the next development task can't drift the same way.
+
+Cross-cutting (NOT under this project's `specs/`):
+- `.claude/agent_refs/validation/general.md` — added Principle 6.5 ("Question every 'v1 out of scope' carve-out at stage 5") and Principle 7 ("Validate the post-mutation shape when a request crosses a header-mutating layer"). Renumbered the prior pinned-items principle to 9. Both new principles cite run `spec_driven-006` as the lesson source.
+- `.claude/agent_refs/validation/development.md` — added Required moves 11 (multi-mode runtime feature parity → one e2e profile per spec-advertised runtime mode) and 12 (cross-origin / cross-port middleware tests must cover both pre-rewrite and post-rewrite shapes). Severity table extended with three new rows: missing-e2e-profile-for-advertised-mode → `blocker`; Origin/Host middleware with no pre-proxy-rewrite unit test → `blocker`; spec carve-out conflicts with another spec section → `critical` at stage 5.
+
+Auto-updated:
+- `specs/development/spec_driven/user_input/revised_prompt.md` — Last-regenerated line bumped; "Cross-cutting constraints" loopback bullet extended with the dev-server proxy contract (Vite rewrites `Origin`/`Host`; backend allow-list is NOT widened to 5173).
+- `specs/development/spec_driven/final_specs/spec.md` — FR-9 amended: appended one sentence describing the Vite proxy contract under `make run-frontend` (rewrite `Origin` to `http://127.0.0.1:8765`, `changeOrigin: true` rewrites `Host`, backend gate stays bound-port-only). Removed the implicit "out of scope for v1" carve-out for the cross-port case.
+- `specs/development/spec_driven/validation/acceptance_criteria.md` — AC-11 extended with two new branches: (i) raw browser shape `Origin: http://localhost:5173` direct-to-backend → 403 (proves the proxy rewrite is load-bearing); (ii) the proxied flow under `make run-frontend` → 200.
+- `specs/development/spec_driven/validation/system_tests.md` — new SYS-16b scenario: boots both `python backend/main.py` and `npm run dev`, drives Build-prompt + every state-changing route through the dev-server, asserts proxied 200 + raw-shape 403. Notes that the second Playwright `webServer`/project entry is a follow-on implementation task; the SYS text is the contract that future stage-5 strategies must respect.
+- `specs/development/spec_driven/validation/strategy.md` — added SYS-16b under the system-tests bullet list with a forward reference to `agent_refs/validation/development.md` move 11 (`blocker`-severity stage-5 requirement).
+- `projects/spec_driven/frontend/vite.config.ts` — proxy entries for `/api`, `/file`, `/project` upgraded from bare target strings to a shared `ProxyOptions` object with `changeOrigin: true` and a `configure(proxy => proxy.on('proxyReq', proxyReq => proxyReq.setHeader('origin', target)))` hook. Imported `ProxyOptions` from `vite` for type inference; `tsc -b` clean (exit 0).
+
+No conflicts found in:
+- `specs/development/spec_driven/interview/qa.md` (no Q/A about Origin / Vite proxy / dev-server contract).
+- `specs/development/spec_driven/findings/` (no angle covers reverse-proxy header-rewrite patterns; conclusions about CSRF / sandbox unchanged).
+- `specs/development/spec_driven/validation/{bdd_scenarios,unit_tests,security,performance,accessibility}.md` (the existing Origin/Host scenarios still hold; the new dev-server-proxy case is captured at the AC + SYS layer where it belongs; no a11y/performance/security shape changes).
+- `projects/spec_driven/backend/libs/api_security.py` and `projects/spec_driven/backend/tests/unit/test_api.py` (the backend gate is unchanged by Option A — the rewrite happens at the Vite proxy, not at the backend allow-list. Existing tests still pass).
+- `projects/spec_driven/frontend/playwright.config.ts` (the second `webServer`/project entry that boots `make run-frontend` is acknowledged as a follow-on implementation task; current playwright still boots single-process mode, but the SYS-16b contract is now in the spec for the next stage-5 run to enforce).
+
 ## Follow-up 005 — 2026-05-03 14:09:17
 Source: user_input/follow_ups/005-20260503-140917-light-theme-rule-into-shared-refs.md
 Summary: Relocate the light-theme rule (added to `CLAUDE.md → Project rules` by follow-up 004) into a new project-scoped refs hierarchy `.claude/agent_refs/project/{general.md, <task_type>.md}` that mirrors the existing per-stage `agent_refs/` layout. The rule's substance and carve-outs are unchanged; only its storage location moves. Future cross-cutting project-output rules accumulate in the new hierarchy instead of inflating `CLAUDE.md`.
