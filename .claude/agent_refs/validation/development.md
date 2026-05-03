@@ -1,165 +1,119 @@
-# Validation playbook — `task_type=development`
+# Validation refs — `task_type=development`
 
-This file is **required pre-reading** for stage 5 (strategy) and stage 6 (runtime validation) whenever the task being validated has `task_type=development`. It captures lessons learned across past development-task validations that the spec alone doesn't carry.
+Institutional memory loaded when the current task has `task_type=development`. Layered on top of `general.md` in this same folder; per-task-type rules win when they conflict.
 
-The parent (Claude in the `agent_team` skill) MUST consult this file when defining validation levels for a development task. The parent records the absolute paths it read in the `pre_reading_consulted` array on the run's stage-start event in `events.jsonl`.
-
-## When to apply
-
-- `task_type == "development"` AND the task produces code under `projects/{name}/`.
-- Especially when the project has separate frontend and backend components communicating via HTTP/JSON.
+Especially load-bearing for projects with separate frontend + backend communicating via HTTP/JSON.
 
 ## Required validation moves
 
 Numbered. Each is a level the parent MUST include unless the spec explicitly excludes it.
 
-### 1. End-to-end browser dogfood is mandatory, not optional
+### 1. End-to-end browser dogfood per runtime mode
 
-For any project with a UI component, a Playwright (or equivalent) end-to-end suite MUST exercise the **golden path** through a real browser against a real backend. Unit tests that verify each side in isolation are NOT sufficient — they miss the contract between the two layers.
+For any UI project, a Playwright (or equivalent) e2e suite MUST exercise the **golden path** through a real browser against a real backend. Unit tests on each side in isolation miss the contract between them.
 
-**Reason this exists:** in run `spec_driven-20260502-clean`, the backend tree-walker emitted `task_type.projects` and `project.stages` while the frontend Sidebar walked via `node.children`. Both sides had passing unit tests. The Projects section rendered empty in the live UI. Only a real browser session against `/api/tree` + a real Sidebar render would have caught the drift.
+**Multi-mode parity.** When the spec defines more than one runtime mode (e.g., `make run-prod` single-process AND `make run-frontend` Vite + backend), the e2e suite MUST exercise the same user-facing feature in EVERY advertised mode. **Mode count = e2e profile count.** A feature that "works in mode A but errors in mode B" where both are documented is a `blocker`, not a carve-out.
 
-**Concrete requirement:** every `system_tests.md` for a development project MUST include at least one scenario that:
-- Boots the actual `make run-prod` (or equivalent single-process mode).
-- Uses Playwright (or selenium/cypress) to drive a real Chromium browser at the production URL.
-- Asserts on the **rendered DOM**, not on raw API responses.
-- Includes a "structural sanity" assertion: the sidebar contains at least the expected number of leaf rows under each top-level section.
+Concrete:
+- `playwright.config.ts` ships one `webServer` / project entry per advertised mode.
+- Every `system_tests.md` includes at least one scenario that boots the actual mode, drives a real browser, asserts on rendered DOM (not raw API), and includes a "structural sanity" assertion (sidebar leaves, etc.).
+- Stage-5 strategy that lists fewer e2e profiles than the spec lists runtime modes = `blocker` finding.
 
-### 2. API contract tests must walk the data the way the consumer walks it
+*(Originated from run `spec_driven-20260502-clean` (backend-frontend field drift) and run `spec_driven-006` (`make run-frontend` Build-prompt 403).)*
 
-Pure-shape unit tests (e.g., "the response has key X") are insufficient. The parent MUST add at least one test per non-trivial API endpoint that **walks the response the same way the frontend code does**, descending into the same field names at the same depths.
+### 2. API contract tests walk the data the way the consumer walks it
 
-**Concrete requirement:** for every endpoint that returns a recursive / hierarchical structure, write one test named `test_<endpoint>_consumer_walk` that:
-- Uses the exact field names the frontend reads (e.g., `node.children`, not `node.projects`).
-- Recursively descends until it hits leaves.
-- Fails loudly if any non-leaf is missing the descent field.
+Pure-shape unit tests ("response has key X") are insufficient. For every endpoint that returns a recursive / hierarchical structure, write a `test_<endpoint>_consumer_walk` that uses the exact field names the frontend reads (e.g., `node.children`, not `node.projects`), recursively descends, and fails loudly if any non-leaf is missing the descent field.
 
-This single test would have caught the children/projects/stages drift.
+*(Originated from run `spec_driven-20260502-clean` — backend emitted `task_type.projects` / `project.stages` while frontend walked `node.children`; both sides had passing unit tests; sidebar rendered empty.)*
 
 ### 3. Frontend ↔ backend field-name mirroring
 
-When the spec is generated by parallel agents (one for backend, one for frontend), the validation strategy MUST include a **shared types check**: identify every JSON shape that crosses the API boundary and verify both agents committed to the same field names.
+When the spec is generated by parallel agents (one for backend, one for frontend), the validation strategy MUST include a **shared types check**: identify every JSON shape that crosses the API boundary, list each with a "consumer field" column showing the exact path the frontend uses. If backend tests reference `result["projects"]` but frontend reads `node.children`, that's a `blocker`, not a warning.
 
-**Concrete requirement:** the strategy.md produced at stage 5 must list every API response shape with a "consumer field" column showing the exact path the frontend uses. If the backend test file references `result["projects"]` but the frontend reads `node.children`, that's a blocker, not a warning.
+### 4. Boot smoke test before declaring stage-6 unit done
 
-### 4. Stage 6 work units MUST include a "boot smoke test" before declaring done
+Every backend service: process starts cleanly, first health-style endpoint returns 200, at least one structurally-meaningful endpoint returns the expected shape under real workload (not just a fixture). Add `boot_smoke` as a runtime `work_unit_kind`. Severity: failure is `critical`, halts immediately, no revision rounds.
 
-For every backend service, the runtime validator must verify:
-- The process starts cleanly (no exceptions during startup).
-- The first health-style endpoint returns 200.
-- At least one structurally-meaningful endpoint returns the expected shape under a real workload (not just a fixture).
+### 5. Cross-platform fixtures from day one
 
-**Concrete requirement:** add `boot_smoke` as a runtime work_unit_kind. Its severity policy: failure is `critical`, halts immediately, no revision rounds. (Spec-level acceptance tests don't catch boot-time regressions because they run against fixtures.)
+Development on this monorepo runs on Windows + Git Bash. Mark POSIX-only tests `STATUS=SKIPPED-WINDOWS-...` rather than failing silently:
 
-### 5. Cross-platform fixtures matter from day one
-
-Development projects on this monorepo run on Windows + Git Bash. The parent MUST mark these as `STATUS=SKIPPED-WINDOWS-...` rather than failing silently:
 - POSIX symlinks (require Developer Mode).
 - `os.replace` atomicity across power-loss (best-effort on NTFS).
 - Case-sensitivity tests (NTFS is case-insensitive by default).
 - `os.fork` / signal-based subprocess control.
 
-**Concrete requirement:** every test that depends on POSIX-only behavior must use `pytest.mark.skipif(sys.platform == "win32", reason="...")` or the equivalent Playwright `test.skip()`. Skipping is fine; silent passing is not.
+Use `pytest.mark.skipif(sys.platform == "win32", reason="...")` or the Playwright `test.skip()` equivalent. Skipping is fine; silent passing is not.
 
-### 6. Don't trust uv
+### 6. Don't trust `uv`
 
-`uv run` has crashed with `EXCEPTION_ACCESS_VIOLATION` on this Windows host (run `spec_driven-20260502-clean` had to fall back to pip). Validation Makefile-targets MUST be implementable in plain `pip` + the repo's existing `.venv` so the build path doesn't depend on a fragile package manager.
+`uv run` has crashed with `EXCEPTION_ACCESS_VIOLATION` on this Windows host (run `spec_driven-20260502-clean` fell back to pip). Validation Makefile targets MUST be implementable in plain `pip` + the repo's existing `.venv`. Flag any `uv` invocation without a pip fallback as `blocker`.
 
-**Concrete requirement:** when reviewing a project's Makefile, flag any `uv` invocation without a pip fallback as a `blocker`-severity issue.
+### 7. Manual UI walkthrough before sign-off
 
-### 7. Stage 6 must include a "manual UI walkthrough" pass before sign-off
+Even with Playwright, a final manual pass catches what e2e scripts miss: visual hierarchy, color contrast, motion, focus visibility under real input. Runtime validation for development tasks MUST emit `validation.requires_manual_walkthrough` after all automated levels pass; the skill surfaces it before declaring done.
 
-Even with Playwright, a final manual-walkthrough acceptance pass catches what e2e scripts miss: visual hierarchy, color contrast, motion, focus visibility under real input. The runtime validation pass for development tasks MUST emit a `validation.requires_manual_walkthrough` event after all automated levels pass — and the skill must surface this to the user before declaring the unit done.
+### 8. Every UI render mode has its own e2e scenario
 
-### 8. Every UI render mode must have its own e2e scenario
+A frontend dispatching to multiple render components by file extension or path pattern needs **one e2e scenario per component**, opening a real file that triggers that mode. Testing only the default markdown mode misses every specialized component (QaView, JsonlView, CodeView, image fallback, error states, …).
 
-A frontend dispatching to multiple render components by file extension or path pattern (markdown view, structured Q/A view, JSONL view, code view, image-placeholder fallback, error states) needs **one e2e scenario per component**, opening a real file that triggers that mode. Testing only the "default" markdown mode misses every specialized component.
+Each scenario asserts on **what the user actually sees** — `main` is non-empty AND a render-mode-specific selector resolves AND `consoleErrors` is empty. URL-only checks are insufficient. Fall-back paths (per FR-41-style "fall back to plain markdown") MUST be reachable with a real triggering file, not a synthetic fixture.
 
-**Reason this exists:** in run `spec_driven-20260502-clean`, `qa.md` deep-links produced a **blank page** because (a) the QaView's answer regex `/^-\s*A:\s*(.*)$/` didn't match the autonomous-mode form `- A *(judgment call …)*:`, so 0 pairs parsed → ParseError, and (b) the `QaViewSafe` wrapper's `try { return <QaView .../> } catch` did NOT catch errors thrown during React rendering — that requires an Error Boundary or hoisting the parse out of the child component. Both bugs were latent because the e2e tests only opened `dossier.md` and `spec.md` (markdown view); the QaView code path was never exercised by automated tests.
+Severity: missing-e2e-for-render-mode = `blocker`; latent render error on deep-link (blank page) = `critical` (bookmark URLs silently broken).
 
-**Concrete requirements:**
-1. The e2e suite MUST include one "deep-link to {file}" scenario per file pattern that triggers a non-default render mode. For spec_driven: `interview/qa.md` (QaView), any `.jsonl` (JsonlView), any `.yaml`/`.yml`/`.json` (CodeView).
-2. Each such scenario asserts on **what the user actually sees** — `main` is non-empty AND a render-mode-specific selector resolves AND `consoleErrors` is empty. A scenario that only checks URL is insufficient.
-3. When a render component falls back on parse failure (per FR-41-style "fall back to plain markdown"), the e2e MUST verify the fallback is reachable with a real file that triggers it, not just a synthetic test fixture.
+*(Originated from run `spec_driven-20260502-clean` — `qa.md` deep-links produced a blank page because the QaView regex didn't match the autonomous-mode form, and the parent's `try { return <QaView /> } catch` did NOT catch errors thrown during React rendering.)*
 
-**Severity:** missing-e2e-for-a-render-mode is `blocker`. Latent-render-error-on-deep-link is `critical` (blank page from a bookmark URL is silently broken UX).
+### 9. React error boundaries wrap every "parse-then-render" component
 
-### 9. React error boundaries must wrap every "parse-then-render" component
+A `try { return <Foo /> } catch` around a child that parses-on-render does NOT catch what its author thought — render is deferred and errors throw inside reconciliation, after the parent's `try` has returned.
 
-A common pattern — "parse the input in the component's render function, render the parsed structure" — is **not protected by a parent's `try/catch`** because rendering is deferred. The errors throw inside React's reconciliation phase, after the parent's `try` has already returned.
+Any component performing a non-trivial parse during render MUST be wrapped in either:
+- A real React Error Boundary class with `componentDidCatch` / `getDerivedStateFromError`, OR
+- A "parse-then-render" hoist where the parse happens in the parent function body (before returning the element) so a normal `try/catch` works.
 
-**Concrete requirement:** any component that performs a non-trivial parse during render (regex over user-authored text, JSON parsing, structural transformation) MUST be wrapped in either:
-- A real React Error Boundary class component with `componentDidCatch` / `getDerivedStateFromError`, OR
-- A "parse-then-render" hoist pattern where the parse happens in the parent function body (before returning the element) so a normal `try/catch` works.
+Seeing the `try { return <Foo /> } catch` shape in a frontend review = `blocker`.
 
-If a level-specialist sees the `try { return <Foo .../> } catch` shape in a frontend review, that's a `blocker` issue — the catch doesn't catch what its author thought it caught. Ask for an Error Boundary or a parse hoist.
+### 10. Parser regexes for user-authored text tested against real upstream output
 
-### 10. Parser regexes for user-authored text must accept what the upstream stage actually produces
+When stage N produces text consumed by stage N+1's parser, the parser's regex MUST be tested against **real output from stage N**, not a hand-written fixture. A regex written off the spec's example-text drifts the moment the upstream stage adds new variants.
 
-When stage N produces text consumed by stage N+1's parser, the parser's regex must be tested against **real output from stage N**, not a hand-written fixture. A parser written off the spec's example-text drifts from reality the moment the upstream stage adds new variants.
+Concrete: every parser whose input is generated by another pipeline stage MUST have a unit test that runs against an **actual on-disk artifact** from a representative recent run. Fixture inventory grows with each new generation pattern (e.g., autonomous mode's judgment-call annotation).
 
-**Reason this exists:** the QaView answer regex was written off the original interview spec's `- A: text` format; the autonomous-mode interview manager produces `- A *(judgment call — chose X because Y)*: text` to record judgment calls. The regex was never re-tested against autonomous-run output.
+*(Originated from run `spec_driven-20260502-clean` — QaView regex was written off the original interview spec's `- A: text` format; autonomous-mode output uses `- A *(judgment call ...)*: text`.)*
 
-**Concrete requirement:** every parser whose input is generated by another pipeline stage MUST have a unit test that runs against an **actual on-disk artifact** from a representative recent run, not just hand-written fixtures. Add fixture rotation: when a new generation pattern appears (e.g., autonomous mode's judgment-call annotation), the unit test fixture inventory grows by one.
+### 11. Header-mutating-layer middleware tests cover both shapes
 
-### 11. Multi-mode runtime feature parity is mandatory
+When the backend has `Origin` / `Host` / CSRF middleware AND the dev workflow has any reverse-proxy / dev-server proxy, the unit-test set MUST include:
 
-When the spec defines more than one runtime mode for the same user-facing feature — production single-process mode (e.g., `make run-prod` serving a built bundle) AND dev-server proxy mode (e.g., `make run-frontend` running Vite at one port, proxying to the backend at another) — the e2e suite MUST exercise the same user-facing feature in EVERY advertised mode. Mode count = e2e profile count. A feature that "works in mode A but 403s / errors in mode B" where both modes are documented in the spec is a `blocker`, not a carve-out.
-
-**Reason this exists:** in run `spec_driven` follow-up 006, the user reported that `Build prompt` returned `403 forbidden` when the SPA was driven via `make run-frontend` (Vite at 5173 → backend at 8765). The unit tests for the loopback-alias fix (follow-up 004) all passed. The Playwright suite all passed. But both gates ran exclusively against `make run-prod` (single-process at 8765, same-origin), which was already the working mode. The broken mode — `make run-frontend`, which the user actually used and which the spec advertised in FR-39 — was structurally outside every gate.
-
-**Concrete requirement:** the validation strategy at stage 5 MUST list every runtime mode the spec advertises (typically: a "Run" / "Dev workflow" / "Makefile targets" section). For each mode, the strategy MUST name the e2e profile that exercises it. `playwright.config.ts` (or equivalent) ships one `webServer` / project entry per mode:
-
-- `run-prod` profile — boots `python backend/main.py` (or `make run-prod`), `baseURL = http://127.0.0.1:<backend-port>`.
-- `run-frontend` profile — boots BOTH the backend AND the Vite dev server (e.g., via two `webServer` entries), `baseURL = http://127.0.0.1:<vite-port>`. Exercises the same user-facing scenarios as the `run-prod` profile, with the proxy in the path.
-
-If a stage-5 strategy lists only one e2e profile while the spec lists multiple runtime modes, that's a `blocker` finding for stage-5 sign-off. The fix is to add the missing profile to the strategy, not to ship the gap and hope.
-
-### 12. Cross-origin / cross-port middleware tests must include the proxied-request shape
-
-When the backend has `Origin` / `Host` / CSRF middleware AND the dev workflow has any reverse-proxy / dev-server proxy in the request path, the unit-test set MUST include at least one case that simulates the **proxied request shape** — the headers the browser actually sends (`Origin: http://localhost:<dev-port>`, `Host: localhost:<dev-port>` from the browser's perspective) — even if the production-strict gate ultimately sees the post-rewrite shape. Without this case, the test set diverges from the dev-flow reality, and a missing proxy `configure` / `changeOrigin` hook goes undetected.
-
-The pair-coverage rule from `general.md` Principle 7 applies here in concrete form for development:
-
-| Test case shape | What it catches |
+| Shape | What it catches |
 |---|---|
-| Pre-rewrite shape (browser-Origin = dev-server origin) sent directly to backend | Backend gate refusal of the raw browser shape — proves the proxy rewrite is load-bearing. |
-| Post-rewrite shape (Origin = backend bound origin) sent directly to backend | Backend gate acceptance under the same shape the running prod mode produces. |
-| Real proxied shape (request goes through Vite at dev port, lands on backend) | The proxy `configure` hook actually wires up — full end-to-end. |
+| Pre-rewrite (browser-Origin = dev-server origin) sent direct to backend → 403 | Backend gate refuses raw browser shape — proves the proxy rewrite is load-bearing. |
+| Post-rewrite (Origin = backend bound origin) sent direct to backend → 200 | Gate accepts under the same shape `make run-prod` produces. |
+| Real proxied (request through Vite at dev port → backend) | Proxy `configure` hook actually wires up — full e2e. |
 
-**Reason this exists:** run `spec_driven` follow-up 006. The middleware unit tests included only the post-rewrite shape (`Origin: http://localhost:8765` + `Host: localhost:8765`). The pre-rewrite shape was never sent, and there was no e2e proxied case either — so the entire `make run-frontend` mode was a blind spot.
+Without the pre-rewrite case, dropping the proxy hook silently re-introduces the bug (no test fails). Severity: missing pre-rewrite case when a header-mutating proxy exists = `blocker`.
 
-**Concrete requirement:** for any project with both a strict-Origin backend gate AND a dev-server proxy, `tests/unit/test_api.py` (or equivalent) MUST include a `test_<endpoint>_dev_server_pre_rewrite_returns_403` case AND the existing post-rewrite success case. The pre-rewrite-403 case documents *why* the proxy rewrite exists; without it, a future refactor that drops the rewrite hook silently re-introduces the bug with no test failing.
+*(Originated from run `spec_driven-006` — middleware tests covered only the post-rewrite shape, so the missing Vite Origin-rewrite hook went undetected.)*
 
 ## Severity escalations specific to development
 
-| Issue class | Severity in development | Reason |
+| Issue class | Severity | Reason |
 |---|---|---|
-| API shape drift between front and back | `critical` | Class of bug that broke the spec_driven Projects sidebar; fail fast. |
+| API shape drift between front and back | `critical` | Class of bug that broke the `spec_driven` Projects sidebar; fail fast. |
 | Boot-time exception in any service | `critical` | Process never serves; no acceptance test can pass. |
+| Latent render error on deep-link (blank page) | `critical` | Bookmark URLs silently broken. |
+| Spec carve-out conflicts with another spec section | `critical` (stage 5) | Run `spec_driven-006`: FR-9's dev-flow carve-out vs FR-39's `make run-frontend` listing. |
 | Playwright e2e for golden path missing | `blocker` | Without it, frontend↔backend contract drift goes undetected. |
-| Test depends on POSIX behavior with no skip marker | `blocker` | Will fail spuriously on this Windows host on every CI run. |
-| `uv run` invocation in Makefile with no pip fallback | `blocker` | Build path fragile on the canonical dev host. |
+| Runtime mode in spec without an e2e profile exercising it | `blocker` | Run `spec_driven-006`: feature 403'd in a documented dev mode. |
 | Missing e2e scenario for any non-default render mode | `blocker` | Class of latent blank-page bug (QaView in run `spec_driven-20260502-clean`). |
-| Latent render error on deep-link (blank page) | `critical` | Bookmark URLs silently broken; user has no signal. |
-| `try { return <Component /> } catch` around a parse-on-render child | `blocker` | The catch doesn't catch what the author thinks it does (run `spec_driven-20260502-clean`). Need Error Boundary or hoist. |
-| Parser regex untested against real upstream-stage output | `blocker` | Regex drifts from reality (the QaView answer-regex bug). |
+| `try { return <Component /> } catch` around a parse-on-render child | `blocker` | The catch doesn't catch what the author thinks. |
+| Parser regex untested against real upstream-stage output | `blocker` | Regex drifts from reality. |
+| Origin/Host middleware with no pre-proxy-rewrite unit test (when a proxy exists) | `blocker` | Run `spec_driven-006`: dropping the proxy hook re-introduces the cross-port 403. |
+| Test depends on POSIX behavior with no skip marker | `blocker` | Will fail spuriously on the canonical Windows host. |
+| `uv run` invocation in Makefile with no pip fallback | `blocker` | Fragile build path on the canonical dev host. |
 | Recommendation-level a11y gap | `warning` | Standard. |
-| Runtime mode in spec, no e2e profile exercising it | `blocker` | Class of bug that broke `make run-frontend` Build-prompt in run `spec_driven-006`; a feature that 403s in a documented dev mode is a UX regression, not a carve-out. |
-| Origin/Host middleware with no pre-proxy-rewrite unit test when a reverse proxy exists | `blocker` | Without it, dropping the proxy's `configure` hook silently re-introduces the cross-port-403 (run `spec_driven-006`). |
-| Spec carve-out conflicts with another spec section | `critical` (stage 5) | When FR-N "out of scope" disowns a behavior FR-M advertises, that's contract drift, not scoping (run `spec_driven-006` — FR-9's dev-flow carve-out vs FR-39's `make run-frontend` listing). |
-
-## What this file is NOT
-
-- It is NOT a substitute for the spec — the spec is still authoritative for FRs/NFRs/ACs.
-- It is NOT a list of test cases — those go in `validation/{level}.md`.
-- It is NOT a record of past run failures — that lives in `.audit/adhoc_agents/{date}/{task_id}/events.jsonl`.
-
-It IS a "what stage 5 has learned from prior development-task runs that the next spec author won't think to write down". Update it whenever a future run surfaces a class of bug that the existing strategy missed.
 
 ## Update protocol
 
-When a development-task validation run discovers a new failure class:
-1. Add a numbered "Required validation moves" entry describing the move that would have caught it.
-2. If the failure recurs across runs, escalate it to a severity table entry.
-3. Cite the run id in the "Reason this exists" inline note so future readers can audit the lesson.
+Surgical: one new move / severity row per lesson. Cite the run id. Wholesale rewrites are anti-patterns — grow institutional memory.

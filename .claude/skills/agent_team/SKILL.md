@@ -5,106 +5,83 @@ description: Spec-driven workflow orchestrator. Walks a task through six stages 
 
 # agent_team — spec-driven workflow
 
-You are driving a task through six stages. Persist every artifact so the user can resume at any stage. Each stage where coordination is needed (2, 3, 5, 6) follows a **parent-direct** model: you (Claude in this skill) read the relevant playbook + agent_refs, decide team composition, spawn workers in parallel via `Agent` (not via a manager subagent), and synthesize the outputs yourself. There is no separate manager subagent layer — that indirection has been removed for parallelism, lower latency, and lower communication cost.
+You drive a task through six stages, persisting every artifact so the user can resume at any stage. Coordinated stages (2, 3, 5, 6) use the parent-direct model — see `CLAUDE.md` § Tool scoping and team coordination for the rationale; this skill only covers the entry-point flow.
 
 ## Inputs (collect from the user if not given)
 
-- `task_type` — required, enum: `development | ai_video`. ASK if unclear; never invent.
+- `task_type` — required, enum: `development | ai_video`. Ask if unclear; never invent.
 - `task_name` — slug, no spaces (e.g., `spec_driven`).
-- `raw_prompt` — what they want to build.
+- `raw_prompt` — what the user wants to build.
 
-Build `task_id = "{task_name}-{YYYYMMDD-HHmmss}"` once at the start of the run. Use it for `.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/` paths.
-
-## The four playbooks
-
-Stages 2, 3, 5, and 6 are governed by procedural playbooks that live alongside this skill:
-
-- `.claude/skills/agent_team/playbooks/interview.md` — stage 2 procedure.
-- `.claude/skills/agent_team/playbooks/research.md` — stage 3 procedure.
-- `.claude/skills/agent_team/playbooks/validation.md` — stages 5 and 6 procedure (strategy + runtime modes).
-
-For each of those stages you MUST read the corresponding playbook AND the matching files under `.claude/agent_refs/{interview|research|validation}/` (always `general.md`; also `<task_type>.md` if it exists for this run's `task_type`) BEFORE you act on that stage. Record the absolute paths you read in a `pre_reading_consulted` array on the stage's first event in `events.jsonl`.
-
-## Follow-up prompts (between full runs)
-
-This skill is the entry point for full pipeline runs. **Follow-up chat prompts that arrive between runs are handled by the ambient triage rule in `CLAUDE.md` § "Follow-up prompt handling"** — they persist to `user_input/follow_ups/`, auto-regenerate `revised_prompt.md`, surgically auto-update conflicting downstream artifacts, and log to `specs/{type}/{name}/changelog.md`. Those follow-up edits do NOT invoke this skill.
-
-When this skill IS invoked to resume or rerun a stage, read `changelog.md` first (if present) so you know which sections were already auto-patched from follow-ups; that context informs whether the user wants a true full regen or just to fill remaining gaps.
+Build `task_id = "{task_name}-{YYYYMMDD-HHmmss}"` once at run start (see `CLAUDE.md` § Task ID convention).
 
 ## Resuming
 
-If `specs/{task_type}/{task_name}/` already exists, ASK which stage to start from. Default to the first stage with missing artifacts. Each stage's "missing" check:
+If `specs/{task_type}/{task_name}/` already exists, ASK which stage to start from. Default to the first stage with missing artifacts:
 
 | Stage | Missing if … |
-|-------|--------------|
+|---|---|
 | 1 Intake | `user_input/revised_prompt.md` doesn't exist |
 | 2 Interview | `interview/qa.md` doesn't exist |
 | 3 Research | `findings/dossier.md` doesn't exist |
 | 4 Spec | `final_specs/spec.md` doesn't exist |
 | 5 Validation strategy | `validation/strategy.md` doesn't exist |
-| 6 Execution | project output folder is empty or validation hasn't run end-to-end |
+| 6 Execution | output project folder is empty or validation hasn't run end-to-end |
 
-## Stage 1 — Intake (parent-direct, no workers)
+When resuming, read `changelog.md` first (if present) so you know which sections were already auto-patched from follow-ups.
 
-1. Save the raw prompt verbatim to `specs/{task_type}/{task_name}/user_input/raw_prompt.md`.
-2. Revise it: clean grammar, expand abbreviations, surface implicit constraints, structure into goal / context / desired outcome. **Do not invent requirements.** Save to `specs/{task_type}/{task_name}/user_input/revised_prompt.md`.
-3. Show the revised prompt to the user. If they object, edit and re-save.
+## Follow-up prompts (between full runs)
 
-## Stage 2 — Interview (parent-direct + optional category workers)
+Follow-up chat that arrives between runs is handled by `CLAUDE.md` § Follow-up prompt handling — those edits do NOT invoke this skill.
 
-1. Read `.claude/skills/agent_team/playbooks/interview.md`.
-2. Read `.claude/agent_refs/interview/general.md` and `.claude/agent_refs/interview/{task_type}.md` (the second only if it exists). Record `pre_reading_consulted`.
-3. Run the procedure in the playbook: identify probe categories, generate the multi-choice question pool (shape A direct, or shape B with parallel category workers via `Agent`), call `AskUserQuestion` (max 4 questions per call, batched by category), iterate up to 3 rounds, write `specs/{task_type}/{task_name}/interview/qa.md`.
-4. Show `qa.md` to the user and confirm before moving on.
+## Stage flow
 
-## Stage 3 — Research (parent-direct + parallel angle workers)
+For each coordinated stage, read its playbook AND its agent_refs files (per `CLAUDE.md` § Stage playbooks and reference docs — pre-reading contract). Record `pre_reading_consulted` on the stage's first `events.jsonl` event.
 
-1. Read `.claude/skills/agent_team/playbooks/research.md`.
-2. Read `.claude/agent_refs/research/general.md` and `.claude/agent_refs/research/{task_type}.md` (the second only if it exists). Record `pre_reading_consulted`.
-3. Run the procedure: identify 3–6 angles, spawn one researcher worker per angle in parallel via `Agent` (single message, multiple tool calls), wait for all to finish, synthesize `specs/{task_type}/{task_name}/findings/dossier.md`. Each researcher writes its own `angle-{slug}.md` and audit pair under `.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/spawns/researcher-NN-{slug}/`.
+### Stage 1 — Intake
 
-## Stage 4 — Spec compilation (parent-direct, no workers)
+1. Save raw prompt to `specs/{task_type}/{task_name}/user_input/raw_prompt.md`.
+2. Revise it: clean grammar, expand abbreviations, surface implicit constraints, structure into goal / context / desired outcome. **Don't invent requirements.** Save to `user_input/revised_prompt.md`.
+3. Show to the user; iterate if they object.
 
-Read revised_prompt + qa.md + dossier.md. Produce `specs/{task_type}/{task_name}/final_specs/spec.md`. The spec must include:
+### Stage 2 — Interview
 
-- **Goal** — one paragraph
-- **Out of scope** — explicit list
+Run `.claude/skills/agent_team/playbooks/interview.md`. Output: `interview/qa.md`. Confirm with the user before moving on.
+
+### Stage 3 — Research
+
+Run `.claude/skills/agent_team/playbooks/research.md`. Output: `findings/dossier.md` + per-angle files.
+
+### Stage 4 — Spec compilation
+
+Read `revised_prompt.md` + `qa.md` + `dossier.md`. Produce `final_specs/spec.md` with these sections:
+
+- **Goal** (one paragraph)
+- **Out of scope** (explicit list)
 - **User roles & primary flows**
-- **Functional requirements** — numbered, each testable
-- **Non-functional requirements** — performance, security, deployment as relevant
-- **Acceptance criteria summary** (full criteria belong in validation)
-- **Open questions** that survived (if any)
+- **Functional requirements** (numbered, each testable)
+- **Non-functional requirements** (performance, security, deployment as relevant)
+- **Acceptance criteria summary** (full criteria belong in stage 5)
+- **Open questions** (if any survived)
 
-Show the spec to the user. They can request changes; iterate until they approve.
+Show to the user; iterate until they approve.
 
-## Stage 5 — Validation strategy (parent-direct + parallel level workers)
+### Stage 5 — Validation strategy
 
-1. Read `.claude/skills/agent_team/playbooks/validation.md` (strategy mode section).
-2. Read `.claude/agent_refs/validation/general.md` and `.claude/agent_refs/validation/{task_type}.md` (the second only if it exists). Record `pre_reading_consulted`.
-3. Run the procedure: decide which validation levels apply, spawn one level-specialist worker per level in parallel via `Agent` (single message, multiple tool calls), wait for all to finish, synthesize `specs/{task_type}/{task_name}/validation/strategy.md`. Each worker writes its own per-level file (`acceptance_criteria.md`, `bdd_scenarios.md`, `unit_tests.md`, `system_tests.md`, optionally `performance.md`/`security.md`/`accessibility.md`) and audit pair under `.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/spawns/level-specialist-NN-{level}/`.
+Run `.claude/skills/agent_team/playbooks/validation.md` (strategy mode). Output: `validation/strategy.md` + per-level files.
 
-## Stage 6 — Execution + streaming validation (parent-direct + parallel validators per unit)
+### Stage 6 — Execution + streaming validation
 
-1. Decompose the spec into work units. A work unit is a coherent piece of buildable output — e.g., "backend API for X", "frontend component Y", "DB schema migration Z". Aim for 3–8 units.
+1. Decompose the spec into 3–8 work units (e.g., `backend_api`, `frontend_component`, `db_schema`).
 2. Initialize `.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/events.jsonl`.
-3. For each work unit (sequentially unless explicitly independent):
-   - Append `exec.unit.started` event.
-   - Implement the unit (write code/files into `projects/{task_name}/` or `ai_videos/{task_name}/`).
+3. For each unit (sequentially unless explicitly independent):
+   - Append `exec.unit.started`.
+   - Implement into `projects/{task_name}/` or `ai_videos/{task_name}/`.
    - Append `exec.unit.completed`.
-   - Run runtime validation per `.claude/skills/agent_team/playbooks/validation.md` (runtime mode section): decide which levels apply to this `work_unit_kind`, append `validation.started` (with `pre_reading_consulted`), spawn one validator worker per applicable level in parallel via `Agent`, collect results, emit `validation.pass` or `validation.issue.raised` per result, apply severity policy.
-   - If issues: revise the unit, append `exec.revision.applied`, re-validate. Cap at 3 revision rounds.
-   - If still failing after 3 rounds: append `pipeline.halted`, stop, escalate to the user.
-4. After all units pass, run a whole-project validation pass (still per the validation playbook's runtime mode) for end-to-end checks. For development tasks, emit `validation.requires_manual_walkthrough` after all automated levels pass and surface it to the user before declaring done.
-
-For `task_type=development`, code lands in `projects/{task_name}/`. For `task_type=ai_video`, artifacts land in `ai_videos/{task_name}/`.
-
-## Halt conditions
-
-Emit `pipeline.halted` and escalate if:
-- Validation can't pass after 3 revisions on any work unit.
-- Same issue repeats across two iterations.
-- Wall-clock exceeds 30 minutes on a single unit.
+   - Run `playbooks/validation.md` (runtime mode) against the unit.
+   - On issues: revise, append `exec.revision.applied`, re-validate. Cap per `CLAUDE.md` § Iteration bounds.
+4. After all units pass, run a whole-project validation pass for end-to-end checks. For development tasks, emit `validation.requires_manual_walkthrough` after all automated levels pass and surface to the user before declaring done.
 
 ## Audit and post-mortem
 
-Each worker spawn writes runtime logs under `.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/spawns/{worker_id}/{prompt.md, output.md}`. After the run completes (whether successful or halted), summarize for the user: which stages ran, how many workers were spawned per stage, durations, surprises, recommendations.
+After the run (successful or halted), summarize for the user: stages run, workers spawned per stage, durations, surprises, recommendations.

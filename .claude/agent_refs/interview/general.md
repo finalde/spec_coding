@@ -1,29 +1,29 @@
-# Interview playbook — task-type-agnostic
+# Interview refs — task-type-agnostic
 
-Required pre-reading for stage 2 (interview) on every run. The parent (Claude in the `agent_team` skill) reads this before identifying probe categories. See also `.claude/skills/agent_team/playbooks/interview.md` for the procedural runbook.
+Institutional memory for stage 2. The pre-reading contract, parent-direct model, and audit paths are in `CLAUDE.md` (§ Stage playbooks and reference docs) — this file is just the principles. Per-task-type files in this same folder override these defaults when they conflict.
 
-## Core principles
+## Principles
 
 ### 1. Probe categories come from the use case, not from a template
 
-The first job is to read the revised prompt and identify which categories actually matter for *this* task. A canned 7-category template (functional / discovery / ux / deployment / success / security / …) is a starting point, not a destination. Adding or merging categories per task is normal; padding with categories that don't apply is wasteful.
+Read the revised prompt and identify which categories actually matter for *this* task. A canned 7-category template is a starting point, not a destination. Adding/merging per task is normal; padding with categories that don't apply is wasteful.
 
 ### 2. Multi-choice questions only
 
-Free-text is the implicit "Other" option, not a default. If the parent finds itself wanting to ask a free-text question, that's a signal the probe category isn't crisp enough — refine the category until the question fits a 2-5 option multi-choice.
+Free-text is the implicit "Other" option, not a default. Wanting a free-text question = the category isn't crisp enough. Refine until it fits 2–5 multi-choice options.
 
 ### 3. Recommended option flagged explicitly
 
-Every multi-choice question MUST surface the recommended answer with `(Recommended)` after the option text. The user shouldn't have to reverse-engineer the recommendation from option ordering.
+Every question MUST surface the recommended answer with `(Recommended)` after the option text. Don't make the user reverse-engineer the recommendation from option ordering.
 
-### 4. Round 1 is mostly clear; rounds 2-3 close the open threads
+### 4. Round 1 mostly clear; rounds 2–3 close open threads
 
-Cap interview iterations at 3 rounds total. If a category is still unclear after round 3, that's a signal to escalate to the user, not to keep probing.
+Cap at 3 rounds total. Still unclear after 3 → escalate to the user, don't keep probing.
 
 ### 5. AUTONOMOUS mode: judgment call + inline annotation
 
-Under `# EXECUTION MODE: AUTONOMOUS`, the parent pre-answers each probe with a best-judgment default annotated as `*(judgment call — chose X because Y)*`. Each annotation cites the FR slice it binds into so a future interactive run can revise without re-deriving the rationale.
+Pre-answer with best judgment, annotated `*(judgment call — chose X because Y)*`. Each annotation cites the FR slice it binds into so an interactive run can revise without re-deriving.
 
 ## Update protocol
 
-Add lessons learned from past interview runs as numbered principles. Cite the run id where the lesson surfaced.
+Surgical: one new principle per lesson. Cite the run id where the lesson surfaced.
