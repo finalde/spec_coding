@@ -1,34 +1,41 @@
 import "@testing-library/jest-dom/vitest";
+import { afterEach, beforeEach } from "vitest";
+import { cleanup } from "@testing-library/react";
 
-// Some jsdom configurations leave localStorage on an opaque origin (DOMException
-// SecurityError). Provide a working in-memory localStorage shim so component
-// tests can persist values without depending on jsdom's URL config.
-if (typeof window !== "undefined") {
-  let needsShim = false;
-  try {
-    // Calling getItem before reads tells us whether the storage is opaque.
-    window.localStorage.getItem("__probe__");
-  } catch {
-    needsShim = true;
+afterEach(() => {
+  cleanup();
+});
+
+beforeEach(() => {
+  if (typeof window !== "undefined" && window.localStorage) {
+    if (typeof window.localStorage.clear === "function") {
+      window.localStorage.clear();
+    } else {
+      // Fallback for environments where clear is missing (Node 25 web-storage)
+      try {
+        for (let i = window.localStorage.length - 1; i >= 0; i -= 1) {
+          const key = window.localStorage.key(i);
+          if (key) window.localStorage.removeItem(key);
+        }
+      } catch {
+        // ignored
+      }
+    }
   }
-  if (needsShim || typeof window.localStorage?.setItem !== "function") {
-    const store = new Map<string, string>();
-    Object.defineProperty(window, "localStorage", {
-      configurable: true,
-      value: {
-        getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
-        setItem: (k: string, v: string) => {
-          store.set(k, String(v));
-        },
-        removeItem: (k: string) => {
-          store.delete(k);
-        },
-        clear: () => store.clear(),
-        key: (i: number) => Array.from(store.keys())[i] ?? null,
-        get length() {
-          return store.size;
-        },
-      },
-    });
-  }
+});
+
+if (typeof window !== "undefined" && !("matchMedia" in window)) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
 }

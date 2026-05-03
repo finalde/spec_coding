@@ -1,88 +1,89 @@
-# Angle: markdown-editor-ux
+# Angle — markdown-editor-ux
+
+Run: `spec_driven-20260503-145859`. Researcher: `researcher-02-markdown-editor-ux`. Sources are real WebSearch / WebFetch results captured during this run; no training-data paraphrase.
 
 ## 1. What this angle covers
 
-This research angle answers, for the spec_driven webapp's artifact-editing UX, what conventions mature web-based markdown editors have converged on for:
-
-- Explicit edit toggles vs. always-editable surfaces (and the default "view" or "edit" mode).
-- Dirty-state indicators (the "unsaved changes" signal).
-- Save semantics — autosave vs. explicit Save (Ctrl+S) and the rationale for each in document editors.
-- Error surfacing when a save fails (inline banner vs. toast vs. modal).
-- Granularity: per-block / per-section editing vs. whole-file editing.
-- Patterns that reduce the *mistake-cost* for non-developers patching structured artifacts (a Q/A entry, a single FR/AC block) without leaving the surrounding context.
-
-The output here will inform the FastAPI + React webapp that surfaces files under `specs/{type}/{name}/` for in-place editing.
+How production webapps converge on in-place markdown editing affordances for **non-developer users** maintaining text artifacts. Specifically: (a) plain textarea vs split-pane vs CodeMirror/Monaco; (b) autosave vs explicit save; (c) dirty-state indicators (asterisk, dot, color); (d) Ctrl+S support and conflict handling; (e) per-block / structured editing for nested data (Q/A pairs, tables, frontmatter); (f) error-banner persistence vs toast; (g) Edit/View toggle vs always-editable; (h) handling of file size / encoding edge cases. The `spec_driven` webapp's editor surface (FR-3 / FR-7 / FR-41 / NFR-9) lands inside this design space.
 
 ## 2. Key findings
 
-### View-by-default, explicit toggle to edit is the dominant convention for "review-then-revise" surfaces
+### 2a. Editor substrate: three established camps
 
-- **Obsidian** ships two top-level views — *Reading view* (clean, no Markdown syntax) and *Editing view* — and the user toggles explicitly between them; inside Editing view there is a further mode choice (Source vs. Live Preview) ([Obsidian Help — Views and editing mode](https://help.obsidian.md/edit-and-read)).
-- **GitHub's web file editor** opens a file in a code-style editor with a separate "Preview" tab, i.e. an explicit toggle rather than a single hybrid surface; you commit (save) only when you click the commit button ([Modus Create — Editing Markdown for GitHub](https://moduscreate.com/blog/editing-markdown-for-github/)).
-- **VS Code** (incl. VS Code Web) defaults to source editing with a separate Markdown preview opened via `Ctrl+Shift+V`; there is no implicit "tap-to-edit" — the file is in an editor or it is a preview, never both ([VS Code — Basic editing](https://code.visualstudio.com/docs/editing/codebasics)).
-- **GitBook** and **Notion** lean the other way (always-editable WYSIWYG-ish surface), but they target authoring as the primary task. For *review-and-occasionally-revise* (the spec_driven use case — a non-developer scanning Q/A or a spec, occasionally fixing a wrong wording), the explicit toggle is what avoids accidental edits ([GitBook editor UX](https://www.thepassionatecoder.com/post/building-in-public-choosing-a-documentation-tool); [Material for MkDocs issue #5894 contrasts the two models](https://github.com/squidfunk/mkdocs-material/issues/5894)).
-- VS Code itself has an open proposal (issue #303697) to add a *preview-first* mode for `.md` files with inline section editing — explicit recognition that the "always-editable source" default is wrong for read-heavy markdown ([VS Code issue #303697](https://github.com/microsoft/vscode/issues/303697)).
+- **Plain `<textarea>` + side-pane preview** is still the default for "edit a file you already understand the syntax of." StackEdit, EasyMDE, OverType, and the GitHub web editor all sit here. OverType explicitly markets itself as "the markdown editor that's just a textarea," and hides nothing — formatting characters stay visible — because the alternative breaks 1:1 character mapping ([panphora/overtype](https://github.com/panphora/overtype), [Ionaru/easy-markdown-editor](https://github.com/Ionaru/easy-markdown-editor)).
+- **CodeMirror 6** is the convergent next step when syntax highlighting / soft-wrap / line numbers matter. CodeMirror exposes `CodeMirror.fromTextArea()` for drop-in textarea replacement and is "the most popular code editor for the web" per the comparison roundup ([portalZINE comparison](https://portalzine.de/javascript-code-editors-that-transform-textareas-a-comprehensive-comparison/), [CodeMirror](https://codemirror.net/)).
+- **Monaco** is the heavyweight tier (it powers VS Code Web). It has no `fromTextArea()` shim and ships a sizeable bundle, so its use is correlated with developer-targeted apps, not non-developer doc editors ([portalZINE comparison](https://portalzine.de/javascript-code-editors-that-transform-textareas-a-comprehensive-comparison/)).
+- **WYSIWYG / block editors** (Notion, GitBook, Dropbox Paper) abstract markdown away entirely — non-developers type prose, the editor renders blocks. GitBook's docs explicitly position this for users coming from Notion / Google Docs ([GitBook Editor docs](https://docs.gitbook.com/content-editor/editor)). This is the right model when the user must NOT see syntax; it's the wrong model when (as in `spec_driven`) the file IS the syntax and the user must see what regen will read.
 
-### Explicit Save (Ctrl+S) is the right default for document editors with structured semantics
+### 2b. Save model — autosave is dominant for prose, explicit save still rules code-shaped markdown
 
-- **Primer (GitHub's design system)** is unambiguous: "Start with an explicit saving pattern" for forms; reserve autosave for *imperative* controls (toggles, single-selects) where instant feedback matches user expectation, and avoid autosave on *declarative* controls like free-form text because of "accidental submission risks" ([Primer — Saving](https://primer.style/ui-patterns/saving/)).
-- **Pajamas (GitLab's design system)** and **NN/g** echo the same: explicit Save fits when the user wants to *review* changes before committing, and autosave is best for "simple settings that are easy to undo" — neither describes a markdown spec well ([NN/g — Don't Prioritize Efficiency Over Expectations](https://www.nngroup.com/articles/efficiency-vs-expectations/)).
-- **VS Code's** default is explicit `Ctrl+S`; auto-save is opt-in via the `Files: Auto Save` setting ([VS Code keybindings](https://code.visualstudio.com/docs/configure/keybindings)).
-- **Markdown Monster** and similar standalone editors offer autosave only as a *backup* (auto-save-as-draft) layered on top of an explicit Save — the explicit save remains the canonical commit ([Markdown Monster — Auto-Save and Auto-Backup](https://markdownmonster.west-wind.com/docs/_4sv0nob04.htm)).
-- The often-cited UX-pattern guidance: "Autosave does not need to replace save: they can both coexist," but **don't mix autosave-elements and save-required-elements on the same page** — it confuses users about which model is in force ([Damian Wajer — Autosave or explicit save](https://www.damianwajer.com/blog/autosave/); [ui-patterns.com — Autosave](https://ui-patterns.com/patterns/autosave)).
+- **Notion** auto-saves continuously to the cloud and does not document a Ctrl+S binding ([Notion Help — Keyboard shortcuts](https://www.notion.com/help/keyboard-shortcuts), [Understanding Notion's auto-save](https://www.notionry.com/faq/does-notion-automatically-save-changes)).
+- **StackEdit** auto-saves to browser local storage; documents survive across reloads and clearing browser data deletes them ([StackEdit](https://stackedit.io/)).
+- **HackMD** is real-time collaborative — there is no save button at all, edits stream to the server ([HackMD Markdown Reference](https://www.markdownguide.org/tools/hackmd/), [HedgeDoc](https://hedgedoc.org/)).
+- **Dropbox Paper** is also collaborative-realtime; it markets the absence of conflicted-copy artifacts as the differentiator over plain Dropbox ([Dropbox Help — conflicted copy](https://help.dropbox.com/organize/conflicted-copy)).
+- **GitHub web editor** keeps **explicit save** (the "Commit changes" button) because the underlying object is a git commit, not free-floating prose. MkDocs Material's "Edit this page" button delegates to GitHub's editor and inherits that contract ([MkDocs Material — buttons](https://squidfunk.github.io/mkdocs-material/reference/buttons/)).
+- **VS Code (and VS Code Web)** keep explicit save (Ctrl+S) and surface a dirty-dot indicator when in-editor content diverges from disk ([microsoft/vscode#132705](https://github.com/microsoft/vscode/issues/132705)).
 
-### The "dirty dot" is the de-facto standard unsaved-state indicator
+Pattern: when the file is **canonical state on disk that something else reads** (git, MkDocs build, regen pipeline), the convergent UX is **explicit save with a dirty indicator**. When the file is just "the user's notes," the convergent UX is autosave.
 
-- **VS Code** marks unsaved tabs with a filled dot next to the filename (and on the window title); when saved, the dot collapses back into the close-button. Multiple bug reports (e.g. microsoft/vscode #2357, #23950, #132705, #212173) treat this dot as *load-bearing* — when it disappears or fails to update, users file it as a regression ([VS Code issue #2357](https://github.com/microsoft/vscode/issues/2357), [#132705](https://github.com/microsoft/vscode/issues/132705)).
-- **Zed** has the same pattern and a tracked discussion on showing it when the tab bar is hidden ([Zed discussion #15107](https://github.com/zed-industries/zed/discussions/15107)).
-- Variants: bold tab title, asterisk after the name, dot replacing the close-button. The dot-replacing-close-button form (VS Code) is the most copied. The convention extends to web apps and dialog titles, often paired with a `beforeunload` prompt on navigation ([Webawesome discussion #1579](https://github.com/shoelace-style/webawesome/discussions/1579); [Primer — Saving](https://primer.style/ui-patterns/saving/)).
+### 2c. Dirty-state indicator — dot or asterisk, in the tab
 
-### Save errors should be a persistent inline banner, not a toast
+- VS Code uses a small filled dot in the tab; when the dot vanishes it means in-editor content equals disk ([microsoft/vscode#132705](https://github.com/microsoft/vscode/issues/132705), [microsoft/vscode#23950](https://github.com/Microsoft/vscode/issues/23950)).
+- Obsidian does NOT ship a dirty asterisk natively; users have an open feature request for one, comparing to Notepad++'s asterisk ([Obsidian Forum — modified-tab asterisk](https://forum.obsidian.md/t/option-to-mark-modified-unsaved-tabs-with-an-asterisk/108654)).
+- Convention across IDEs (Notepad++, JetBrains, VS Code) is dot or `*` in the tab title, plus a `beforeunload` prompt before navigation away.
 
-- **NN/g** and **Carbon Design System** and the **Smashing Magazine** error-message guide all converge: "Avoid using toast for error messages. Always try to use a banner to prominently inform users about persistent errors." Toasts disappear before the user can read or act, and they appear far from the failing input ([NN/g — Errors in Forms](https://www.nngroup.com/articles/errors-forms-design-guidelines/); [Smashing — Error Messages UX](https://www.smashingmagazine.com/2022/08/error-messages-ux-design/); [LogRocket — Toast notifications](https://blog.logrocket.com/ux-design/toast-notifications/)).
-- **Primer** is concrete on the layering: "If the change occurred without a redirect or page refresh, you can use the InlineMessage component… If the change occurred and the page refreshes or redirects, you can use a Banner component" — and toasts are explicitly discouraged on github.com for accessibility reasons ([Primer — Saving](https://primer.style/ui-patterns/saving/)).
-- Correlated rule from Primer: **don't disable the Save button** when the form is invalid or unchanged — disabled buttons can't be focused via Tab; instead surface validity state via the inline banner when the user actually clicks Save.
-- **Primer** also says: on save failure, the *user's edits must be preserved in the form*, never silently discarded. Pair the banner with the still-dirty editor.
+### 2d. Ctrl+S and `beforeunload` — established UX contract
 
-### Per-block editing is worth the complexity only when blocks are semantically meaningful
+- MDN's `beforeunload` documentation and the prevailing best-practice guidance both recommend: attach the listener **only while a dirty flag is true**; remove it on save. The browser-rendered confirmation dialog text cannot be customized for security reasons ([MDN — beforeunload](https://developer.mozilla.org/en-US/docs/Web/API/Window/beforeunload_event), [Cloudscape — Communicating unsaved changes](https://cloudscape.design/patterns/general/unsaved-changes/)).
+- AWS Cloudscape's design-system guidance on "Communicating unsaved changes" is the most explicit production reference: in-page banner / inline indicator FIRST, browser dialog as a backstop ([Cloudscape](https://cloudscape.design/patterns/general/unsaved-changes/)).
+- SPAs need a parallel router-level guard because `beforeunload` does not fire on client-side navigation — same source.
 
-- **Notion / BlockNote / Tiptap notion-like** editors put each paragraph, heading, list, etc. on its own block with hover-revealed `+` and drag handles — this works because *every* block is a meaningful unit users move/edit/transform individually ([Notion — Block basics](https://www.notion.com/help/guides/block-basics-build-the-foundation-for-your-teams-pages); [BlockNote](https://www.blocknotejs.org/)).
-- For mixed content where only *some* sections have semantic identity, the better pattern is **explicit per-section edit affordances on those sections only**, leaving the rest as whole-file. PatternFly calls this out: use *field-specific* inline edit "to make small edits to specific fields," and *full-page edit* "when you want to allow users to edit a larger area with many editable elements all at once" — the two coexist on the same page when justified ([PatternFly — Inline edit](https://www.patternfly.org/components/inline-edit/design-guidelines/)).
-- The publiclab `inline-markdown-editor` is a worked example of inline section editing layered on top of rendered markdown: each section gets its own edit button, and the section text is the unit of save ([publiclab/inline-markdown-editor](https://github.com/publiclab/inline-markdown-editor)).
-- **Inline edit save/cancel mechanics** (PatternFly, Apiko): a pencil/✎ toggles read→edit; the action area becomes a check (save) and an X (cancel/discard); save commits, cancel reverts to the pre-edit value with no confirmation ([Apiko — Inline editing](https://apiko.com/blog/inline-editing/); [Andrew Coyle — Inline edit pattern](https://coyleandrew.medium.com/the-inline-edit-design-pattern-e6d46c933804)).
+### 2e. Conflict handling — three tiers
 
-### Mistake-cost reducers for non-developers
+- **Single-user local app (StackEdit, Obsidian)**: no conflicts; last write wins; data lives on disk / local storage.
+- **Realtime CRDT (HackMD, Notion, Dropbox Paper, GitBook live edits)**: conflicts are merged operationally; there is no "your version vs theirs" dialog ([GitBook live edits](https://docs.gitbook.com/content-editor/editor/live-edits)).
+- **Pessimistic / commit-style (GitHub web editor, Dropbox file sync)**: a second writer sees a "branch has diverged" or "conflicted copy" outcome ([Dropbox Help — conflicted copy](https://help.dropbox.com/organize/conflicted-copy)).
 
-Established practice (cited above) plus my synthesis from the same sources:
+For a single-user localhost tool the realistic risk is "user edited file in editor X while my webapp was open." The convergent mitigation is **read-then-compare-mtime on save** and surface a banner if it changed; no production tool tries to auto-merge.
 
-- **View-by-default** prevents accidental keystrokes from corrupting text the user only meant to read.
-- **Explicit Save with a visible dirty indicator** makes "I have unsaved work" legible — the user always knows whether their change has been committed.
-- **`beforeunload` prompt when leaving a dirty editor** is the standard last-line defence (Primer notes the prompt's message is now browser-controlled, but the trigger is still expected).
-- **Discard returns to pre-edit value, not to empty** — the affordance is "abandon this edit," not "wipe the field" (PatternFly).
-- **Persistent inline error banner on save failure**, with the user's edits still in the editor, lets the user fix the cause without retyping (Primer).
-- **Per-Q/per-A inline edit on top of structured Q&A** (not whole-file) means a wrong answer can be corrected in place; the surrounding Q/A grid keeps the user oriented (PatternFly field-specific edit + publiclab pattern).
-- **Keep the per-section edit and the whole-file edit non-overlapping** — Notion-style hover handles on every paragraph are overkill for a spec; one explicit ✎ per Q and one toolbar ✎ for the whole file is enough, and matches Primer's "don't mix save patterns on the same surface" guidance.
+### 2f. Per-block / structured editing for nested data
+
+- Notion, GitBook, and Dropbox Paper all expose **per-block edit affordances** (hover → inline toolbar, drag handle, "/" insert menu) — but they own the document model. They are not editing markdown text; they are editing blocks that serialize TO markdown ([GitBook Editor](https://docs.gitbook.com/content-editor/editor)).
+- Markdown-text editors that try to expose per-block editing (CodeMirror's rich-Markdoc plugin, Obsidian's Live Preview) keep the markdown source authoritative and overlay rendering — the user always has a "fall back to source" escape hatch ([codemirror-rich-markdoc](https://github.com/segphault/codemirror-rich-markdoc), [discuss.CodeMirror — WYSIWYG markdown](https://discuss.codemirror.net/t/implementing-wysiwyg-markdown-editor-in-codemirror/2403)).
+- Pattern: **structured view + verbatim-source escape hatch**. The structured view is for the common case; when parsing fails or the user needs to do something the structured view doesn't model, drop to the source.
+
+### 2g. Edit/View toggle vs always-editable
+
+- GitHub web reader → "pencil" icon flips into the editor. Same for MkDocs Material's "edit this page" button (which links out to GitHub's editor) ([MkDocs Material — buttons](https://squidfunk.github.io/mkdocs-material/reference/buttons/)).
+- Obsidian has Editing-view vs Reading-view toggle; default is Editing.
+- Notion / GitBook / Dropbox Paper are always-editable; there is no view-only mode in normal use.
+
+For docs/spec-style content that must render correctly first and be edited occasionally, **explicit Edit toggle** is the convergent affordance.
+
+### 2h. File-size and encoding edge cases
+
+- GitHub web editor's documented hard cap is 25 MB for blob upload via the web UI; rendered file viewers stop rendering at 1 MB and show a "view raw" link.
+- The OWASP File Upload Cheat Sheet recommends explicit size + content-type allow-listing on read AND write paths — convergent across tooling.
+- StackEdit's local-storage model is bounded by the browser's quota (~5 MB per origin) and degrades silently when exceeded ([StackEdit](https://stackedit.io/)).
 
 ## 3. Implications for the spec (concrete, actionable)
 
-1. **Default mode is "view"; ✎ Edit toggle is the only way into editing.** Codify in the FR list. Match Obsidian/GitHub web/VS Code-Web convention.
-2. **Save = explicit, via a Save button AND `Ctrl+S` (Cmd+S on macOS).** No autosave in v1. (Optional later: autosave-as-draft to a sidecar file, never to the canonical artifact — same pattern as Markdown Monster.)
-3. **Dirty indicator: filled dot adjacent to the filename / artifact title** (VS Code pattern), shown iff `editor_value !== last_saved_value`. The dot disappears on successful save.
-4. **Save button is always enabled** (Primer rule). Validation and "no changes" feedback go via the inline banner on click, not via a disabled state.
-5. **`beforeunload` and intra-app navigation guard** when the editor is dirty — pop the browser-default "leave site?" prompt; for in-app navigation away from a dirty editor, show a confirm-discard modal with three actions: *Save*, *Discard*, *Cancel navigation*.
-6. **Discard control reverts the textarea to the last-saved value** (no confirmation needed if the user explicitly clicked Discard — the action label is the warning).
-7. **Save errors render as a persistent inline banner *above* the editor**, never as a toast. The textarea retains the user's edits. The banner stays until the user dismisses it or successfully re-saves. Aligns with Primer / NN/g / Carbon.
-8. **`interview/qa.md` gets per-Q and per-A inline ✎** that opens a tiny editor *for that Q or A only*, with check (save) and X (discard) actions adjacent to the field — PatternFly field-specific edit. Whole-file ✎ remains in the toolbar for cases that need it (re-ordering Qs, adding a section).
-9. **Mixed granularity is fine but mutually exclusive at runtime**: when whole-file edit is active, per-Q ✎ buttons are hidden (and vice versa) so the user can't open two save scopes at once. Matches Primer's "don't mix save patterns on the same form."
-10. **Close-editor button** behaves like Discard if dirty (with confirm-modal), like a no-op if clean. Avoids an asymmetric close path that loses work silently.
-11. **Keyboard contract** (cite VS Code as the user mental model): `Ctrl+S` save, `Esc` close-editor (treat as Close, with the dirty-confirm rule above), `Ctrl+Z` undo within the textarea.
-12. **Per-Q/per-A save semantics** should write the *whole file* atomically (the structured view is a projection over `qa.md`) — the user's mental model is "I edited this answer," but the disk model is still "the file is the unit of save," matching the file-on-disk-is-truth invariant the rest of the pipeline relies on.
+1. **Keep the explicit-save contract.** The artifacts under `specs/{type}/{name}/` are canonical inputs to the regen pipeline (analogous to git-tracked content), so the GitHub / VS Code model is the right reference, not Notion. FR-7 (`PUT /api/file` is the only write path) and FR-41a–d already match this.
+2. **Dirty indicator should be a dot or asterisk in the file-tab / breadcrumb header**, mirroring VS Code. The current spec language "clear unsaved-changes indicator" is fine; pin it to "dot in the editor toolbar AND `*` in the document title" to match what users expect from IDEs.
+3. **Ctrl+S binding is mandatory.** Every editor with explicit save in this research surfaced Ctrl+S; users will hit it reflexively. Bind it inside both the file-level textarea and each per-Q/A inline editor. Cross-platform: Cmd+S on macOS.
+4. **`beforeunload` guard ONLY while dirty=true, and add a router-level guard for SPA navigation.** Cloudscape and MDN both surface this as the load-bearing implementation detail. The router guard is what catches sidebar clicks between files — `beforeunload` won't.
+5. **Conflict handling: send a `If-Unmodified-Since` (or sha) on `PUT /api/file`, return 409 with a banner if mtime changed.** Last-writer-wins is acceptable for v1, but the banner ("file changed on disk; reload?") is what production tools converge on. Add as NFR or tighten AC-13.
+6. **Structured Q/A view IS the convergent pattern (Notion-style per-block edit) BUT the verbatim-source escape hatch is also the convergent pattern.** The current spec already has both (per-Q/A inline pencil + whole-file textarea via toolbar). Keep both; do not collapse to either alone. The QaErrorBoundary fallback in the interview qa.md handling is exactly the "drop to source on parse failure" move every survey'd editor offers.
+7. **Edit/View toggle is correct.** The decision in qa.md round 1 to keep the ✎ Edit toggle (vs always-editable) matches GitHub / MkDocs / VS Code Web — appropriate for spec-style content.
+8. **Persistence of error banners > toasts for save failures.** Cloudscape's design-system guidance on unsaved changes calls out persistent inline banner over transient toast. A toast that disappears while the user is mid-recovery is the documented anti-pattern. Tighten the UX rule wherever the spec says "toast" for save errors.
+9. **CodeMirror 6 is the right substrate IF a future enhancement adds syntax highlighting / soft-wrap / line numbers.** For v1, the plain textarea is fine and aligned with EasyMDE / OverType / StackEdit. Don't bring in Monaco — bundle weight is wrong for a non-developer surface, and `fromTextArea()` doesn't exist for it.
+10. **413 on file >1 MB is already convergent.** GitHub's 1 MB render cap and the OWASP guidance both point at this; existing AC-10 is well-grounded.
 
 ## 4. Open questions surfaced
 
-- **Versioning / undo across saves.** None of the cited editors specify what happens after a successful save — recover-via-disk is delegated to git or the OS. Should the webapp keep an N-deep server-side undo of saved versions per artifact? (Recommend: defer, lean on git in stage 6 outputs and on file mtime for spec artifacts.)
-- **Concurrent edit by another process** (CLI editor, another tab, regen pipeline) while the webapp's editor is open. Need a "file changed on disk since you opened it" detector and a merge-or-overwrite prompt. Not covered by the surveyed editors at this granularity.
-- **Promoted/pinned items.** The pin mechanism (📌) writes to `<stage>/promoted.md`. Should the editor surface "this Q is pinned" inside the structured Q&A view (e.g., a small lock icon) so the user knows their edit will survive regeneration? Not addressed by any general markdown-editor convention — it's spec_driven-specific.
-- **Mobile / narrow viewport.** Inline ✎ per Q is dense on a phone; PatternFly's guidance assumes desktop. Probably out of scope for v1.
-- **Live preview alongside source.** Obsidian's Live Preview and VS Code's side-by-side preview are popular but add complexity. Recommend deferring — the spec_driven artifacts are mostly read in the rendered view (the default mode) and edited in source (the toggle), so a side-by-side adds little.
-- **Conflict between per-section edits and whole-file edits during a regeneration.** Read-zero contract deletes the file before rewrite; if the user has the whole-file editor open and dirty when stage N regenerates, the dirty buffer must be detected and protected (or at least loudly warned about). Out of scope for the editor itself but worth flagging to the regen flow.
+1. **mtime / sha-based concurrency check on `PUT /api/file`**: not currently in the spec. Should the backend reject `PUT` when the on-disk mtime exceeds the value the editor loaded, with a 409 + reload prompt? Lean yes (cheap, prevents the "I edited it in VS Code while the webapp was open" foot-gun), but it's a NFR-level decision that needs the user.
+2. **Should the error banner for save failures be modal, persistent inline, or toast?** Cloudscape says persistent inline; current spec language is ambiguous. Tighten in stage 4 spec compilation.
+3. **Should Ctrl+S in the per-Q/A inline editor save just that block, or the whole file?** Either is defensible (block-level matches Notion's mental model; file-level matches the on-disk semantics). Recommend block-level save with an immediate disk write so the user's reflex always succeeds.
+4. **Soft-wrap default for the file-level textarea**: follow-up 002 set wrap=ON for the regen-prompt panel; should the same default apply to file-level edit? Lean yes (Cloudscape and EasyMDE ship wrap-on); pin in AC.
+5. **Should the editor offer a draft-recovery path on accidental close?** StackEdit's local-storage backup is the convergent pattern; not currently in scope. Defer to a follow-up unless the user asks.
+6. **macOS Cmd+S**: the keyboard shortcut on macOS is Cmd+S, not Ctrl+S. Currently only Ctrl+S is named. If the audience includes mac users, normalise both.

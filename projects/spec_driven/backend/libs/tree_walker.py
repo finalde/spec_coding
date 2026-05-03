@@ -1,172 +1,139 @@
-"""
-tree_walker — produce the EXPOSED_TREE JSON consumed by GET /api/tree.
-
-Output shape (FR-1):
-    {name, path, type, children[]}
-
-Where `type` ∈ {"section", "type", "project", "stage", "file"}.
-
-Every non-leaf node carries a `children` array. The frontend Sidebar descends
-node["children"] uniformly — there is NO `task_type.projects` or `project.stages`
-drift (regression-2026-05-02-clean).
-
-Paths are forward-slash normalized (NFR-13).
-"""
-
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
-from .exposed_tree import CANONICAL_STAGES, PROJECT_LEVEL_FILES, ExposedTree
-
-
-class TreeNode(TypedDict):
-    name: str
-    path: str
-    type: str
-    children: list["TreeNode"]
+from libs.exposed_tree import ALLOWED_EXTENSIONS, ExposedTree
 
 
-@dataclass(frozen=True)
 class TreeWalker:
-    exposed: ExposedTree
+    def __init__(self, exposed: ExposedTree) -> None:
+        self._exposed = exposed
+        self._root = exposed.root
 
-    def walk(self) -> list[TreeNode]:
-        return [self._claude_section(), self._projects_section()]
+    def build(self) -> dict[str, Any]:
+        return {
+            "type": "section",
+            "name": "root",
+            "path": "",
+            "children": [
+                self._claude_section(),
+                self._projects_section(),
+            ],
+        }
 
-    def _rel(self, p: Path) -> str:
-        try:
-            return p.resolve().relative_to(self.exposed.root.resolve()).as_posix()
-        except ValueError:
-            return p.as_posix().replace("\\", "/")
+    def _claude_section(self) -> dict[str, Any]:
+        children: list[dict[str, Any]] = []
 
-    def _file_node(self, p: Path) -> TreeNode:
-        return {"name": p.name, "path": self._rel(p), "type": "file", "children": []}
+        for f in self._exposed.claude_root_files():
+            children.append(self._leaf_for(f))
 
-    def _claude_section(self) -> TreeNode:
-        children: list[TreeNode] = []
-        claude_md = self.exposed.claude_md()
-        if claude_md.is_file():
-            children.append(self._file_node(claude_md))
-
-        agents = self.exposed.claude_agents()
-        if agents:
-            children.append(
-                {
-                    "name": ".claude/agents",
-                    "path": ".claude/agents",
-                    "type": "section",
-                    "children": [self._file_node(a) for a in agents],
-                }
-            )
-
-        skill_files = self.exposed.claude_skill_files()
-        if skill_files:
-            children.append(
-                {
-                    "name": ".claude/skills",
-                    "path": ".claude/skills",
-                    "type": "section",
-                    "children": sorted(
-                        [self._file_node(s) for s in skill_files],
-                        key=lambda n: n["path"].lower(),
-                    ),
-                }
-            )
-
-        refs = self.exposed.claude_agent_refs()
-        if refs:
-            children.append(
-                {
-                    "name": ".claude/agent_refs",
-                    "path": ".claude/agent_refs",
-                    "type": "section",
-                    "children": sorted(
-                        [self._file_node(r) for r in refs],
-                        key=lambda n: n["path"].lower(),
-                    ),
-                }
-            )
+        dotclaude_node = self._build_dotclaude_node()
+        if dotclaude_node is not None:
+            children.append(dotclaude_node)
 
         return {
-            "name": "Claude Settings & Shared Context",
-            "path": "_claude",
             "type": "section",
+            "name": "Claude Settings & Shared Context",
+            "path": "",
             "children": children,
         }
 
-    def _projects_section(self) -> TreeNode:
-        type_groups: dict[str, list[TreeNode]] = {}
-        for project_dir in self.exposed.project_dirs():
-            type_name = project_dir.parent.name
-            project_children: list[TreeNode] = []
+    def _build_dotclaude_node(self) -> dict[str, Any] | None:
+        dotclaude = self._root / ".claude"
+        if not dotclaude.is_dir():
+            return None
+        sub_children: list[dict[str, Any]] = []
 
-            for top_file in self.exposed.project_top_level_files(project_dir):
-                project_children.append(self._file_node(top_file))
-
-            for stage_dir in self.exposed.project_stage_dirs(project_dir):
-                stage_files: list[TreeNode] = []
-                for entry in sorted(stage_dir.iterdir(), key=lambda x: x.name.lower()):
-                    if entry.is_file():
-                        stage_files.append(self._file_node(entry))
-                    elif entry.is_dir():
-                        sub_files = [
-                            self._file_node(f)
-                            for f in sorted(entry.iterdir(), key=lambda x: x.name.lower())
-                            if f.is_file()
-                        ]
-                        if sub_files:
-                            stage_files.append(
-                                {
-                                    "name": entry.name,
-                                    "path": self._rel(entry),
-                                    "type": "stage",
-                                    "children": sub_files,
-                                }
-                            )
-                project_children.append(
+        skills_dir = dotclaude / "skills"
+        if skills_dir.is_dir():
+            skills_children = self._walk_filtered(
+                skills_dir,
+                lambda p: p.name == "SKILL.md"
+                or (p.parent.name == "playbooks" and p.suffix == ".md"),
+            )
+            if skills_children:
+                sub_children.append(
                     {
-                        "name": stage_dir.name,
-                        "path": self._rel(stage_dir),
-                        "type": "stage",
-                        "children": stage_files,
+                        "type": "directory",
+                        "name": "skills",
+                        "path": self._rel(skills_dir),
+                        "children": skills_children,
                     }
                 )
 
-            type_groups.setdefault(type_name, []).append(
-                {
-                    "name": project_dir.name,
-                    "path": self._rel(project_dir),
-                    "type": "project",
-                    "children": project_children,
-                }
-            )
-
-        type_nodes: list[TreeNode] = []
-        for type_name in sorted(type_groups.keys(), key=str.lower):
-            type_nodes.append(
-                {
-                    "name": type_name,
-                    "path": f"specs/{type_name}",
-                    "type": "type",
-                    "children": type_groups[type_name],
-                }
-            )
+        refs_dir = dotclaude / "agent_refs"
+        if refs_dir.is_dir():
+            refs_children = self._walk_filtered(refs_dir, lambda p: p.suffix == ".md")
+            if refs_children:
+                sub_children.append(
+                    {
+                        "type": "directory",
+                        "name": "agent_refs",
+                        "path": self._rel(refs_dir),
+                        "children": refs_children,
+                    }
+                )
 
         return {
-            "name": "Projects",
-            "path": "_projects",
-            "type": "section",
-            "children": type_nodes,
+            "type": "directory",
+            "name": ".claude",
+            "path": self._rel(dotclaude),
+            "children": sub_children,
         }
 
+    def _projects_section(self) -> dict[str, Any]:
+        # FR-15: "Specs" subtree is `{type}/{name}/` mirrored from `specs/`.
+        # Elide the literal `specs/` wrapper so task_type is the direct child.
+        specs_dir = self._root / "specs"
+        children: list[dict[str, Any]] = (
+            self._walk_filtered(specs_dir, self._is_allowed_leaf)
+            if specs_dir.is_dir()
+            else []
+        )
+        return {
+            "type": "section",
+            "name": "Specs",
+            "path": "",
+            "children": children,
+        }
 
-def to_jsonable(node: TreeNode) -> dict[str, Any]:
-    return {
-        "name": node["name"],
-        "path": node["path"],
-        "type": node["type"],
-        "children": [to_jsonable(c) for c in node["children"]],
-    }
+    def _walk_filtered(self, directory: Path, leaf_predicate: Any) -> list[dict[str, Any]]:
+        children: list[dict[str, Any]] = []
+        excluded = self._exposed.excluded_dirs()
+        try:
+            entries = sorted(directory.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        except OSError:
+            return children
+        for entry in entries:
+            if entry.is_symlink():
+                continue
+            if entry.name in excluded:
+                continue
+            if entry.is_dir():
+                sub = self._walk_filtered(entry, leaf_predicate)
+                if sub:
+                    children.append(
+                        {
+                            "type": "directory",
+                            "name": entry.name,
+                            "path": self._rel(entry),
+                            "children": sub,
+                        }
+                    )
+            elif entry.is_file():
+                if leaf_predicate(entry):
+                    children.append(self._leaf_for(entry))
+        return children
+
+    def _is_allowed_leaf(self, p: Path) -> bool:
+        return p.suffix.lower() in ALLOWED_EXTENSIONS
+
+    def _leaf_for(self, f: Path) -> dict[str, Any]:
+        return {"type": "file", "name": f.name, "path": self._rel(f)}
+
+    def _rel(self, p: Path) -> str:
+        try:
+            return p.resolve().relative_to(self._root).as_posix()
+        except ValueError:
+            return p.as_posix()

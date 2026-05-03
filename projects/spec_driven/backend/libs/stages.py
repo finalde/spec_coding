@@ -1,13 +1,7 @@
-"""
-Canonical six-stage definition (FR-10).
-
-Single source of truth for stage IDs, labels, folders, invocations, and modules.
-Returned by GET /api/stages and consumed by the regen-prompt assembler.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -17,7 +11,7 @@ class Module:
     relative_path: str
     description: str
 
-    def to_dict(self) -> dict:
+    def to_payload(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "label": self.label,
@@ -34,88 +28,164 @@ class Stage:
     invocation: str
     modules: tuple[Module, ...]
 
-    def to_dict(self) -> dict:
+    def to_payload(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "label": self.label,
             "folder": self.folder,
             "invocation": self.invocation,
-            "modules": [m.to_dict() for m in self.modules],
+            "modules": [m.to_payload() for m in self.modules],
         }
 
 
-STAGES: tuple[Stage, ...] = (
+CANONICAL_STAGES: tuple[Stage, ...] = (
     Stage(
         id="intake",
-        label="intake",
+        label="1 — Intake",
         folder="user_input",
-        invocation="Claude rewrites raw_prompt + every follow_ups/*.md → revised_prompt.md (no agent).",
+        invocation="Re-run intake: rebuild user_input/revised_prompt.md = raw + every follow_up in numerical order.",
         modules=(
-            Module("revised_prompt", "revised_prompt.md", "user_input/revised_prompt.md", "Auto-regenerated from raw + follow-ups."),
+            Module(
+                id="revised_prompt",
+                label="revised_prompt.md",
+                relative_path="user_input/revised_prompt.md",
+                description="Auto-regenerated as raw + every follow-up in numeric order.",
+            ),
         ),
     ),
     Stage(
         id="interview",
-        label="interview",
+        label="2 — Interview",
         folder="interview",
-        invocation="Claude reads playbooks/interview.md + agent_refs/interview/*.md, identifies probe categories, asks via AskUserQuestion (max 3 rounds), produces qa.md.",
+        invocation="Re-run interview stage: ask multi-choice questions via AskUserQuestion (interactive) or use best judgment (autonomous), produce interview/qa.md.",
         modules=(
-            Module("qa", "qa.md", "interview/qa.md", "Round-by-round Q/A produced by the interview team."),
+            Module(
+                id="qa",
+                label="qa.md",
+                relative_path="interview/qa.md",
+                description="Round → category → Q/A pairs.",
+            ),
         ),
     ),
     Stage(
         id="research",
-        label="research",
+        label="3 — Research",
         folder="findings",
-        invocation="Claude reads playbooks/research.md + agent_refs/research/*.md, spawns one researcher per business angle in parallel, synthesizes dossier.md.",
+        invocation="Re-run research stage: spawn researcher workers per angle, synthesize findings/dossier.md.",
         modules=(
-            Module("angles", "angle-*.md", "findings/angle-*.md", "Per-angle researcher outputs."),
-            Module("dossier", "dossier.md", "findings/dossier.md", "Synthesized cross-angle dossier."),
+            Module(
+                id="dossier",
+                label="dossier.md",
+                relative_path="findings/dossier.md",
+                description="Synthesis of every researcher angle.",
+            ),
+            Module(
+                id="angles",
+                label="angle-*.md",
+                relative_path="findings/",
+                description="Per-angle research files.",
+            ),
         ),
     ),
     Stage(
         id="spec",
-        label="spec compilation",
+        label="4 — Spec compilation",
         folder="final_specs",
-        invocation="Claude reads revised_prompt.md + qa.md + dossier.md and writes final_specs/spec.md directly (no agent).",
+        invocation="Re-run spec compilation: parent-direct write of final_specs/spec.md from revised_prompt + qa + dossier.",
         modules=(
-            Module("spec", "spec.md", "final_specs/spec.md", "Compiled specification."),
+            Module(
+                id="spec",
+                label="spec.md",
+                relative_path="final_specs/spec.md",
+                description="Functional + non-functional requirements + acceptance summary.",
+            ),
         ),
     ),
     Stage(
         id="validation",
-        label="validation strategy",
+        label="5 — Validation strategy",
         folder="validation",
-        invocation="Claude reads playbooks/validation.md + agent_refs/validation/*.md, decides applicable levels, spawns level-specialist workers in parallel, consolidates strategy.md.",
+        invocation="Re-run validation strategy: spawn level-specialist workers per level, consolidate validation/strategy.md and per-level files.",
         modules=(
-            Module("strategy", "strategy.md", "validation/strategy.md", "Top-level multi-level plan."),
-            Module("acceptance_criteria", "acceptance_criteria.md", "validation/acceptance_criteria.md", "Gherkin scenarios per AC-NN."),
-            Module("bdd_scenarios", "bdd_scenarios.md", "validation/bdd_scenarios.md", "Feature-level behaviors."),
-            Module("unit_tests", "unit_tests.md", "validation/unit_tests.md", "Backend + frontend unit cases."),
-            Module("system_tests", "system_tests.md", "validation/system_tests.md", "Multi-component scenarios."),
-            Module("security", "security.md", "validation/security.md", "Security probes."),
-            Module("performance", "performance.md", "validation/performance.md", "Latency / size budgets."),
-            Module("accessibility", "accessibility.md", "validation/accessibility.md", "WCAG-anchored a11y checks."),
+            Module(
+                id="strategy",
+                label="strategy.md",
+                relative_path="validation/strategy.md",
+                description="Top-level rollup of every validation level.",
+            ),
+            Module(
+                id="acceptance_criteria",
+                label="acceptance_criteria.md",
+                relative_path="validation/acceptance_criteria.md",
+                description="AC-NN list mapping spec FRs/NFRs to checks.",
+            ),
+            Module(
+                id="bdd_scenarios",
+                label="bdd_scenarios.md",
+                relative_path="validation/bdd_scenarios.md",
+                description="Given/When/Then scenarios per primary flow.",
+            ),
+            Module(
+                id="unit_tests",
+                label="unit_tests.md",
+                relative_path="validation/unit_tests.md",
+                description="Per-lib unit-test contracts.",
+            ),
+            Module(
+                id="system_tests",
+                label="system_tests.md",
+                relative_path="validation/system_tests.md",
+                description="End-to-end / boot-smoke tests.",
+            ),
+            Module(
+                id="security",
+                label="security.md",
+                relative_path="validation/security.md",
+                description="SEC-NN probe set.",
+            ),
+            Module(
+                id="performance",
+                label="performance.md",
+                relative_path="validation/performance.md",
+                description="NFR-1..3 budgets and load tests.",
+            ),
+            Module(
+                id="accessibility",
+                label="accessibility.md",
+                relative_path="validation/accessibility.md",
+                description="WCAG focus / contrast / motion checks.",
+            ),
         ),
     ),
     Stage(
         id="execution",
-        label="execution + streaming validation",
-        folder="projects",
-        invocation="Claude implements work units against final_specs/spec.md and runs the validation/* checks per work unit (3 revision rounds max).",
+        label="6 — Execution + streaming validation",
+        folder="(projects)",
+        invocation="Re-run execution: implement work units against the spec, run per-unit validators in parallel.",
         modules=(
-            Module("project", "projects/{name}/", "projects/{name}/", "Generated project tree (backend + frontend if applicable)."),
+            Module(
+                id="project",
+                label="projects/{name}/",
+                relative_path="projects/",
+                description="Code + tests + README + Makefile under projects/{name}/.",
+            ),
         ),
     ),
 )
 
 
-def stages_to_jsonable() -> list[dict]:
-    return [s.to_dict() for s in STAGES]
+class Stages:
+    @staticmethod
+    def list() -> list[Stage]:
+        return list(CANONICAL_STAGES)
 
+    @staticmethod
+    def by_id(stage_id: str) -> Stage | None:
+        for s in CANONICAL_STAGES:
+            if s.id == stage_id:
+                return s
+        return None
 
-def stage_by_id(stage_id: str) -> Stage | None:
-    for s in STAGES:
-        if s.id == stage_id:
-            return s
-    return None
+    @staticmethod
+    def to_payload() -> list[dict[str, Any]]:
+        return [s.to_payload() for s in CANONICAL_STAGES]

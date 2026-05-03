@@ -1,5 +1,75 @@
 # Changelog — spec_driven
 
+## Follow-up 009 — 2026-05-03 16:48:40
+Source: user_input/follow_ups/009-20260503-164840-specs-section-clickable-nodes-and-markdown-pins.md
+Summary: Four coupled UX fixes. (a) Sidebar second top-level section renamed `Projects` → `Specs` (user mental model; matches FR-15 layout shipped in 008). (b) Project nodes (`specs/{type}/{name}`) now navigate to `/project/{type}/{name}` on row click, opening the FR-32 master Regenerate panel — disclosure caret split into its own button so expansion stays available. (c) Stage nodes (`specs/{type}/{name}/{stage}` for the 5 canonical stages) navigate to a new `/stage/{type}/{name}/{stage}` route rendered by a new `StagePage` component, which mounts the existing `RegeneratePanel` in stage-scoped mode (`stageId={stage}`). (d) Two coupled promotion bugs fixed: (d1) `Reader.tsx::extractPinnedIds` regex was looking for `pin:X` but `promotions.py::_serialize` writes `<!-- pin source=… id=… -->` — replaced the regex with one that mirrors `_PIN_HEADER` + `_ATTR` so QA pin state actually hydrates from `promoted.md`; (d2) markdown `Renderer` extended with an optional `PinContext` and component overrides on `<p>` / `<li>` that detect a leading `<strong>` matching `^(FR|NFR|AC|SYS|OQ)-(\d+\w?)\.?$` and inject a 📌 button — closing FR-35 coverage for spec / validation / findings markdown (Q/A pinning in `QaView` is unchanged). `Reader` builds `pinContext` for stages in the 4-stage promote allowlist (`interview` excluded since `QaView` already owns it; the loader still hydrates `pinnedIds` for QA via the now-correct regex).
+
+Auto-updated:
+- specs/development/spec_driven/final_specs/spec.md — FR-3: `"Projects"` → `"Specs"` in the top-level-sections sentence. FR-15: same literal in the section-name sentence AND `Projects/{type}/{name}/` → `Specs/{type}/{name}/` in the subtree-shape sentence. No new FR / NFR / AC.
+- projects/spec_driven/backend/libs/tree_walker.py — `_projects_section` returns `name: "Specs"` (was `"Projects"`); leading comment updated.
+- projects/spec_driven/backend/tests/unit/test_tree_walker.py — `test_root_has_two_top_level_sections` and `test_tree_consumer_walk` assert against `"Specs"` (was `"Projects"`).
+- projects/spec_driven/frontend/src/components/Home.tsx — `discoverProjects` finds the section by name `"Specs"`.
+- projects/spec_driven/frontend/src/App.tsx — added `<Route path="/stage/:projectType/:projectName/:stage" element={<StagePage />} />` and the corresponding import.
+- projects/spec_driven/frontend/src/components/StagePage.tsx — new file. Reads `useParams`, renders `<RegeneratePanel … stageId={stage} initiallyOpen />`. Includes a `STAGE_LABELS` map for the human-readable subtitle.
+- projects/spec_driven/frontend/src/components/Sidebar.tsx — new `classifySpecPath()` that returns `"project"` / `"stage"` / `null` for a tree node's path; row-click and `Enter`/`Space` keyboard handlers prefer navigation when the path matches; the disclosure indicator (▾/▸) is now a `<button>` with its own click handler so users can still expand/collapse without leaving the destination page.
+- projects/spec_driven/frontend/src/components/Reader.tsx — `extractPinnedIds` now uses the canonical `<!-- pin source=… id=… -->` shape (mirror of `promotions.py::_PIN_HEADER` + `_ATTR`); pin loading runs for the 4 promotable stages (was: interview only); added `onPinMarkdown` / `onUnpinMarkdown` that look up the paragraph body for an FR-NN-style item via `extractMarkdownItemBody` and call `POST /api/promote` / `DELETE /api/promote`; `pinContext` (a new `PinContext` value imported from `markdown/Renderer`) is wired through to `<Renderer>` for non-QA pinnable stages (`findings`, `final_specs`, `validation`).
+- projects/spec_driven/frontend/src/markdown/renderer.tsx — added `PinContext` interface + `PinButton` + `extractPinId(children)`. `Renderer` accepts a new optional `pinContext` prop. Component overrides on `<p>` / `<li>` inject a `PinButton` next to any leading `<strong>` matching `^(FR|NFR|AC|SYS|OQ)-(\d+[a-z]?)\.?$`. Existing link-resolution behavior is unchanged.
+- projects/spec_driven/frontend/src/styles.css — `.tree-disclosure` extended with button-reset rules (background / border / padding / cursor) since it's now a `<button>` not a `<span>`. New `.pin-toggle-md` rules style the markdown pin button (low-opacity by default, full opacity when hovered or pinned). New `.markdown-view [data-pin-id]` rule reserves `position: relative` for future absolute-positioning if the pin button needs to float.
+- specs/development/spec_driven/user_input/revised_prompt.md — `Last regenerated` header bumped to 2026-05-03 16:48:40 with follow-up 009 noted; body unchanged (intent unchanged; FR-15 / FR-32 / FR-35 already specified the desired states).
+
+No conflicts found in: interview/qa.md, findings/dossier.md, validation/* (the rename is purely cosmetic at the section header; no FR text outside FR-3 / FR-15 references "Projects" as a section), projects/spec_driven/backend/libs/{api.py, promotions.py, file_reader.py, file_writer.py} (promotions backend already supports the 4-stage allowlist; `_PIN_HEADER` / `_ATTR` were already correct — the bug was only in the frontend mirror), projects/spec_driven/frontend/src/components/{ProjectPage,RegeneratePanel,QaView,Editor,Breadcrumb,BrokenLink,ParseFallback}.tsx (untouched — `RegeneratePanel`'s `stageId` prop already drives both project-wide and stage-scoped rendering, so `StagePage` is a thin wrapper; `QaView` continues to own Q/A pinning unchanged), projects/spec_driven/README.md (target list unchanged; no Run-section changes).
+
+## Follow-up 008 — 2026-05-03 16:36:26
+Source: user_input/follow_ups/008-20260503-163626-sidebar-mirrors-specs-and-home-project-link.md
+Summary: Two coupled UI fixes. (a) Sidebar "Projects" section drifted from FR-15 — it wrapped the entire `specs/` tree behind a literal `specs/` folder name AND walked each `projects/{name}/` as a sibling. Restructured `tree_walker._projects_section` so its children are the direct children of `specs/` (task-type at level 1, task-name at level 2, per-stage subfolders at level 3 — matching the on-disk hierarchy). Project-code output `projects/{name}/` no longer appears in the sidebar; it's still reachable through the file API (`is_inside` admits `projects/...`) and via direct deep-link URLs. (b) `/project/:projectType/:projectName` (FR-32) had no UI affordance — only typed URLs. `Home.tsx` now derives `{type, name}` pairs from the tree's "Projects" section and renders a per-project "Build regen prompt" link to that route.
+
+Auto-updated:
+- projects/spec_driven/backend/libs/tree_walker.py — `_projects_section` rewritten: walks `specs/` directly, drops literal `specs/` wrapper and the `projects/{name}/` parallel loop. Path strings remain canonical filesystem-relative (deep-links unaffected).
+- projects/spec_driven/frontend/src/components/Home.tsx — added `discoverProjects(tree)` that yields `(task_type, task_name)` from the "Projects" section's first two child levels; renders an `<ul>` of `<Link to={"/project/{type}/{name}"}>` entries when at least one project is discovered, falls back to the prior "{N} top-level sections loaded" message otherwise.
+- projects/spec_driven/frontend/src/styles.css — added `.home-projects`, `.home-project-list`, `.home-project-item` rules under the existing "Home" section. No theme/token additions; only existing CSS vars (`--border`).
+- specs/development/spec_driven/user_input/revised_prompt.md — header `Last regenerated` bumped to 2026-05-03 16:36:26 with follow-up 008 noted; body unchanged (intent does not move; FR-15 / FR-32 already describe the desired state).
+
+No conflicts found in: final_specs/spec.md (FR-15 already specifies `Projects/{type}/{name}/` shape; FR-32 already specifies the project-page route — implementation drifted, spec did not), interview/qa.md, findings/dossier.md, validation/* (existing structural assertions in `test_tree_walker.py` survive the visible-name change since paths are unchanged; SYS-20 / SYS-21 selector-mismatch issues predate this follow-up and are explicitly deferred), projects/spec_driven/backend/libs/exposed_tree.py (untouched — `project_dirs()` left in place even though no longer called; trimming is out of scope), projects/spec_driven/frontend/src/App.tsx (route already wired), projects/spec_driven/frontend/src/components/{Sidebar,RegeneratePanel,ProjectPage}.tsx (no changes needed — Sidebar's uniform `node.children` walk handles the new shape; ProjectPage / RegeneratePanel already work standalone).
+
+## Follow-up 007 — 2026-05-03 16:10:01
+Source: user_input/follow_ups/007-20260503-161001-makefile-host-port-flag-mismatch.md
+Summary: `make run-backend` and `make run-prod` crashed with `main.py: error: unrecognized arguments: --host 127.0.0.1 --port 8765`. The Makefile passed CLI flags that `backend/main.py` never declared (host/port are hardcoded module-level constants per SEC-13 / NFR-7). Aligned the Makefile to the spec by stripping the flags and the now-orphaned `HOST` / `PORT` vars; `main.py` left untouched to keep the loopback bind a hardcoded boundary, not a CLI surface.
+
+Auto-updated:
+- projects/spec_driven/Makefile — removed `HOST`, `PORT` vars and the `--host`/`--port` arguments from the `run-backend` and `run-prod` recipes.
+- specs/development/spec_driven/user_input/revised_prompt.md — header `Last regenerated` bumped to 2026-05-03 16:10:01 with follow-up 007 noted; body unchanged (intent does not move).
+
+No conflicts found in: final_specs/spec.md (FR-39 lists target names + asserts loopback bind, says nothing about CLI flags), interview/qa.md, findings/dossier.md, validation/* (boot-smoke + Origin/Host suites already assert behavior at `127.0.0.1:8765` against the un-flagged invocation), projects/spec_driven/README.md (Run section describes target names only), projects/spec_driven/backend/main.py (intentionally untouched — SEC-13 invariant).
+
+## Autonomous regen — 2026-05-03 14:58:59 (run `spec_driven-20260503-145859`)
+
+Source: user pasted a full-pipeline `# EXECUTION MODE: AUTONOMOUS` regen prompt selecting all six stages.
+Outcome: **full pipeline regenerated and validated.** An initial premature `pipeline.halted` after stage 2 was reversed at 15:00:00 (operator pushback — self-imposed halt, not a real bound trip per CLAUDE.md § Iteration bounds); stages 3–6 then ran in the same autonomous turn. Final `pipeline.completed` event emitted at 15:55:08.
+
+Stages completed (read-zero contract honored on each):
+
+| Stage | Deletions | Workers | Outputs | Validation |
+|---|---:|---:|---|---|
+| 1 — Intake | 0 (in-place rewrite) | 0 | `revised_prompt.md` Last-regenerated bumped; body unchanged | n/a |
+| 2 — Interview | 1 (`qa.md`; `promoted.md` preserved) | 0 (parent-direct) | 4 categories, 16 judgment-call answers; **pin-001 verbatim** | n/a |
+| 3 — Research | 5 (`angle-*.md` + `dossier.md`) | 4 researchers in parallel (real `WebSearch` + `WebFetch`) | 4 angles + parent-synthesized `dossier.md` (10 KB, 6 cross-cutting insights, 8 spec recommendations) | n/a |
+| 4 — Spec | 1 (`spec.md`) | 0 (parent-direct) | 41 FRs, 16 NFRs, 29 ACs, 9 OQs (~20 KB) | n/a |
+| 5 — Validation strategy | 8 (every `validation/*.md` except `promoted.md`) | 7 level-specialists in parallel | 29 ACs, 15 BDD Features (~620 lines), 131 unit cases, 27 SYS scenarios incl. SYS-16b, 22 SEC probes (CWE/CVE-cited), 7 PERF budgets, 25 A11Y checks; parent-synthesized `strategy.md` | n/a |
+| 6 — Execution + streaming validation | 65 (entire `projects/spec_driven/` source tree; `node_modules` preserved) | 6 implementation workers in parallel (backend-core, backend-tests, frontend-core, frontend-tests, e2e-config, project-meta) | 67 source files rebuilt; backend libs (12), backend tests (8), frontend src (~25 incl. 11 components), frontend tests (7), Playwright config + 27-scenario suite, Makefile, README, .gitignore | **211 passed / 1 skipped** (pytest), **56 passed** (vitest), `tsc -b` clean, `vite build` clean to `backend/static/`, boot smoke pass (8 routes wired, `/api/tree` recursive `children`, regen-prompt INTERACTIVE + AUTONOMOUS headers verbatim, loopback-alias 200, pre-rewrite-shape 403 — move-11 regression test passes, PATCH 405 with `Allow: GET, PUT`) |
+
+Subagent total: **17** (4 research + 7 validation level-specialists + 6 implementation). Audit pairs at `.audit/adhoc_agents/2026-05-03/spec_driven-20260503-145859/spawns/`.
+
+Read-zero contract preserved by:
+- Every stage's prior outputs deleted before regenerate (real `rm`-equivalent, not logical "treat as missing"). 80 files total deleted.
+- All `<stage>/promoted.md` files preserved (interview only had pin-001; findings/final_specs/validation promoted.md were empty/non-existent).
+- Pin-001 verbatim re-inclusion verified in regenerated `qa.md` (Round 1 / functional-scope).
+
+Pending manual verification (per `agent_refs/validation/general.md` principle 4 + accessibility A11Y-17):
+- `make e2e` — Playwright drivers not invoked in this autonomous turn; the 27-scenario suite is wired (incl. SYS-16b dev-server-proxy parity contract per development.md move 11).
+- A11Y manual walkthrough — visual hierarchy of QaView Q/A tints, focus-visibility under real keyboard, motion/animation perceptibility, NVDA screen-reader sanity, forced-colors mode, 200% zoom, prefers-reduced-motion.
+
+Audit: `.audit/adhoc_agents/2026-05-03/spec_driven-20260503-145859/{events.jsonl (124 events), spawns/ (17 spawn audit pairs)}`.
+
 ## Follow-up 006 — 2026-05-03 14:27:03
 Source: user_input/follow_ups/006-20260503-142703-vite-proxy-origin-rewrite-and-validation-gap-prevention.md
 Summary: User reported that "Build prompt" still 403'd when the SPA was driven via `make run-frontend` (Vite at 5173 → backend at 8765). Two coupled fixes: (a) Option A — Vite proxy rewrites the `Origin` header to `http://127.0.0.1:8765` so the backend's strict-Origin gate (untouched) sees a same-shape request in both runtime modes; (b) capture the class of failure as institutional memory in `agent_refs/validation/{general.md, development.md}` so the next development task can't drift the same way.

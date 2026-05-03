@@ -1,541 +1,872 @@
-# BDD scenarios — spec_driven
+# BDD scenarios — `spec_driven`
 
-Stage: 5 (Validation strategy) — clean-state regeneration
-Run: spec_driven-20260503-030434
+Run: `spec_driven-20260503-145859`
 
-Gherkin scenarios for the spec_driven viewer/editor + regeneration-prompt assembler. Each Feature maps to a §3 functional area or a §2 user journey; each Scenario starts with `Given` and ends with `Then`. Selectors and endpoint contracts are quoted verbatim from `final_specs/spec.md`.
+Feature-level Gherkin specs grouping related user-perceived behaviors. Each Feature is broader than the granular ACs in `acceptance_criteria.md`; ACs are checkpoint assertions, scenarios are end-to-end flows. Cross-references at the end of every Feature.
 
----
-
-## Feature: Sidebar tree and render dispatch
-
-  Scenario: Sidebar boots with both top-level sections
-    Given the FastAPI server is running on `127.0.0.1:8765`
-    And the SPA is loaded at `http://127.0.0.1:8765/`
-    When the frontend issues `GET /api/tree`
-    Then the response status is 200
-    And the JSON shape is `{name, path, type, children[]}` recursively
-    And the element with `data-testid="sidebar"` is present in the DOM
-    And at least one `data-testid="tree-leaf"` descends from the "Claude Settings & Shared Context" section
-    And at least one `data-testid="tree-leaf"` descends from the "Projects" section
-
-  Scenario: Sidebar tree includes the canonical artifact set
-    Given the EXPOSED_TREE walker has indexed the repo
-    When the user inspects `GET /api/tree`
-    Then the tree contains `CLAUDE.md`
-    And the tree contains every file matching `.claude/skills/agent_team/playbooks/*.md`
-    And the tree contains every file matching `.claude/agent_refs/**/*.md`
-    And under each `specs/{type}/{name}/` it contains `user_input/`, `interview/`, `findings/`, `final_specs/`, `validation/` subfolders only
-    And it contains each stage's `promoted.md` sidecar when present
-    And it contains `changelog.md` when present
-
-  Scenario Outline: Render dispatch picks the correct view per file path
-    Given the user navigates to `/file/<path>`
-    When the main pane resolves the renderer for `<path>`
-    Then the active component is `<component>`
-
-    Examples:
-      | path                                                            | component         |
-      | specs/development/spec_driven/final_specs/spec.md               | MarkdownView      |
-      | specs/development/spec_driven/interview/qa.md                   | QaView            |
-      | .audit/adhoc_agents/2026-05-03/run-x/events.jsonl               | JsonlView         |
-      | .claude/settings.json                                           | CodeView          |
-      | specs/development/spec_driven/findings/diagram.png              | ImagePlaceholder  |
-
-  Scenario: Per-project link opens the project parent page
-    Given the sidebar has rendered the "Projects" section
-    And there is a project entry for `development/spec_driven`
-    When the user clicks the `data-testid="project-link"` `↗` icon next to that entry
-    Then the route changes to `/project/development/spec_driven`
-    And the project parent page lists six stages with module checkboxes
-    And the master Regenerate panel is visible
-
-  Spec refs: FR-1, FR-2, FR-15, FR-16, FR-17, FR-18, AC-1, AC-27
+Conventions:
+- `Given` sets up filesystem / SPA state.
+- `When` is a single user-visible action (click, paste URL, keypress, send HTTP request).
+- `Then` asserts on rendered DOM, response shape, on-disk content, or `events.jsonl`.
+- HTTP examples assume the backend is bound at `127.0.0.1:8765` unless otherwise stated.
+- Module identifiers (`FR-NN`, `NFR-NN`, `AC-NN`) refer to `final_specs/spec.md` and `validation/acceptance_criteria.md`.
 
 ---
 
-## Feature: File reader and safe_resolve sandbox
+## Feature: Browse the artifact tree
 
-  Scenario: Read a known markdown artifact end-to-end
-    Given the file `specs/development/spec_driven/final_specs/spec.md` exists on disk
-    When the client issues `GET /api/file?path=specs/development/spec_driven/final_specs/spec.md`
-    Then the response status is 200
-    And the JSON body has fields `{path, content, mtime, bytes}`
-    And `content` decodes as UTF-8 and matches the file bytes
-    And the response carries header `X-Content-Type-Options: nosniff`
-    And the response carries header `Content-Disposition: attachment`
+  As the spec author
+  I want to navigate every file the workflow reads or writes from a single sidebar
+  So that I never have to switch to a file explorer to inspect a stage's output
 
-  Scenario Outline: Path traversal and sandbox escapes return 404 (single status)
-    Given the EXPOSED_TREE is rooted at the repo
-    When the client issues `GET /api/file?path=<path>`
-    Then the response status is 404
-    And the response body does not distinguish "outside tree" from "not found"
+  Background:
+    Given the backend is running at "http://127.0.0.1:8765"
+    And the SPA is loaded in a browser tab against the backend
+    And the repo contains at least one project under "specs/development/spec_driven/"
 
-    Examples:
-      | path                                                          |
-      | ../etc/passwd                                                 |
-      | specs/../../etc/passwd                                        |
-      | specs/development/spec_driven/CON.md                          |
-      | specs/development/spec_driven/PRN                             |
-      | specs/development/spec_driven/final_specs/spec.md::$DATA      |
-      | specs/development/spec_driven/final_specs/spec.md:hidden      |
-      | C:/Windows/System32/drivers/etc/hosts                         |
+  Scenario: Sidebar exposes the two top-level sections with recursive children
+    When the SPA fetches "GET /api/tree"
+    Then the response is a single JSON object with shape "{type, name, path, children: [...]}"
+    And exactly two top-level sections exist with names "Claude Settings & Shared Context" and "Projects"
+    And every non-leaf node carries a "children" field (possibly empty)
+    And every leaf node has "type": "file" and no "children" field
+    And the "Claude Settings & Shared Context" subtree includes "CLAUDE.md" as a leaf
+    And the "Claude Settings & Shared Context" subtree includes ".claude/skills/agent_team/SKILL.md" as a leaf
+    And the "Claude Settings & Shared Context" subtree includes ".claude/agent_refs/validation/general.md" as a leaf
+    And the "Projects" subtree includes "specs/development/spec_driven/final_specs/spec.md" as a leaf
 
-  Scenario: Reparse points (junctions and symlinks) are rejected
-    Given a junction at `specs/development/spec_driven/leak` points outside the EXPOSED_TREE
-    When the client issues `GET /api/file?path=specs/development/spec_driven/leak/anything.md`
-    Then the response status is 404
-    And `safe_resolve` rejected the request before any `open()` call
+  Scenario: Sidebar walks "node.children" uniformly with no special branches
+    Given the consumer-walk recurses only via "node.children" and never via "node.projects" or "node.stages"
+    When the consumer-walk visits every node in the response of "GET /api/tree"
+    Then no leaf is reached via a path that requires a non-"children" field
+    And the total leaf count for the "Projects" section is at least 1
 
-  Scenario Outline: Disallowed extension returns 415
-    Given the file `<path>` exists
-    When the client issues `GET /api/file?path=<path>`
-    Then the response status is 415
+  Scenario: Click a sidebar leaf renders the file in the main pane
+    Given the sidebar is rendered
+    When the user clicks the leaf "specs/development/spec_driven/final_specs/spec.md"
+    Then the URL changes to "/file/specs%2Fdevelopment%2Fspec_driven%2Ffinal_specs%2Fspec.md"
+    And the main pane renders a markdown view
+    And the breadcrumb above the main pane shows "specs / development / spec_driven / final_specs / spec.md"
+    And the current crumb is rendered as plain text with attribute aria-current="page"
 
-    Examples:
-      | path                                              |
-      | specs/development/spec_driven/scratch.exe         |
-      | specs/development/spec_driven/diagram.svg         |
-      | specs/development/spec_driven/notes.docx          |
+  Scenario: Sidebar keyboard navigation reaches the focused leaf
+    Given the sidebar tree has been built
+    When the user presses "Ctrl+Shift+E"
+    Then focus moves to the sidebar tree root
+    When the user presses "ArrowDown" three times
+    Then a leaf or section node is focused
+    When the user presses "Enter"
+    Then the focused file is mounted into the main pane
 
-  Scenario: Files larger than 1 MB return 413
-    Given a file `specs/development/spec_driven/huge.md` is 1.5 MB
-    When the client issues `GET /api/file?path=specs/development/spec_driven/huge.md`
-    Then the response status is 413
+  Scenario: Sidebar response is fast at canonical scale
+    Given the canonical scale (50 projects x 200 files = 10000 leaves) is staged on disk
+    When the SPA fetches "GET /api/tree"
+    Then the response arrives within 250 ms
 
-  Scenario: Verb whitelist on the file endpoint
-    Given the server is running
-    When the client issues `PATCH /api/file` or `DELETE /api/file`
-    Then the response status is 405
-
-  Spec refs: FR-3, FR-4, FR-5, NFR-4, NFR-5, NFR-6, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-12
+  References: FR-3, FR-15, FR-16, FR-17, FR-18, NFR-1, AC-3, AC-26.
 
 ---
 
-## Feature: File editor — toolbar, dirty-dot, error banner, Ctrl+S
+## Feature: Render a file in the appropriate mode
 
-  Scenario: Entering edit mode shows the editor controls
-    Given the user is viewing a rendered markdown file at `/file/specs/development/spec_driven/final_specs/spec.md`
-    When the user clicks the ✎ Edit toolbar button
-    Then the rendered view is replaced by a `<textarea>`
-    And the toolbar shows three controls: **Save**, **Discard**, **Close editor**
-    And the toolbar's filename has no dirty dot
+  As the spec author
+  I want each file to render in the mode that matches its extension and shape
+  So that JSONL is collapsible, Q/A is color-differentiated, and code is syntax-highlighted
 
-  Scenario: Dirty dot appears on edit and clears on save
-    Given the editor is open with the file's last-saved text
-    When the user types a character into the textarea
-    Then a filled-circle dirty dot is rendered next to the toolbar's filename
-    When the user presses Ctrl+S
-    And `PUT /api/file` returns 200
-    Then the dirty dot disappears
-    And the editor remains open with the saved content as the new baseline
+  Background:
+    Given the SPA is loaded
+    And every render component is wrapped in a real React Error Boundary class
 
-  Scenario: Discard reverts the textarea to last-saved
-    Given the editor is open and the textarea has unsaved edits
-    And the dirty dot is visible
-    When the user clicks **Discard**
-    Then the textarea content reverts to the last-saved text
+  Scenario Outline: Render-mode dispatch by file shape
+    Given the file "<path>" exists inside EXPOSED_TREE
+    When the user opens the file via the sidebar
+    Then the main pane mounts the "<component>" component
+    And the selector "<selector>" resolves inside the main pane
+    And the browser console reports zero errors
+
+    Examples:
+      | path                                                     | component         | selector                  |
+      | specs/development/spec_driven/final_specs/spec.md        | MarkdownView      | .markdown-view            |
+      | specs/development/spec_driven/interview/qa.md            | QaView            | .qa-view .qa-pair         |
+      | .audit/adhoc_agents/2026-05-03/spec_driven-20260503-145859/events.jsonl | JsonlView | .jsonl-view .jsonl-line  |
+      | projects/spec_driven/backend/static/manifest.json        | CodeView          | .code-view pre code       |
+      | specs/development/spec_driven/findings/diagram.png       | ImagePlaceholder  | .image-placeholder        |
+
+  Scenario: MarkdownView strips raw HTML through rehype-sanitize default schema
+    Given a file "specs/development/spec_driven/findings/dossier.md" containing "<script>alert(1)</script>" inline
+    When the user opens that file
+    Then the rendered DOM contains zero "<script>" elements
+    And the rendered DOM contains zero attributes whose name starts with "on"
+    And no anchor in the rendered DOM has href starting with "javascript:"
+
+  Scenario: MarkdownView renders broken internal links as muted spans, not anchors
+    Given the file "specs/development/spec_driven/findings/dossier.md" links to "[gone](./removed.md)" and "./removed.md" does not exist
+    When the user opens that file
+    Then the link "gone" renders as a "<span class='broken-link'>" element
+    And the span carries a "title" attribute containing the broken target
+    And the link is NOT rendered as an "<a>" element
+
+  Scenario: MarkdownView opens external links in a new tab
+    Given a file links to "[OWASP](https://owasp.org/)"
+    When the user opens that file
+    Then the link "OWASP" is an "<a>" with attribute target="_blank"
+    And the anchor has rel containing "noopener" and "noreferrer"
+
+  Scenario: QaView color-differentiates question and answer blocks
+    Given "specs/development/spec_driven/interview/qa.md" contains a Round 1 General-shape Q/A pair
+    When the user opens "interview/qa.md"
+    Then each Q block has class containing "qa-q" and resolved background-color is the blue tint
+    And each A block has class containing "qa-a" and resolved background-color is the green tint
+    And every Q/A block carries a "category" badge in its header
+
+  Scenario: QaView regex matches the autonomous-mode judgment-call form
+    Given a Q/A pair in "qa.md" written as "- A *(judgment call: Y because Z)*: text"
+    When the user opens "interview/qa.md"
+    Then the answer renders inside a ".qa-a" block with the same body text
+    And no parse-fallback banner is shown
+
+  Scenario: ParseFallback Error Boundary catches a malformed Q/A file
+    Given "interview/qa.md" contains a corrupted line that throws inside QaView's parse-on-render
+    When the user opens "interview/qa.md"
+    Then the main pane renders a "<pre>" with the raw file content
+    And a banner above the "<pre>" reads "Parse error — falling back to raw text"
+    And the browser console reports the caught error exactly once
+
+  Scenario: JsonlView parses each line independently
+    Given a file "events.jsonl" contains three valid JSON object lines and one malformed line
+    When the user opens that file
+    Then exactly three ".jsonl-line.parsed" elements render
+    And exactly one ".jsonl-line.parse-error" element renders
+    And clicking a parsed line toggles a collapsed/expanded JSON tree
+
+  Scenario: CodeView uses the dark fixed palette (intentional carve-out)
+    Given a file "manifest.json" is opened
+    Then the ".code-view pre" element resolves background-color to a dark color
+    And the contrast ratio between the rendered text and that background meets WCAG AA
+
+  Scenario: Image placeholder for binary files
+    Given a file "specs/development/spec_driven/findings/diagram.png" is opened
+    Then the main pane renders a card showing the filename, the byte count, and the text "binary content not previewed"
+    And no "<img>" tag is rendered
+
+  References: FR-19, FR-20, FR-21, FR-22, FR-23, FR-24, NFR-8, NFR-13, NFR-16, AC-4, AC-5, AC-6, AC-25.
+
+---
+
+## Feature: Edit a whole file in the textarea editor
+
+  As the spec author
+  I want to switch a file into edit mode, change it, and save without losing the cursor's place
+  So that I can fix a typo without leaving the SPA
+
+  Background:
+    Given the SPA is loaded
+    And a file "specs/development/spec_driven/final_specs/spec.md" is open in MarkdownView
+    And the file's mtime on disk is "T0"
+
+  Scenario: Toggle edit, modify, save round-trip
+    When the user clicks the "Edit" pencil in the file-pane toolbar
+    Then the main pane swaps to a "<textarea>" containing the full file content
+    When the user appends "\n\n## Scratch" to the textarea
+    Then the toolbar shows a filled dot "●"
+    And document.title contains an asterisk "*"
+    When the user presses "Ctrl+S"
+    Then a "PUT /api/file" request is sent with body "{path, content}"
+    And the request includes header "If-Unmodified-Since: <T0 in RFC 7232>"
+    And the response is 200 with body "{bytes, mtime: T1}"
+    And the editor stays mounted but the dirty dot disappears
+    And document.title no longer contains the asterisk
+    When the user clicks "Close editor"
+    Then the main pane re-mounts MarkdownView with the new content
+    And the rendered markdown contains the heading "Scratch"
+
+  Scenario: Discard reverts to last-saved content
+    Given the user has typed "garbage" into the editor
+    And the toolbar shows the dirty dot
+    When the user clicks "Discard"
+    Then the textarea content reverts to the last-saved version
     And the dirty dot disappears
 
-  Scenario: Save error renders a persistent inline banner; content is preserved
-    Given the editor is open with edits in the textarea
-    When the user presses Ctrl+S
-    And `PUT /api/file` returns 413 with `{detail: {kind: "too_large"}}`
-    Then a persistent banner is rendered above the textarea
-    And the banner reads `Could not save: <message>`
-    And the banner has `role="alert"`
-    And the textarea content is preserved (no auto-clear, no auto-revert)
-    And the **Save** button is still focusable and clickable
-    When the user fixes the issue and presses Ctrl+S again
-    And `PUT /api/file` returns 200
-    Then the banner disappears
+  Scenario: Closing a dirty editor warns via beforeunload
+    Given the user has typed "garbage" into the editor
+    When the user attempts to navigate away (closes the tab)
+    Then the browser fires a "beforeunload" event
+    And the user is prompted whether to discard unsaved changes
 
-  Scenario: PUT roundtrip persists content
-    Given the user opens `specs/development/spec_driven/scratch.md` for edit
-    When the user replaces the body with `x` and presses Ctrl+S
-    And the client issues `PUT /api/file` with `{path: "specs/development/spec_driven/scratch.md", content: "x"}`
-    Then the response status is 200
-    And a subsequent `GET /api/file?path=specs/development/spec_driven/scratch.md` returns `content == "x"`
+  Scenario: Save error shows a persistent inline banner, not a toast
+    Given the user has typed valid changes
+    And the next "PUT /api/file" will return 500
+    When the user presses "Ctrl+S"
+    Then a banner appears above the textarea with class "save-error-banner"
+    And the banner is NOT a transient toast (the element is still present after 5 seconds)
+    And the dirty dot remains visible
+    When the next "PUT /api/file" returns 200
+    And the user presses "Ctrl+S" again
+    Then the banner is removed and the dirty dot clears
 
-  Scenario: Cross-origin save attempt is rejected
-    Given the editor calls `PUT /api/file` with `Origin: http://evil.example.com`
-    When the request reaches the FastAPI app
-    Then the response status is 403
-    And no file on disk is mutated
+  Scenario: Stale-write conflict — file changed under the user
+    Given the user opened the file at mtime "T0"
+    And another process wrote the file at mtime "T1 > T0"
+    When the user presses "Ctrl+S"
+    Then "PUT /api/file" responds 409 with body '{"detail":{"kind":"stale_write","current_mtime":"T1"}}'
+    And a banner reads "file changed externally — Reload?"
+    And the banner shows a "Reload" button
+    When the user clicks "Reload"
+    Then the editor fetches the latest content (mtime T1)
+    And the in-memory edits are discarded
+    And the dirty dot is cleared
 
-  Scenario: Image and SVG paths cannot be written
-    Given the user crafts a `PUT /api/file` to a `.png` or `.svg` path
-    When the request reaches the FastAPI app
-    Then the response status is 415
+  Scenario: PUT body validates UTF-8 / no NUL on text extensions
+    When the user pastes content beginning with a NUL byte and presses "Ctrl+S"
+    Then "PUT /api/file" responds 400 with a "kind: invalid_text" detail
+    And the editor shows a save-error banner with that message
 
-  Spec refs: FR-6, FR-7, FR-8, FR-9, FR-25, FR-26, FR-27, FR-28, AC-9, AC-10, AC-11, NFR-7, NFR-8, NFR-9, NFR-15
+  Scenario: 1.5 MB content is rejected with 413
+    Given the user pastes content of 1.5 MB into the editor
+    When "Ctrl+S" is pressed
+    Then "PUT /api/file" responds 413 with body '{"detail":{"kind":"too_large"}}'
+    And a save-error banner shows "file too large"
 
----
-
-## Feature: Structured Q/A view and per-block editing
-
-  Scenario: QaView renders rounds, categories, and tinted Q/A blocks
-    Given the user deep-links to `/file/specs/development/spec_driven/interview/qa.md`
-    When the SPA boots and dispatches by path
-    Then the main pane mounts the component with `data-testid="qa-view"`
-    And `<main>` content is non-empty
-    And `consoleErrors` collected during boot equal `[]`
-    And at least one Q-tinted block (blue) is present
-    And at least one A-tinted block (green) is present
-    And each round renders with a `## Round N` heading
-    And each category renders as a colored badge above its Q/A list
-
-  Scenario: Autonomous-form Q/A renders parsed (not via fallback)
-    Given the qa.md contains a line `- A *(judgment call — chose X because Y)*: text`
-    When QaView's parser walks the file
-    Then the answer regex matches both interactive `- A: <text>` and autonomous `- A *(judgment call — chose X because Y)*: <text>`
-    And the block renders as a parsed A-tint block
-    And the Error Boundary fallback is NOT engaged
-
-  Scenario: Per-Q inline edit persists via PUT /api/file
-    Given QaView is mounted on `interview/qa.md`
-    When the user clicks the ✎ pencil on a single Q block
-    Then a small `<textarea>` scoped to that block appears with **Save** and **Cancel** controls
-    When the user edits the Q and presses Ctrl+S
-    Then the client issues `PUT /api/file` with the full file's new content
-    And the response status is 200
-    And QaView re-renders with the updated Q text
-
-  Scenario: File-level ✎ Edit is disabled (but visible) while a per-block editor is open
-    Given QaView is mounted and a per-Q editor is open
-    When the user looks at the toolbar
-    Then the file-level ✎ Edit toggle is rendered
-    And the file-level ✎ Edit toggle is disabled (inert) — not hidden
-    When the user closes the per-block editor
-    Then the file-level ✎ Edit toggle becomes enabled again
-
-  Scenario: Whole-file edit on qa.md ignores the structured view
-    Given QaView is mounted on `interview/qa.md`
-    And no per-block editor is open
-    When the user clicks the file-level ✎ Edit toolbar button
-    Then the structured QaView is replaced by the standard `<textarea>` editor
-    And the textarea content equals the raw markdown of `qa.md`
-    And Save/Discard/Close-editor controls behave per FR-25–FR-28
-
-  Spec refs: FR-18, FR-21, FR-29, FR-30, FR-31, FR-32, AC-18, AC-19
+  References: FR-7, FR-7b, FR-8, FR-25, FR-26, FR-27, FR-28, FR-29, NFR-6, AC-7, AC-9, AC-10, AC-13, AC-14, AC-15.
 
 ---
 
-## Feature: QaView fallback via Error Boundary
+## Feature: Edit a Q/A pair in place
 
-  Scenario: Malformed qa.md falls back to MarkdownView with a banner
-    Given a deliberately malformed `interview/qa.md` exists in a fixture project
-    And the user deep-links to `/file/specs/development/<broken-fixture>/interview/qa.md`
-    When QaView's parser throws during render
-    Then a real React Error Boundary class component catches the error via `componentDidCatch`
-    And the fallback renders `MarkdownView` over the raw markdown
-    And a one-line banner reads `Could not parse structured Q/A view; rendering raw markdown. (cause: <message>)`
-    And `<main>` content is non-empty
-    And `consoleErrors` collected during boot equal `[]`
+  As the spec author
+  I want to fix a single Q or A in interview/qa.md without retyping the rest of the file
+  So that small interview corrections stay surgical
 
-  Scenario: Fallback does NOT use a try/catch around JSX
-    Given the QaView component is reviewed
-    When the implementation is inspected
-    Then it does NOT use the pattern `try { return <Foo .../> } catch { return <Fallback /> }`
-    And it relies on a class-component Error Boundary using `componentDidCatch` / `getDerivedStateFromError`
+  Background:
+    Given the SPA is loaded
+    And "specs/development/spec_driven/interview/qa.md" renders in QaView with at least three Q/A pairs
 
-  Spec refs: FR-19, FR-20, AC-20
+  Scenario: Per-Q inline edit round-trip
+    When the user clicks the per-Q "✎" pencil on the second Q block
+    Then a small inline editor opens scoped to that Q
+    And the file-level "Edit" toggle in the toolbar becomes disabled
+    When the user changes the Q text and clicks "Save"
+    Then a "PUT /api/file" request is sent with the WHOLE file content (not a patch)
+    And the response is 200
+    And the QaView re-renders with the new Q text
+    And the file-level "Edit" toggle re-enables
+
+  Scenario: Per-A inline edit round-trip
+    When the user clicks the per-A "✎" pencil on the first A block
+    Then a small inline editor opens scoped to that A
+    When the user changes the A text and clicks "Save"
+    Then "PUT /api/file" is sent with the whole file
+    And the response is 200
+    And the QaView shows the new A text in the same color-differentiated block
+
+  Scenario: Per-block edit and file-level edit are mutually exclusive
+    Given a per-Q inline editor is open
+    When the user attempts to click the file-level "Edit" pencil in the toolbar
+    Then nothing happens (the button is disabled)
+
+  Scenario: Per-block edit on autonomous-mode judgment-call form
+    Given the second Q/A pair was written by an autonomous-mode regen as "- A *(judgment call: chose B because cost)*: text"
+    When the user clicks "✎" on that A
+    Then the inline editor opens with the answer body "text" (judgment-call annotation visible above)
+    When the user edits the answer and saves
+    Then the file's exact "*(judgment call ...)*" annotation is preserved verbatim
+
+  Scenario: Two Q-edits race — last-write-wins per Q with banner
+    Given the user opens a per-Q inline editor at mtime "T0"
+    And another tab has already saved the same Q at mtime "T1 > T0"
+    When the user clicks "Save"
+    Then "PUT /api/file" responds 409
+    And a banner above the inline editor reads "Q changed externally — Reload?"
+    When the user clicks "Reload"
+    Then the inline editor re-fetches and re-mounts with the T1 version
+    And the user's in-memory edit is discarded
+
+  References: FR-20, FR-30, OQ-2, AC-8, AC-13.
 
 ---
 
-## Feature: Markdown rendering and link resolution
+## Feature: Pin / unpin atomic items
 
-  Scenario: Relative links resolve against the current file's directory and SPA-navigate
-    Given the user is viewing `/file/specs/development/spec_driven/final_specs/spec.md`
-    And the markdown contains a link `[interview qa](../interview/qa.md)`
-    When the user clicks the link
-    Then the SPA navigates to `/file/specs/development/spec_driven/interview/qa.md`
-    And no full page reload occurs
+  As the spec author
+  I want to mark a Q/A pair, FR-NN, NFR-NN, AC-NN, or recommendation bullet as pinned
+  So that the next regeneration of that stage cannot silently drop it
 
-  Scenario: Absolute http(s) links open in a new tab
-    Given the markdown contains `[OWASP](https://owasp.org/)`
-    When the user clicks the link
-    Then a new tab opens with `target="_blank"` and `rel="noopener noreferrer"`
+  Background:
+    Given the SPA is loaded
+    And "specs/development/spec_driven/interview/promoted.md" does not exist
 
-  Scenario: Anchor-only links scroll without navigation
-    Given the markdown contains `[top](#section-1)`
-    When the user clicks the link
-    Then the page scrolls to the in-page anchor
-    And the route is unchanged
+  Scenario: Pin a Q/A pair
+    Given QaView is rendered for "interview/qa.md"
+    When the user clicks "📌" on the first Q/A pair
+    Then a "POST /api/promote" request is sent with body
+      """
+      {
+        "project_type": "development",
+        "project_name": "spec_driven",
+        "stage_folder": "interview",
+        "source_file": "qa.md",
+        "item_id": "round1.general.q1",
+        "item_text": "...verbatim Q+A markdown..."
+      }
+      """
+    And the response is 200 with body '{"status":"ok","item_id":"round1.general.q1"}'
+    And the file "specs/development/spec_driven/interview/promoted.md" now exists
+    And it contains the verbatim "...Q+A markdown..." block
+    And the rendered Q/A pair shows a small "📌" indicator
+    When the user hovers the indicator
+    Then a tooltip displays the path "specs/development/spec_driven/interview/promoted.md"
 
-  Scenario Outline: Broken links render as muted spans, not anchors
-    Given the markdown contains a link to `<target>` that resolves as broken
-    When the renderer visits that link
-    Then the rendered element is `<span class="link-broken" aria-disabled="true">` (NOT an `<a>`)
-    And the span carries a `title="<cause>"` attribute
+  Scenario: Pin an FR block
+    Given the user is viewing "final_specs/spec.md" rendered as MarkdownView
+    When the user clicks "📌" next to the "**FR-9.**" block
+    Then "POST /api/promote" is sent with stage_folder "final_specs", item_id "FR-9"
+    And "specs/development/spec_driven/final_specs/promoted.md" contains the verbatim FR-9 paragraph
+
+  Scenario: Pin an AC block
+    Given the user is viewing "validation/acceptance_criteria.md"
+    When the user clicks "📌" next to "**AC-11**"
+    Then "POST /api/promote" is sent with stage_folder "validation", item_id "AC-11"
+    And the response is 200
+    And "validation/promoted.md" contains the AC-11 block
+
+  Scenario: Unpin an item is idempotent
+    Given an item "round1.general.q1" is pinned in "interview/promoted.md"
+    When the user clicks the "📌" again to unpin
+    Then "DELETE /api/promote" is sent with stage_folder "interview", item_id "round1.general.q1"
+    And the response is 200
+    And the pin is removed from "interview/promoted.md"
+    When the user immediately clicks unpin a second time (race)
+    Then the second request also returns 200 (idempotent)
+
+  Scenario: Promotion endpoint rejects unknown stage_folder
+    When a "POST /api/promote" sends stage_folder "scratch"
+    Then the response is 400 with detail "kind: invalid_stage"
+
+  Scenario: Stage 6 (project code) does not support promotion
+    Given the user is viewing "projects/spec_driven/backend/main.py"
+    Then no "📌" pin affordance is rendered next to any code symbol or block
+
+  References: FR-13, FR-14, FR-35, FR-36, NFR-15, AC-24.
+
+---
+
+## Feature: Build a per-stage regeneration prompt
+
+  As the spec author
+  I want to assemble a copy-paste regeneration prompt for one stage with my chosen modules and mode
+  So that I can drive Claude Code to re-run that stage without hand-writing the prompt
+
+  Background:
+    Given the SPA is loaded
+    And the project "specs/development/spec_driven/" has at least two follow-ups under "user_input/follow_ups/"
+    And the autonomous-mode toggle is in its persisted state
+
+  Scenario: Build a small interactive prompt — happy path
+    Given the user has opened "specs/development/spec_driven/interview/qa.md"
+    And the per-stage Regenerate "<details>" panel is closed by default
+    When the user opens the Regenerate panel
+    Then all module checkboxes are checked
+    And the autonomous toggle reflects localStorage "spec_driven.autonomous_mode.v1" (default off)
+    When the user clicks "Build prompt"
+    Then a "POST /api/regen-prompt" is sent with body
+      """
+      {
+        "project_type": "development",
+        "project_name": "spec_driven",
+        "stages": ["interview"],
+        "modules": {"interview": ["qa"]},
+        "autonomous": false
+      }
+      """
+    And the response is 200 with body shape "{prompt, warning, selected_stages_count, follow_ups_count, autonomous, bytes}"
+    And "warning" is null
+    And the assembled "prompt" starts with the literal first line "# EXECUTION MODE: INTERACTIVE"
+    And the prompt inlines the verbatim content of "user_input/revised_prompt.md"
+    And the prompt lists "user_input/follow_ups/001-..." and "user_input/follow_ups/002-..." in numerical order with full bodies inlined
+    And the prompt contains "### Constraints" with the read-zero contract verbatim
+    And a bordered ".regen-prompt-block" renders inline (no inner "<details>")
+    And the breakdown line beside the Build button reads "1 stages selected, 2 follow-ups inlined, autonomous=false, X KB"
+
+  Scenario: Build a prompt in autonomous mode
+    Given the autonomous toggle is on
+    When the user opens the Regenerate panel and clicks "Build prompt"
+    Then the response "autonomous" field is true
+    And the assembled prompt's first line is "# EXECUTION MODE: AUTONOMOUS"
+
+  Scenario: Pinned items appear inlined in the per-stage prompt
+    Given "specs/development/spec_driven/interview/promoted.md" contains a verbatim Q/A pair
+    When the user clicks "Build prompt" for the interview stage
+    Then the assembled prompt contains a section header "Pinned items (MUST survive regeneration)"
+    And the section contains the verbatim Q/A pair from "promoted.md"
+
+  Scenario: Copy button places the prompt on the clipboard
+    Given a regen-prompt-block is rendered
+    When the user clicks the "Copy" button in the header bar
+    Then navigator.clipboard.readText() returns the same string as the rendered "<pre>" body
+    And the button's label flips to "Copied!"
+    And the button's aria-live attribute is "polite"
+    And after 1500 ms the label flips back to "Copy"
+    And the button's bounding box width does not change between states (fixed min-width)
+
+  Scenario: Soft-wrap toggle defaults on, off restores horizontal scroll
+    Given a regen-prompt-block is rendered
+    Then the "<pre>" element has CSS "white-space: pre-wrap"
+    When the user clicks the "Wrap" toggle off
+    Then the "<pre>" element has CSS "white-space: pre" and "overflow-x: auto"
+    When the user clicks "Build prompt" again on a different stage
+    Then the new prompt block reverts to soft-wrap on (per-render preference, not persisted)
+
+  Scenario: Regen prompt shows assembled-style preference
+    Given a regen-prompt-block is rendered
+    Then the "<pre>" computed font-size is "13px"
+    And the "<pre>" computed line-height is "1.55"
+    And the "<pre>" computed max-height is "520px"
+
+  Scenario Outline: Size policy — warn don't truncate
+    Given the user has selected stages and modules that produce a prompt of "<bytes>" bytes
+    When the user clicks "Build prompt"
+    Then the response status is "<status>"
+    And the response "warning" field is "<warning>"
+    And the UI behavior is "<ui>"
 
     Examples:
-      | target                               | cause                  |
-      | ../missing/no-such-file.md           | file not found         |
-      | ../../etc/passwd                     | outside exposed tree   |
-      | ../Interview/qa.md                   | case mismatch          |
-      | #not-a-real-anchor                   | anchor not in document |
+      | bytes  | status | warning                                                            | ui                                                                            |
+      | 12000  | 200    | null                                                               | bordered prompt block rendered; no banner                                     |
+      | 51199  | 200    | null                                                               | bordered prompt block rendered; no banner                                     |
+      | 75000  | 200    | {"kind":"approaching_ceiling","bytes":75000,"soft_limit":51200}    | yellow banner above prompt block; prompt block still rendered                 |
+      | 999999 | 200    | {"kind":"approaching_ceiling","bytes":999999,"soft_limit":51200}   | yellow banner above prompt block; prompt block still rendered                 |
+      | 1100000| 413    | n/a (response detail is {"kind":"too_large"})                      | build-error banner; prompt block NOT rendered                                 |
 
-  Scenario: No raw HTML survives the sanitizer
-    Given a markdown source contains `<script>alert(1)</script>` and `<img onerror=...>`
-    When the renderer pipeline runs `react-markdown` + `rehype-sanitize`
-    Then the rendered DOM contains no `<script>` element
-    And no `on*` event handler attributes are present
+  Scenario: Build prompt in single-process mode (`make run-prod`)
+    Given the SPA is loaded at "http://127.0.0.1:8765/" (single-process)
+    And the autonomous toggle is off
+    When the user clicks "Build prompt"
+    Then the request "POST /api/regen-prompt" sends with header "Origin: http://127.0.0.1:8765"
+    And the request sends with header "Host: 127.0.0.1:8765"
+    And the response is 200
 
-  Spec refs: FR-22, FR-23, FR-24, NFR-8, AC-21
+  Scenario: Build prompt in dev-server proxy mode (browser at `localhost:5173`)
+    Given the user opens the SPA at "http://localhost:5173/" (Vite dev server, `make run-frontend`)
+    And the backend is running at "http://127.0.0.1:8765/"
+    When the user clicks "Build prompt"
+    Then the browser sends "POST /api/regen-prompt" via "fetch" to a same-origin path
+    And the Vite proxy intercepts the request
+    And the Vite proxy rewrites the request "Origin" header to "http://127.0.0.1:8765"
+    And the Vite proxy (changeOrigin: true) rewrites the request "Host" header to "127.0.0.1:8765"
+    And the backend receives the rewritten request
+    And the backend Origin/Host gate sees a same-shape request (Origin matches the bound port)
+    And the response is 200
+    And the regen-prompt-block renders in the browser at "localhost:5173"
+
+  Scenario: Pre-rewrite Origin sent direct to backend is refused
+    Given the backend is running at "http://127.0.0.1:8765/"
+    When a tester sends "POST /api/regen-prompt" directly to the backend with header "Origin: http://localhost:5173"
+    Then the response is 403 (Origin not in the bound-port allow-list)
+    And no prompt body is returned
+
+  References: FR-9, FR-10, FR-11, FR-12, FR-31, FR-32, FR-33, FR-34, FR-37, FR-41, NFR-7, AC-11, AC-16, AC-17, AC-18, AC-19, AC-20, AC-21.
 
 ---
 
-## Feature: Regenerate panel — per-stage file
+## Feature: Build a regeneration prompt for the whole project
 
-  Scenario: Default-collapsed panel above a stage file
-    Given the user is viewing `/file/specs/development/spec_driven/validation/strategy.md`
-    When the page first renders
-    Then a `<details title="Regenerate">` element is present above the file content
-    And the `<details>` is closed (`open` attribute absent)
+  As the spec author
+  I want to assemble a single regen prompt that walks multiple stages in order
+  So that I can re-run a slice of the pipeline with one paste
 
-  Scenario: Module checkboxes default to all-checked
-    Given the user expands the Regenerate panel on a `validation/` file
-    When the panel reads `GET /api/stages?project_type=development&project_name=spec_driven`
-    Then a checkbox is rendered for each module of the `validation` stage
-    And every checkbox is checked by default
+  Background:
+    Given the SPA is loaded
+    And the user navigates to "/project/development/spec_driven"
 
-  Scenario: Build prompt assembles INTERACTIVE prompt and shows breakdown line
-    Given the Regenerate panel is expanded on a `validation/` file
-    And the autonomous-mode toggle is OFF
-    When the user clicks **Build prompt**
-    And the client issues `POST /api/regen-prompt` with `{autonomous: false, stages: ["validation"], modules: {validation: [...]}}`
-    Then the response status is 200
-    And the response body has `{prompt, warning, selected_stages_count, follow_ups_count, autonomous, bytes}`
-    And `autonomous` equals `false`
-    And `prompt` opens with the literal first line `# EXECUTION MODE: INTERACTIVE`
-    And the prompt does NOT contain the autonomous imperative line
-    And a one-line breakdown `{N} stages selected, {K} follow-ups inlined, autonomous=false, {bytes} KB` is rendered in the actions row beside Build prompt
-    And `warning` is `null`
+  Scenario: Project parent route renders the stage map and master panel
+    Then the page shows six stage entries (intake, interview, research, spec, validation, execution)
+    And each stage entry has a checkbox (default checked)
+    And each stage's modules are listed as nested checkboxes (default checked)
+    And one autonomous-mode toggle drives the project-level prompt
+    And one "Build prompt" button drives the project-level prompt
 
-  Scenario: Autonomous header and verbatim imperative line
-    Given the autonomous-mode toggle is ON
-    When the user clicks **Build prompt**
-    And the client issues `POST /api/regen-prompt` with `{autonomous: true, ...}`
-    Then `prompt` opens with the literal first line `# EXECUTION MODE: AUTONOMOUS`
-    And the next non-blank line equals "Do not call AskUserQuestion. For anything unclear, use your best judgment, record the choice inline in the artifact, and keep going. Produce every requested artifact below in this single turn before stopping."
-    And the breakdown line shows `autonomous=true`
+  Scenario: Combined prompt walks selected stages in order
+    Given the user un-checks the "intake" stage and the "execution" stage
+    When the user clicks "Build prompt"
+    Then "POST /api/regen-prompt" sends "stages": ["interview","research","final_specs","validation"]
+    And the response 200's "selected_stages_count" is 4
+    And the assembled prompt contains exactly four stage sections
+    And the stage sections appear in the order: interview, research, final_specs, validation
+    And each section names its invocation hint and module list
 
-  Scenario: Assembled prompt renders inline with header bar and Copy button
-    Given the user has clicked **Build prompt** and the response was 200
-    When the assembled prompt is displayed
-    Then it is rendered inside a bordered `regen-prompt-block` (no inner `<details>` to expand)
-    And the header bar contains, left-to-right: an "Assembled prompt" title, a "Wrap" toggle (default checked), a primary-style **Copy** button
-    And the body is a `<pre>` element with `white-space: pre-wrap; word-break: break-word` while Wrap is on
+  Scenario: Project autonomous toggle and per-stage panels share state
+    Given the project-level autonomous toggle is off
+    When the user toggles it on
+    Then localStorage "spec_driven.autonomous_mode.v1" is "true"
+    And every per-stage Regenerate panel in any other tab updates via the "storage" event
+    When the user toggles it off
+    Then the value is "false" and propagates again
 
-  Scenario: Copy button copies prompt and flips label
-    Given the assembled prompt is rendered
-    When the user clicks the **Copy** button
-    Then the full prompt text is written to the clipboard
-    And the button label flips to "Copied!" for ~1500 ms
-    And the button has attribute `aria-live="polite"`
-    And the button has a fixed minimum width so the label flip does not shift layout
+  References: FR-32, FR-34, AC-22, AC-23.
 
-  Scenario: Wrap toggle controls soft-wrap (and is NOT persisted)
-    Given the assembled prompt is rendered with Wrap on
-    When the user unchecks the "Wrap" toggle
-    Then the `<pre>` switches to fixed-width with horizontal scroll
-    When the user re-checks the "Wrap" toggle
-    Then the `<pre>` reverts to soft-wrap
-    And `localStorage` does NOT contain a key for the wrap state
+---
 
-  Scenario Outline: Size policy on `POST /api/regen-prompt`
-    Given a regen prompt is assembled with body size `<bytes>`
-    When the client issues `POST /api/regen-prompt`
-    Then the response status is `<status>`
-    And the response `warning` field is `<warning>`
-    And the prompt is emitted in full (never truncated) when `<status>` is 200
+## Feature: CSRF defense via Origin / Host gate
+
+  As a security-conscious operator
+  I want every state-changing endpoint to refuse foreign origins or wrong ports
+  So that a malicious page cannot drive the local backend through a CSRF or DNS-rebind
+
+  Background:
+    Given the backend is running at "http://127.0.0.1:8765/"
+    And the SPA is loaded in a browser tab against the backend
+    And the Origin/Host allow-list at the bound port is {"http://127.0.0.1:8765","http://localhost:8765"} for Origin and {"127.0.0.1:8765","localhost:8765"} for Host
+
+  Scenario Outline: Foreign and malformed origins are refused
+    When a request "<method>" "<endpoint>" is sent direct to the backend with header Origin "<origin>" and Host "<host>"
+    Then the response is "<status>"
 
     Examples:
-      | bytes      | status | warning   |
-      | 12_000     | 200    | null      |
-      | 75_000     | 200    | non-null  |
-      | 600_000    | 200    | non-null  |
-      | 1_500_000  | 413    | n/a       |
+      | method | endpoint              | origin                       | host                  | status |
+      | PUT    | /api/file             | http://127.0.0.1:8765        | 127.0.0.1:8765        | 200    |
+      | PUT    | /api/file             | http://localhost:8765        | localhost:8765        | 200    |
+      | PUT    | /api/file             | http://localhost:8765        | 127.0.0.1:8765        | 200    |
+      | PUT    | /api/file             | http://127.0.0.1:8765        | localhost:8765        | 200    |
+      | PUT    | /api/file             | http://localhost:5173        | localhost:5173        | 403    |
+      | PUT    | /api/file             | http://attacker.example.com  | 127.0.0.1:8765        | 403    |
+      | PUT    | /api/file             | (missing)                    | 127.0.0.1:8765        | 403    |
+      | PUT    | /api/file             | http://127.0.0.1:8765        | (missing)             | 403    |
+      | PUT    | /api/file             | http://[::1]:8765            | [::1]:8765            | 403    |
+      | POST   | /api/regen-prompt     | http://localhost:5173        | localhost:5173        | 403    |
+      | POST   | /api/promote          | http://attacker.example.com  | 127.0.0.1:8765        | 403    |
+      | DELETE | /api/promote          | http://localhost:5173        | localhost:5173        | 403    |
 
-  Scenario: Warning banner above the prompt block
-    Given `POST /api/regen-prompt` returned `warning: "prompt is 250 KB; review before pasting"` with status 200
-    When the panel renders
-    Then a muted banner reading `warning: prompt is 250 KB; review before pasting — verify your selection before pasting` is rendered ABOVE the `regen-prompt-block`
+  Scenario: PATCH and DELETE on /api/file are not advertised
+    When a request "PATCH /api/file" is sent with valid Origin/Host
+    Then the response is 405
+    When a request "DELETE /api/file" is sent with valid Origin/Host
+    Then the response is 405
 
-  Scenario: Read-zero contract is in the Constraints section
-    Given any successful `POST /api/regen-prompt` response
-    When the prompt body is inspected
-    Then it contains a `### Constraints` section
-    And the section names CLAUDE.md state surfaces, canonical paths, parent-direct manager-spawn contract, no-AskUserQuestion-in-autonomous-mode
-    And the section includes the verbatim sentence `regeneration deletes prior outputs first; new generation reads only the inputs.`
-    And the section names the audit events `regen.delete.planned`, `regen.delete.completed`, `regen.write.completed`
+  Scenario: Vite proxy mode — full e2e with rewritten headers
+    Given the SPA is loaded at "http://localhost:5173/" (Vite dev)
+    When the SPA performs any state-changing fetch ("PUT /api/file", "POST /api/regen-prompt", "POST /api/promote", "DELETE /api/promote")
+    Then the Vite proxy rewrites Origin to "http://127.0.0.1:8765" and Host to "127.0.0.1:8765"
+    And the backend gate accepts the rewritten request
+    And the response is 200
 
-  Scenario: Pinned items survive in the assembled prompt
-    Given `specs/development/spec_driven/interview/promoted.md` is non-empty (contains pin-001)
-    And the user selects the `interview` stage in the panel
-    When the user clicks **Build prompt**
-    Then the assembled prompt contains a `### Pinned items (MUST survive regeneration)` section
-    And the contents of `interview/promoted.md` appear verbatim under that section
+  Scenario: Pre-rewrite middleware unit test (post-mutation contract)
+    Given a unit test posts "PUT /api/file" to the FastAPI app via TestClient
+    When the test sets Origin "http://127.0.0.1:8765" and Host "127.0.0.1:8765" (post-rewrite shape)
+    Then the response is 200
 
-  Scenario: Follow-ups are inlined in numerical order
-    Given `specs/development/spec_driven/user_input/follow_ups/` contains `001-...md`, `002-...md`, `003-...md`
-    When the user clicks **Build prompt** with any stage selected
-    Then the assembled prompt lists each follow-up filename in numerical order
-    And `follow_ups_count` in the response equals 3
+  Scenario: Pre-rewrite middleware unit test (pre-mutation contract)
+    Given a unit test posts "PUT /api/file" to the FastAPI app via TestClient
+    When the test sets Origin "http://localhost:5173" and Host "localhost:5173" (pre-rewrite shape — what the browser sends in dev mode)
+    Then the response is 403
+    # This shape is what would arrive if the Vite proxy "configure" hook is dropped.
 
-  Spec refs: FR-10, FR-11, FR-12, FR-33, NFR-11, NFR-15, NFR-16, AC-13, AC-14, AC-15, AC-16, AC-17, AC-22, AC-23, AC-24, AC-25
-
----
-
-## Feature: Regenerate panel — project parent page
-
-  Scenario: Project parent page lists six stages with a master Regenerate panel
-    Given the user navigates to `/project/development/spec_driven`
-    When the page renders
-    Then six stages are listed (intake, interview, research, spec compilation, validation strategy, execution)
-    And each stage shows its module checkboxes
-    And a single master Regenerate panel exposes select-any-subset semantics across stages
-    And the breakdown / warning / Copy contract matches the per-stage panel exactly
-
-  Scenario: Master panel assembles a multi-stage prompt
-    Given the user is on `/project/development/spec_driven`
-    And the user selects stages `interview`, `research`, and `validation`
-    And the user picks a strict subset of modules under `validation`
-    When the user clicks **Build prompt**
-    And the client issues `POST /api/regen-prompt` with the selected stages and modules
-    Then the response status is 200
-    And `selected_stages_count` equals 3
-    And the prompt walks each selected stage with its invocation hint and module list
-    And the breakdown line reflects the selection
-
-  Spec refs: FR-15, FR-34, AC-27
+  References: FR-9, NFR-7, AC-11, AC-12.
 
 ---
 
-## Feature: Autonomous-mode toggle persistence and storage-event sync
+## Feature: Path sandbox and traversal defense
 
-  Scenario: Toggle defaults to OFF (interactive)
-    Given the user opens the SPA in a fresh browser profile
-    And `localStorage["spec_driven.autonomous_mode.v1"]` is unset
-    When the per-stage Regenerate panel renders
-    Then the autonomous-mode toggle is unchecked
-    And subsequent `POST /api/regen-prompt` calls send `autonomous: false`
+  As a security-conscious operator
+  I want every file path to be resolved inside EXPOSED_TREE
+  So that no probe — encoded or not — leaks the filesystem above the repo root
 
-  Scenario: Toggling persists to localStorage and survives reload
-    Given the user is on `/file/specs/development/spec_driven/validation/strategy.md`
-    When the user checks the autonomous-mode toggle
-    Then `localStorage["spec_driven.autonomous_mode.v1"]` equals `"true"`
-    When the user reloads the page
-    Then the toggle renders as checked
+  Background:
+    Given the backend is running at "http://127.0.0.1:8765/"
 
-  Scenario: Same-tab in-process subscription syncs both consumers
-    Given the user has two routes open in one tab: a per-stage file view and the project parent page (e.g., via tabbed UI / split view)
-    When the user toggles autonomous mode in the per-stage panel
-    Then the project-parent-page panel re-renders with the new toggle state
-    And both consumers send the same `autonomous` value on subsequent **Build prompt** clicks
-
-  Scenario: Cross-tab sync via the storage event
-    Given two browser tabs are open against `http://127.0.0.1:8765/`
-    And tab A is on a stage file, tab B is on `/project/development/spec_driven`
-    When the user toggles autonomous mode in tab A
-    Then a `storage` event fires for key `spec_driven.autonomous_mode.v1`
-    And tab B's master Regenerate panel re-renders with the new toggle state
-    And both tabs agree on the toggle value
-
-  Spec refs: FR-33, FR-35, AC-26
-
----
-
-## Feature: Promotion (pin / unpin)
-
-  Scenario Outline: Atomic pin candidates show the 📌 toggle on hover
-    Given the user is viewing `<file>`
-    When the user hovers over a `<item-kind>`
-    Then a 📌 toggle is rendered on that item
+  Scenario Outline: Path traversal and existence-oracle probes collapse to single 404
+    When a request "GET /api/file?path=<path>" is sent
+    Then the response is 404
+    And the response detail does NOT distinguish "exists outside sandbox" from "does not exist"
 
     Examples:
-      | file                                                              | item-kind                  |
-      | specs/development/spec_driven/interview/qa.md                     | Q/A pair                   |
-      | specs/development/spec_driven/findings/dossier.md                 | recommendation bullet      |
-      | specs/development/spec_driven/final_specs/spec.md                 | FR-NN block                |
-      | specs/development/spec_driven/validation/acceptance_criteria.md   | AC-NN block                |
-      | specs/development/spec_driven/validation/system_tests.md          | SYS-NN block               |
+      | path                                          |
+      | ../../../etc/passwd                           |
+      | ..%2F..%2Fetc%2Fpasswd                        |
+      | %2e%2e/%2e%2e/etc/passwd                      |
+      | C:\Windows\win.ini                            |
+      | CLAUDE.md::$DATA                              |
+      | CON                                           |
+      | NUL                                           |
+      | PROGRA~1\foo                                  |
+      | mixed\\slashes/CLAUDE.md                      |
+      | CLAUDE.md\                                    |
+      | CLAUDE.md:stream                              |
+      | spec.md .md                              |
 
-  Scenario: Pinning appends a verbatim block to promoted.md
-    Given `specs/development/spec_driven/interview/promoted.md` is empty
-    When the user clicks the 📌 toggle on a Q/A pair in `interview/qa.md`
-    And the client issues `POST /api/promote` with `{project_type: "development", project_name: "spec_driven", stage_folder: "interview", source_file: "interview/qa.md", item_id, item_text}`
-    Then the response status is 200
-    And `interview/promoted.md` contains the item's text verbatim
-    And the 📌 toggle on that item renders as "pinned"
+  Scenario: Symlinks and Windows junctions are refused outright
+    Given a symlink "specs/sneaky" pointing to "/etc"
+    When a request "GET /api/file?path=specs/sneaky/passwd" is sent
+    Then the response is 404
+    And no realpath is leaked in any header or body
 
-  Scenario: Unpinning removes only the matching block
-    Given `interview/promoted.md` contains pin-001 and pin-002
-    When the user clicks the 📌 toggle on pin-001 (already pinned)
-    And the client issues `DELETE /api/promote` with `{project_type, project_name, stage_folder: "interview", item_id: "pin-001"}`
-    Then the response status is 200
-    And pin-001 is removed from `interview/promoted.md`
-    And pin-002 remains in `interview/promoted.md` untouched
+  Scenario: Disallowed extension returns 415
+    When a request "GET /api/file?path=specs/development/spec_driven/scratch.exe" is sent
+    Then the response is 415
 
-  Scenario Outline: stage_folder allowlist
-    Given the client issues `POST /api/promote` with `stage_folder: "<value>"`
-    When the request reaches the FastAPI app
-    Then the response status is `<status>`
+  Scenario: 1.5 MB file returns 413 on read
+    Given "specs/development/spec_driven/findings/big.md" is 1.5 MB
+    When a request "GET /api/file?path=specs/development/spec_driven/findings/big.md" is sent
+    Then the response is 413
 
-    Examples:
-      | value         | status |
-      | interview     | 200    |
-      | findings      | 200    |
-      | final_specs   | 200    |
-      | validation    | 200    |
-      | user_input    | 4xx    |
-      | projects      | 4xx    |
+  Scenario: Read response carries hardening headers
+    When a request "GET /api/file?path=CLAUDE.md" is sent
+    Then the response is 200
+    And the response header "X-Content-Type-Options" is "nosniff"
+    And the response header "Content-Disposition" is "attachment"
 
-  Scenario: Stage 6 files do NOT show 📌 toggles
-    Given the user is viewing a file under `projects/spec_driven/`
-    When the page renders
-    Then no 📌 toggle is present on any item
-    And `POST /api/promote` is not called by any control on the page
+  Scenario: SVG is not in the allowlist
+    Given a file "specs/development/spec_driven/findings/diagram.svg" exists
+    When a request "GET /api/file?path=specs/development/spec_driven/findings/diagram.svg" is sent
+    Then the response is 415
 
-  Scenario: Cross-origin promote attempt is rejected
-    Given the client issues `POST /api/promote` with `Origin: http://evil.example.com`
-    When the request reaches the FastAPI app
-    Then the response status is 403
-    And `promoted.md` is not mutated
-
-  Spec refs: FR-13, FR-14, FR-9, FR-36, FR-37, NFR-7
+  References: FR-2, FR-4, FR-5, FR-8, NFR-5, NFR-9, NFR-10, NFR-11, NFR-12, AC-1, AC-2.
 
 ---
 
-## Feature: Boot smoke
+## Feature: Resume an autonomous regeneration mid-pipeline
 
-  Scenario: `make run-prod` brings up the server cleanly
-    Given a fresh checkout with `frontend/` built into `backend/static/`
-    When the operator runs `make run-prod`
-    Then uvicorn starts on `127.0.0.1:8765`
-    And the bind address is NOT `0.0.0.0`
-    And `GET /api/tree` returns 200
-    And `http://127.0.0.1:8765/` serves the SPA
-    And the Sidebar contains ≥1 leaf under "Claude Settings & Shared Context"
-    And the Sidebar contains ≥1 leaf under "Projects"
+  As the spec author
+  I want a paste from the SPA's regen-prompt-block to drive a Claude Code session in autonomous mode without prompting me
+  So that long sequences finish without re-asking me trivia
 
-  Scenario: Server is not reachable on the LAN IP
-    Given uvicorn is bound to `127.0.0.1:8765`
-    When a request hits the host's LAN IP on port 8765
-    Then the connection is refused
+  Background:
+    Given the user has copied an "# EXECUTION MODE: AUTONOMOUS" prompt from the SPA
+    And the prompt selects stages ["research", "final_specs", "validation"]
+    And the prompt inlines "revised_prompt.md" plus follow-ups 001 and 002
 
-  Scenario: `make run` also binds localhost-only
-    Given a fresh checkout
-    When the operator runs `make run`
-    Then uvicorn binds to `127.0.0.1:8765`
-    And `0.0.0.0` does not appear anywhere in the resolved Uvicorn config
+  Scenario: Autonomous header suppresses AskUserQuestion
+    When the user pastes the prompt into a fresh Claude Code CLI session
+    Then Claude does not call "AskUserQuestion" at any point during the run
+    And every ambiguous decision is recorded inline in the produced artifact as "judgment call: chose X because Y"
+    And every requested artifact (dossier.md, spec.md, strategy.md + per-level files) is produced in the same turn before stopping
+    And iteration bounds (3 revision rounds per unit, 30-minute wall clock) still apply
+    And on bound trip a clean halt with a "pipeline.halted" event is emitted
 
-  Scenario: Initial app load completes within 2 s on localhost
-    Given the SPA bundle has been built
-    When the user opens `http://127.0.0.1:8765/` with a cold cache
-    Then HTML + JS + first `/api/tree` + first `/api/file` complete within 2000 ms
-    And `GET /api/tree` returns within 200 ms
-    And `GET /api/file` for a <500 KB file returns within 100 ms
+  Scenario: Read-zero regeneration deletes prior outputs first
+    Given "findings/dossier.md" exists from a prior run
+    And "findings/angle-1.md" through "findings/angle-4.md" exist
+    And "findings/promoted.md" exists with a pinned recommendation
+    When the autonomous regen prompt runs stage 3
+    Then "regen.delete.planned" is appended to "events.jsonl" once per file (excluding "findings/promoted.md")
+    And "regen.delete.completed" is appended once with the count of deleted files
+    And after deletion the deleted files no longer exist on disk
+    And "findings/promoted.md" still exists on disk
+    Then the new generation reads only the inputs (revised_prompt.md, follow-ups, qa.md, promoted.md, CLAUDE.md, .claude/agent_refs/research/*.md)
+    And the new generation writes the new "findings/dossier.md" and per-angle files
+    And "regen.write.completed" is appended for each file written (path + bytes)
+    And the verbatim text of every pin in "findings/promoted.md" appears in the new "dossier.md" or in a "## Pinned items (orphaned)" section
 
-  Spec refs: FR-38, FR-39, NFR-1, NFR-2, NFR-3, AC-28, AC-29
+  Scenario: Pin re-insertion at natural location
+    Given "validation/promoted.md" contains a pinned "AC-7" block (verbatim text)
+    When the autonomous regen runs stage 5
+    Then the regenerated "validation/acceptance_criteria.md" contains "AC-7" verbatim at the natural numerical slot
+    And no "## Pinned items (orphaned)" section is present (because AC-7's slot exists)
+
+  Scenario: Pin orphan when natural slot disappears
+    Given "interview/promoted.md" contains a pinned Q/A pair attributed to round1.removed-category
+    And the new run produces no "round1.removed-category" categories
+    When the autonomous regen runs stage 2
+    Then the regenerated "interview/qa.md" contains a "## Pinned items (orphaned)" section
+    And that section contains the verbatim pinned Q/A pair
+    And the pin is NEVER silently dropped
+
+  Scenario: Stage 6 regeneration deletes the entire project folder, not promoted.md
+    Given the user pastes a regen prompt selecting stage 6 ("execution") for "projects/spec_driven/"
+    And no "projects/spec_driven/promoted.md" exists (stage 6 has no promotion in v1)
+    When Claude executes the prompt
+    Then "regen.delete.planned" is emitted for every file under "projects/spec_driven/"
+    And after deletion "projects/spec_driven/" is empty (or absent)
+    And the new generation rebuilds "projects/spec_driven/{README.md, Makefile, backend/, frontend/}" from "final_specs/spec.md" + "validation/*.md"
+
+  Scenario: pre_reading_consulted is recorded for each coordinated stage
+    When Claude starts stage 5 of the autonomous run
+    Then the first event for stage 5 in "events.jsonl" is "validation.started"
+    And that event carries a non-empty array "pre_reading_consulted" listing absolute paths to the playbook + agent_refs files actually loaded
+    And the array contains absolute paths matching ".claude/skills/agent_team/playbooks/validation.md"
+    And the array contains absolute paths matching ".claude/agent_refs/validation/general.md"
+    And the array contains absolute paths matching ".claude/agent_refs/validation/development.md"
+
+  References: FR-37, FR-38, FR-41, NFR-15, AC-16, AC-17, AC-18.
+
+---
+
+## Feature: Stage 6 multi-mode dev workflow runs end-to-end
+
+  As the spec author
+  I want every advertised runtime mode (`make run-prod`, `make run-frontend`, plain `make run`) to actually serve the SPA and accept state-changing requests
+  So that "documented mode" never means "doesn't actually work"
+
+  Background:
+    Given the repo is on the canonical Windows host
+    And the python venv is bootstrapped (no `uv run` failure path)
+
+  Scenario: Single-process mode boot smoke
+    When the user runs "make run-prod"
+    Then the FastAPI process starts cleanly within 5 seconds
+    And "GET /api/tree" returns 200 with the recursive shape
+    And the SPA bundle is served at "/" from "backend/static/"
+    And the SPA loads in a real browser at "http://127.0.0.1:8765/"
+    And the browser sidebar walks the recursive children and shows non-empty "Projects" subtree
+
+  Scenario: Vite dev mode boot smoke
+    When the user runs "make run-frontend" in one terminal AND "make run-backend" in another
+    Then the SPA loads at "http://localhost:5173/"
+    And the SPA fetches "GET /api/tree" through the Vite proxy
+    And the response 200 carries the recursive shape
+    And "POST /api/regen-prompt" through the Vite proxy returns 200 (the proxy `configure` hook rewrites Origin to "http://127.0.0.1:8765")
+
+  Scenario: `make run` is an alias for `make run-backend`
+    When the user runs "make run"
+    Then the FastAPI process binds "127.0.0.1:8765" only (NOT "0.0.0.0")
+    And no listening socket exists on a non-loopback interface
+
+  Scenario: Boot smoke fails fast on bind error
+    Given another process is already bound to "127.0.0.1:8765"
+    When the user runs "make run-prod"
+    Then the process exits non-zero within 3 seconds
+    And the error message names the conflicting port
+
+  Scenario: e2e suite has one Playwright project per advertised mode
+    When the e2e CI lane runs
+    Then "playwright.config.ts" lists at least two project entries
+    And one project boots "make run-prod" and runs the golden-path scenario
+    And one project boots "make run-frontend + make run-backend" and runs the same golden-path scenario
+    And both projects pass
+
+  Scenario: Manual walkthrough is emitted before sign-off
+    Given all automated levels (unit, system, security, performance, accessibility) pass for the work unit
+    When the parent finalizes the work unit
+    Then a "validation.requires_manual_walkthrough" event is appended to "events.jsonl"
+    And the parent surfaces a one-line message to the user: "manual walkthrough needed: <unit>"
+
+  Scenario: Cross-platform skip markers respected
+    Given a unit test asserts POSIX symlink behavior
+    When the test runs on win32
+    Then it is recorded as "STATUS=SKIPPED-WINDOWS-symlink-requires-developer-mode"
+    And the test does NOT silently pass
+
+  Scenario: `uv run` invocations have a pip fallback
+    Given the Makefile target "test-backend" prefers "uv run pytest"
+    When "uv run" exits with EXCEPTION_ACCESS_VIOLATION
+    Then the Makefile falls back to ".venv/bin/pytest" (or ".venv/Scripts/pytest.exe" on Windows)
+    And the test suite still runs to completion
+
+  References: FR-39, NFR-3, NFR-14, AC-28, AC-29 + development.md required-validation-moves §1, §4, §5, §6, §7.
+
+---
+
+## Feature: Light-theme app chrome with intentional dark carve-outs
+
+  As the spec author
+  I want the entire app chrome rendered light regardless of OS preference
+  So that the cross-project light-only convention is not silently overridden
+
+  Background:
+    Given the SPA is loaded
+    And the user's OS reports "prefers-color-scheme: dark"
+
+  Scenario: Body chrome is light
+    Then the rendered "body" element resolves background-color to a near-white color
+    And the rendered "body" element computes "color-scheme: light"
+    And no computed CSS rule on body, sidebar, toolbar, or main-pane chrome is gated by "@media (prefers-color-scheme: dark)"
+
+  Scenario Outline: Intentional dark carve-outs
+    Given a "<surface>" element is rendered
+    Then the computed background-color is a dark color
+    And the contrast ratio between rendered text and that background meets WCAG AA (>= 4.5:1)
+
+    Examples:
+      | surface                     |
+      | .markdown-view pre          |
+      | .code-view pre              |
+      | .regen-prompt-block pre     |
+
+  Scenario: No dark-mode toggle is exposed in the UI
+    Then no element with role "switch" or text matching "dark" / "theme" exists in the toolbar or settings UI
+
+  References: NFR-16, FR-40 + project/development.md light-theme rule.
+
+---
+
+## Feature: Read-zero regeneration audit log
+
+  As the spec author
+  I want every regeneration to leave a verifiable trail of what got deleted and what got written
+  So that a regen run is reproducible from `events.jsonl` alone
+
+  Background:
+    Given a regen prompt selects stage 5 (validation strategy)
+    And "validation/strategy.md" and "validation/acceptance_criteria.md" exist
+    And "validation/promoted.md" exists with one pin
+
+  Scenario: Audit events fire in the correct order
+    When Claude executes the prompt
+    Then events.jsonl appends, in this order:
+      | event                       | payload field        |
+      | validation.started          | pre_reading_consulted |
+      | regen.delete.planned        | path                 |
+      | regen.delete.planned        | path                 |
+      | regen.delete.completed      | count                |
+      | regen.write.completed       | path, bytes          |
+      | regen.write.completed       | path, bytes          |
+      | validation.pass             | unit                 |
+    And "validation/promoted.md" is NOT among the deleted paths
+
+  Scenario: A level run with no audit events is treated as not having run
+    Given a level worker writes its artifact but emits no "validation.started" event
+    When the parent synthesizes the strategy
+    Then the parent flags the missing-audit case as a "critical" finding
+    And the affected level is re-run before the strategy is finalized
+
+  References: FR-37, FR-38, NFR-15 + general.md principle §5, §8.
+
+---
+
+## Feature: Severity flows from blast radius
+
+  As the validation strategist
+  I want severities derived from blast radius, not recency
+  So that an unexploited XSS still halts before a flaky test does
+
+  Scenario: XSS in markdown render path is critical
+    Given an automated test detects raw "<script>" reaching the rendered DOM
+    Then the issue is recorded with severity "critical"
+    And the parent halts the work unit immediately
+    And no revision rounds proceed without explicit user approval
+
+  Scenario: A11y "Recommended" gap is a warning
+    Given a Lighthouse run flags a recommended-tier a11y gap
+    Then the issue is recorded with severity "warning"
+    And the work unit does not halt
+
+  Scenario: Latent render error on deep-link is critical
+    Given a Playwright test opens "/file/specs%2Fdevelopment%2Fspec_driven%2Finterview%2Fqa.md" directly
+    And the main pane is empty (no fallback rendered)
+    Then the issue severity is "critical"
+
+  Scenario: API shape drift between front and back is critical
+    Given a unit test passes on backend (asserting "result['projects']") and frontend (reading "node.children")
+    And the consumer-walk test discovers no projects rendered
+    Then the issue is recorded as "API shape drift between front and back" with severity "critical"
+
+  References: general.md severity table + development.md severity escalations.
+
+---
+
+## Feature: Manual walkthrough surfaces what e2e cannot
+
+  As the spec author
+  I want a final manual pass before sign-off
+  So that visual hierarchy, color contrast, motion, and focus visibility are caught
+
+  Scenario: Walkthrough event is emitted after automated levels pass
+    Given unit, system, security, performance, and accessibility validation all pass
+    When the parent finalizes the work unit
+    Then "validation.requires_manual_walkthrough" is appended to events.jsonl
+    And the parent surfaces a checklist to the user with items: "visual hierarchy", "color contrast", "motion", "focus visibility"
+
+  Scenario: Walkthrough is required even when all automated levels are green
+    Given a development task_type project completes its automated validation
+    Then a manual-walkthrough event MUST be emitted before the parent declares the unit done
+
+  References: general.md principle §4 + development.md required-validation-move §7.

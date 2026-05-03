@@ -1,199 +1,227 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { parseQa, type QaPair } from "../lib/qaParser";
-import { putFile } from "../api";
+import type { ApiError } from "../types";
 
-interface Props {
-  source: string;
+export interface QaViewProps {
+  content: string;
   filePath: string;
-  onWholeFileEdit: () => void;
-  fileLevelDisabled?: boolean;
-  onAnyBlockOpen?: (open: boolean) => void;
-  onSaved?: (newSource: string) => void;
+  onSave: (newContent: string) => Promise<void>;
+  saveError: ApiError | Error | null;
+  onActiveBlockChange: (blockOpen: boolean) => void;
+  fileEditDisabled: boolean;
+  projectType: string | null;
+  projectName: string | null;
+  onPin: (pair: QaPair) => Promise<void>;
+  onUnpin: (pair: QaPair) => Promise<void>;
+  pinnedIds: Set<string>;
 }
 
-export function QaView({ source, filePath, onAnyBlockOpen, onSaved }: Props) {
-  const doc = parseQa(source);
-  const [editing, setEditing] = useState<{ id: string; field: "q" | "a" } | null>(null);
-  const [draft, setDraft] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+interface ActiveEdit {
+  itemId: string;
+  field: "Q" | "A";
+  buffer: string;
+}
 
-  const startEdit = (pair: QaPair, field: "q" | "a") => {
-    setEditing({ id: pair.id, field });
-    setDraft(field === "q" ? pair.q : pair.a);
-    setError(null);
-    onAnyBlockOpen?.(true);
+export function QaView(props: QaViewProps): JSX.Element {
+  const document = useMemo(() => parseQa(props.content), [props.content]);
+  const [active, setActive] = useState<ActiveEdit | null>(null);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [staleConflict, setStaleConflict] = useState<string | null>(null);
+
+  const open = (itemId: string, field: "Q" | "A", initial: string): void => {
+    setActive({ itemId, field, buffer: initial });
+    props.onActiveBlockChange(true);
   };
 
-  const cancel = () => {
-    setEditing(null);
-    onAnyBlockOpen?.(false);
+  const close = (): void => {
+    setActive(null);
+    props.onActiveBlockChange(false);
   };
 
-  const save = async (pair: QaPair, field: "q" | "a") => {
-    const lineRe =
-      field === "q"
-        ? new RegExp(`(^[-*]\\s*\\*?\\*?Q\\*?\\*?:\\s*).+$`, "m")
-        : pair.judgmentCall
-          ? new RegExp(
-              `(^[-*]\\s*\\*?\\*?A\\*?\\*?\\s*\\*\\(judgment call\\s*[—-]\\s*${escapeReg(pair.judgmentCall)}\\)\\*\\s*:\\s*).+$`,
-              "m",
-            )
-          : new RegExp(`(^[-*]\\s*\\*?\\*?A\\*?\\*?:\\s*).+$`, "m");
-
-    const oldText = field === "q" ? pair.q : pair.a;
-    const lines = source.split(/\r?\n/);
-    let replaced: string[] = [];
-    let done = false;
-    for (const line of lines) {
-      if (!done && line.includes(oldText)) {
-        replaced.push(line.replace(oldText, draft));
-        done = true;
-      } else {
-        replaced.push(line);
+  const saveActive = async (): Promise<void> => {
+    if (!active) return;
+    const lines = props.content.split(/\r?\n/);
+    let pair: QaPair | undefined;
+    for (const round of document.rounds) {
+      for (const cat of round.categories) {
+        const found = cat.pairs.find((p) => p.itemId === active.itemId);
+        if (found) {
+          pair = found;
+          break;
+        }
       }
+      if (pair) break;
     }
-    if (!done) {
-      setError("could not locate the original text in the file");
+    if (!pair) {
+      close();
       return;
     }
-    const newSource = replaced.join("\n");
+    if (active.field === "Q") {
+      lines[pair.qLine] = `**Q:** ${active.buffer}`;
+    } else {
+      const annotation = pair.judgmentCall ? ` *(${pair.judgmentCall})*` : "";
+      lines[pair.aLine] = `- A${annotation}: ${active.buffer}`;
+    }
+    const newContent = lines.join("\n");
+    setSaving(true);
     try {
-      await putFile(filePath, newSource);
-      onSaved?.(newSource);
-      cancel();
-    } catch (e: any) {
-      const detail = e?.detail?.detail?.kind || e?.detail?.detail || e?.detail || "save failed";
-      setError(`Could not save: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`);
+      await props.onSave(newContent);
+      setStaleConflict(null);
+      close();
+    } catch (err) {
+      const apiError = err as { status?: number; detail?: { kind?: string } };
+      if (apiError && apiError.status === 409) {
+        setStaleConflict("Q changed externally — Reload?");
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="qa-view" data-testid="qa-view">
-      {doc.rounds.map((round) => (
-        <section key={round.number} className="qa-round">
-          <h2>Round {round.number}</h2>
-          {round.categories.map((category) => (
-            <section key={category.name} className="qa-category" data-category-badge={category.name}>
-              <h3>
-                <span className="category-badge">{category.name}</span>
-              </h3>
-              {category.pairs.map((pair) => (
-                <article key={pair.id} className="qa-pair" data-block-id={pair.id}>
-                  <div
-                    className="qa-block qa-tint-q"
-                    data-block="q"
-                    data-testid="qa-q-block"
-                    aria-label="Question"
-                  >
-                    <strong>Q:</strong>{" "}
-                    {editing?.id === pair.id && editing.field === "q" ? (
-                      <BlockEditor
-                        value={draft}
-                        onChange={setDraft}
-                        onSave={() => save(pair, "q")}
-                        onCancel={cancel}
-                        blockId={`qa-block-editor-${pair.id}-q`}
+    <div className="qa-view">
+      {document.rounds.length === 0 ? (
+        <p className="muted">No Q/A pairs detected.</p>
+      ) : null}
+      {document.rounds.map((round) => (
+        <section key={round.index} className="qa-round">
+          <h2 className="qa-round-heading">
+            Round {round.index}
+            {round.title ? ` — ${round.title}` : ""}
+          </h2>
+          {round.categories.map((cat) => (
+            <div key={`${round.index}-${cat.name}`} className="qa-category">
+              <h3 className="qa-category-heading">{cat.name}</h3>
+              {cat.pairs.map((pair) => (
+                <article key={pair.itemId} className="qa-pair" data-qid={pair.itemId}>
+                  <header className="qa-pair-header">
+                    <span className="qa-category-badge" aria-label={`Category ${cat.name}`}>
+                      {cat.name}
+                    </span>
+                    {props.projectType && props.projectName ? (
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={props.pinnedIds.has(pair.itemId)}
+                        aria-label={`Pin ${pair.itemId}`}
+                        className="pin-toggle"
+                        title={
+                          props.pinnedIds.has(pair.itemId)
+                            ? "Pinned (click to unpin)"
+                            : "Pin to interview/promoted.md"
+                        }
+                        onClick={() => {
+                          if (props.pinnedIds.has(pair.itemId)) {
+                            void props.onUnpin(pair);
+                          } else {
+                            void props.onPin(pair);
+                          }
+                        }}
+                      >
+                        <span aria-hidden="true">📌</span>
+                      </button>
+                    ) : null}
+                  </header>
+                  <div className="qa-q" aria-label="Question">
+                    <span className="qa-prefix" aria-hidden="true">
+                      Q:
+                    </span>{" "}
+                    {active && active.itemId === pair.itemId && active.field === "Q" ? (
+                      <InlineEditor
+                        value={active.buffer}
+                        onChange={(v) => setActive({ ...active, buffer: v })}
+                        onSave={saveActive}
+                        onCancel={close}
+                        saving={saving}
                       />
                     ) : (
                       <>
-                        <span>{pair.q}</span>
+                        <span className="qa-text">{pair.q}</span>
                         <button
                           type="button"
-                          className="pencil"
-                          aria-label="Edit question"
-                          data-testid={`qa-q-edit-${pair.id}`}
-                          onClick={() => startEdit(pair, "q")}
+                          aria-label={`Edit question ${pair.itemId}`}
+                          className="qa-edit-pencil"
+                          disabled={props.fileEditDisabled}
+                          onClick={() => open(pair.itemId, "Q", pair.q)}
                         >
                           ✎
                         </button>
                       </>
                     )}
                   </div>
-                  <div
-                    className="qa-block qa-tint-a"
-                    data-block="a"
-                    data-testid="qa-a-block"
-                    aria-label="Answer"
-                  >
-                    <strong>A:</strong>{" "}
-                    {editing?.id === pair.id && editing.field === "a" ? (
-                      <BlockEditor
-                        value={draft}
-                        onChange={setDraft}
-                        onSave={() => save(pair, "a")}
-                        onCancel={cancel}
-                        blockId={`qa-block-editor-${pair.id}-a`}
+                  <div className="qa-a" aria-label="Answer">
+                    <span className="qa-prefix" aria-hidden="true">
+                      A:
+                    </span>
+                    {pair.judgmentCall ? (
+                      <span className="qa-annotation"> ({pair.judgmentCall})</span>
+                    ) : null}{" "}
+                    {active && active.itemId === pair.itemId && active.field === "A" ? (
+                      <InlineEditor
+                        value={active.buffer}
+                        onChange={(v) => setActive({ ...active, buffer: v })}
+                        onSave={saveActive}
+                        onCancel={close}
+                        saving={saving}
                       />
                     ) : (
                       <>
-                        <span>{pair.a}</span>
-                        {pair.judgmentCall && (
-                          <em className="judgment-call" title="judgment call">
-                            ({pair.judgmentCall})
-                          </em>
-                        )}
+                        <span className="qa-text">{pair.a}</span>
                         <button
                           type="button"
-                          className="pencil"
-                          aria-label="Edit answer"
-                          data-testid={`qa-a-edit-${pair.id}`}
-                          onClick={() => startEdit(pair, "a")}
+                          aria-label={`Edit answer ${pair.itemId}`}
+                          className="qa-edit-pencil"
+                          disabled={props.fileEditDisabled}
+                          onClick={() => open(pair.itemId, "A", pair.a)}
                         >
                           ✎
                         </button>
                       </>
                     )}
                   </div>
+                  {staleConflict && active && active.itemId === pair.itemId ? (
+                    <div className="save-error-banner" role="alert">
+                      {staleConflict}
+                    </div>
+                  ) : null}
                 </article>
               ))}
-            </section>
+            </div>
           ))}
         </section>
       ))}
-      {error && (
-        <div role="alert" className="qa-error">
-          {error}
+      {props.saveError ? (
+        <div className="save-error-banner" role="alert">
+          Save failed: {props.saveError.message}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-interface BlockEditorProps {
+interface InlineEditorProps {
   value: string;
   onChange: (v: string) => void;
   onSave: () => void;
   onCancel: () => void;
-  blockId: string;
+  saving: boolean;
 }
 
-function BlockEditor({ value, onChange, onSave, onCancel, blockId }: BlockEditorProps) {
+function InlineEditor({ value, onChange, onSave, onCancel, saving }: InlineEditorProps): JSX.Element {
   return (
-    <span className="block-editor">
+    <span className="qa-inline-editor">
       <textarea
-        data-testid={blockId}
-        aria-label="Edit Q/A block"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            onSave();
-          } else if (e.key === "Escape") {
-            onCancel();
-          }
-        }}
+        rows={Math.max(2, Math.min(8, value.split("\n").length))}
+        aria-label="Inline edit"
       />
-      <button type="button" onClick={onSave}>
-        Save
+      <button type="button" onClick={onSave} disabled={saving} className="qa-inline-save">
+        {saving ? "Saving…" : "Save"}
       </button>
-      <button type="button" onClick={onCancel}>
+      <button type="button" onClick={onCancel} className="qa-inline-cancel">
         Cancel
       </button>
     </span>
   );
-}
-
-function escapeReg(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

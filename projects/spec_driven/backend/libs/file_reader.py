@@ -1,92 +1,96 @@
-"""
-file_reader — backing module for GET /api/file (FR-3, FR-5, AC-2, AC-7, AC-8).
-
-- Allowed extensions: .md, .json, .yaml, .yml, .jsonl, .txt, .png, .jpg
-- Files >1 MB return 413 (size check via os.stat BEFORE any read).
-- Anything outside the EXPOSED_TREE returns 404 (single status — no enumeration
-  side-channel between "missing inside tree" and "outside tree").
-"""
-
 from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
+from email.utils import format_datetime
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
-from .safe_resolve import OutsideTreeError, SafeResolver
+from libs.exposed_tree import ALLOWED_EXTENSIONS, MAX_FILE_BYTES, ExposedTree
+from libs.safe_resolve import SafeResolver
 
-ALLOWED_TEXT_EXT = frozenset({".md", ".json", ".yaml", ".yml", ".jsonl", ".txt"})
-ALLOWED_IMAGE_EXT = frozenset({".png", ".jpg"})
-ALLOWED_EXT = ALLOWED_TEXT_EXT | ALLOWED_IMAGE_EXT
-MAX_BYTES = 1 * 1024 * 1024
-
-
-class NotFoundError(Exception):
-    """Maps to HTTP 404. Used for both 'missing inside tree' and 'outside tree'."""
+_TEXT_EXTENSIONS: frozenset[str] = frozenset(
+    {".md", ".json", ".yaml", ".yml", ".jsonl", ".txt"}
+)
+_IMAGE_EXTENSIONS: frozenset[str] = frozenset({".png", ".jpg"})
 
 
-class TooLargeError(Exception):
+class UnsupportedExtension(Exception):
     pass
 
 
-class UnsupportedExtensionError(Exception):
+class FileTooLarge(Exception):
+    pass
+
+
+class OutsideSandbox(Exception):
     pass
 
 
 @dataclass(frozen=True)
 class ReadResult:
-    path: str
+    rel_path: str
     content: str
-    mtime: str
-    bytes: int
-    is_image: bool
+    encoding: str
+    size_bytes: int
+    mtime_unix: float
+    mtime_http: str
 
-    def to_dict(self) -> dict:
-        d = {"path": self.path, "content": self.content, "mtime": self.mtime, "bytes": self.bytes}
-        if self.is_image:
-            d["data_encoding"] = "base64"
-        return d
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "path": self.rel_path,
+            "content": self.content,
+            "encoding": self.encoding,
+            "bytes": self.size_bytes,
+            "mtime": self.mtime_unix,
+            "mtime_http": self.mtime_http,
+        }
 
 
-@dataclass(frozen=True)
 class FileReader:
-    resolver: SafeResolver
+    def __init__(self, exposed: ExposedTree, resolver: SafeResolver) -> None:
+        self._exposed = exposed
+        self._resolver = resolver
 
     def read(self, rel: str) -> ReadResult:
+        resolved = self._resolver.resolve(rel)
+        if resolved is None:
+            raise OutsideSandbox()
+        ext = Path(rel).suffix.lower() if isinstance(rel, str) else ""
+        if ext not in ALLOWED_EXTENSIONS:
+            raise UnsupportedExtension(ext)
+        if not resolved.is_file():
+            raise OutsideSandbox()
         try:
-            absolute = self.resolver.resolve(rel)
-        except OutsideTreeError as e:
-            raise NotFoundError("not found") from e
-
-        ext = absolute.suffix.lower()
-        if ext not in ALLOWED_EXT:
-            raise UnsupportedExtensionError("unsupported_extension")
-
-        if not absolute.is_file():
-            raise NotFoundError("not found")
-
-        st = absolute.stat()
-        if st.st_size > MAX_BYTES:
-            raise TooLargeError("too_large")
-
-        is_image = ext in ALLOWED_IMAGE_EXT
-        if is_image:
-            content = base64.b64encode(absolute.read_bytes()).decode("ascii")
+            stat = resolved.stat()
+        except OSError as e:
+            raise OutsideSandbox() from e
+        if stat.st_size > MAX_FILE_BYTES:
+            raise FileTooLarge(stat.st_size)
+        raw = resolved.read_bytes()
+        if ext in _IMAGE_EXTENSIONS:
+            content = base64.b64encode(raw).decode("ascii")
+            encoding = "base64"
         else:
-            content = absolute.read_bytes().decode("utf-8", errors="replace")
-
-        rel_normalized = rel.replace("\\", "/").lstrip("./")
-        try:
-            rel_normalized = absolute.resolve().relative_to(self.resolver.root).as_posix()
-        except ValueError:
-            pass
-
-        mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()
+            content = raw.decode("utf-8", errors="replace")
+            encoding = "utf-8"
+        mtime_dt = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
         return ReadResult(
-            path=rel_normalized,
+            rel_path=Path(rel).as_posix(),
             content=content,
-            mtime=mtime,
-            bytes=st.st_size,
-            is_image=is_image,
+            encoding=encoding,
+            size_bytes=stat.st_size,
+            mtime_unix=stat.st_mtime,
+            mtime_http=format_datetime(mtime_dt, usegmt=True),
         )
+
+    @staticmethod
+    def security_headers(filename: str) -> dict[str, str]:
+        safe = "".join(c for c in filename if 32 <= ord(c) < 127 and c not in '"\\')
+        if not safe:
+            safe = "file"
+        return {
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f'attachment; filename="{safe}"',
+        }

@@ -1,98 +1,99 @@
-# Angle: copypaste-prompt-ux
+# Angle — copypaste-prompt-ux
 
 ## 1. What this angle covers
 
-The webapp builds a regeneration prompt the user must paste into Claude Code CLI. The artifact is text-only, frequently 5–50 KB and occasionally up to 1 MB (hard ceiling enforced by 413). The UI's job is twofold:
+How production tools that emit copy-paste LLM prompts signal **execution mode** (autonomous vs interactive) and present the assembled prompt for human copy. Specifically:
 
-1. Make the prompt **readable in place** (line-height, soft-wrap toggle, dark code theme, scrollable region).
-2. Make the prompt **trivial to grab** — a prominent "Copy" affordance, accurate metadata about what was assembled (stage count, follow-ups inlined, autonomous flag, byte size), and graceful behavior at the edges (warn at 50 KB, block at 1 MB, "Copied!" feedback, optional download fallback).
+- (a) header conventions — literal first-line directive vs frontmatter vs metadata field
+- (b) prompt-assembly rules — what gets inlined vs referenced
+- (c) "Build prompt → Copy" UX flow — visible inline vs collapsed `<details>`; soft-wrap toggle; size warnings
+- (d) section breakdown of the assembled prompt for the user's preview
+- (e) size-budget signals — warn-don't-truncate vs hard-413
+- (f) how the receiving model is told to honor the mode contract
 
-This angle surveys what mature dev tools and design systems have converged on for "copy this multi-thousand-character text" affordances: button placement, size surfacing, truncation/warn/block policy, "Copied!" signaling, and clipboard-vs-download offers.
+The angle informs FR-14c (regen-prompt assembly) and FR-42 (Build prompt → Copy UI) for `spec_driven`.
 
 ## 2. Key findings
 
-### a) Where the Copy button goes
+### Header conventions: there is no industry-standard literal `# EXECUTION MODE` directive — `spec_driven` is inventing one
 
-- **Header bar above the body, top-right of the header, is the dominant pattern.** Modern code-block conventions use a flex header with a left-side label (language / filename / metadata) and a right-side Copy button; the button sits in the header rather than overlaying the body, so it does not move when the body scrolls. ([whitep4nth3r — How to build a copy code snippet button](https://whitep4nth3r.com/blog/how-to-build-a-copy-code-snippet-button/), [amanhimself.dev — advanced code blocks with Shiki](https://amanhimself.dev/blog/advanced-code-blocks-with-shiki-and-astro/))
-- **Floating / sticky variant for very long blocks.** When code is long enough that a static header scrolls out of view, the button can float top-right of the viewport so users do not have to scroll back up. This is exactly the pattern ChatGPT-style chat UIs adopted; users have actively requested the same in other tools. ([open-webui issue #5767 — Floating copy button like ChatGPT](https://github.com/open-webui/open-webui/issues/5767))
-- **PatternFly's "expandable" clipboard-copy variant** is the design-system encoding of the same idea: for "long lines of text" the component expands into a panel; the inline compact variant is reserved for short single-line content. ([PatternFly — Clipboard copy design guidelines](https://www.patternfly.org/components/clipboard-copy/design-guidelines/))
-- **Hiding the prompt behind a `<details>` is an anti-pattern for primary-action content.** Search results and design-system guidance treat "click to copy" as a *primary* micro-interaction; the consistent recommendation is to keep it visible and reachable in one click, not behind progressive disclosure.
+- **Cursor / `.cursor/rules/*.mdc`** uses **YAML frontmatter** with three fields: `description`, `globs`, `alwaysApply`. The "mode" of a rule (always-on, file-pattern-scoped, agent-decided, manual) is signaled by the *combination* of those fields, not a literal mode header. `alwaysApply: true` is the closest equivalent to "this rule must be honored." [cursor.com/docs/context/rules](https://cursor.com/docs/context/rules)
+- **GitHub Spec Kit** prompts use frontmatter with a `mode:` field (e.g. `mode: speckit.command-name`) for routing inside Copilot Chat skills, but it is a *routing* signal, not an autonomy signal. [github.com/github/spec-kit/blob/main/AGENTS.md](https://github.com/github/spec-kit/blob/main/AGENTS.md)
+- **AGENTS.md (the cross-tool standard, stewarded under the Linux Foundation Agentic AI Foundation)** is *just standard Markdown* — "use any headings you like; the agent simply parses the text you provide." There is no mode header at all. Mode is inferred from prose. [agents.md](https://agents.md/), [developers.openai.com/codex/guides/agents-md](https://developers.openai.com/codex/guides/agents-md)
+- **Claude Code plan mode** injects a *literal system-message preamble* `Plan mode is active` plus the contract `you MUST NOT make any edits…`. This is a system-level injection, not a header the user sees in a copy-paste artifact. [lucumr.pocoo.org/2025/12/17/what-is-plan-mode/](https://lucumr.pocoo.org/2025/12/17/what-is-plan-mode/), [claudelog.com/mechanics/plan-mode/](https://claudelog.com/mechanics/plan-mode/)
+- **JetBrains Junie** signals autonomy via a UI checkbox ("Brave Mode") that maps to an internal flag — there is no user-visible prompt header. [jetbrains.com/help/junie/modes.html](https://www.jetbrains.com/help/junie/modes.html), [junie.jetbrains.com/docs/junie-cli.html](https://junie.jetbrains.com/docs/junie-cli.html)
+- **OpenAI Model Spec** uses a structural hierarchy (system / developer / user) baked into the API, not a literal mode header; commentary blocks are visually distinguished from instruction blocks but do not gate execution autonomy. [model-spec.openai.com/2025-12-18.html](https://model-spec.openai.com/2025-12-18.html)
+- **Codex CLI** also recommends "turning up the autonomy or prompting for a 'non-interactive' mode" for evals — phrased as prose, not a header. [developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide)
 
-Implication: a fixed header bar with the Copy button on the right matches established practice. A second sticky/floating Copy that appears only after the user scrolls past the header is a known refinement; not required for v1, but on the table.
+**Implication:** the literal `# EXECUTION MODE: AUTONOMOUS` / `# EXECUTION MODE: INTERACTIVE` header that follow-up 001 specifies is a *novel convention for this repo*. It is justified — copy-paste prompts have no system/developer message channel, so the contract has to ride in the prose — but the spec should call it out explicitly and document why frontmatter was rejected.
 
-### b) How tools surface the size of large copy targets
+### Prompt-assembly rules: inlined > referenced for copy-paste workflows
 
-- **Inline metadata next to the action button is the norm** — language label on the left, byte/length info adjacent to (or just under) the Copy button on the right. The webapp's planned "{N} stages, {K} follow-ups, autonomous=…, {bytes} KB" line is consistent with this pattern.
-- **Soft-warning banners around 75–80% of the hard limit** are a long-established pattern for size-bounded content. Next.js warns at 128 KB of page data (a fraction of the actual hard cap) precisely so devs can act *before* hitting failure; HTML5 banner ad pipelines warn well below the 150 KB IAB ceiling. ([Next.js — Large Page Data](https://nextjs.org/docs/messages/large-page-data), [checksafe.zone — HTML5 Banner Validator](https://checksafe.zone/validator))
-- **Soft-quota / hard-quota separation is the canonical model.** "Soft quotas send a warning message when resource usage reaches a certain level, but do not affect data access operations, so you can take appropriate action before the quota is exceeded." ([NetApp — hard, soft, threshold quotas](https://docs.netapp.com/us-en/ontap/volumes/differences-hard-soft-threshold-quotas-concept.html)) That maps cleanly onto: ≥50 KB → muted warning banner; >1 MB → 413, do not render.
+- **Codex CLI** concatenates `AGENTS.md` files top-down ("Codex concatenates files from the root down, joining them with blank lines. Files closer to your current directory override earlier guidance because they appear later in the combined prompt"). Inline assembly, not reference. [developers.openai.com/codex/guides/agents-md](https://developers.openai.com/codex/guides/agents-md)
+- **Continue.dev `.prompt` files** use a YAML preamble above a `---` separator and inline the body verbatim into the chat; context-provider variables (`{{file}}`, `{{input}}`) expand at send time, not reference time. [docs.continue.dev/customize/deep-dives/prompts](https://docs.continue.dev/customize/deep-dives/prompts), [docs.continue.dev/features/prompt-files](https://docs.continue.dev/features/prompt-files)
+- **Cursor** rule files, when activated, are inlined into the system prompt — never referenced as paths the model has to fetch. The user never sees the assembled bundle in their chat input. [cursor.com/docs/context/rules](https://cursor.com/docs/context/rules)
+- **Spec Kit slash commands** install command files into `.claude/`, `.github/prompts/`, `.pi/prompts/`, etc., and the agent reads those command files directly when the slash command fires — but the *user-visible* artifact is the spec/plan/tasks markdown, which is itself self-contained. [github.com/github/spec-kit](https://github.com/github/spec-kit)
 
-### c) Truncate vs. warn vs. block
+**Established convention:** for copy-paste prompts where the receiving session has no shared filesystem context, **inline the content of every dependency**. Listing filenames is acceptable as an *audit trail*, but the prompt body must be self-contained. This matches the qa.md decision for FR-14c (inline `revised_prompt.md`, list every `follow_ups/*.md` filename, inline non-empty `<stage>/promoted.md`).
 
-- **Don't silently truncate text destined for the clipboard.** Multiple bug threads (Alacritty, Monaco, kitty, VS Code) document that silent truncation of large clipboard targets is treated as a bug, not a feature — users expect the full content or a visible failure, not a quietly mangled paste. ([alacritty/alacritty#6848](https://github.com/alacritty/alacritty/issues/6848), [microsoft/monaco-editor#1540](https://github.com/microsoft/monaco-editor/issues/1540), [kovidgoyal/kitty#3937](https://github.com/kovidgoyal/kitty/issues/3937), [microsoft/vscode#5498](https://github.com/microsoft/vscode/issues/5498))
-- **Warn early, block hard, never truncate.** The convergent pattern across Next.js, IAB/Campaign Manager, and OS-level quota systems is: a soft warning lets the user act, the hard limit produces a clean refusal with an actionable message, and there is no "we silently shortened your content" middle state.
-- The webapp's plan (warn ≥50 KB, hard 413 at >1 MB and do NOT render the prompt block) sits squarely on this convention.
+### Build-prompt → Copy UX: the inline-visible-block pattern is the converged norm for long content
 
-### d) "Copied!" state signaling
+- **PatternFly Clipboard Copy** — the canonical design-system reference — distinguishes inline (single-line, scroll-fade-right for overflow) vs **block (recommended for very long content), with an expand caret and a copy icon in the header bar**. [patternfly.org/components/clipboard-copy](https://www.patternfly.org/components/clipboard-copy/), [patternfly.org/v3/pattern-library/forms-and-controls/copy-to-clipboard](https://www.patternfly.org/v3/pattern-library/forms-and-controls/copy-to-clipboard/index.html)
+- **Cloudscape (AWS) `<copy-to-clipboard>`** confirms the same model: "Copy" button with a transient success state ("Copied!" for 2–3 seconds). [cloudscape.design/components/copy-to-clipboard](https://cloudscape.design/components/copy-to-clipboard/)
+- **Flowbite (Tailwind)** ships the same pattern: bordered code/textarea block, copy button anchored to the header bar. [flowbite.com/docs/components/clipboard](https://flowbite.com/docs/components/clipboard/)
+- **Soft-wrap toggle**: HTML's native `wrap` attribute supports `soft` / `hard` / `off`; CSS `text-wrap` extends it. Wrapping is universally the *default* for textarea, and toggling it off (so users can see indentation / line structure) is the established power-user affordance. [developer.mozilla.org/en-US/docs/Web/API/HTMLTextAreaElement/wrap](https://developer.mozilla.org/en-US/docs/Web/API/HTMLTextAreaElement/wrap), [developer.mozilla.org/en-US/docs/Web/CSS/text-wrap](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/text-wrap)
+- **Collapsing behind `<details>`** is *not* the converged norm for content the user is going to copy in one click — design systems specifically recommend visible-block when the content is long, with internal scroll, not collapse-then-expand. Follow-up 002's "no inner `<details>`, inline visible block with header bar Copy + Wrap toggle" matches PatternFly/Cloudscape/Flowbite guidance.
 
-- **2-second timeout is the de facto standard.** Multiple component libraries (Modern UI, Shoelace, shadcn copy button, Framer Motion implementations) reset the success state after ~2000 ms; 1–3 s is the working range. ([Modern UI — Copy Button](https://modern-ui.org/docs/components/copy-button), [Shoelace — Copy Button](https://shoelace.style/components/copy-button), [shadcn — Copy Button](https://www.shadcn.io/button/copy))
-- **Icon swap (clipboard → check) is the dominant visual.** Often paired with a tooltip whose text flips from "Copy" to "Copied!" for assistive-tech parity. PatternFly explicitly specifies that the tooltip "informs users that clicking the button will copy the content" then "will update to convey success" after interaction. ([PatternFly — Clipboard copy design guidelines](https://www.patternfly.org/components/clipboard-copy/design-guidelines/))
-- **Toast notifications are an alternative, not a replacement.** Inline button feedback is mandatory; a global toast is optional and tends to be reserved for cases where the button is small/icon-only and visual feedback would be missed.
-- **Accessibility is a hard contract.** Icon-only buttons need an `aria-label` (e.g., "Copy prompt to clipboard"); the Copied state should also be exposed (e.g., updating `aria-label` or using an `aria-live` region) so screen-reader users hear the confirmation.
+### Size-budget signals: warn, don't truncate
 
-### e) When to offer Download as file vs. clipboard only
+- No mainstream tool **hard-truncates** an assembled prompt for the user. They warn:
+  - **Codex CLI** caps merged `AGENTS.md` content with a "size cap" but is explicit about it; truncation is logged. [developers.openai.com/codex/guides/agents-md](https://developers.openai.com/codex/guides/agents-md)
+  - **Cursor** does not truncate rule bundles; long rules degrade rule-following quality, which is surfaced in community guidance ("keep rules short / under ~500 lines"), not in a hard cap. [forum.cursor.com/t/my-best-practices-for-mdc-rules-and-troubleshooting/50526](https://forum.cursor.com/t/my-best-practices-for-mdc-rules-and-troubleshooting/50526)
+  - **Claude API XML-tagged prompts** documentation explicitly warns "avoid over-tagging" and "be consistent" but does not cap length. [docs.claude.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags](https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags)
+- **For a copy-paste UI**, the established UX is: show byte/char count, soft-warn at a threshold (e.g. ">100 KB"), never truncate the copy payload. The user is the one who knows their target model's context window.
 
-- **Clipboard-only is fine up to "a few hundred KB" in practice.** The Async Clipboard API has no hardcoded text-size cap, but historical bug threads show that very large strings (Mb-scale) hit performance, browser-specific, and OS-clipboard friction. ([clipboard.js#407 — Firefox fails to copy bigger amount of data](https://github.com/zenorocha/clipboard.js/issues/407), [The Old New Thing — Windows clipboard size](https://devblogs.microsoft.com/oldnewthing/20220608-00/?p=106727))
-- **Design-system precedent for offering format alternatives at large sizes exists.** Tools like Kibana and similar admin UIs offer "Copy as JSON / Copy as TXT / Download" when content is large. ([elastic/kibana#179731 — Copy rows as text UX enhancements](https://github.com/elastic/kibana/issues/179731))
-- For a prompt that can reach 1 MB, a **secondary "Download .md" button alongside Copy** is a reasonable safety net even if Copy still works — it gives the user a path when the OS-level paste target chokes on a giant clipboard payload (some terminals, RDP/SSH paste channels, browser-restricted contexts). Established practice supports it; it is not strictly required.
+### Section breakdown of the assembled prompt
 
-### Practice vs. opinion
+Across Codex/Cursor/Continue/Spec Kit, the consensus structure is:
 
-- Established: header-bar Copy on the right, 2 s "Copied!" state, soft-warn / hard-block separation, no silent truncation, expandable variant for long content.
-- Lighter consensus / my synthesis: the specific 50 KB warning and 1 MB hard ceiling are the webapp's own choice; they sit in the right zone (warn at ~5% of cap) but the exact numbers are a product call, not an industry standard.
-- Author opinion: a Download fallback at >50 KB is a low-cost safety net given how heterogeneous OS paste targets are; the spec can defer it to v2 without sacrificing core UX.
+1. **Mode / role preamble** (system-level intent — "you are a coding agent", autonomy contract)
+2. **Project / repo context** (inlined `AGENTS.md` / `CLAUDE.md` / cursor rules)
+3. **Task statement** (the user's revised prompt + any follow-ups)
+4. **Constraints / guardrails** (non-negotiables, file scope, tools)
+5. **Pinned must-survive content** (Spec Kit's "constitution.md" plays this role; for `spec_driven` it's `<stage>/promoted.md`)
+6. **Output contract** (what artifacts to produce, where to write them)
+
+`spec_driven`'s FR-14c assembly should mirror this ordering.
+
+### How the receiving model is told to honor the mode contract
+
+- **Plan mode (Claude Code)** uses an imperative "you MUST NOT make any edits" — restrictive, single-axis. [lucumr.pocoo.org/2025/12/17/what-is-plan-mode/](https://lucumr.pocoo.org/2025/12/17/what-is-plan-mode/)
+- **Codex preamble guidance** says "acknowledge then plan before any tool calls; 1-sentence acknowledgement, 1–2 sentence plan; updates every 1–3 execution steps; hard floor every 6 steps or 10 tool calls" — prescriptive cadence rules, not a single mode-flag. [developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide)
+- **Spec Kit constitution.md** sets "non-negotiable principles" as a separate file the agent must consult — establishes a contract layer above task instructions. [github.blog/ai-and-ml/generative-ai/spec-driven-development-with-ai-get-started-with-a-new-open-source-toolkit/](https://github.blog/ai-and-ml/generative-ai/spec-driven-development-with-ai-get-started-with-a-new-open-source-toolkit/)
+
+For copy-paste prompts that drop into a fresh CLI session with no system-message channel, the established move is to **make the contract the first paragraph of the user message and phrase it imperatively**. `spec_driven`'s `# EXECUTION MODE: AUTONOMOUS` followed by "Do NOT call AskUserQuestion. For anything ambiguous, use best judgment, and record the choice inline" is exactly this pattern.
 
 ## 3. Implications for the spec (concrete, actionable)
 
-1. **Header bar layout.** Each rendered prompt block has a sticky-within-block header: left side = title ("Regeneration prompt") + the metadata line "{N} stages selected, {K} follow-ups inlined, autonomous={true|false}, {bytes} KB"; right side = the Copy button (primary affordance). Do NOT put the Copy button inside a `<details>` / expander.
-2. **Body styling.** Dark code theme by default; configurable line-height; soft-wrap toggle in the header (icon button) since prompts contain long lines (paths, headers) that benefit from both wrapped and unwrapped views at different times.
-3. **Copy feedback.** Icon swap (clipboard → check) for ~2000 ms, with the button's `aria-label` flipping from "Copy prompt to clipboard" to "Copied". Tooltip text mirrors the label. No toast required for v1.
-4. **Size surfacing.**
-   - Always show byte count in the header metadata line, formatted as KB (one decimal) below 1 MB and MB (two decimals) above.
-   - At ≥50 KB: render a muted warning banner above the prompt body ("This prompt is large ({size}); some terminals may paste slowly. Consider Download .md.") This is the soft-warn tier. Copy stays enabled.
-   - At >1 MB: server returns 413 and the UI does NOT render the prompt body — instead it renders an error block with the size, the cap, and remediation guidance ("Reduce stage selection or split into multiple regenerations"). Copy button is hidden in this state, not disabled-with-tooltip — a hidden button can't be misclicked.
-5. **No silent truncation, ever.** If the assembled text would exceed 1 MB, fail loudly with the 413 path above. Do not render a "first 50 KB" preview that copies to clipboard with the rest dropped.
-6. **Optional Download .md (v2-eligible).** A secondary button next to Copy that triggers a `Blob` download of the assembled text. Useful as a fallback for heterogeneous paste targets (some terminals, RDP, browser sandboxes). Spec it as v2 unless interview answers show users hitting OS-paste failures often.
-7. **Accessibility checklist.** Visible focus ring on Copy; `aria-label` reflects copy/copied state; Copied state announced via tooltip text update or `aria-live="polite"` region; warning banner uses semantic `role="status"` (or `role="alert"` for the 1 MB hard error).
-8. **Floating Copy is a v2 nice-to-have.** If user logs show they scroll past the header on long prompts, add a sticky floating Copy that appears only when the header scrolls out of view. Not blocking for v1.
+**FR-14c — regen-prompt assembly:**
+- Top-of-prompt mode header MUST be a literal first-line H1 (`# EXECUTION MODE: AUTONOMOUS` or `# EXECUTION MODE: INTERACTIVE`). Inventing this is justified — frontmatter (Cursor / Spec Kit) and structural hierarchy (Model Spec) both rely on tool-side parsers that copy-paste flows do not have. The spec should call out the rejected alternatives so the convention is not re-litigated.
+- Body sections, in this order: (1) mode header, (2) one-sentence "you are running a regen of stages X, Y, Z for project P" intent line, (3) inlined `revised_prompt.md` verbatim, (4) follow-ups list — filenames + body inlined, (5) per-stage section with module checklist + invocation hint + inlined non-empty `<stage>/promoted.md` (under "Pinned items (MUST survive regeneration)"), (6) the regeneration contract from `CLAUDE.md § Regeneration semantics: read-zero from prior outputs` quoted verbatim, (7) output contract (paths, events to emit).
+- No truncation. Surface a byte/line count under the prompt block. Soft-warn (yellow chip) above 100 KB; never block the copy.
+- Contract phrasing for autonomous mode: imperative, addressed to "you" — matches plan-mode style. Reuse the wording from `CLAUDE.md § Regeneration prompts & autonomous mode`.
+
+**FR-42 — Build prompt → Copy UI:**
+- Inline visible block (no inner `<details>`). Bordered container; header bar with title, Wrap toggle (default ON), and Copy button. Match PatternFly / Cloudscape / Flowbite design-system conventions. (Already locked by follow-up 002.)
+- Copy button visual feedback: label flips to "Copied!" for ~1.5–2 s. (Cloudscape / PatternFly converge on 2–3 s; 1.5 s in qa.md is on the short side but defensible.)
+- Wrap toggle drives the textarea/`<pre>` element's CSS `white-space` (or HTML `wrap` attribute on `<textarea>`).
+- Display a metadata chip near the header showing line count + byte count. If the count exceeds a configurable threshold (default 100 KB), show a yellow "Large prompt — verify your model's context window" hint. Do NOT truncate the payload; do NOT block Copy.
+- Keyboard: Ctrl/⌘-C while focused inside the block should copy the entire block, not just the selection. (Aligns with PatternFly clipboard pattern.)
+
+**Documentation:**
+- The spec should include a one-paragraph rationale for the literal mode-header convention with citations to AGENTS.md, Cursor rules, and Spec Kit constitution.md, so a future contributor doesn't migrate it to frontmatter.
 
 ## 4. Open questions surfaced
 
-- **Should v1 include the Download .md fallback, or defer to v2?** The user's revised prompt mentions only Copy; established practice is split.
-- **What size banding for KB display?** Show as KB up to 1024, then MB? Or always KB? The spec needs a consistent formatter.
-- **Floating-copy for long prompts: in or out for v1?** Probably out, but should be surfaced as an explicit non-goal so it isn't silently dropped.
-- **Soft-wrap default state.** Wrap on or off by default? Long path-style lines argue for wrap-on; readability of structured headers (`# EXECUTION MODE: …`) argues for wrap-off.
-- **Should the Copied state be persistent (button text stays "Copied") or auto-revert?** 2 s auto-revert is mainstream; persistent only resets on next interaction. The spec should pick one.
-- **Are there OS-clipboard size limits we need to defensively warn about?** Empirically the Async Clipboard API has no hard text-size cap, but specific browsers and paste targets do. Worth documenting the known-bad combinations as caveats in the warning banner copy.
-
-## Sources
-
-- [PatternFly — Clipboard copy design guidelines](https://www.patternfly.org/components/clipboard-copy/design-guidelines/)
-- [Cloudscape Design System — Copy to clipboard](https://cloudscape.design/components/copy-to-clipboard/)
-- [whitep4nth3r — How to build a copy code snippet button and why it matters](https://whitep4nth3r.com/blog/how-to-build-a-copy-code-snippet-button/)
-- [DEV Community — How to build a copy code snippet button](https://dev.to/whitep4nth3r/how-to-build-a-copy-code-snippet-button-and-why-it-matters-3en8)
-- [amanhimself.dev — Advanced code blocks with Shiki and Astro](https://amanhimself.dev/blog/advanced-code-blocks-with-shiki-and-astro/)
-- [open-webui issue #5767 — Floating copy button like the ChatGPT website](https://github.com/open-webui/open-webui/issues/5767)
-- [Modern UI — Copy Button component](https://modern-ui.org/docs/components/copy-button)
-- [Shoelace — Copy Button](https://shoelace.style/components/copy-button)
-- [shadcn — Copy Button](https://www.shadcn.io/button/copy)
-- [alacritty/alacritty#6848 — Truncated text on copy to clipboard](https://github.com/alacritty/alacritty/issues/6848)
-- [microsoft/monaco-editor#1540 — Text truncated on copy with ellipsis](https://github.com/microsoft/monaco-editor/issues/1540)
-- [kovidgoyal/kitty#3937 — Clipboard size limit](https://github.com/kovidgoyal/kitty/issues/3937)
-- [microsoft/vscode#5498 — Crash when copying large amounts of data](https://github.com/microsoft/vscode/issues/5498)
-- [zenorocha/clipboard.js#407 — Firefox fails to copy bigger amount of data](https://github.com/zenorocha/clipboard.js/issues/407)
-- [The Old New Thing — Windows clipboard size limits](https://devblogs.microsoft.com/oldnewthing/20220608-00/?p=106727)
-- [Next.js — Large Page Data](https://nextjs.org/docs/messages/large-page-data)
-- [checksafe.zone — HTML5 Banner Validator (150 KB IAB ceiling)](https://checksafe.zone/validator)
-- [NetApp — Differences among hard, soft, and threshold quotas](https://docs.netapp.com/us-en/ontap/volumes/differences-hard-soft-threshold-quotas-concept.html)
-- [elastic/kibana#179731 — Copy rows as text UX/UI enhancements](https://github.com/elastic/kibana/issues/179731)
-- [Postman Docs — Generate code snippets from API requests](https://learning.postman.com/docs/sending-requests/create-requests/generate-code-snippets)
+1. Should the autonomous-mode header carry a *machine-readable* secondary signal (e.g. `<!-- mode: autonomous -->`) for tooling that wants to detect mode programmatically without parsing the H1? AGENTS.md ecosystem has no precedent; Cursor frontmatter would be the closest analogue. Deferred.
+2. The 100 KB warn threshold is conventional but unvalidated for `spec_driven`. A real run with a large `<stage>/promoted.md` would tell us where the actual ceiling is. Defer to runtime data.
+3. PatternFly recommends scroll-fade-right for inline copy; for our block variant with Wrap=ON the issue doesn't arise, but with Wrap=OFF horizontal overflow is back. Should the block also fade-right at the gutter, or rely on a plain horizontal scrollbar? Defer to FR-42 implementation review.
+4. Cursor, JetBrains Junie, and Claude Code all expose autonomy via UI toggle + tool-side enforcement. `spec_driven`'s prose-only enforcement depends entirely on Claude honoring the contract when reading the H1. Worth a one-line note in the spec that this is a *trust-based* contract, not a sandbox.

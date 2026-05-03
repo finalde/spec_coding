@@ -1,28 +1,71 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const REPO_ROOT = "../../..";
+const BACKEND_CMD = `python ${REPO_ROOT}/projects/spec_driven/backend/main.py`;
+const FRONTEND_CMD = "npm run dev";
+
+const PORT_BACKEND = 8765;
+const PORT_FRONTEND = 5173;
+
+const URL_BACKEND = `http://127.0.0.1:${PORT_BACKEND}`;
+const URL_FRONTEND = `http://127.0.0.1:${PORT_FRONTEND}`;
+
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 30_000,
   fullyParallel: false,
-  forbidOnly: !!process.env.CI,
-  retries: 0,
   workers: 1,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  reporter: [["list"]],
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
+
   use: {
-    baseURL: "http://127.0.0.1:8765",
+    actionTimeout: 10_000,
+    navigationTimeout: 15_000,
     trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    video: "off",
     permissions: ["clipboard-read", "clipboard-write"],
   },
-  webServer: {
-    command: "python ../backend/main.py",
-    url: "http://127.0.0.1:8765/api/tree",
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
-    cwd: __dirname,
-  },
+
+  webServer: [
+    {
+      command: BACKEND_CMD,
+      url: `${URL_BACKEND}/api/tree`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+    {
+      command: FRONTEND_CMD,
+      url: URL_FRONTEND,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  ],
+
   projects: [
     {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      name: "run-prod",
+      testMatch: /dogfood\.spec\.ts/,
+      grepInvert: /SYS-16b/,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: URL_BACKEND,
+      },
+    },
+    {
+      name: "run-frontend",
+      testMatch: /dogfood\.spec\.ts/,
+      grep: /SYS-16b/,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: URL_FRONTEND,
+      },
     },
   ],
 });

@@ -1,106 +1,114 @@
-import type { FileResult, RegenResult, Stage, TreeNode, WriteResult } from "./types";
+import {
+  ApiError,
+  type ApiErrorDetail,
+  type FileResult,
+  type PromoteRequest,
+  type PromoteResult,
+  type RegenRequest,
+  type RegenResult,
+  type Stage,
+  type TreeNode,
+  type UnpromoteRequest,
+  type WriteResult,
+} from "./types";
 
-const ORIGIN_HEADERS = { "Content-Type": "application/json" };
-
-export async function fetchTree(): Promise<TreeNode> {
-  const resp = await fetch("/api/tree");
-  if (!resp.ok) throw new Error(`tree: ${resp.status}`);
-  return resp.json();
+async function readJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!response.ok) {
+    let detail: ApiErrorDetail | null = null;
+    try {
+      const parsed = text ? JSON.parse(text) : null;
+      if (parsed && typeof parsed === "object" && "detail" in parsed) {
+        const d = (parsed as { detail: unknown }).detail;
+        if (d && typeof d === "object") detail = d as ApiErrorDetail;
+        else if (typeof d === "string") detail = { kind: d };
+      }
+    } catch {
+      // body wasn't JSON
+    }
+    throw new ApiError(response.status, `HTTP ${response.status}`, detail);
+  }
+  if (!text) return undefined as unknown as T;
+  return JSON.parse(text) as T;
 }
 
-export interface FetchFileError {
-  status: number;
-  detail: unknown;
+export async function fetchTree(): Promise<TreeNode> {
+  const response = await fetch("/api/tree", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<TreeNode>(response);
 }
 
 export async function fetchFile(path: string): Promise<FileResult> {
-  const resp = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
-  if (!resp.ok) {
-    const detail = await resp.json().catch(() => null);
-    throw { status: resp.status, detail } satisfies FetchFileError;
-  }
-  return resp.json();
+  const response = await fetch(`/api/file?path=${encodeURIComponent(path)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<FileResult>(response);
 }
 
-export async function putFile(path: string, content: string): Promise<WriteResult> {
-  const resp = await fetch("/api/file", {
+export interface PutFileOptions {
+  ifUnmodifiedSince?: string;
+}
+
+export async function putFile(
+  path: string,
+  content: string,
+  options: PutFileOptions = {},
+): Promise<WriteResult> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  if (options.ifUnmodifiedSince) {
+    headers["If-Unmodified-Since"] = options.ifUnmodifiedSince;
+  }
+  const response = await fetch("/api/file", {
     method: "PUT",
-    headers: ORIGIN_HEADERS,
+    headers,
     body: JSON.stringify({ path, content }),
   });
-  if (!resp.ok) {
-    const detail = await resp.json().catch(() => null);
-    throw { status: resp.status, detail } satisfies FetchFileError;
-  }
-  return resp.json();
+  return readJson<WriteResult>(response);
 }
 
-export async function fetchStages(projectType: string, projectName: string): Promise<Stage[]> {
-  const resp = await fetch(
-    `/api/stages?project_type=${encodeURIComponent(projectType)}&project_name=${encodeURIComponent(projectName)}`,
-  );
-  if (!resp.ok) throw new Error(`stages: ${resp.status}`);
-  const body = await resp.json();
-  return body.stages;
-}
-
-export interface RegenRequest {
-  project_type: string;
-  project_name: string;
-  stages: string[];
-  modules: Record<string, string[]>;
-  autonomous: boolean;
+export async function fetchStages(
+  projectType: string,
+  projectName: string,
+): Promise<Stage[]> {
+  const url = `/api/stages?project_type=${encodeURIComponent(projectType)}&project_name=${encodeURIComponent(projectName)}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  const result = await readJson<{ stages: Stage[] } | Stage[]>(response);
+  if (Array.isArray(result)) return result;
+  return result.stages;
 }
 
 export async function postRegenPrompt(req: RegenRequest): Promise<RegenResult> {
-  const resp = await fetch("/api/regen-prompt", {
+  const response = await fetch("/api/regen-prompt", {
     method: "POST",
-    headers: ORIGIN_HEADERS,
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(req),
   });
-  if (!resp.ok) {
-    const detail = await resp.json().catch(() => null);
-    throw { status: resp.status, detail } satisfies FetchFileError;
-  }
-  return resp.json();
+  return readJson<RegenResult>(response);
 }
 
-export interface PromoteRequest {
-  project_type: string;
-  project_name: string;
-  stage_folder: string;
-  source_file: string;
-  item_id: string;
-  item_text: string;
-}
-
-export async function postPromote(req: PromoteRequest): Promise<{ status: string; item_id: string }> {
-  const resp = await fetch("/api/promote", {
+export async function postPromote(req: PromoteRequest): Promise<PromoteResult> {
+  const response = await fetch("/api/promote", {
     method: "POST",
-    headers: ORIGIN_HEADERS,
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(req),
   });
-  if (!resp.ok) {
-    const detail = await resp.json().catch(() => null);
-    throw { status: resp.status, detail } satisfies FetchFileError;
-  }
-  return resp.json();
+  return readJson<PromoteResult>(response);
 }
 
-export async function deletePromote(req: {
-  project_type: string;
-  project_name: string;
-  stage_folder: string;
-  item_id: string;
-}): Promise<{ status: string; item_id: string }> {
-  const resp = await fetch("/api/promote", {
+export async function deletePromote(req: UnpromoteRequest): Promise<PromoteResult> {
+  const response = await fetch("/api/promote", {
     method: "DELETE",
-    headers: ORIGIN_HEADERS,
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(req),
   });
-  if (!resp.ok) {
-    const detail = await resp.json().catch(() => null);
-    throw { status: resp.status, detail } satisfies FetchFileError;
-  }
-  return resp.json();
+  return readJson<PromoteResult>(response);
 }

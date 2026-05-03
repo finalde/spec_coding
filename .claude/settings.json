@@ -7,7 +7,7 @@
           {
             "type": "command",
             "shell": "bash",
-            "command": "python .claude/hooks/spec_driven_triage.py",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/spec_driven_triage.py\"",
             "timeout": 5
           }
         ]

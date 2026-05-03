@@ -1,7 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
-export interface QaErrorBoundaryProps {
+export interface ParseFallbackProps {
   rawText: string;
+  componentName: string;
   children: ReactNode;
 }
 
@@ -10,7 +11,7 @@ interface State {
   error: Error | null;
 }
 
-export class QaErrorBoundary extends Component<QaErrorBoundaryProps, State> {
+export class ParseFallback extends Component<ParseFallbackProps, State> {
   override state: State = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error): State {
@@ -19,7 +20,7 @@ export class QaErrorBoundary extends Component<QaErrorBoundaryProps, State> {
 
   override componentDidCatch(error: Error, _info: ErrorInfo): void {
     // eslint-disable-next-line no-console
-    console.error(error);
+    console.error(`[${this.props.componentName}]`, error);
   }
 
   override render(): ReactNode {
@@ -27,7 +28,7 @@ export class QaErrorBoundary extends Component<QaErrorBoundaryProps, State> {
       return (
         <div className="parse-fallback" role="alert">
           <div className="parse-error-banner">
-            Parse error — falling back to raw text
+            Parse error — falling back to raw text ({this.props.componentName})
           </div>
           <pre>{this.props.rawText}</pre>
         </div>

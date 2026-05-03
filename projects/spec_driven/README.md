@@ -1,85 +1,83 @@
 # spec_driven
 
-Interactive viewer / editor for the artifacts produced by the spec-driven workflow,
-plus a regeneration-prompt assembler that emits copy-paste prompts for the
-Claude Code CLI.
-
-Single project at `projects/spec_driven/` with `backend/` + `frontend/` sharing this
-README. Localhost-only — binds `127.0.0.1:8765` (loopback only).
-
-## Stack
-
-- Backend: FastAPI (Python 3.10+) — single process serves both `/api/*` and the
-  pre-built React SPA from `backend/static/`.
-- Frontend: React + Vite + react-router-dom.
-
-## Install
-
-```sh
-make install
-```
-
-(Alternatively: `pip install -r backend/requirements.txt && (cd frontend && npm install)`.)
+`spec_driven` is an interactive viewer/editor SPA for the artifacts produced by the spec-driven workflow (`specs/{task_type}/{task_name}/`) plus the cross-cutting context the workflow reads (`CLAUDE.md`, `.claude/skills/**/*.md`, `.claude/agent_refs/**/*.md`). Browse the recursive sidebar, edit whole files or per-Q/A blocks, pin atomic items so they survive regeneration, and emit copy-paste regen prompts (INTERACTIVE or AUTONOMOUS) that drive any subset of the six pipeline stages back through Claude Code.
 
 ## Run
 
-Dev (no SPA build needed) — backend only, serves API + a no-SPA fallback:
+The webapp supports three runtime modes. All three bind IPv4 loopback only (`127.0.0.1`) — never `0.0.0.0`.
 
-```sh
-make run            # alias for `make run-backend`
+### Production single-process — `make run-prod`
+
+Builds the frontend bundle into `backend/static/` and serves SPA + API from one FastAPI process.
+
 ```
-
-Dev — backend + Vite dev server in two terminals (hot reload on the React side):
-
-```sh
-# terminal 1
-make run-backend    # FastAPI on http://127.0.0.1:8765
-# terminal 2
-make run-frontend   # Vite on http://127.0.0.1:5173
-```
-
-Production (single process, SPA built and served from `backend/static/`):
-
-```sh
 make build-frontend
 make run-prod
 ```
 
-Open http://127.0.0.1:8765/ in a browser.
+Open `http://127.0.0.1:8765/`.
+
+### Backend-only alias — `make run`
+
+Alias for `make run-backend`. Expects a previously built bundle in `backend/static/` (or treat as API-only).
+
+```
+make run
+```
+
+### Backend + frontend separately (dev) — two terminals
+
+Terminal 1 (backend on `127.0.0.1:8765`):
+
+```
+make run-backend
+```
+
+Terminal 2 (Vite dev server on `127.0.0.1:5173`):
+
+```
+make run-frontend
+```
+
+Open `http://127.0.0.1:5173/`. The Vite proxy forwards `/api/*` to the backend; per follow-up 006 the proxy rewrites `Origin` to `http://127.0.0.1:8765` (and `changeOrigin: true` rewrites `Host` to the target) so the backend's Origin/Host gate sees a same-shape request in both runtime modes. The backend allow-list is NOT widened to the dev-server port.
 
 ## Test
 
-```sh
-make test-backend     # pytest under backend/tests/
-make test-frontend    # vitest under frontend/test/
-make e2e              # Playwright system tests
-make boot-smoke       # SYS-1 only (fast smoke)
-```
+| Target | What it runs |
+|---|---|
+| `make test-backend` | `pytest` over `backend/tests/` (unit + boundary tests against `EXPOSED_TREE`). |
+| `make test-frontend` | Frontend unit tests (Vitest / equivalent). |
+| `make e2e` | Playwright suite against both runtime modes (one profile per advertised mode). |
+| `make boot-smoke` | Boot-smoke pytest: process starts, root endpoint returns 200, `/api/tree` returns the expected shape. |
 
-## Routes
+## Install
 
-- `GET /api/tree` — recursive `{name, path, type, children[]}` for the EXPOSED_TREE.
-- `GET /api/file?path=<rel>` — read a file inside the EXPOSED_TREE.
-- `PUT /api/file` — write a file inside the EXPOSED_TREE.
-- `GET /api/stages?project_type=&project_name=` — canonical six-stage definition.
-- `POST /api/regen-prompt` — assemble a copy-paste regeneration prompt.
-- `POST /api/promote` / `DELETE /api/promote` — pin / unpin atomic items into
-  `<stage>/promoted.md`.
+| Target | What it does |
+|---|---|
+| `make install` | Runs both install targets below. |
+| `make install-backend` | `pip install -r backend/requirements.txt` (pip-only — no `uv`). |
+| `make install-frontend` | `npm install` inside `frontend/`. |
+
+## Clean
+
+`make clean` removes `node_modules/`, `dist/`, `.vite/`, generated `backend/static/` artifacts, `__pycache__/`, and `.pytest_cache/`.
+
+## Architecture
+
+- **Backend.** FastAPI on `127.0.0.1:8765` (IPv4 loopback). Strongly typed Python in `backend/libs/` (`@dataclass(frozen=True)` containers, `str | None` syntax). Single-process mode also serves `backend/static/`.
+- **Frontend.** React + Vite (TypeScript). Recursive sidebar walks `node.children` uniformly; render-mode dispatch chooses `MarkdownView` / `QaView` / `JsonlView` / `CodeView` / `ImagePlaceholder`; every parse-on-render component is wrapped in a real React Error Boundary class.
+- **Mutation surface.** Exactly four endpoints: `PUT /api/file`, `POST /api/regen-prompt`, `POST /api/promote`, `DELETE /api/promote`. No file create / delete / upload.
+- **Regen prompts.** Assembled server-side (`backend/libs/regen_prompt.py`); inline `revised_prompt.md` + every `user_input/follow_ups/*.md` + per-stage pinned items + the read-zero contract verbatim from `CLAUDE.md`. Copy-paste into Claude Code CLI.
 
 ## Security model
 
-- All file-touching paths run through `safe_resolve` (see `backend/libs/safe_resolve.py`).
-  Reparse points (junctions, symlinks), Windows reserved device names, ADS, 8.3 short
-  names, and absolute paths are rejected. Disallowed extensions return 415, files
-  larger than 1 MB return 413, anything outside the EXPOSED_TREE returns a single 404.
-- State-changing routes validate `Origin` and `Host` headers (FR-9). Foreign Origin
-  or Host mismatch returns 403.
-- Markdown is rendered through `react-markdown` + `rehype-sanitize` with no raw-HTML
-  escape hatch. SVG is NOT in the file-extension allowlist.
+- Localhost-only, IPv4 (`127.0.0.1`). IPv6 (`[::1]`) and `0.0.0.0` are explicitly out of scope.
+- `Origin` and `Host` validated on every state-changing endpoint; foreign / missing / wrong-port → **403** (CSRF / DNS-rebind defense). Loopback aliases (`localhost` ↔ `127.0.0.1` at the bound port) admit because they resolve to the same socket.
+- File access sandboxed through `EXPOSED_TREE`. Path traversal probes (`..`, percent-encoded, ADS, Windows reserved names, 8.3 short names, mixed slashes, trailing-backslash per Vite CVE-2025-62522) all collapse to a single **404** (no existence oracle). Symlinks / Windows junctions refused outright.
+- Extension allowlist for reads (`.md`, `.json`, `.yaml`, `.yml`, `.jsonl`, `.txt`, `.png`, `.jpg`); SVG NOT in the allowlist (code-execution vector). Image extensions are not writable. 1 MB body cap on writes.
+- Markdown render path uses `rehype-sanitize` default schema; raw HTML, event handlers, and `javascript:` URIs are stripped.
+- Concurrency guard via `If-Unmodified-Since` (RFC 7232 mtime) on `PUT /api/file` — stale write returns **409** so the SPA can offer "file changed externally — Reload?".
 
-## Spec
+## Light-theme app chrome
 
-The canonical spec for this project lives at
-`specs/development/spec_driven/final_specs/spec.md`. Every functional requirement
-(FR-NN), non-functional requirement (NFR-NN), and acceptance criterion (AC-NN) in
-the test files cites it.
+App chrome (body, sidebars, toolbars, panels, buttons, form controls) is light-only per `.claude/agent_refs/project/development.md` — `:root { color-scheme: light; }`, no `@media (prefers-color-scheme: dark)` overrides. Dark `<pre>` palettes inside `.regen-prompt-block`, `.markdown-view pre`, and `.code-view pre` are intentional carve-outs (validated WCAG AA).

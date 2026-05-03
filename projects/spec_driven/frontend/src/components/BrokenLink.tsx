@@ -1,15 +1,14 @@
-import type { BrokenLinkCause } from "../types";
+export interface BrokenLinkProps {
+  href: string;
+  title?: string;
+  children: React.ReactNode;
+}
 
-export function BrokenLink(props: { children: React.ReactNode; cause: BrokenLinkCause }) {
+export function BrokenLink({ href, title, children }: BrokenLinkProps): JSX.Element {
+  const tip = title ?? `Broken link: ${href}`;
   return (
-    <span
-      className="link-broken"
-      aria-disabled="true"
-      tabIndex={0}
-      title={props.cause}
-      data-testid="link-broken"
-    >
-      {props.children}
+    <span className="broken-link" title={tip} aria-label={tip}>
+      {children}
     </span>
   );
 }

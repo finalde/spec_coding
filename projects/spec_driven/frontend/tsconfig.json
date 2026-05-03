@@ -2,21 +2,25 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx",
     "module": "ESNext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
+    "skipLibCheck": true,
     "resolveJsonModule": true,
-    "useDefineForClassFields": true,
+    "allowImportingTsExtensions": false,
     "noEmit": true,
-    "types": ["vite/client", "vitest/globals"]
+    "useDefineForClassFields": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src", "test", "vite.config.ts"]
+  "include": ["src", "test"],
+  "exclude": ["node_modules", "dist", "../backend/static"]
 }

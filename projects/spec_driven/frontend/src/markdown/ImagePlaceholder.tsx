@@ -1,14 +1,16 @@
-interface Props {
-  path: string;
-  base64?: string;
+export interface ImagePlaceholderProps {
+  filename: string;
+  bytes: number;
 }
 
-export function ImagePlaceholder({ path, base64 }: Props) {
-  const src = base64 ? `data:image/${path.endsWith(".png") ? "png" : "jpeg"};base64,${base64}` : `/api/file?path=${encodeURIComponent(path)}`;
+export function ImagePlaceholder({ filename, bytes }: ImagePlaceholderProps): JSX.Element {
   return (
-    <div className="image-placeholder" data-testid="image-placeholder">
-      <img src={src} alt={path} loading="lazy" />
-      <p className="image-meta">{path}</p>
+    <div className="image-placeholder" role="region" aria-label={`Image placeholder for ${filename}`}>
+      <div className="image-placeholder-card">
+        <div className="image-placeholder-name">{filename}</div>
+        <div className="image-placeholder-meta">{bytes.toLocaleString()} bytes</div>
+        <div className="image-placeholder-note">binary content not previewed</div>
+      </div>
     </div>
   );
 }

@@ -1,90 +1,95 @@
-"""
-EXPOSED_TREE definition (FR-2).
-
-The EXPOSED_TREE is the union of:
-- CLAUDE.md
-- every .claude/agents/*.md
-- every .claude/skills/**/SKILL.md
-- every .claude/skills/agent_team/playbooks/*.md
-- every .claude/agent_refs/**/*.md
-- every specs/{type}/{name}/<canonical-stage>/** (limited to canonical stages)
-
-Plus an explicit allow-listed __scratch__ subfolder under each project for fixture
-writes (system tests need a writable area inside the sandbox).
-
-This module returns absolute Path objects; safe_resolve still applies on top.
-"""
-
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
-CANONICAL_STAGES = ("user_input", "interview", "findings", "final_specs", "validation")
-PROJECT_LEVEL_FILES = ("changelog.md",)
-SCRATCH_DIRNAME = "__scratch__"
+CANONICAL_STAGES: list[str] = [
+    "user_input",
+    "interview",
+    "findings",
+    "final_specs",
+    "validation",
+]
+SCRATCH_DIRNAME: str = "__scratch__"
+ALLOWED_EXTENSIONS: frozenset[str] = frozenset(
+    {".md", ".json", ".yaml", ".yml", ".jsonl", ".txt", ".png", ".jpg"}
+)
+MAX_FILE_BYTES: int = 1_048_576
+
+_EXCLUDED_DIRS: frozenset[str] = frozenset(
+    {"node_modules", ".git", ".audit", "__pycache__", ".pytest_cache", "dist", "build", ".vite"}
+)
 
 
-@dataclass(frozen=True)
 class ExposedTree:
-    root: Path
+    def __init__(self, repo_root: Path) -> None:
+        self._root = repo_root.resolve()
 
-    def claude_md(self) -> Path:
-        return self.root / "CLAUDE.md"
+    @property
+    def root(self) -> Path:
+        return self._root
 
-    def claude_agents(self) -> list[Path]:
-        agents = self.root / ".claude" / "agents"
-        if not agents.is_dir():
-            return []
-        return sorted([p for p in agents.glob("*.md") if p.is_file()])
+    def claude_root_files(self) -> list[Path]:
+        cm = self._root / "CLAUDE.md"
+        return [cm] if cm.is_file() else []
 
     def claude_skill_files(self) -> list[Path]:
-        skills = self.root / ".claude" / "skills"
-        if not skills.is_dir():
-            return []
+        skills_dir = self._root / ".claude" / "skills"
         out: list[Path] = []
-        for p in skills.rglob("SKILL.md"):
+        if not skills_dir.is_dir():
+            return out
+        for p in skills_dir.rglob("SKILL.md"):
             if p.is_file():
                 out.append(p)
-        for p in (skills / "agent_team" / "playbooks").glob("*.md") if (skills / "agent_team" / "playbooks").is_dir() else []:
-            if p.is_file():
-                out.append(p)
-        return sorted(set(out))
+        playbooks_dir = self._root / ".claude" / "skills" / "agent_team" / "playbooks"
+        if playbooks_dir.is_dir():
+            for p in sorted(playbooks_dir.glob("*.md")):
+                if p.is_file():
+                    out.append(p)
+        return out
 
     def claude_agent_refs(self) -> list[Path]:
-        refs = self.root / ".claude" / "agent_refs"
-        if not refs.is_dir():
+        refs_dir = self._root / ".claude" / "agent_refs"
+        if not refs_dir.is_dir():
             return []
-        return sorted([p for p in refs.rglob("*.md") if p.is_file()])
+        return sorted(p for p in refs_dir.rglob("*.md") if p.is_file())
 
     def project_dirs(self) -> list[Path]:
-        specs = self.root / "specs"
-        if not specs.is_dir():
+        projects_root = self._root / "projects"
+        if not projects_root.is_dir():
             return []
-        out: list[Path] = []
-        for type_dir in sorted(specs.iterdir()):
-            if not type_dir.is_dir():
-                continue
-            for name_dir in sorted(type_dir.iterdir()):
-                if name_dir.is_dir():
-                    out.append(name_dir)
-        return out
+        return sorted(p for p in projects_root.iterdir() if p.is_dir())
 
     def project_stage_dirs(self, project_dir: Path) -> list[Path]:
-        out = []
-        for stage in CANONICAL_STAGES:
-            d = project_dir / stage
-            if d.is_dir():
-                out.append(d)
-        scratch = project_dir / SCRATCH_DIRNAME
-        if scratch.is_dir():
-            out.append(scratch)
-        return out
+        return [project_dir / s for s in CANONICAL_STAGES if (project_dir / s).is_dir()]
 
-    def project_top_level_files(self, project_dir: Path) -> list[Path]:
-        out = []
-        for name in PROJECT_LEVEL_FILES:
-            p = project_dir / name
-            if p.is_file():
-                out.append(p)
-        return out
+    def is_inside(self, rel: str) -> bool:
+        if not rel or rel.startswith("/") or "\\" in rel or "\x00" in rel:
+            return False
+        candidate = (self._root / rel).resolve(strict=False)
+        if not (candidate == self._root or self._root in candidate.parents):
+            return False
+        try:
+            relative = candidate.relative_to(self._root)
+        except ValueError:
+            return False
+        parts = relative.parts
+        if not parts:
+            return False
+        first = parts[0]
+        if first == "CLAUDE.md":
+            return True
+        if first == ".claude":
+            if len(parts) >= 2 and parts[1] in {"skills", "agent_refs"}:
+                return True
+            return False
+        if first == "specs":
+            return True
+        if first == "projects":
+            for seg in parts:
+                if seg in _EXCLUDED_DIRS:
+                    return False
+            return True
+        return False
+
+    def excluded_dirs(self) -> frozenset[str]:
+        return _EXCLUDED_DIRS

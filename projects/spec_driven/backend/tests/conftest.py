@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
+from typing import Iterator
 
 import pytest
 
@@ -31,20 +33,44 @@ def bound() -> BoundOrigin:
 
 
 @pytest.fixture()
-def client(repo_root: RepoRoot, bound: BoundOrigin):
-    from fastapi.testclient import TestClient
-
-    app = create_app(repo_root=repo_root, bound=bound, serve_static=False)
-    return TestClient(app)
+def app(repo_root: RepoRoot, bound: BoundOrigin):
+    return create_app(repo_root=repo_root, bound=bound, serve_static=False)
 
 
 @pytest.fixture()
-def scratch_dir(repo_root: RepoRoot) -> Path:
-    p = repo_root.path / "specs" / "development" / "spec_driven" / "__scratch__"
-    p.mkdir(parents=True, exist_ok=True)
-    yield p
+def client(app):
+    from fastapi.testclient import TestClient
+
+    return TestClient(app)
 
 
 @pytest.fixture()
 def good_headers() -> dict[str, str]:
     return {"Origin": "http://127.0.0.1:8765", "Host": "127.0.0.1:8765"}
+
+
+@pytest.fixture()
+def localhost_headers() -> dict[str, str]:
+    return {"Origin": "http://localhost:8765", "Host": "localhost:8765"}
+
+
+@pytest.fixture()
+def scratch_dir(repo_root: RepoRoot) -> Iterator[Path]:
+    p = repo_root.path / "specs" / "development" / "spec_driven" / "__scratch__"
+    p.mkdir(parents=True, exist_ok=True)
+    yield p
+    # Best-effort cleanup of leftover files inside scratch (don't remove dir
+    # itself — other parallel tests may share it within a session run).
+    for child in list(p.iterdir()):
+        try:
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                child.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+@pytest.fixture()
+def scratch_rel(scratch_dir: Path) -> str:
+    return "specs/development/spec_driven/__scratch__"

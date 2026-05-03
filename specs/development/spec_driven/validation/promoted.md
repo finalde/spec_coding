@@ -1,4 +1,1 @@
-# Promoted items
-
-_INPUT to regeneration. See CLAUDE.md → Pinned items survive regeneration._
-
+<!-- spec_driven promoted.md — INPUT to regeneration; pinned items survive read-zero regen. -->

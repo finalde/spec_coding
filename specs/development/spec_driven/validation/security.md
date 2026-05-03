@@ -1,241 +1,238 @@
-# Validation — Security level
+# Validation — Security probes
 
-Stage: 5 (Validation strategy) — clean-state regeneration
-Run: spec_driven-20260503-030434
-Specialist: level-specialist-05-security
-Inputs read: `final_specs/spec.md` (FR-3..9, NFR-4..9, AC-3..12, AC-29), `findings/angle-localhost-fs-sandbox-risks.md`, `CLAUDE.md`, `.claude/skills/agent_team/playbooks/validation.md`, `.claude/agent_refs/validation/general.md`, `.claude/agent_refs/validation/development.md`.
+Run: `spec_driven-20260503-145859` · Worker: `level-specialist-05-security`
 
-This catalogue defines the security probes that exercise the spec's hardening claims. Each entry is a single test the validator runs against a live `127.0.0.1:8765` instance (or against the underlying `safe_resolve` / sanitizer for unit-shape probes that do not require HTTP). All HTTP probes default to a benign `Origin: http://127.0.0.1:8765` and `Host: 127.0.0.1:8765` unless the probe explicitly tests CSRF / DNS rebinding.
+Source angle: `findings/angle-localhost-fs-sandbox-risks.md`. Severity policy: `.claude/agent_refs/validation/general.md` § Standard severity policy + `.claude/agent_refs/validation/development.md` § Severity escalations specific to development.
 
-Severity contract (per `.claude/agent_refs/validation/general.md` and prompt rules):
-- `critical` — any path-traversal / sandbox-escape success, ADS bypass, reparse-point bypass, sanitizer XSS that reaches the DOM.
-- `blocker` — missing security header on the success path, or `0.0.0.0` bind in any default config.
-- `high` — verb / extension / size-cap / Origin-Host enforcement gap that does NOT escape the sandbox but trivially bypasses the documented rule.
-- `medium` — enumeration side-channel (403/404 split, error-message leakage).
+Convention: every probe is a row of **Class** / **CWE/CVE** / **Vector** / **Expected behavior** / **Pass criterion** / **Severity**. All security failures (any SEC-* miss) halt immediately per the standard policy — no revision rounds without explicit user approval.
+
+The probe corpus is table-driven where possible (`tests/unit/test_path_sandbox.py` parametrize) so a new variant is one fixture row, not one new test function. Backend probes target `127.0.0.1:8765`; proxy probes target `127.0.0.1:5173` with the Vite proxy active.
 
 ---
 
-## SEC-01 — Path traversal via `..` (POSIX form)
-- **Attack vector:** `GET /api/file?path=../etc/passwd`, `GET /api/file?path=specs/../../etc/passwd`, `GET /api/file?path=specs/development/../../../CLAUDE.md` (last form deliberately resolves *back inside* the tree to confirm the rule is "containment after canonicalization", not "any `..` is rejected outright").
-- **Expected behavior:** Every request returns **404** with no body that names whether the file exists. `safe_resolve` rejects on `..` after normalization for the first two; the third resolves back into the EXPOSED_TREE and MAY return 200 (containment-based rule per FR-4) — flag as informational, not a failure.
-- **Pass criterion:** Status `404` for the first two probes; no `Content-Disposition` containing the absolute attacker path; response identical (modulo timing) to the "outside EXPOSED_TREE" probe in SEC-18.
-- **Severity:** `critical` if any of the first two returns 200 or leaks bytes from outside the tree.
-- **CWE:** CWE-22 (Path Traversal).
-- **Components exercised:** FR-3, FR-4, AC-3, NFR-4.
+## SEC-1 — Path traversal: literal `..` segments
 
-## SEC-02 — Path traversal via URL-encoded `..` (`..%2f`, `%2e%2e/`, `%2e%2e%2f`)
-- **Attack vector:** `GET /api/file?path=..%2fetc%2fpasswd`, `GET /api/file?path=%2e%2e%2fetc%2fpasswd`, `GET /api/file?path=specs%2f..%2f..%2fetc%2fpasswd`.
-- **Expected behavior:** FastAPI / Starlette decodes the query string before the handler sees it, so `safe_resolve` receives literal `..` and rejects per SEC-01.
-- **Pass criterion:** All return **404**. No 200 / 500.
-- **Severity:** `critical` on any 200.
+- **Class:** Path traversal sandbox escape.
+- **CWE:** CWE-22 (Improper Limitation of a Pathname to a Restricted Directory).
+- **Vector:** `GET /api/file?path=../../etc/passwd`, `GET /api/file?path=specs/../../etc/passwd`, `GET /api/file?path=..\..\windows\system.ini`. Same payloads against `PUT /api/file`.
+- **Expected behavior:** `resolve_safe()` rejects the literal `..` segment before any FS call. No `realpath` resolution happens. No file-existence side channel.
+- **Pass criterion:** every probe returns `404` with the same generic body as a missing-file probe; response headers identical to a clean 404; no `errno`/`strerror` text in the body; latency within 5 % of a clean 404 (no timing oracle).
+- **Severity:** `critical`.
+
+## SEC-2 — Path traversal: percent-encoded variants
+
+- **Class:** Path traversal sandbox escape via encoding.
+- **CWE:** CWE-22 (decoded variants), CWE-172 (Encoding Error).
+- **Vector:** `%2e%2e%2f`, `%2e%2e%5c`, double-encoded `%252e%252e%252f`, mixed case `%2E%2e%2F`, overlong UTF-8 `%c0%ae%c0%ae`, NUL byte `%00`. Probe against both GET and PUT.
+- **Expected behavior:** server URL-decodes once, then runs `..` rejection. Double-encoded variants are NOT decoded twice (no recursive decode). Overlong UTF-8 is rejected at the codec layer.
+- **Pass criterion:** all probes → single `404`. Property-based test (`hypothesis`) generates 200 random encoding combinations and asserts the same single-404 response.
+- **Severity:** `critical`.
+
+## SEC-3 — Path traversal: mixed slashes + absolute paths
+
+- **Class:** Path traversal via separator confusion.
 - **CWE:** CWE-22.
-- **Components exercised:** FR-3, FR-4, AC-3.
+- **Vector:** `/etc/passwd`, `C:\Windows\System32\drivers\etc\hosts`, `\\?\C:\Windows\win.ini` (UNC form), `/specs/development/spec_driven/../../etc/shadow`, leading `/` or `\` on the path query. Mixed `..\\..\/..\\` separators.
+- **Expected behavior:** absolute-path detection (`Path.is_absolute()`) AND leading `/`/`\` rejection happen before resolution. Mixed separators are normalized once and the result is re-validated.
+- **Pass criterion:** all probes → `404`. Backend never reads outside `EXPOSED_TREE`; assert via a process-level `os.open` audit hook in the test fixture that no path outside the configured root is opened.
+- **Severity:** `critical`.
 
-## SEC-03 — Path traversal via Windows backslash (`..\`, `..%5c`)
-- **Attack vector:** `GET /api/file?path=..\etc\passwd`, `GET /api/file?path=..%5cetc%5cpasswd`, `GET /api/file?path=specs%5c..%5c..%5cCLAUDE.md` — the canonical Vite CVE-2025-62522 regression. Run on both Windows and POSIX (POSIX should still treat `\` as a valid path char and refuse, because `safe_resolve` normalizes BEFORE checking traversal per FR-4 / findings 2b).
-- **Expected behavior:** `safe_resolve` normalizes `\` → `/` first, then applies `..` rejection. Both forms return 404.
-- **Pass criterion:** Status `404`; no platform divergence.
-- **Severity:** `critical` on any 200; `high` on a platform-divergent result (POSIX rejects, Windows accepts) — that is the exact Vite regression class.
-- **CWE:** CWE-22.
-- **Components exercised:** FR-4, NFR-13.
+## SEC-4 — Vite CVE-2025-62522 trailing-backslash bypass
 
-## SEC-04 — Absolute path outside EXPOSED_TREE
-- **Attack vector:** `GET /api/file?path=/etc/passwd` (POSIX), `GET /api/file?path=C:\Windows\System32\drivers\etc\hosts` (Windows), `GET /api/file?path=/proc/self/environ`.
-- **Expected behavior:** `safe_resolve` rejects absolute paths (FR-4 explicit clause).
-- **Pass criterion:** Status `404`. Body MUST NOT differ from the SEC-08 (extension-disallowed inside tree) body in a way that lets an attacker enumerate which case they hit — see SEC-18.
-- **Severity:** `critical` on any 200.
-- **CWE:** CWE-22.
-- **Components exercised:** FR-4, AC-3, NFR-4.
+- **Class:** Sandbox bypass via path-suffix trick.
+- **CVE:** **CVE-2025-62522** (CWE-22). Affects Vite 2.9.18→<3, 3.2.9→<4, 4.5.3→<5, 5.2.6→<5.4.21, 6.0.0→<6.4.1, 7.0.0→<7.0.8, 7.1.0→<7.1.11. Patched 5.4.21 / 6.4.1 / 7.0.8 / 7.1.11.
+- **Vector:** `GET /api/file?path=specs/development/spec_driven/final_specs/spec.md\` (trailing `\`); `GET /api/file?path=foo.png\` (resolves to `foo.png` on Windows under unpatched Vite); `GET /api/file?path=.env\`; `GET /api/file?path=CLAUDE.md/`; same trailing-`\` payload against `PUT /api/file`.
+- **Expected behavior:** the Python backend independently rejects any path containing a literal `\` byte, ending in `\` or `/`, or containing `:` (drive letters / ADS) — BEFORE `realpath` resolution. The defense does NOT rely on Vite's filtering even when running under the dev proxy.
+- **Pass criterion:** probe returns `404`. Backend `package.json` / `vite` lockfile pinned to a patched range (`>=7.1.11` for the v7 line). Test fixture asserts the installed Vite version is in the patched set OR the unit test for trailing-backslash path rejection passes (defense-in-depth — both must hold).
+- **Severity:** `critical`.
 
-## SEC-05 — Windows reserved device names
-- **Attack vector:** `GET /api/file?path=specs/development/spec_driven/CON.md`, `…/PRN.md`, `…/AUX.md`, `…/NUL.md`, `…/COM1.md`, `…/LPT1.md`. Also case-mixed (`Con.MD`, `nUl.md`) and bare (`specs/CON`).
-- **Expected behavior:** `safe_resolve` rejects on the basename allow-list per FR-4 regardless of extension or case.
-- **Pass criterion:** Status `404` for every variant. AC-4 is the spec's anchor for this probe.
-- **Severity:** `critical` on any 200 or 500 (a 500 means the OS device alias was actually opened).
-- **CWE:** CWE-22 (alias resolution into a non-file device).
-- **Components exercised:** FR-4, AC-4.
+## SEC-5 — Windows reserved device names
 
-## SEC-06 — Alternate Data Streams (ADS)
-- **Attack vector:** `GET /api/file?path=specs/development/spec_driven/final_specs/spec.md::$DATA`, `…/spec.md:hidden`, `…/spec.md:hidden.txt`, URL-encoded `…/spec.md%3a%3a%24DATA`.
-- **Expected behavior:** `safe_resolve` rejects any path segment with `:` other than the drive-letter colon at index 1, AND rejects `::$DATA` literally (FR-4).
-- **Pass criterion:** Status `404` for every form. AC-5 is the spec's anchor.
-- **Severity:** `critical` on any 200 — ADS exposes alternate metadata streams that the user did not consent to expose.
-- **CWE:** CWE-22 / CWE-538 (file/directory information exposure).
-- **Components exercised:** FR-4, AC-5.
+- **Class:** Windows reserved-name handling.
+- **CWE:** CWE-66 (Improper Handling of File Names that Identify Virtual Resources).
+- **Vector:** `GET /api/file?path=CON`, `?path=CON.md`, `?path=PRN.txt`, `?path=AUX`, `?path=NUL`, `?path=NUL.tar.gz`, `?path=COM1`, `?path=COM9.md`, `?path=COM1.json` (case variants `con`, `Con`, `CON`), `?path=LPT1`…`LPT9`, superscript-digit variants `COM¹`, `LPT²`. Same set against `PUT /api/file` (write probes).
+- **Expected behavior:** path-component check matches `^(CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³])(\.|$)` case-insensitively, rejects before any FS open. Real-world precedent: `claude-code` issue #16604 (literal `nul` file broke OneDrive sync).
+- **Pass criterion:** every probe returns `404` (read) / `404` (write — sandbox-reject before extension check). No `nul` / `con` / etc. file is ever created on disk during the test; assert by globbing `EXPOSED_TREE` for matching basenames after the test run and asserting an empty result.
+- **Severity:** `critical`.
 
-## SEC-07 — 8.3 short-name aliases (`PROGRA~1`)
-- **Attack vector:** `GET /api/file?path=PROGRA~1/something.md`, `GET /api/file?path=specs/DEVELO~1/spec_driven/final_specs/spec.md` (where `DEVELO~1` is the 8.3 alias for `development`). On filesystems where 8.3 generation is disabled, this probe MAY natively 404 — the test runner injects a synthetic alias via a fixture directory or skips with a recorded reason.
-- **Expected behavior:** `safe_resolve` rejects any segment containing `~<digit>` smell BEFORE resolution, OR resolves and re-checks containment after canonicalization (the spec's preferred form per findings 2b).
-- **Pass criterion:** Status `404`. If the alias would otherwise resolve into the tree, the test fails — short-name canonicalization MUST not be a back-door.
-- **Severity:** `critical` on a successful read; `high` on a successful read of a file that would also be reachable by its long name (still a rule violation even if the bytes are the same).
-- **CWE:** CWE-22.
-- **Components exercised:** FR-4.
+## SEC-6 — NTFS Alternate Data Streams + 8.3 short names
 
-## SEC-08 — Reparse points / NTFS junctions
-- **Attack vector:** Set up a junction `specs/development/spec_driven/_junc -> C:\Windows` (test fixture, Windows-only). Then `GET /api/file?path=specs/development/spec_driven/_junc/win.ini`.
-- **Expected behavior:** `safe_resolve` lstats every segment of the resolved path and refuses if `FILE_ATTRIBUTE_REPARSE_POINT` is set on any segment (FR-4, NFR-5).
-- **Pass criterion:** Status `404`. AC-6 is the spec's anchor.
-- **Severity:** `critical` on any 200 — junctions are the canonical Windows sandbox-escape vector.
-- **CWE:** CWE-59 (Link Following).
-- **Components exercised:** FR-4, NFR-5, AC-6.
-- **Platform note:** Windows-only setup; on POSIX the test is skipped with `pytest.mark.skipif(sys.platform != "win32", reason="junction setup is Windows-specific")` per NFR-12. Skipping is fine; silent passing is not.
+- **Class:** Windows-specific filename-format bypass.
+- **CWE:** CWE-66 (filename-format confusion); related to CWE-178 (Improper Handling of Case Sensitivity).
+- **Vector:** ADS: `?path=spec.md::$DATA`, `?path=CLAUDE.md::$DATA`, `?path=specs/foo:hidden`, `?path=foo.md:stream:$DATA`. 8.3 short names: `?path=FILE~1.MD`, `?path=PROGRA~1`, `?path=SPEC_D~1/final_specs/SPEC~1.MD`. Mixed-case variants of each.
+- **Expected behavior:** any path component containing `:` is rejected outright on all platforms (not just Windows). Any path component matching `~\d` regex is rejected. Both checks happen pre-resolve.
+- **Pass criterion:** all probes → `404`. Documented carve-out: a legitimate file literally named `foo~1.md` would be rejected — `EXPOSED_TREE` contains no such files (asserted by a sweep test that fails if any tracked file matches the `~\d` pattern).
+- **Severity:** `critical`.
 
-## SEC-09 — POSIX symlink crossing the sandbox
-- **Attack vector:** `ln -s /etc/passwd specs/development/spec_driven/_link.md` then `GET /api/file?path=specs/development/spec_driven/_link.md`. POSIX-only; on Windows substitute SEC-08 junction.
-- **Expected behavior:** `safe_resolve` is_symlink check rejects the resolved path before reading bytes (FR-4, NFR-5).
-- **Pass criterion:** Status `404`.
-- **Severity:** `critical` on any 200.
-- **CWE:** CWE-59.
-- **Components exercised:** FR-4, NFR-5.
-- **Platform note:** `pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink setup")`. Use SEC-08 instead on Windows.
+## SEC-7 — POSIX symlink refusal (read path)
 
-## SEC-10 — Disallowed extension on read
-- **Attack vector:** `GET /api/file?path=evil.exe`, `…/scratch.bat`, `…/payload.ps1`, `…/x.svg` (SVG explicitly NOT in the allowlist per NFR-9 / FR-3), `…/x.dll`, `…/x.com` (also doubles as SEC-05 device-name check via the `.com` suffix). Run with the file actually present inside the tree (fixture write) to ensure the rejection is on extension, not on existence.
-- **Expected behavior:** Status `415` (FR-3 disallowed-extension contract). Body matches the documented error shape (no leakage of which directory was probed).
-- **Pass criterion:** Status `415` exactly; not `404`, not `403`, not `200`. AC-8 is the spec's anchor.
-- **Severity:** `high` on `200` (extension allowlist failed); `medium` on `404` (consistent with SEC-18 enumeration policy but inconsistent with FR-3, which mandates `415`).
-- **CWE:** CWE-434 (Unrestricted Upload — applied here in the read direction as "served what we should not serve").
-- **Components exercised:** FR-3, NFR-9, AC-8.
+- **Class:** Link-following sandbox escape.
+- **CWE:** CWE-59 (Improper Link Resolution Before File Access — "Link Following").
+- **Vector:** create a symlink `specs/development/spec_driven/findings/leak.md` → `/etc/passwd` (POSIX) or to `..\..\..\Windows\win.ini` (Windows under Developer Mode). `GET /api/file?path=specs/development/spec_driven/findings/leak.md`. Also probe a directory whose ancestor was replaced by a symlink mid-walk (TOCTOU).
+- **Expected behavior:** per-component `Path.is_symlink()` check during resolution refuses the path outright if any ancestor or the leaf itself is a symlink. NO `realpath`-and-re-verify fallback (refused outright per spec OQ-4 resolution).
+- **Pass criterion:** probe returns `404`. Test marker `pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlinks require Developer Mode on Windows; covered by SEC-8 junction probe")` per `agent_refs/validation/development.md` § 5.
+- **Severity:** `critical`.
 
-## SEC-11 — File >1 MB on read
-- **Attack vector:** Fixture-write a 1.5 MB `.md` file inside the tree, then `GET /api/file?path=<that path>`.
-- **Expected behavior:** Status `413` (FR-3 size-cap contract). AC-7 anchor.
-- **Pass criterion:** Status `413` and `Content-Length` of response is small (no streaming of the file's prefix before the cap fires).
-- **Severity:** `high` on `200` (size cap failed); `medium` on `413` that arrives only after the full file was read into memory (DoS risk).
-- **CWE:** CWE-770 (Allocation of Resources Without Limits).
-- **Components exercised:** FR-3, AC-7.
+## SEC-8 — Windows junction refusal
 
-## SEC-12 — PUT body >1 MB
-- **Attack vector:** `PUT /api/file` with a 1.5 MB body (`{path: "…/scratch.md", content: "<1.5 MB of 'a'>"}`).
-- **Expected behavior:** Status `413` with body `{detail: {kind: "too_large"}}` (FR-7, AC-10). The cap is enforced at FastAPI level (and at any reverse-proxy layer per FR-7) BEFORE the full body lands in memory, per OWASP File Upload Cheat Sheet (findings 2c).
-- **Pass criterion:** Status `413` AND `response.json()["detail"]["kind"] == "too_large"`. The verbatim `kind` key is the contract — string comparison, not regex.
-- **Severity:** `high` on `200` (write succeeded); `high` on `413` without the `kind: "too_large"` discriminator (rule violated even if status is right).
-- **CWE:** CWE-770.
-- **Components exercised:** FR-7, NFR-11, AC-10.
+- **Class:** Link-following sandbox escape (Windows variant).
+- **CWE:** CWE-59. Microsoft RedirectionGuard (Windows 11, June 2025) acknowledges junctions as the largest residual junction-traversal gap.
+- **Vector:** `mklink /J specs\junction_leak C:\Windows\System32` then `GET /api/file?path=specs/junction_leak/drivers/etc/hosts`. Also probe `mklink /D` directory symlinks and registry-symlink-style indirection where applicable.
+- **Expected behavior:** junctions are detected via `Path.is_symlink()` (which returns True for NTFS junctions in Python 3.10+) AND via a defensive `os.lstat` reparse-point check on Windows. Refused outright; no realpath fallback.
+- **Pass criterion:** probe returns `404`. Assert no read happens on the junction target (file-system audit hook in the fixture). Marked `pytest.mark.skipif(sys.platform != "win32", reason="Windows-only junction test")`.
+- **Severity:** `critical`.
 
-## SEC-13 — PUT with binary content (NUL bytes) to a `.md` path
-- **Attack vector:** `PUT /api/file {path: "…/scratch.md", content: " <arbitrary bytes>"}` — the first 16 bytes contain NUL.
-- **Expected behavior:** Status `415` (FR-8 first-16-bytes plain-text check rejects NUL).
-- **Pass criterion:** Status `415`; on-disk file is unchanged (`mtime` unchanged from a baseline `GET` taken before the probe). The probe is a write-attempt; assert no partial write.
-- **Severity:** `critical` on `200` AND on-disk content actually now contains NUL bytes (corruption + content-type smuggling); `high` on `200` with the NUL stripped (silent rewriting); `high` on `400` (wrong status — spec mandates `415` to keep the discriminator consistent with FR-3).
-- **CWE:** CWE-434, CWE-138 (Improper Neutralization of Special Elements).
-- **Components exercised:** FR-8.
+## SEC-9 — Extension allowlist enforcement
 
-## SEC-14 — PUT to a `.png` / `.jpg` path
-- **Attack vector:** `PUT /api/file {path: "…/scratch.png", content: "<base64 png bytes>"}` and `…/scratch.jpg` likewise. Run with both a real PNG payload and a text payload to confirm the rule rejects on extension, not on magic-bytes.
-- **Expected behavior:** Status `415` (FR-8 — image extensions are NOT writable in v1).
-- **Pass criterion:** Status `415` for every payload; on-disk file (if it pre-existed) unchanged.
-- **Severity:** `high` on `200`; `medium` on `400` (rejection is right, status is wrong — discriminator drift).
-- **CWE:** CWE-434.
-- **Components exercised:** FR-8, NFR-9.
+- **Class:** Unrestricted file type / executable-content vector.
+- **CWE:** CWE-434 (Unrestricted Upload of File with Dangerous Type).
+- **Vector:** `GET /api/file?path=spec.exe`, `?path=spec.bat`, `?path=spec.svg`, `?path=spec.html`, `?path=spec.php`, `?path=spec.tar.gz`, `?path=spec.md.exe` (double extension). Same probes against `PUT /api/file`. Image-write probes (`PUT /api/file?path=foo.png`) — must be blocked by FR-8.
+- **Expected behavior:** allowlist is exact-match on the final extension after canonicalization: `.md`, `.json`, `.yaml`, `.yml`, `.jsonl`, `.txt`, `.png`, `.jpg`. Anything else → `415`. SVG explicitly NOT in allowlist (code-execution vector). PUT to `.png` / `.jpg` → `415` (FR-8: image extensions not writable).
+- **Pass criterion:** every disallowed-extension probe → `415` with `{detail: {kind: "extension_not_allowed"}}`. Allowed extensions → `200`. Double-extension `.md.exe` resolves to `.exe` final → `415`. Test the full extension allowlist as a parametrized truth table.
+- **Severity:** `critical`.
 
-## SEC-15 — PATCH and DELETE on `/api/file` return 405
-- **Attack vector:** `PATCH /api/file?path=…/spec.md` with a JSON-merge-patch body, `DELETE /api/file?path=…/spec.md`. Also `OPTIONS` and `TRACE` for completeness — `OPTIONS` MAY return 200 with `Allow: GET, PUT`; `TRACE` MUST be `405` or disabled.
-- **Expected behavior:** `405 Method Not Allowed` for `PATCH`, `DELETE`, `TRACE`. `Allow` response header lists the accepted methods (`GET, PUT`) so clients can self-correct (NFR-6, AC-12).
-- **Pass criterion:** Status `405` AND `Allow: GET, PUT` (case-insensitive header value comparison; both methods must be present).
-- **Severity:** `high` on any non-405 (especially `200` on `DELETE` — that would be a sandbox-escape via verb).
-- **CWE:** CWE-749 (Exposed Dangerous Method).
-- **Components exercised:** FR-6, NFR-6, AC-12.
+## SEC-10 — Size cap enforcement (1 MB read + write)
 
-## SEC-16 — POST without `Origin` from bound localhost
-- **Attack vector:** `POST /api/regen-prompt` (and equivalently `PUT /api/file`, `POST /api/promote`, `DELETE /api/promote`) with the `Origin` header omitted entirely; also with `Origin: null` (browsers send this for `file://` and sandboxed iframes); also with `Origin: http://attacker.example.com`.
-- **Expected behavior:** Status `403` for every form per FR-9 / NFR-7 (defense against DNS-rebinding / browser-driven CSRF). Tooling-style requests (curl, server-to-server) that legitimately have no `Origin` are NOT supported by v1 — the webapp's only client is a browser bound to `http://127.0.0.1:8765`.
-- **Pass criterion:** Status `403` AND no side-effect (write not applied; promoted.md unchanged; no audit event of type `regen.delete.planned`).
-- **Severity:** `high` on `200` (rule violation); `high` on `403` with side-effect (audit log shows the action ran before the rejection).
-- **CWE:** CWE-352 (CSRF), CWE-918 (SSRF — partial, since DNS rebinding is the SSRF-cousin attack).
-- **Components exercised:** FR-9, NFR-7, AC-11.
+- **Class:** Resource exhaustion / DoS via oversized payload.
+- **CWE:** CWE-770 (Allocation of Resources Without Limits or Throttling).
+- **Vector:** `GET /api/file?path=oversized.md` where the on-disk file is 1.5 MB; `PUT /api/file` with a 1.5 MB body; `POST /api/regen-prompt` whose assembled output would be ≥1 MB; `Content-Length: 0` with a chunked-encoded 2 MB body (length-claim mismatch).
+- **Expected behavior:** read-side checks file size via `Path.stat().st_size` before opening; write-side checks `Content-Length` header AND streams with a hard 1 MB ceiling (no buffering past the cap). Chunked encoding still hits the streaming cap. Regen-prompt assembly checks final byte length post-assembly.
+- **Pass criterion:** oversized read → `413 {detail: {kind: "too_large"}}`; oversized write → `413 {detail: {kind: "too_large"}}`; oversized regen → `413 {detail: {kind: "too_large"}}` per FR-12. Memory profile during the chunked-encoding probe stays below 8 MB peak (no buffer-the-whole-body anti-pattern).
+- **Severity:** `critical`.
 
-## SEC-17 — POST with `Host: 127.0.0.1.evil.com` (DNS-rebinding pattern)
-- **Attack vector:** `POST /api/regen-prompt` with `Origin: http://127.0.0.1:8765` (looks legitimate) AND `Host: 127.0.0.1.evil.com` (the rebinding pattern — attacker domain that previously resolved to `127.0.0.1`). Also `Host: 127.0.0.1:8765.evil.com`, `Host: localhost.attacker.com`.
-- **Expected behavior:** Status `403` per FR-9 — the `Host` allowlist is exactly `127.0.0.1:<bound-port>` (string equality, NOT suffix match). This is the load-bearing OWASP DNS-rebinding mitigation (findings 2a, 2c).
-- **Pass criterion:** Status `403` and no side-effect, identical to SEC-16 contract.
-- **Severity:** `critical` on `200` — DNS rebinding succeeded, attacker's tab now drives the user's local repo. This is the highest-severity browser-driven attack the spec explicitly defends against.
-- **CWE:** CWE-918, CWE-350 (Reliance on Reverse DNS Resolution).
-- **Components exercised:** FR-9, NFR-7.
+## SEC-11 — Origin / Host validation: foreign origins
 
-## SEC-18 — Single 404 for "outside tree" vs "exists but disallowed"
-- **Attack vector:** Run three probes back-to-back: (a) `GET /api/file?path=../etc/passwd` (outside tree, doesn't exist there), (b) `GET /api/file?path=specs/development/no-such-project/spec.md` (inside tree, file doesn't exist), (c) `GET /api/file?path=specs/development/spec_driven/final_specs/_secret_payload.md` (inside tree, file exists on disk via fixture but with a disallowed extension via a separate fixture for the disallowed-case). Diff the response bodies and status lines.
-- **Expected behavior:** (a) and (b) both return **404** with byte-identical bodies (or differing only in dynamic fields the spec does not promise — empty body is preferred). (c) returns `415` per FR-3 — that distinction is intentional and is the only one the API discloses.
-- **Pass criterion:** `status[a] == status[b] == 404`; `body[a] == body[b]`; no `WWW-Authenticate` / `X-Sandbox-Reason` / response-time delta > 5 ms median across N=20 trials.
-- **Severity:** `medium` on a 403/404 split (enumeration side-channel — findings 2c bullet 7); `medium` on body-text divergence ("file not found" vs "outside sandbox") even with matching status.
-- **CWE:** CWE-204 (Observable Response Discrepancy), CWE-203 (Observable Discrepancy).
-- **Components exercised:** FR-3, FR-4, AC-3.
+- **Class:** Cross-Site Request Forgery.
+- **CWE:** CWE-352 (Cross-Site Request Forgery).
+- **Vector:** `PUT /api/file` with `Origin: https://evil.com`; `Origin: http://127.0.0.1:9999` (wrong port); `Origin: http://127.0.0.1` (no port — same site, wrong allowlist match); missing `Origin` header entirely; `Origin: null`; `Origin: file://`; `Origin: http://[::1]:8765` (IPv6 — explicitly out of scope per OQ-8). Same payloads against `POST /api/regen-prompt`, `POST /api/promote`, `DELETE /api/promote`.
+- **Expected behavior:** the four state-changing endpoints share one middleware that allow-lists `Origin ∈ {http://127.0.0.1:8765, http://localhost:8765}` and `Host ∈ {127.0.0.1:8765, localhost:8765}`. Anything else → `403`. Loopback aliases admit (same socket).
+- **Pass criterion:** all foreign-origin probes → `403` with `{detail: {kind: "origin_blocked"}}`. Loopback aliases → `200`. Verb whitelist holds (PATCH/DELETE on `/api/file` → `405` per SEC-19). Per `agent_refs/validation/development.md` § 7, BOTH pre- and post-rewrite shapes are tested (see SEC-21).
+- **Severity:** `critical`.
 
-## SEC-19 — Response-header check on every successful `GET /api/file`
-- **Attack vector:** `GET /api/file?path=specs/development/spec_driven/final_specs/spec.md` (200 path). Also exercise `.json`, `.yaml`, `.jsonl`, `.txt`, `.png` to confirm the rule is universal across content types.
-- **Expected behavior:** Response carries BOTH `X-Content-Type-Options: nosniff` AND `Content-Disposition: attachment` per FR-5 / NFR-8. Image responses (`.png`, `.jpg`) MUST also carry `attachment` — the spec does not exempt them.
-- **Pass criterion:** Both headers present (case-insensitive name match, exact value match) on every 200 response. AC-2 is the spec's anchor.
-- **Severity:** `blocker` on missing-header (per prompt rule; this is the load-bearing browser-MIME-sniffing defense).
-- **CWE:** CWE-693 (Protection Mechanism Failure), CWE-79 (XSS — the downstream attack the headers prevent).
-- **Components exercised:** FR-5, NFR-8, AC-2.
+## SEC-12 — DNS rebinding via Host header
 
-## SEC-20 — `0.0.0.0` bind audit
-- **Attack vector:** Static-grep the project source for the literal string `0.0.0.0` in every default-config code path: `projects/spec_driven/main.py`, `projects/spec_driven/Makefile`, `projects/spec_driven/backend/**/*.py`, any `uvicorn.run(...)` call site, any `.env*` template. Also runtime-grep: launch `python main.py` and `make run` / `make run-prod`, capture the Uvicorn startup line, assert it contains `127.0.0.1:8765` and NOT `0.0.0.0`.
-- **Expected behavior:** No occurrence in source; runtime startup line names `127.0.0.1` (FR-38, AC-29).
-- **Pass criterion:** Static grep returns zero hits; runtime startup line matches `Uvicorn running on http://127.0.0.1:8765`.
-- **Severity:** `blocker` on any hit (per prompt rule + AC-29) — a `0.0.0.0` bind exposes the editor to the LAN, breaking the entire localhost-only threat model.
-- **CWE:** CWE-1327 (Binding to an Unrestricted IP Address).
-- **Components exercised:** FR-38, NFR-7, AC-29.
+- **Class:** DNS rebinding to localhost.
+- **CWE:** CWE-350 (Reliance on Reverse DNS Resolution for a Security-Critical Action) + CWE-352.
+- **Vector:** `PUT /api/file` with `Host: 127.0.0.1.evil.com:8765`; `Host: localhost.attacker.test:8765`; `Host: 127.0.0.1:8765.evil.com`; `Host: 127.0.0.1` (no port, ambiguous); `Host: 127.0.0.2:8765` (different loopback IP).
+- **Expected behavior:** Host allowlist exact-matches `{127.0.0.1:8765, localhost:8765}`; substring/suffix matches are rejected. The Host-rebind variant (`127.0.0.1.evil.com`) does NOT match `127.0.0.1:8765`. Stanford DNS-rebinding paper / MCP Python SDK "421 Invalid Host Header" pattern.
+- **Pass criterion:** all rebind variants → `403`. Test parametrizes the full string-match boundary cases. Probe the same against the GET path's optional Host check (defense-in-depth — even though GET is non-state-changing, leaking arbitrary file content to a rebound origin is a confidentiality issue).
+- **Severity:** `critical`.
 
-## SEC-21 — Markdown XSS: raw `<script>` in source
-- **Attack vector:** Fixture-write `specs/development/spec_driven/_xss_script.md` containing literal `<script>window.__pwned=1;alert(1)</script>` inline and inside fenced code blocks (the latter must be preserved as text, not rendered as HTML). Open the file via the SPA at `/file/specs/development/spec_driven/_xss_script.md`.
-- **Expected behavior:** `react-markdown` + `rehype-sanitize` (default schema, no raw-HTML escape hatch — per NFR-8 / FR-22) drops the `<script>` tag entirely. Inline form: tag stripped, no `<script>` element in the rendered DOM, `window.__pwned` is `undefined` after render, console has no errors. Fenced form: rendered as `<code>` text inside `<pre>`, never as a live element.
-- **Pass criterion:** Playwright assertion: `await page.evaluate(() => window.__pwned) === undefined` AND `await page.locator('script:not([src])').count() === 0` (excluding the SPA's own scripts in the head). Console errors empty.
-- **Severity:** `critical` on a successful XSS execution; `blocker` on a sanitizer failure that DOES NOT execute but DOES leave the tag in the DOM (rule violated regardless of exploitability).
+## SEC-13 — Source-grep: no `0.0.0.0` LAN bind anywhere in `projects/spec_driven/`
+
+- **Class:** Configuration / supply-chain leak via accidental wide bind.
+- **CWE:** CWE-668 (Exposure of Resource to Wrong Sphere).
+- **Vector:** static analysis. `rg -F '0.0.0.0' projects/spec_driven/` (all files), `rg -F 'host="0.0.0.0"' projects/spec_driven/`, `rg -F "host='0.0.0.0'" projects/spec_driven/`, `rg --pcre2 'uvicorn\.run\([^)]*0\.0\.0\.0' projects/spec_driven/`, plus a Makefile grep `rg -F '0.0.0.0' projects/spec_driven/Makefile`.
+- **Expected behavior:** zero literal `0.0.0.0` matches anywhere under `projects/spec_driven/` (source, Makefile, Vite config, env templates, tests, fixtures). Per spec OQ-9: cross-port LAN bind is explicitly out of scope; SEC-13 is the audit that prevents accidental introduction.
+- **Pass criterion:** the grep command emits an empty result. Test runs as a pytest unit test (`test_no_lan_bind`) and an additional CI lint step. A non-empty result fails the test with the file path so the regression is immediately diagnosable.
+- **Severity:** `critical`.
+
+## SEC-14 — Markdown XSS via raw `<script>`
+
+- **Class:** Stored / reflected XSS via markdown.
+- **CWE:** CWE-79 (Cross-site Scripting).
+- **Vector:** craft a markdown file under `EXPOSED_TREE` with `<script>alert('xss')</script>`, `<script src="//evil.com/x.js"></script>`, raw `<iframe srcdoc="...">`, raw `<object data="...">`, raw `<embed>`, `<svg onload="alert(1)">`. Probe via the SPA at `/file/<encoded-path>` and assert the rendered DOM.
+- **Expected behavior:** `react-markdown` + `rehype-sanitize` (default schema) drops the raw HTML before render. Default schema disallows `<script>`, `<iframe>`, `<object>`, `<embed>`, raw `<svg>`. No execution occurs.
+- **Pass criterion:** Playwright loads the file, asserts `page.evaluate(() => window.__xss_executed)` is undefined, asserts `await page.locator('script[src*="evil.com"]').count() === 0`, asserts `consoleErrors` is empty. Unit test (`test_markdown_view_strips_script`) renders via JSDOM and asserts the same.
+- **Severity:** `critical`.
+
+## SEC-15 — Markdown XSS via event handlers + `javascript:` URIs
+
+- **Class:** XSS via attribute injection.
 - **CWE:** CWE-79.
-- **Components exercised:** FR-22, NFR-8.
+- **Vector:** markdown with `[click me](javascript:alert(1))`, `[click me](JaVaScRiPt:alert(1))`, `[click me](data:text/html,<script>alert(1)</script>)`, `<a href="javascript:alert(1)">x</a>` (raw), `<img src=x onerror=alert(1)>` (raw), `[x](#" onclick="alert(1))` (attribute-break injection).
+- **Expected behavior:** rehype-sanitize default schema strips `on*` attributes and rejects `javascript:` / `data:` URI schemes on `<a>` href + `<img>` src. The link is rendered as plain text or as a muted span (broken link convention from FR-19), never as a clickable navigation.
+- **Pass criterion:** Playwright clicks every link in the rendered file and asserts no navigation to `javascript:` or unexpected origins; asserts no `alert` dialog fired (`page.on('dialog', ...)` raises if it does); asserts `consoleErrors` is empty. Unit test parametrizes 20 attribute-injection variants and asserts the sanitized output contains none of them.
+- **Severity:** `critical`.
 
-## SEC-22 — Markdown XSS: `<img onerror>` and `<a javascript:>`
-- **Attack vector:** Fixture-write `_xss_event.md` containing `<img src=x onerror="window.__pwned=1">`, `<a href="javascript:window.__pwned=1">click</a>`, `<svg onload="window.__pwned=1">` (SVG inline as a sanity-check that `rehype-sanitize` strips the SVG element, not just the file extension), and the markdown form `[click](javascript:window.__pwned=1)`. Open via SPA.
-- **Expected behavior:** Sanitizer drops `onerror` / `onload` attributes and rejects `javascript:` URIs. The markdown `[click](javascript:...)` form is rewritten to a broken-link span per FR-24 (`<span class="link-broken" aria-disabled="true" title="...">`), NOT an `<a>` element.
-- **Pass criterion:** `window.__pwned === undefined`; no element matches `[onerror], [onload]`; no `<a>` whose `href` starts with `javascript:`; the markdown-`javascript:`-link renders as the broken-link span.
-- **Severity:** `critical` on execution; `blocker` on attribute survival without execution.
-- **CWE:** CWE-79, CWE-83 (Improper Neutralization of Script in Attributes).
-- **Components exercised:** FR-22, FR-24, NFR-8.
+## SEC-16 — `rehype-sanitize` default schema enforcement
 
-## SEC-23 — Read-zero contract surfacing in regen prompts
-- **Attack vector:** `POST /api/regen-prompt` with each of: `{stages: ["interview"], autonomous: false}`, `{stages: ["research"], autonomous: true}`, `{stages: ["interview","research","spec","validation"], autonomous: true}` (the full interactive + autonomous matrix across stages). Parse the returned `prompt` body.
-- **Expected behavior:** Every returned `prompt` contains a `### Constraints` section, and that section contains the verbatim sentence `regeneration deletes prior outputs first; new generation reads only the inputs.` (FR-11(g), AC-16). Substring match (whitespace-normalized) is acceptable; case-sensitive on the sentence body, lenient on surrounding markdown.
-- **Pass criterion:** All N matrix cells contain the sentence verbatim. None drops it under autonomous mode (regression surface).
-- **Severity:** `high` on a missing sentence (the read-zero contract is the load-bearing rule that makes regen runs idempotent — silently dropping it makes the assembled prompt drift from intent, which is the failure mode the workflow exists to prevent).
-- **CWE:** N/A (workflow-integrity probe, not a classical web vuln).
-- **Components exercised:** FR-11(g), AC-16.
+- **Class:** XSS via misconfigured sanitizer.
+- **CWE:** CWE-79 + CWE-1188 (Insecure Default Initialization of Resource).
+- **Vector:** static + runtime checks. Static: grep `projects/spec_driven/frontend/src/` for `rehype-sanitize` usage and assert the import is `import rehypeSanitize from 'rehype-sanitize'` with NO custom `schema` argument (or with an explicit `defaultSchema` import — both signal default-schema enforcement). Runtime: render a corpus of 30 known-bad payloads and assert every one is sanitized.
+- **Expected behavior:** the sanitizer is invoked with the **default schema**. No `allowedTags` / `allowedAttributes` widening anywhere in the codebase. Custom schemas would be a `critical` finding.
+- **Pass criterion:** static grep returns either zero custom-schema usages OR every custom-schema usage is the documented `defaultSchema` reference; runtime corpus passes. Plus a regression test that fails if anyone widens the schema in a future PR.
+- **Severity:** `critical`.
+
+## SEC-17 — Single-404 enumeration policy
+
+- **Class:** Information disclosure via response side-channel.
+- **CWE:** CWE-204 (Observable Response Discrepancy).
+- **Vector:** probe a series of paths that fail for *different* reasons and compare responses byte-by-byte: (a) outside `EXPOSED_TREE` (`/etc/passwd`), (b) inside tree but file absent, (c) inside tree but extension disallowed, (d) inside tree but path contains `..`, (e) inside tree but symlink-rejected. ALL must collapse to the SAME 404 unless the spec specifically defines a different status (extension → 415 per FR-4 + SEC-9; size → 413 per FR-12 + SEC-10).
+- **Expected behavior:** "path outside `EXPOSED_TREE`" and "file does not exist inside `EXPOSED_TREE`" return identical `404` responses (same body, same headers, no `errno`/`strerror` leak, no realpath leak per NFR-10). Latency within 5 % across the variants (no timing oracle).
+- **Pass criterion:** test diffs response body + headers across all 404-class probes; asserts byte-equality of body and identity-equality of header set (modulo `Date`). Latency oracle test: 1000 probes per variant, t-test fails to reject `H0: same mean` at p>0.01.
+- **Severity:** `blocker` (information disclosure, not a sandbox escape).
+
+## SEC-18 — Security headers on every `GET /api/file`
+
+- **Class:** Defense-in-depth header gating.
+- **CWE:** CWE-693 (Protection Mechanism Failure).
+- **Vector:** `GET /api/file?path=CLAUDE.md`, `?path=specs/development/spec_driven/final_specs/spec.md`, `?path=foo.png` (image), `?path=foo.json` (json), `?path=foo.jsonl` (jsonl), `?path=foo.txt` (txt). Inspect response headers.
+- **Expected behavior:** every successful `GET /api/file` carries BOTH `X-Content-Type-Options: nosniff` AND `Content-Disposition: attachment; filename="<ascii-safe>"`. Per FR-5 + the OWASP File Upload Cheat Sheet — the pair is load-bearing because `Content-Disposition` alone is bypassable (markitzeroday "defeating Content-Disposition"); `nosniff` alone leaves `text/plain` payloads sniffable; the pair closes both.
+- **Pass criterion:** parametrized header-presence test across the full extension allowlist asserts both headers present on every successful 200. Filename in `Content-Disposition` is ASCII-safe (no high-bit bytes, no CRLF). Test fails loudly if either header is missing or if the filename contains a CR/LF (header-injection regression).
+- **Severity:** `blocker`.
+
+## SEC-19 — Verb whitelist (`PATCH` / `DELETE` on `/api/file` → `405`)
+
+- **Class:** Mutation surface containment.
+- **CWE:** CWE-749 (Exposed Dangerous Method or Function).
+- **Vector:** `PATCH /api/file?path=foo.md`, `DELETE /api/file?path=foo.md`, `OPTIONS /api/file`, `TRACE /api/file`, `HEAD /api/file?path=foo.md`. Same verbs against `/api/tree`, `/api/stages`, `/api/regen-prompt`, `/api/promote`.
+- **Expected behavior:** per NFR-6, mutation surface is exactly four endpoints (`PUT /api/file`, `POST /api/regen-prompt`, `POST /api/promote`, `DELETE /api/promote`). PATCH and DELETE on `/api/file` → `405 Method Not Allowed` per AC-12. `HEAD` may be allowed on read endpoints (FastAPI default) but must NOT short-circuit the Origin/Host gate when used in a state-changing-adjacent context.
+- **Pass criterion:** the verb truth table is asserted across every endpoint. Unexpected-200 on a non-allowlisted verb fails the gate.
+- **Severity:** `blocker`.
+
+## SEC-20 — Read-zero contract preserved verbatim across the autonomous + interactive matrix
+
+- **Class:** Regeneration semantics regression.
+- **CWE:** CWE-754 (Improper Check for Unusual or Exceptional Conditions) — analog: silent omission of a load-bearing constraint sentence.
+- **Vector:** call `POST /api/regen-prompt` with the full 2×N matrix: `{autonomous: false} × N` and `{autonomous: true} × N`, where N covers the six stages individually + project-level (selecting all six). For each assembled prompt, search for the exact read-zero contract sentences from `CLAUDE.md` § Regeneration semantics: read-zero from prior outputs.
+- **Expected behavior:** every assembled prompt's `### Constraints` section contains the read-zero contract sentences VERBATIM (modulo line wrapping). The per-stage delete-then-regenerate table is included verbatim. The Files-to-preserve column (`<stage>/promoted.md`) is preserved verbatim. The audit-event protocol (`regen.delete.planned` → `regen.delete.completed` → `regen.write.completed`) is included verbatim. Per FR-37 and follow-up 005's contract-preservation rule: the webapp's `regen_prompt.py` MUST inline the contract from a single source of truth (no copy-paste drift between `CLAUDE.md` and the assembled prompt).
+- **Pass criterion:** test fixture loads `CLAUDE.md`, extracts the canonical contract sentences (via marker comments or section anchors), and asserts byte-equality of those sentences in every assembled prompt across the 14-prompt matrix. Drift between `CLAUDE.md` and assembled prompt → `critical` regression. Test runs in CI on every change to either `CLAUDE.md` or `regen_prompt.py`.
+- **Severity:** `critical`.
+
+## SEC-21 — Pre-proxy-rewrite shape: `Origin: http://localhost:5173` direct-to-backend → `403`
+
+- **Class:** Proxy-rewrite contract regression.
+- **CWE:** CWE-352 (CSRF — variant: missing reverse-proxy hardening).
+- **Vector:** `PUT /api/file` sent DIRECTLY to `127.0.0.1:8765` (bypassing Vite) with `Origin: http://localhost:5173` and `Host: localhost:5173`. This is the EXACT shape the browser produces when the dev-server proxy is misconfigured / missing its `configure(proxy => proxy.on('proxyReq', ...))` hook.
+- **Expected behavior:** the backend `Origin`/`Host` middleware refuses the raw browser-shape request → `403`. Dropping the Vite `Origin` rewrite hook silently re-introduces the bug (`spec_driven-006` regression). Per `agent_refs/validation/development.md` § 11 (Header-mutating-layer middleware tests cover both shapes), this **pre-rewrite** test is load-bearing — it proves the proxy rewrite is *required*, not optional.
+- **Pass criterion:** unit test (`test_origin_middleware_rejects_pre_rewrite_shape`) sends the raw browser-shape `PUT` direct to the backend and asserts `403`. Companion test (`test_origin_middleware_accepts_post_rewrite_shape`) sends `Origin: http://127.0.0.1:8765` and asserts `200` (or whatever the endpoint's normal success status is). BOTH tests must exist; missing the pre-rewrite case → `blocker` per the dev refs severity table.
+- **Severity:** `blocker`.
+
+## SEC-22 — Dev-server proxy rewrite hook present in `vite.config.ts`
+
+- **Class:** Static-config regression — the Vite proxy actually wires the rewrite up.
+- **CWE:** CWE-1188 (Insecure Default Initialization of Resource).
+- **Vector:** static analysis of `projects/spec_driven/frontend/vite.config.ts`. Grep for `server.proxy['/api'].configure` AND for `proxyReq.setHeader('Origin'` AND for `proxyReq.setHeader('Host'` (or equivalent). Plus a runtime e2e probe through `make run-frontend` that sends a `PUT /api/file` and asserts the backend gate sees `Origin: http://127.0.0.1:8765` (verified via a backend-side audit hook that records the `Origin` value of the request that arrived).
+- **Expected behavior:** `vite.config.ts` defines a `server.proxy['/api']` entry with `changeOrigin: true` AND a `configure(proxy => { proxy.on('proxyReq', (proxyReq, req) => { proxyReq.setHeader('Origin', 'http://127.0.0.1:8765'); }) })` hook. The hook is active at dev-server startup. Per FR-9 dev-server proxy contract.
+- **Pass criterion:** static grep finds all three markers. Runtime e2e: backend audit-hook log shows `Origin: http://127.0.0.1:8765` (post-rewrite) for every `/api/*` request that arrived through `127.0.0.1:5173`. Hook missing or grep mismatch → `blocker` per `agent_refs/validation/development.md` § 11.
+- **Severity:** `blocker`.
 
 ---
 
-## Cross-cutting test moves
+## Probe execution layout
 
-These are not numbered SEC entries but apply to the whole suite:
-
-- **Run every probe twice — once on Windows, once on POSIX (Git Bash on Windows runs both via WSL or native, per NFR-12). Skip-with-reason is acceptable for SEC-08 (POSIX) and SEC-09 (Windows); silent passing is not.**
-- **Every probe asserts no audit-event leakage on rejection paths.** A `403`/`404`/`405`/`413`/`415` response MUST NOT have caused a `regen.delete.planned` / `fs.write.accepted` event in `events.jsonl`. The probe diffs the audit log before and after.
-- **Replay every state-changing probe with the documented benign Origin/Host once it has been rejected by SEC-16/SEC-17 — confirm the SAME inputs succeed when the headers are correct.** This is the negative-control that catches an over-broad rejection rule.
-- **Snapshot the response-body bytes for every 4xx response and diff across the suite** to detect enumeration side-channels beyond the explicit SEC-18 probe.
+- Unit-test surface: `projects/spec_driven/backend/tests/unit/test_path_sandbox.py`, `test_origin_host_middleware.py`, `test_extension_allowlist.py`, `test_size_cap.py`, `test_security_headers.py`, `test_verb_whitelist.py`, `test_no_lan_bind.py`, `test_regen_contract_preservation.py`.
+- Frontend unit-test surface: `projects/spec_driven/frontend/src/__tests__/MarkdownView.security.test.tsx` (XSS corpus + sanitizer config).
+- E2E surface: `projects/spec_driven/e2e/security.spec.ts` — DNS-rebind, dev-proxy header rewrite verification, end-to-end XSS payload render checks.
+- Static analysis: `make security-audit` runs the source greps (SEC-13, SEC-22) and the regen-contract-preservation regression (SEC-20) as a single CI gate.
 
 ## Severity rollup
 
-| Severity | SEC entries that can hit this severity at peak |
-|---|---|
-| `critical` | SEC-01, SEC-02, SEC-03, SEC-04, SEC-05, SEC-06, SEC-07, SEC-08, SEC-09, SEC-13, SEC-17, SEC-21, SEC-22 |
-| `blocker`  | SEC-19, SEC-20, SEC-21 (sanitizer leak without execution), SEC-22 (sanitizer leak without execution) |
-| `high`     | SEC-10, SEC-11, SEC-12, SEC-14, SEC-15, SEC-16, SEC-23 |
-| `medium`   | SEC-18 (enumeration side-channel) |
+| Severity | Probes | Halt? |
+|---|---|---|
+| `critical` | SEC-1, SEC-2, SEC-3, SEC-4, SEC-5, SEC-6, SEC-7, SEC-8, SEC-9, SEC-10, SEC-11, SEC-12, SEC-13, SEC-14, SEC-15, SEC-16, SEC-20 | Yes — immediate halt; no revision rounds without explicit user approval. |
+| `blocker` | SEC-17, SEC-18, SEC-19, SEC-21, SEC-22 | Standard 3-revision-round cap. |
 
-A `critical` or `blocker` finding halts the pipeline and emits `pipeline.halted` per `CLAUDE.md` § Iteration bounds.
+Per `agent_refs/validation/general.md` § Standard severity policy, every `critical` probe failure halts immediately. The 17 `critical` probes form the security gate; the 5 `blocker` probes are still load-bearing but follow the standard revision-round cadence.
 
-## Background
+## Pre-reading consulted
 
-Sources cited from `findings/angle-localhost-fs-sandbox-risks.md`:
-
-- Vite path-traversal CVEs (Windows backslash bypass): `https://www.miggo.io/vulnerability-database/cve/CVE-2025-62522` (motivates SEC-03).
-- Vite `server.fs.deny` bypass via `/.` prefix: `https://security.snyk.io/vuln/SNYK-JS-VITE-9919777` (motivates SEC-01, SEC-02).
-- Vite `/@fs/...?import&raw??` traversal: `https://www.offsec.com/blog/cve-2025-30208/` (motivates SEC-01).
-- MkDocs serve directory traversal: `https://github.com/mkdocs/mkdocs/issues/2601` (general traversal-on-localhost prior art).
-- DNS-rebinding against MCP localhost servers: `https://rafter.so/blog/mcp-dns-rebinding-localhost` and `https://crypto.stanford.edu/dns/dns-rebinding.pdf` (motivate SEC-16, SEC-17).
-- OWASP Path Traversal canonical guidance: `https://owasp.org/www-community/attacks/Path_Traversal` (motivates SEC-01..SEC-09).
-- OWASP Windows Alternate Data Stream: `https://owasp.org/www-community/attacks/Windows_alternate_data_stream` (motivates SEC-06).
-- Microsoft Win32 reserved-name docs: `https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file` (motivates SEC-05).
-- OWASP File Upload Cheat Sheet (size caps, headers, content-type spoofing): `https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html` (motivates SEC-10..SEC-14, SEC-19).
-- OWASP CSRF Prevention Cheat Sheet: `https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html` (motivates SEC-16, SEC-17).
-- FastAPI body-size cap discussion: `https://github.com/fastapi/fastapi/discussions/8167` (motivates SEC-11, SEC-12).
-- VS Code extension localhost CVEs: `https://blog.trailofbits.com/2023/02/21/vscode-extension-escape-vulnerability/` (general "localhost is not a boundary" prior art motivating the whole SEC-16/SEC-17/SEC-20 trio).
+- `C:/workspace/spec_coding/CLAUDE.md`
+- `C:/workspace/spec_coding/.claude/skills/agent_team/SKILL.md`
+- `C:/workspace/spec_coding/.claude/skills/agent_team/playbooks/validation.md`
+- `C:/workspace/spec_coding/.claude/agent_refs/validation/general.md`
+- `C:/workspace/spec_coding/.claude/agent_refs/validation/development.md`
+- `C:/workspace/spec_coding/specs/development/spec_driven/final_specs/spec.md`
+- `C:/workspace/spec_coding/specs/development/spec_driven/findings/angle-localhost-fs-sandbox-risks.md`
+- `C:/workspace/spec_coding/specs/development/spec_driven/validation/promoted.md`

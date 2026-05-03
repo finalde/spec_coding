@@ -1,243 +1,210 @@
-# Validation level — Accessibility
+# Validation — Accessibility
 
-Stage: 5 (Validation strategy) — clean-state regeneration
-Run: spec_driven-20260503-030434 (autonomous full-pipeline)
-Source spec: `specs/development/spec_driven/final_specs/spec.md`
-Anchored requirements: NFR-14, NFR-15, NFR-16 plus implicit a11y claims throughout FRs.
+Run: `spec_driven-20260503-145859` (stage 5, level-specialist-07-accessibility, parent-direct).
 
-Pre-reading consulted:
-- `C:/workspace/spec_coding/.claude/skills/agent_team/playbooks/validation.md`
-- `C:/workspace/spec_coding/.claude/agent_refs/validation/general.md`
-- `C:/workspace/spec_coding/.claude/agent_refs/validation/development.md`
+Scope: every interactive surface produced by FR-15..FR-36 plus the cross-cutting theme contract from NFR-16 / `agent_refs/project/development.md`. Each check follows a fixed shape: **Surface** (which spec FR / region of the SPA the check inspects), **WCAG ref** (success-criterion identifier — 2.1 AA baseline), **Method** (how a validator proves the check passes — automated tool, scripted assertion, or scripted manual walkthrough), **Pass criterion** (what counts as green). Severity per `agent_refs/validation/general.md`: **Mandatory** ⇒ ARIA / a11y mandatory check fail = `blocker`; **Recommended** ⇒ a11y recommended gap = `warning` (logged, never halts).
 
-Severity policy (from `agent_refs/validation/general.md`):
-- ARIA / mandatory a11y check fail = `blocker` (standard 3-revision-round cap).
-- A11y "Recommended" gap = `warning` (logged; never halts).
-- Manual-walkthrough items emit `validation.requires_manual_walkthrough` per principle #4.
+Manual walkthrough is a real validation level (general.md principle 4). Visual contrast, focus visibility, motion, and keyboard ergonomics are surfaced via `validation.requires_manual_walkthrough` events so the parent prompts the user before stage-6 sign-off (A11Y-17).
 
-Scope of automation: cases A11Y-01 through A11Y-16 are automatable via Playwright + `@axe-core/playwright` and DOM snapshot assertions. A11Y-17 is a manual-walkthrough pass — visual hierarchy, focus visibility under real keyboard input, motion/animation perceptibility — which axe alone cannot certify.
+## Tools assumed available to validators
 
----
+- `axe-core` (or `@axe-core/playwright`) for automated rule sweeps in stage-6 e2e validators.
+- Playwright keyboard / focus assertions for scripted keyboard checks.
+- A contrast helper (e.g., `wcag-contrast` npm package or a local computation against the foreground/background hex pairs declared in `frontend/src/styles.css`) for ratio assertions on the two themes.
+- Manual walkthrough script: a numbered list the user (or a stage-6 reviewer) follows on a real localhost build; the parent emits `validation.requires_manual_walkthrough` when a check is in the manual-walkthrough subset.
 
-## A11Y-01 — Sidebar keyboard navigation (Tab / Enter / Esc)
+## Checks
 
-- **WCAG criterion:** 2.1.1 Keyboard (Level A); 2.4.3 Focus Order (Level A).
-- **Anchors:** NFR-14, FR-16, FR-17.
-- **Setup:** Boot the app at `http://127.0.0.1:8765/`. Wait for `data-testid="sidebar"`.
-- **Steps:**
-  1. Press `Tab` repeatedly from page load. Tab order MUST traverse: skip-to-main link → sidebar root → each tree node in document order → main pane.
-  2. With focus on a collapsible tree node, press `Enter` — the node MUST toggle expanded/collapsed.
-  3. With focus on a leaf, press `Enter` — the leaf MUST navigate (URL becomes `/file/<rel>`).
-  4. With focus on an expanded node, press `Esc` — the node MUST collapse (or, equivalently, focus returns to its parent without losing the tree's expanded ancestors).
-- **Expected:** every assertion above true; `consoleErrors === []`.
-- **Severity if fail:** `blocker` (mandatory keyboard support).
+### A11Y-1 — Sidebar tree exposes ARIA tree semantics
+- **Surface:** FR-15 recursive sidebar (`frontend/src/components/Sidebar.*` or equivalent).
+- **WCAG ref:** 4.1.2 Name, Role, Value (Level A); ARIA Authoring Practices "Tree View" pattern.
+- **Method:** Automated DOM assertion via Playwright + axe-core. Query `[role="tree"]` for the sidebar root; query `[role="treeitem"]` for every node; assert non-leaf nodes carry `aria-expanded="true|false"` matching their visual state. Exempt the top-level "Claude Settings & Shared Context" / "Projects" headings only if they are non-interactive container labels (in which case they get `role="group"` with an `aria-labelledby`).
+- **Pass criterion:** every visible non-leaf node has `aria-expanded`; every leaf (file) has `role="treeitem"` without `aria-expanded`; `aria-selected` is set on the active node when one is open in the main pane.
+- **Severity:** Mandatory.
 
-## A11Y-02 — Skip-to-main-content link
+### A11Y-2 — Breadcrumb is a navigation landmark with aria-current on the current crumb
+- **Surface:** FR-16 breadcrumb above the main pane.
+- **WCAG ref:** 2.4.8 Location (Level AAA, but breadcrumb-pattern best practice at AA); 1.3.1 Info and Relationships.
+- **Method:** DOM assertion. The breadcrumb container is `<nav aria-label="Breadcrumb">`; the final crumb (current page) has `aria-current="page"` and is rendered as plain text (not an `<a>`).
+- **Pass criterion:** axe-core reports no `aria-current` violations; manual screen-reader spot-check announces "current page".
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 2.4.1 Bypass Blocks (Level A).
-- **Anchors:** NFR-14 (implicit).
-- **Setup:** Load `/`.
-- **Steps:**
-  1. Press `Tab` once. The first focusable element MUST be a "Skip to main content" link (visible on focus, may be visually-hidden until focus).
-  2. Press `Enter`. Focus MUST move to the `<main>` element (or the first focusable child therein); URL MAY include `#main`.
-- **Expected:** link is reachable as the first tab stop; activating it skips past the sidebar.
-- **Severity if fail:** `blocker`.
+### A11Y-3 — Keyboard navigation: focus tree, traverse, open
+- **Surface:** FR-18 keyboard parity (`Ctrl/Cmd+Shift+E` focuses sidebar; arrows traverse; `Enter` opens).
+- **WCAG ref:** 2.1.1 Keyboard (Level A); 2.1.2 No Keyboard Trap (Level A).
+- **Method:** Playwright scripted run. (1) Press `Control+Shift+E` (and on macOS `Meta+Shift+E`); assert `document.activeElement` is inside the sidebar tree and matches `[role="treeitem"]`. (2) Press `ArrowDown`/`ArrowUp` four times; assert the active treeitem changes per ARIA tree pattern. (3) Press `Enter` on a file node; assert the main pane mounts that file (URL updates to `/file/<path>`). (4) Press `Tab` repeatedly from the focused tree; assert focus eventually exits the tree (no trap).
+- **Pass criterion:** all four assertions hold on Chromium; A11Y-15 covers the macOS chord on Webkit when feasible.
+- **Severity:** Mandatory.
 
-## A11Y-03 — Sidebar tree uses native semantics
+### A11Y-4 — Visible focus indicator on every interactive element
+- **Surface:** every focusable element across FR-15..FR-36 — sidebar treeitems, breadcrumb (none focusable), toolbar buttons (✎ Edit, Save, Discard, Close-editor), per-Q/A ✎ inline buttons, 📌 pin buttons, Build prompt buttons, Copy buttons, soft-wrap toggle, autonomous-mode toggle, module checkboxes, Save-error banner Reload button.
+- **WCAG ref:** 2.4.7 Focus Visible (Level AA); 2.4.11 Focus Not Obscured (WCAG 2.2 Level AA, recommended).
+- **Method:** Scripted manual walkthrough — tab through the page, screenshot focus state on each control. Automated axe-core does NOT cover visual focus rings; this is a `validation.requires_manual_walkthrough` event.
+- **Pass criterion:** every focused control has a focus ring with at least 3:1 contrast against the adjacent background, and the ring is not clipped by parent overflow.
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 4.1.2 Name, Role, Value (Level A); 1.3.1 Info and Relationships (Level A).
-- **Anchors:** NFR-15, FR-16.
-- **Setup:** Inspect the rendered sidebar DOM.
-- **Steps:**
-  1. Assert the sidebar root uses either nested `<ul><li>` markup OR `role="tree"` with `role="treeitem"` children. NO `<div>`-soup.
-  2. Each leaf MUST be focusable via keyboard alone (verified by Tab traversal in A11Y-01).
-  3. Expand/collapse state MUST be conveyed via `aria-expanded` on parent nodes (or implied by `<details>` if used).
-- **Expected:** axe-core rule `aria-required-children` and `list` pass without violations.
-- **Severity if fail:** `blocker` for missing roles; `warning` if `aria-expanded` is missing on otherwise-correct structure.
+### A11Y-5 — Icon-only buttons (✎, 📌, Save, Discard, Close, Copy) carry accessible names
+- **Surface:** FR-25 toolbar; FR-30 per-Q/A inline edit; FR-33 Copy button; FR-35 📌 pin toggle; FR-26 Discard / Close.
+- **WCAG ref:** 4.1.2 Name, Role, Value (Level A); 2.5.3 Label in Name (Level A).
+- **Method:** axe-core `button-name` rule + DOM assertion that every `<button>` matching `[aria-label]` has a non-empty value, OR has visible text content (not just an icon glyph).
+- **Pass criterion:** axe-core reports zero `button-name` failures; every icon-only button has either `aria-label="Edit"` / `"Pin"` / etc. or a `<span class="sr-only">` companion.
+- **Severity:** Mandatory.
 
-## A11Y-04 — Breadcrumb semantics and aria-current
+### A11Y-6 — Editor textarea has a programmatic label
+- **Surface:** FR-25 editor textarea.
+- **WCAG ref:** 1.3.1 Info and Relationships (Level A); 3.3.2 Labels or Instructions (Level A).
+- **Method:** DOM assertion — the `<textarea>` carries `aria-labelledby` pointing to the file-pane title (filename) OR an `aria-label` containing the filename.
+- **Pass criterion:** screen reader announces the filename as the textarea label; axe-core reports no `label` violation.
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 1.3.1 Info and Relationships (Level A); 4.1.2 Name, Role, Value (Level A).
-- **Anchors:** NFR-15 (implicit), FR-15 (route → breadcrumb).
-- **Setup:** Navigate to `/file/specs/development/spec_driven/interview/qa.md`.
-- **Steps:**
-  1. Assert a `<nav aria-label="Breadcrumb">` element exists ABOVE the main pane.
-  2. Children form an ordered list (`<ol>`) of links; the LAST item MUST carry `aria-current="page"` and MAY be a non-link span.
-- **Expected:** axe-core rule `aria-valid-attr-value` passes; manual DOM assert.
-- **Severity if fail:** `blocker`.
+### A11Y-7 — Dirty indicator is announced
+- **Surface:** FR-27 dirty dot `●` in toolbar + `*` in `document.title`.
+- **WCAG ref:** 4.1.3 Status Messages (Level AA).
+- **Method:** DOM assertion + scripted manual walkthrough. The toolbar dot has `role="status"` (or sits inside a region with `aria-live="polite"`) and an accessible name like `aria-label="Unsaved changes"`. The `document.title` change is naturally announced by screen readers on title-change.
+- **Pass criterion:** when the user types into the editor, the dirty status is announced within 1s without stealing focus; the title shows `*` prefix.
+- **Severity:** Mandatory.
 
-## A11Y-05 — Editor toolbar uses native buttons; Save remains focusable on error
+### A11Y-8 — Save-error banner uses role="alert"
+- **Surface:** FR-28 persistent inline save-error banner above the textarea.
+- **WCAG ref:** 4.1.3 Status Messages (Level AA); 3.3.1 Error Identification (Level A).
+- **Method:** DOM assertion — the banner has `role="alert"` (which implies `aria-live="assertive"` and `aria-atomic="true"`). Confirmed via axe-core + screen-reader manual spot-check.
+- **Pass criterion:** when a `PUT /api/file` returns 5xx and the banner mounts, NVDA / VoiceOver / Narrator announce the error text immediately; the banner persists (NOT a toast — toasts are explicitly forbidden mid-recovery per FR-28).
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 4.1.2 Name, Role, Value (Level A); 2.1.1 Keyboard (Level A).
-- **Anchors:** FR-25, FR-27, NFR-14.
-- **Setup:** Open any `.md` file; click ✎ Edit.
-- **Steps:**
-  1. Assert toolbar controls are `<button>` elements (not `<div role="button">`): ✎ Edit, **Save**, **Discard**, **Close editor**.
-  2. Tab order is left-to-right matching DOM order.
-  3. Inject a save failure (mock `PUT /api/file` to return 500). After the save-error banner appears, assert **Save** is still in the focusable set (`document.activeElement` can land on it via Tab) AND `disabled` attribute is NOT set.
-- **Expected:** Save remains focusable so a keyboard-only user can retry without a mouse.
-- **Severity if fail:** `blocker` (FR-25 is explicit on this).
+### A11Y-9 — Stale-write conflict banner has a focusable Reload button
+- **Surface:** FR-29 conflict banner (`409 stale_write` response).
+- **WCAG ref:** 2.1.1 Keyboard (Level A); 4.1.3 Status Messages (Level AA).
+- **Method:** Playwright scripted run — simulate a stale-write 409 (set `If-Unmodified-Since` to a stale value); assert the banner mounts with `role="alert"`; tab to the Reload button; assert it is focusable; press Enter; assert the file reloads and the editor content updates.
+- **Pass criterion:** keyboard-only user can recover from a stale-write conflict end-to-end.
+- **Severity:** Mandatory.
 
-## A11Y-06 — Editor dirty-dot has accessible name
+### A11Y-10 — Copy button label flip is announced via aria-live="polite"
+- **Surface:** FR-33(d) Copy button — label flips to "Copied!" for ~1.5s.
+- **WCAG ref:** 4.1.3 Status Messages (Level AA); 3.2.2 On Input (Level A — no context change).
+- **Method:** DOM assertion + scripted manual walkthrough. The Copy button (or a sibling status node) has `aria-live="polite"`; the label change is wrapped in a node that announces "Copied" without stealing focus. The button has a fixed `min-width` so the layout does NOT shift when the label flips (FR-33d explicit), which preserves focus position.
+- **Pass criterion:** screen reader announces "Copied" within 500 ms of the click; no focus shift; layout-shift score < 0.01 on the click frame.
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 1.3.1 Info and Relationships (Level A); 4.1.2 Name, Role, Value (Level A).
-- **Anchors:** FR-26, NFR-15.
-- **Setup:** Open a `.md` file in edit mode; type one character.
-- **Steps:**
-  1. Assert the dirty-dot element carries `aria-label="unsaved changes"` (or equivalent: `role="status"` with a sr-only text node, or `<span class="sr-only">unsaved changes</span>` accompanying the visual dot).
-  2. Erase the character so content matches last-saved; the accessible name MUST disappear (the dot is removed, not just visually hidden).
-- **Expected:** screen-reader users learn dirty state without sight.
-- **Severity if fail:** `blocker`.
+### A11Y-11 — Dark `<pre>` carve-outs meet WCAG AA contrast
+- **Surface:** NFR-16 carve-outs — `.regen-prompt-block pre`, `.markdown-view pre`, `.code-view pre` (FR-19, FR-22, FR-33d/e). Per `agent_refs/project/development.md`, these dark surfaces are unconditional (NOT gated on `prefers-color-scheme: dark`) and MUST be validated for contrast.
+- **WCAG ref:** 1.4.3 Contrast (Minimum) — 4.5:1 for body text, 3:1 for large text (Level AA).
+- **Method:** Compute the contrast ratio from the hex colors declared in `frontend/src/styles.css`. If the regen-prompt body is `color: #c9d1d9` on `background: #0d1117`, the ratio is ~12.6:1 — passes. The validator reads the active palette and asserts every text-on-background pair inside the dark `<pre>` reaches 4.5:1 minimum. Syntax-highlighted tokens (rehype-highlight default theme) get a separate sweep against the same background.
+- **Pass criterion:** every foreground/background pair in dark carve-outs is ≥ 4.5:1 for body text and ≥ 3:1 for code-comment / muted tokens; if any token fails, raise the issue with the exact pair.
+- **Severity:** Mandatory.
 
-## A11Y-07 — Save error banner uses role="alert"
+### A11Y-12 — Light-theme app chrome contrast
+- **Surface:** NFR-16 light theme — `body`, sidebar text on sidebar background, toolbar buttons on toolbar background, breadcrumb link text, modal/banner text. Excludes the dark carve-outs from A11Y-11.
+- **WCAG ref:** 1.4.3 Contrast (Minimum) — 4.5:1 for body text, 3:1 for large text (Level AA); 1.4.11 Non-text Contrast — 3:1 for UI component boundaries (Level AA).
+- **Method:** Compute contrast for every chrome text/background pair declared in `frontend/src/styles.css`. Run axe-core `color-contrast` rule on a rendered page in CI.
+- **Pass criterion:** every chrome pair ≥ 4.5:1 (body) / ≥ 3:1 (large or UI-component); axe-core reports zero `color-contrast` failures on the light theme.
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 4.1.3 Status Messages (Level AA).
-- **Anchors:** FR-27, NFR-15.
-- **Setup:** Open a `.md` file in edit mode; mock `PUT /api/file` → 500.
-- **Steps:**
-  1. Click **Save**. Assert the banner element carries `role="alert"` (or `aria-live="assertive"` with `aria-atomic="true"`).
-  2. Banner text matches the FR-27 template: `Could not save: <message>`.
-  3. The textarea content is unchanged after the failure (FR-27 cross-check).
-- **Expected:** screen readers immediately announce the error.
-- **Severity if fail:** `blocker` (NFR-15 calls this out explicitly).
+### A11Y-13 — QaView color-block tints have non-color cues
+- **Surface:** FR-20 — Q tinted blue, A tinted green, category badge. Color is one channel of differentiation; it MUST NOT be the only one.
+- **WCAG ref:** 1.4.1 Use of Color (Level A).
+- **Method:** DOM assertion + visual inspection. Each Q block carries an `aria-label` or visible "Q:" / "Question" prefix; each A block carries "A:" / "Answer". The category badge is a labeled chip with text, not a colored dot only. Optionally, an icon (❓ for Q, 💬 for A) provides a redundant non-color cue — the requirement is that *some* non-color cue exists, not which one.
+- **Pass criterion:** a user with Achromatopsia (or a forced-colors-mode walkthrough — see A11Y-16) can still tell Q from A without relying on hue; axe-core has no specific rule for this, so the check is a scripted manual walkthrough.
+- **Severity:** Mandatory.
 
-## A11Y-08 — Q/A view: semantic landmarks and pencil aria-labels
+### A11Y-14 — Soft-wrap toggle in regen-prompt header is a labeled checkbox
+- **Surface:** FR-33(d) "Wrap" toggle in the regen-prompt-block header bar.
+- **WCAG ref:** 4.1.2 Name, Role, Value (Level A); 1.3.1 Info and Relationships (Level A).
+- **Method:** DOM assertion — the toggle is `<input type="checkbox">` (or `role="switch"` with `aria-checked`) with an associated `<label>` reading "Soft wrap" / "Wrap". Default ON per FR-33d.
+- **Pass criterion:** axe-core reports no label violation; keyboard user can toggle with Space; screen reader announces state change.
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 4.1.2 Name, Role, Value (Level A); 1.3.1 Info and Relationships (Level A).
-- **Anchors:** FR-29, FR-30.
-- **Setup:** Navigate to `/file/specs/development/spec_driven/interview/qa.md`. Assert `data-testid="qa-view"` is mounted.
-- **Steps:**
-  1. Each Round renders as a section with an `<h2>`; each category renders with an `<h3>`; Q and A blocks are within `<article>` or `<section>` with appropriate aria labels (e.g., `aria-label="Question"`/`aria-label="Answer"`).
-  2. Each Q's ✎ pencil button MUST carry `aria-label="Edit question"`.
-  3. Each A's ✎ pencil button MUST carry `aria-label="Edit answer"`.
-  4. Pencil buttons are focusable via Tab in document order.
-- **Expected:** axe-core `button-name` rule passes; manual DOM assertions for labels match.
-- **Severity if fail:** `blocker`.
+### A11Y-15 — prefers-reduced-motion respected in transitions
+- **Surface:** Copy → "Copied!" 1.5s flip (FR-33d), any Edit/View toggle transition, sidebar expand/collapse animation if present.
+- **WCAG ref:** 2.3.3 Animation from Interactions (Level AAA, but recommended at AA for vestibular safety).
+- **Method:** CSS / scripted walkthrough. Run with the OS / DevTools `prefers-reduced-motion: reduce` emulation; assert no opacity / transform animations exceeding 200 ms; instant state swaps are fine. The Copy label still flips for 1.5s but as an instant text swap, not a fade.
+- **Pass criterion:** under `prefers-reduced-motion: reduce`, no animation > 200 ms ms duration runs; the Copy label still announces "Copied" via aria-live (A11Y-10).
+- **Severity:** Recommended (warning if violated; the spec does not mandate animations of any kind, so the more frequent failure is "we added one and forgot to gate it").
 
-## A11Y-09 — Regenerate panel native semantics; Wrap is a labeled checkbox
+### A11Y-16 — Forced-colors mode (Windows High Contrast / contrast-more) usability
+- **Surface:** every chrome and content surface; specifically the QaView color tints (A11Y-13), the sidebar selection state, the dirty dot, the focus rings, the dark `<pre>` carve-outs.
+- **WCAG ref:** 1.4.11 Non-text Contrast (Level AA); 1.4.1 Use of Color (Level A).
+- **Method:** Scripted manual walkthrough in Windows High Contrast (Edge / Chromium honor `forced-colors: active`). The light-theme rule does NOT prevent forced-colors override — the user agent rewrites colors regardless of `color-scheme: light`. The validator checks: (a) sidebar text remains readable; (b) selected treeitem is distinguishable via something other than color (an outline / border survives forced-colors); (c) focus rings remain visible; (d) the dark `<pre>` carve-outs accept the forced palette without clipping content.
+- **Pass criterion:** forced-colors walkthrough completes the primary flows (browse, edit, build prompt, copy) without any unreadable surface.
+- **Severity:** Mandatory (forced-colors is a legal accessibility floor on Windows).
 
-- **WCAG criterion:** 1.3.1 Info and Relationships (Level A); 4.1.2 Name, Role, Value (Level A).
-- **Anchors:** FR-33, NFR-15.
-- **Setup:** Open a stage file, e.g. `/file/specs/development/spec_driven/interview/qa.md`.
-- **Steps:**
-  1. Assert the Regenerate panel is a `<details>` with a `<summary>` titled "Regenerate" (default-collapsed per AC-22).
-  2. Module rows are `<input type="checkbox">` elements with associated `<label for="...">` (or wrapped-label) text matching the module label.
-  3. The "Autonomous mode" toggle is a labeled `<input type="checkbox">`.
-  4. Inside the assembled-prompt block (after Build), the **Wrap** toggle is a labeled `<input type="checkbox">` (NOT a `<button>` with `aria-pressed`); its label reads "Wrap" and is `for=`-associated to the input.
-- **Expected:** axe-core `label` rule passes; native semantics throughout.
-- **Severity if fail:** `blocker` for missing labels; `warning` if a button-with-`aria-pressed` is used in place of `<details>`/`<summary>` (still accessible, but deviates from FR-33 contract).
+### A11Y-17 — Manual walkthrough event surfaces visual-only checks
+- **Surface:** A11Y-4 (focus visibility), A11Y-7 (dirty announcement), A11Y-13 (QaView non-color cue), A11Y-15 (reduced motion), A11Y-16 (forced colors), A11Y-20 (200% zoom).
+- **WCAG ref:** N/A (process check; flows from `agent_refs/validation/general.md` principle 4).
+- **Method:** The stage-6 validator emits a `validation.requires_manual_walkthrough` event into `events.jsonl` for each check in the manual subset, with a numbered checklist payload the user follows on the running localhost build. The event MUST surface BEFORE stage-6 sign-off; missing event ⇒ the validation level "didn't run" per general.md principle 5.
+- **Pass criterion:** every manual-subset check has a corresponding event with the user's pass/fail recorded; `validation.pass` for the level is only emitted after every walkthrough check is green.
+- **Severity:** Mandatory (a missing manual-walkthrough event is treated as a failed level run, not as "not yet checked").
 
-## A11Y-10 — Copy button: aria-live="polite" and stable width
+### A11Y-18 — Headings hierarchy is in order
+- **Surface:** every page rendered by the SPA — `/file/<path>`, `/project/{type}/{name}`, root.
+- **WCAG ref:** 1.3.1 Info and Relationships (Level A); 2.4.6 Headings and Labels (Level AA).
+- **Method:** axe-core `heading-order` and `page-has-heading-one` rules; DOM assertion that there is exactly one `<h1>` per page (the page title) and that heading levels do not skip downward (h1 → h3 with no h2 is a fail unless wrapped in a labeled section).
+- **Pass criterion:** axe-core reports zero heading-order violations; one and only one `<h1>` per route.
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 4.1.3 Status Messages (Level AA); 1.4.10 Reflow (Level AA, related — no layout shift).
-- **Anchors:** FR-33(f), AC-24.
-- **Setup:** Open a stage file; click Build prompt; locate the Copy button.
-- **Steps:**
-  1. Assert the Copy button element carries `aria-live="polite"`.
-  2. Measure `getBoundingClientRect().width` BEFORE click (label "Copy") and AFTER click during the ~1500 ms "Copied!" window. Width MUST be identical (within 1 px tolerance) — a fixed `min-width` prevents layout-shift.
-  3. After ~1500 ms the label flips back to "Copy"; width unchanged.
-- **Expected:** screen reader announces the "Copied!" change; sighted users see no layout shift.
-- **Severity if fail:** `blocker` for missing `aria-live`; `warning` for measurable width drift (still announces correctly, just visually janky).
+### A11Y-19 — Landmark regions are present and labeled
+- **Surface:** FR-15 sidebar, FR-16 breadcrumb area, FR-19..FR-24 main file pane, FR-25 editor toolbar.
+- **WCAG ref:** 1.3.1 Info and Relationships (Level A); 4.1.2 Name, Role, Value (Level A).
+- **Method:** axe-core `region` and `landmark-unique` rules. The page has: `<nav aria-label="File tree">` for the sidebar, `<nav aria-label="Breadcrumb">` for the breadcrumb (already covered in A11Y-2), `<main>` for the file pane, `<header>` (or `role="toolbar"` with `aria-label`) for the editor toolbar.
+- **Pass criterion:** axe-core reports no region violations; every primary section is inside a labeled landmark; no two landmarks share an `aria-label`.
+- **Severity:** Mandatory.
 
-## A11Y-11 — Color contrast on dark code-block theme
+### A11Y-20 — 200% zoom usability
+- **Surface:** every page; specifically the breadcrumb, toolbar, editor textarea, regen-prompt-block.
+- **WCAG ref:** 1.4.4 Resize Text (Level AA); 1.4.10 Reflow (Level AA).
+- **Method:** Scripted manual walkthrough — set browser zoom to 200%; assert no horizontal scroll on a 1280×800 viewport (1.4.10 reflow at 320 CSS pixels); assert toolbar buttons remain visible (do not get clipped behind a fixed sidebar); assert textarea wraps text instead of overflowing.
+- **Pass criterion:** primary flows (browse, edit, build prompt, copy) still complete at 200% zoom without horizontal scrolling at 1280-CSS-pixel viewport width.
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 1.4.3 Contrast (Minimum) (Level AA).
-- **Anchors:** NFR-16.
-- **Setup:** Build a regen prompt; measure foreground/background of the `<pre>` body and the surrounding `regen-prompt-block` border, header bar, and header-bar text.
-- **Steps:**
-  1. Run `@axe-core/playwright` with the `color-contrast` rule on the page; collect violations scoped to `.regen-prompt-block` and any `<pre>` rendered by `shiki`.
-  2. Sample shiki theme tokens (keyword, string, comment) against the chosen background; compute contrast ratio. Body text MUST be ≥ 4.5:1; large text (≥18pt or 14pt bold) MUST be ≥ 3:1.
-  3. The "Wrap" label, "Copy" button label (both states), and breakdown line MUST pass AA against their backgrounds.
-- **Expected:** zero `color-contrast` violations from axe in the assembled-prompt region.
-- **Severity if fail:** `blocker` (NFR-16 is explicit on AA).
+### A11Y-21 — Promotion (📌) toggle has accessible state
+- **Surface:** FR-35..FR-36 — 📌 toggle next to each pinnable atomic item (Q/A, FR-NN / NFR-NN / AC-NN / SYS-NN, recommendation bullet); pin indicator on already-pinned items.
+- **WCAG ref:** 4.1.2 Name, Role, Value (Level A).
+- **Method:** DOM assertion — the toggle is `<button role="switch" aria-checked="true|false" aria-label="Pin <item-id>">` (or equivalent). The pin indicator shown after promotion (FR-36) is announced via `aria-label` like "Pinned to validation/promoted.md".
+- **Pass criterion:** axe-core reports no aria-allowed-attr / role-has-required-aria-props violations; screen-reader user can promote and unpin items end-to-end without sighted help.
+- **Severity:** Mandatory.
 
-## A11Y-12 — Visible focus outline on every interactive control
+### A11Y-22 — Module checkbox lists in regen panels are grouped and labeled
+- **Surface:** FR-31 per-stage Regenerate `<details>` panel; FR-32 project-page master Regenerate panel.
+- **WCAG ref:** 1.3.1 Info and Relationships (Level A); 4.1.2 Name, Role, Value (Level A).
+- **Method:** DOM assertion — the checkbox group is wrapped in `<fieldset>` with a `<legend>` like "Modules" (or a `role="group"` with `aria-labelledby`). Each `<input type="checkbox">` has an associated `<label>` with the module name.
+- **Pass criterion:** axe-core reports no label / fieldset violations; screen reader announces the group label before each checkbox.
+- **Severity:** Mandatory.
 
-- **WCAG criterion:** 2.4.7 Focus Visible (Level AA).
-- **Anchors:** NFR-14.
-- **Setup:** Tab through the app from a fresh load; visit the sidebar, breadcrumb, editor toolbar (in edit mode), Q/A pencils, Regenerate panel, Copy/Wrap controls.
-- **Steps:**
-  1. For each focused element, capture computed `outline-style`, `outline-width`, `outline-color`, `box-shadow` (focus rings sometimes emulated). Assert at least one of: outline ≠ `none`/0px, OR `box-shadow` includes a non-transparent ring with ≥ 2px spread.
-  2. The focus ring MUST meet 3:1 contrast against its adjacent background (per WCAG 2.4.11 Focus Appearance, AAA — but enforced as a NFR-14 floor here).
-  3. NO global `*:focus { outline: none; }` style with no replacement; if present, fail.
-- **Expected:** every interactive control shows a perceptible focus indicator.
-- **Severity if fail:** `blocker` for any control with no indicator at all; `warning` if some controls' rings fall below 3:1 contrast but are still perceptible.
+### A11Y-23 — Recommended: skip-to-main-content link
+- **Surface:** root layout (every route).
+- **WCAG ref:** 2.4.1 Bypass Blocks (Level A) — typically satisfied by landmarks (A11Y-19), but a skip-link is best practice for keyboard-only users facing a deep sidebar.
+- **Method:** DOM assertion — a `<a href="#main">Skip to main content</a>` is the first focusable element on the page; activating it moves focus to the main pane.
+- **Pass criterion:** Tab once from page load → focus is on the skip link; press Enter → focus jumps to `<main>`.
+- **Severity:** Recommended (warning if absent — landmarks already satisfy 2.4.1, but the skip-link improves the keyboard-only ergonomics noticeably).
 
-## A11Y-13 — Broken links: span, aria-disabled, focusable, title
+### A11Y-24 — Recommended: respect prefers-contrast: more
+- **Surface:** entire SPA.
+- **WCAG ref:** 1.4.6 Contrast (Enhanced) — Level AAA, but recommended via `prefers-contrast: more` user query.
+- **Method:** CSS check — when `@media (prefers-contrast: more) { ... }` is active, chrome contrast pairs reach 7:1 for body text and 4.5:1 for large text.
+- **Pass criterion:** under `prefers-contrast: more` emulation, every chrome pair reaches AAA contrast; if no media query is implemented, the existing AA contrast (A11Y-12) carries (warning, not blocker).
+- **Severity:** Recommended.
 
-- **WCAG criterion:** 4.1.2 Name, Role, Value (Level A); 1.3.1 Info and Relationships (Level A).
-- **Anchors:** FR-24, AC-21.
-- **Setup:** Open a markdown artifact containing a relative link to a non-existent file.
-- **Steps:**
-  1. Assert the broken-link node is a `<span class="link-broken" aria-disabled="true">` and NOT an `<a>` element.
-  2. Assert it carries a `title="<cause>"` attribute (e.g., `file not found`).
-  3. Assert it is in the focusable set (`tabindex="0"`) so screen-reader users can land on it and have the title narrated; pressing Enter MUST do nothing (no navigation).
-  4. Hovering surfaces the tooltip in sighted UA.
-- **Expected:** broken links are semantically distinct from working links and are perceivable to AT users.
-- **Severity if fail:** `blocker` for using `<a>` (the user can mistakenly click and trigger nav); `warning` if the span is correct but lacks `tabindex="0"` (still perceivable on hover, but not focusable).
+### A11Y-25 — Error pages and 404 / 403 / 413 / 415 / 409 responses are labeled
+- **Surface:** FR-4 (404, 415, 413), FR-7b (409), FR-9 (403), FR-12 (413). When the SPA receives any of these from `GET /api/file` or `PUT /api/file`, it surfaces an inline banner.
+- **WCAG ref:** 3.3.1 Error Identification (Level A); 4.1.3 Status Messages (Level AA).
+- **Method:** Playwright — for each error code, induce the response (e.g., `GET /api/file?path=does-not-exist` → 404; `GET /api/file?path=foo.svg` → 415; `PUT /api/file` 1.5 MB → 413). Assert the banner is `role="alert"` and contains both the error class (`stale_write`, `too_large`, `forbidden_origin`) and a human-readable explanation.
+- **Pass criterion:** every error code produces an alert banner with `role="alert"` and a clear cause + next step (e.g., 409 → "Reload?" button per A11Y-9).
+- **Severity:** Mandatory.
 
-## A11Y-14 — Form controls have associated labels
+## Severity summary
 
-- **WCAG criterion:** 1.3.1 Info and Relationships (Level A); 3.3.2 Labels or Instructions (Level A); 4.1.2 Name, Role, Value (Level A).
-- **Anchors:** NFR-15 (implicit), FR-25, FR-30, FR-33.
-- **Setup:** Walk every `<input>`, `<textarea>`, `<select>` rendered across: file editor textarea (FR-25), per-block Q/A textarea (FR-30), Regenerate-panel module checkboxes (FR-33a), Autonomous toggle (FR-33b), Wrap toggle (FR-33f).
-- **Steps:**
-  1. Run axe-core `label` rule on every page state above. Zero violations expected.
-  2. Each control has EXACTLY ONE of: `<label for="...">` pointing to its `id`, wrapped-label, `aria-label`, or `aria-labelledby` referencing visible text. The textarea MUST have an accessible name (e.g., `aria-label="File content editor"` or `aria-label="Edit answer"`).
-- **Expected:** every form control has a programmatically-associated name.
-- **Severity if fail:** `blocker`.
+| Severity | Count |
+|---|---|
+| Mandatory (blocker on fail) | 22 |
+| Recommended (warning on fail) | 3 |
 
-## A11Y-15 — Reduced-motion respect on the assembled prompt block
+Manual-walkthrough subset (per A11Y-17): A11Y-4, A11Y-7, A11Y-13, A11Y-15, A11Y-16, A11Y-20.
 
-- **WCAG criterion:** 2.3.3 Animation from Interactions (Level AAA, but enforced as a floor here per NFR-14 spirit).
-- **Anchors:** FR-33(f), AC-24, NFR-14.
-- **Setup:** Set OS / browser to honor `prefers-reduced-motion: reduce` (Playwright: `await page.emulateMedia({ reducedMotion: 'reduce' })`).
-- **Steps:**
-  1. Build a regen prompt. Assert no auto-running animations on the `regen-prompt-block` (no marquee, no auto-scrolling, no infinite spinners).
-  2. Click **Copy**. The "Copy" → "Copied!" → "Copy" label flip MUST happen via direct text-content change OR a transition that is suppressed under `prefers-reduced-motion: reduce` (computed `transition-duration` ≤ 0.01s under the reduced-motion media query).
-  3. The Wrap toggle changes `<pre>` layout instantly (no transitioned width/height).
-- **Expected:** no motion that would violate `prefers-reduced-motion: reduce`.
-- **Severity if fail:** `warning` (Recommended-tier; never halts) per the severity table — but log every violation.
+## Audit hooks
 
-## A11Y-16 — Promotion 📌 toggle: aria-pressed and aria-label
+Per `agent_refs/validation/general.md` principle 5, every level run MUST emit:
 
-- **WCAG criterion:** 4.1.2 Name, Role, Value (Level A).
-- **Anchors:** FR-36.
-- **Setup:** Open `interview/qa.md`; hover a Q/A block to reveal the 📌 toggle.
-- **Steps:**
-  1. Assert the 📌 control is a `<button>` (NOT a `<div>` or `<span>`).
-  2. Unpinned state: `aria-pressed="false"` AND `aria-label="Pin item"`.
-  3. After click (pin succeeds): `aria-pressed="true"` AND `aria-label="Unpin item"`.
-  4. The button is focusable via Tab and activatable via Enter or Space.
-- **Expected:** screen-reader users can perceive the toggle's state and label.
-- **Severity if fail:** `blocker` (a toggle with no `aria-pressed` is mute to AT).
+- `validation.started` with `level=accessibility` at the top of the run.
+- One `validation.issue.raised` per failed check (or `validation.requires_manual_walkthrough` for the manual subset awaiting user confirmation).
+- `validation.pass` only when (a) every Mandatory check is green AND (b) every manual-walkthrough check has a recorded user pass.
 
-## A11Y-17 — Manual walkthrough pass
-
-Emits `validation.requires_manual_walkthrough` event per `agent_refs/validation/general.md` core principle #4. A human reviewer MUST visually confirm the items below; axe-core cannot certify any of them.
-
-Checklist:
-
-1. **Visual hierarchy** — sidebar section headers are visually distinct from leaves; Q tint (blue) and A tint (green) are perceivable but not the SOLE channel of meaning (the Q/A label text is also present, satisfying 1.4.1 Use of Color).
-2. **Focus visibility under real keyboard input** — tab through the app on Windows + Chrome; confirm every control's focus ring is perceptible against its background under typical viewing conditions (not just synthetically passing 3:1 contrast in axe).
-3. **Motion / animation perceptibility** — confirm the Copy button's "Copied!" flip is noticeable but not jarring; with reduced-motion preference enabled, confirm no animations run.
-4. **Screen reader sanity check** — drive the app with NVDA (Windows) for ≥ 5 minutes through the primary journeys (browse → render Q/A → edit a Q → build a regen prompt → pin an item). Note any control whose announced name is misleading or empty.
-5. **High-contrast / forced-colors mode** — switch Windows to High Contrast (forced-colors media query). Confirm no critical UI element vanishes (broken-link spans should remain perceivable; focus rings should remain).
-6. **Zoom to 200%** — per WCAG 1.4.4 Resize Text. Confirm no content is clipped or requires two-axis scrolling at 200% zoom on a 1280px-wide viewport.
-7. **`prefers-reduced-motion` end-to-end** — flip the system preference; replay the Copy button + the Wrap toggle + any other transitions. Confirm A11Y-15 holds in real conditions.
-8. **Tooltip accessibility for broken links** — confirm the `title` tooltip surfaces under hover AND keyboard focus (some browsers omit `title` on focus; if so, log as `warning` and propose `aria-describedby` instead in a follow-up).
-
-Manual-walkthrough severity policy:
-- Items 1, 2, 4, 5 failing on their golden path → `blocker` (mandatory a11y).
-- Items 3, 6, 7, 8 failing → `warning` (logged; never halts).
-
-The reviewer records pass/fail per item in the validation event log and emits a single `validation.requires_manual_walkthrough` event with the checklist results inline (or a path to the per-item notes).
-
----
-
-## Cross-cutting notes
-
-- **Tooling:** `@axe-core/playwright` is the automated baseline; manual checks layer on top per A11Y-17. Running `axe.run()` on every page state visited by the e2e suite is cheap and catches regressions outside the explicit cases here.
-- **No silent-pass:** every case above MUST emit either `validation.pass` or `validation.issue.raised`. A case that ran without an event is treated as if it didn't run (per general.md principle #5).
-- **Pin preservation:** none of the a11y cases here change the pin-preservation contract; they live alongside it. If `validation/promoted.md` exists at regen time, those pins are inlined verbatim above (this run has no validation pins as of writing).
-- **Out-of-scope for v1:** WCAG 2.4.11 Focus Appearance (AAA) is partially enforced via A11Y-12's 3:1 ring-contrast floor but not as a strict AAA pass. Full AAA conformance is deferred.
+A level run with no audit events is treated as if it didn't run.

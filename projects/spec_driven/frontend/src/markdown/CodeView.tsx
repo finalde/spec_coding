@@ -1,26 +1,31 @@
 import { useMemo } from "react";
-import hljs from "highlight.js";
-import "highlight.js/styles/github-dark.css";
 
-interface Props {
-  source: string;
-  language: string;
+export interface CodeViewProps {
+  content: string;
+  filename: string;
 }
 
-export function CodeView({ source, language }: Props) {
-  const html = useMemo(() => {
-    try {
-      const lang = hljs.getLanguage(language) ? language : "plaintext";
-      return hljs.highlight(source, { language: lang }).value;
-    } catch {
-      return source.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!));
+export function CodeView({ content, filename }: CodeViewProps): JSX.Element {
+  const ext = useMemo(() => {
+    const dot = filename.lastIndexOf(".");
+    return dot >= 0 ? filename.slice(dot + 1).toLowerCase() : "";
+  }, [filename]);
+
+  const formatted = useMemo(() => {
+    if (ext === "json") {
+      try {
+        return JSON.stringify(JSON.parse(content), null, 2);
+      } catch {
+        return content;
+      }
     }
-  }, [source, language]);
+    return content;
+  }, [ext, content]);
 
   return (
-    <div className="code-view" data-testid="code-view">
+    <div className="code-view">
       <pre>
-        <code className={`hljs language-${language}`} dangerouslySetInnerHTML={{ __html: html }} />
+        <code className={`language-${ext}`}>{formatted}</code>
       </pre>
     </div>
   );

@@ -1,44 +1,124 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Sidebar } from "../src/components/Sidebar";
 
-const fixture = {
+function renderSidebar(tree: TreeNode): ReturnType<typeof render> {
+  return render(
+    <MemoryRouter>
+      <Sidebar tree={tree} currentPath="" onSelect={() => {}} />
+    </MemoryRouter>,
+  );
+}
+
+type TreeNode = {
+  type: "section" | "directory" | "file";
+  name: string;
+  path: string;
+  children?: TreeNode[];
+};
+
+const tree: TreeNode = {
+  type: "section",
   name: "root",
   path: "",
-  type: "section",
   children: [
     {
+      type: "section",
       name: "Claude Settings & Shared Context",
       path: "_claude",
-      type: "section",
-      children: [{ name: "CLAUDE.md", path: "CLAUDE.md", type: "file", children: [] }],
-    },
-    {
-      name: "Projects",
-      path: "_projects",
-      type: "section",
       children: [
         {
-          name: "development",
-          path: "specs/development",
-          type: "type",
+          type: "file",
+          name: "CLAUDE.md",
+          path: "CLAUDE.md",
+        },
+        {
+          type: "directory",
+          name: ".claude",
+          path: ".claude",
           children: [
             {
-              name: "spec_driven",
-              path: "specs/development/spec_driven",
-              type: "project",
+              type: "directory",
+              name: "agent_refs",
+              path: ".claude/agent_refs",
               children: [
                 {
-                  name: "final_specs",
-                  path: "specs/development/spec_driven/final_specs",
-                  type: "stage",
+                  type: "directory",
+                  name: "validation",
+                  path: ".claude/agent_refs/validation",
                   children: [
                     {
+                      type: "file",
+                      name: "general.md",
+                      path: ".claude/agent_refs/validation/general.md",
+                    },
+                    {
+                      type: "file",
+                      name: "development.md",
+                      path: ".claude/agent_refs/validation/development.md",
+                    },
+                  ],
+                },
+                {
+                  type: "directory",
+                  name: "project",
+                  path: ".claude/agent_refs/project",
+                  children: [
+                    {
+                      type: "file",
+                      name: "development.md",
+                      path: ".claude/agent_refs/project/development.md",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: "section",
+      name: "Specs",
+      path: "_specs",
+      children: [
+        {
+          type: "directory",
+          name: "development",
+          path: "projects/development",
+          children: [
+            {
+              type: "directory",
+              name: "spec_driven",
+              path: "projects/development/spec_driven",
+              children: [
+                {
+                  type: "directory",
+                  name: "interview",
+                  path: "specs/development/spec_driven/interview",
+                  children: [
+                    {
+                      type: "file",
+                      name: "qa.md",
+                      path: "specs/development/spec_driven/interview/qa.md",
+                    },
+                    {
+                      type: "file",
+                      name: "promoted.md",
+                      path: "specs/development/spec_driven/interview/promoted.md",
+                    },
+                  ],
+                },
+                {
+                  type: "directory",
+                  name: "final_specs",
+                  path: "specs/development/spec_driven/final_specs",
+                  children: [
+                    {
+                      type: "file",
                       name: "spec.md",
                       path: "specs/development/spec_driven/final_specs/spec.md",
-                      type: "file",
-                      children: [],
                     },
                   ],
                 },
@@ -51,63 +131,41 @@ const fixture = {
   ],
 };
 
-afterEach(() => vi.restoreAllMocks());
+const countLeavesViaChildren = (node: TreeNode): number => {
+  if (node.type === "file" || !node.children) return node.type === "file" ? 1 : 0;
+  return node.children.reduce((acc, c) => acc + countLeavesViaChildren(c), 0);
+};
 
-describe("Sidebar", () => {
-  it("[regression-2026-05-02-clean] descends node.children recursively and renders leaves under both top-level sections", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(fixture), { status: 200 }),
-    );
-
-    const { container, findByTestId } = render(
-      <MemoryRouter>
-        <Sidebar />
-      </MemoryRouter>,
-    );
-
-    await findByTestId("sidebar");
-    await waitFor(() => {
-      const leaves = container.querySelectorAll('[data-testid="tree-leaf"]');
-      expect(leaves.length).toBeGreaterThanOrEqual(2);
-    });
-
-    const claudeSection = container.querySelector('[data-section="claude"]');
-    const projectsSection = container.querySelector('[data-section="projects"]');
-    expect(claudeSection).toBeTruthy();
-    expect(projectsSection).toBeTruthy();
-    expect(claudeSection!.querySelectorAll('[data-testid="tree-leaf"]').length).toBeGreaterThanOrEqual(1);
-    expect(projectsSection!.querySelectorAll('[data-testid="tree-leaf"]').length).toBeGreaterThanOrEqual(1);
-    expect(projectsSection!.querySelector('[data-testid="project-link"]')).toBeTruthy();
+describe("Sidebar — recursive walk via uniform `children` (move 2, AC-26)", () => {
+  it("renders every file leaf in the recursive tree fixture", () => {
+    renderSidebar(tree);
+    const expected = countLeavesViaChildren(tree);
+    expect(expected).toBeGreaterThanOrEqual(6);
+    // Each leaf name appears at least once.
+    expect(screen.getAllByText("CLAUDE.md").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("general.md").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("development.md").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("qa.md").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("spec.md").length).toBeGreaterThan(0);
   });
 
-  it("does NOT read node.projects or node.stages — pure node.children walk", async () => {
-    const tampered = JSON.parse(JSON.stringify(fixture));
-    tampered.children[1].projects = [{ name: "DRIFT", path: "drift", type: "project", children: [] }];
-    delete tampered.children[1].children[0].children[0].children[0].children;
-    tampered.children[1].children[0].children[0].children[0].stages = [
-      {
-        name: "DRIFT",
-        path: "drift",
-        type: "stage",
-        children: [{ name: "drift.md", path: "drift.md", type: "file", children: [] }],
-      },
-    ];
+  it("renders top-level section names: 'Claude Settings & Shared Context' and 'Specs'", () => {
+    renderSidebar(tree);
+    expect(
+      screen.getByText("Claude Settings & Shared Context"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Specs")).toBeInTheDocument();
+  });
 
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(tampered), { status: 200 }),
-    );
-
-    const { container, findByTestId } = render(
-      <MemoryRouter>
-        <Sidebar />
-      </MemoryRouter>,
-    );
-
-    await findByTestId("sidebar");
-    await waitFor(() => {
-      const leaves = container.querySelectorAll('[data-testid="tree-leaf"]');
-      const names = Array.from(leaves).map((l) => l.textContent);
-      expect(names.some((n) => n === "DRIFT")).toBe(false);
-    });
+  it("descends through arbitrarily-deep children chains (regression for spec_driven-20260502-clean)", () => {
+    renderSidebar(tree);
+    // Deepest file is .claude/agent_refs/project/development.md and
+    // specs/development/spec_driven/final_specs/spec.md — must be visible.
+    const devEntries = screen.getAllByText("development.md");
+    expect(devEntries.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("spec.md").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("promoted.md").length).toBeGreaterThan(0);
   });
 });

@@ -1,23 +1,24 @@
-import { Link } from "react-router-dom";
+export interface BreadcrumbProps {
+  path: string;
+}
 
-export function Breadcrumb({ path }: { path: string }) {
-  const segments = path.split("/").filter(Boolean);
+export function Breadcrumb({ path }: BreadcrumbProps): JSX.Element {
+  const parts = path.split("/").filter((p) => p.length > 0);
   return (
-    <nav aria-label="Breadcrumb" className="breadcrumb">
-      <ol>
-        <li>
-          <Link to="/">root</Link>
-        </li>
-        {segments.map((seg, idx) => {
-          const isLast = idx === segments.length - 1;
-          const partial = segments.slice(0, idx + 1).join("/");
+    <nav className="breadcrumb" aria-label="Breadcrumb">
+      <ol className="breadcrumb-list">
+        {parts.map((part, index) => {
+          const isLast = index === parts.length - 1;
           return (
-            <li key={partial}>
+            <li key={`${index}-${part}`} className="breadcrumb-item">
               {isLast ? (
-                <span aria-current="page">{seg}</span>
+                <span aria-current="page" className="breadcrumb-current">
+                  {part}
+                </span>
               ) : (
-                <Link to={`/file/${partial}`}>{seg}</Link>
+                <span className="breadcrumb-segment">{part}</span>
               )}
+              {!isLast ? <span className="breadcrumb-sep" aria-hidden="true"> / </span> : null}
             </li>
           );
         })}
