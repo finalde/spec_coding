@@ -2,7 +2,7 @@
 
 Stage 1 output. Auto-regenerated from `raw_prompt.md` + every `user_input/follow_ups/*.md` in numerical order.
 
-Last regenerated: 2026-05-03 (follow-up 003 — added `run-backend` / `run-frontend` Makefile targets; prior autonomous full-pipeline regen preserved).
+Last regenerated: 2026-05-03 (follow-up 005 — light-theme rule relocated from `CLAUDE.md → Project rules` to `.claude/agent_refs/project/development.md`; this project's styles.css application of the rule is unchanged. Prior follow-up 004 — Origin/Host middleware loopback alias + light-theme application — and follow-up 003 / autonomous full-pipeline regen preserved).
 
 ---
 
@@ -70,7 +70,8 @@ This contract is documented under a `## Regeneration prompts & autonomous mode` 
 - **Manager agents do not do the work themselves.** All three managers (interview, research, validation) build dynamic teams and coordinate them. Sub-agents are general-purpose, ephemeral, and captured in the audit log — not permanent agent files.
 - **Three permanent agents only.** No prompt-revision agent, no spec-compilation agent, no executor agent — Claude does those directly.
 - **Streaming validation during execution.** Validation runs per work unit, results stream back as the build progresses, revisions loop until pass.
-- **Localhost-only security model still holds.** Editing endpoints inherit the same sandbox (exposed tree, allowed extensions, symlink refusal, size cap) as the reader.
+- **Localhost-only security model still holds.** Editing endpoints inherit the same sandbox (exposed tree, allowed extensions, symlink refusal, size cap) as the reader. The Origin/Host CSRF gate admits the `localhost` ↔ `127.0.0.1` loopback alias at the bound port (per follow-up 004); foreign domains and other hosts continue to return 403.
+- **Light-theme app chrome.** Per the cross-cutting project-output rule in `.claude/agent_refs/project/development.md` (relocated from `CLAUDE.md → Project rules` by follow-up 005), the spec_driven webapp's body / sidebar / toolbar / panels / buttons stay light regardless of the OS `prefers-color-scheme`. Intentional dark surfaces on syntax-highlighted `<pre>` blocks and the assembled-prompt panel are preserved.
 
 ## Out of scope (still / clarified)
 

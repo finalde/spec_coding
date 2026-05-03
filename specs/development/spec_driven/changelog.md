@@ -1,5 +1,48 @@
 # Changelog — spec_driven
 
+## Follow-up 005 — 2026-05-03 14:09:17
+Source: user_input/follow_ups/005-20260503-140917-light-theme-rule-into-shared-refs.md
+Summary: Relocate the light-theme rule (added to `CLAUDE.md → Project rules` by follow-up 004) into a new project-scoped refs hierarchy `.claude/agent_refs/project/{general.md, <task_type>.md}` that mirrors the existing per-stage `agent_refs/` layout. The rule's substance and carve-outs are unchanged; only its storage location moves. Future cross-cutting project-output rules accumulate in the new hierarchy instead of inflating `CLAUDE.md`.
+
+Cross-cutting (NOT under this project's `specs/`):
+- `.claude/agent_refs/project/general.md` — new file. Documents the project-scoped-refs contract (loaded at every coordinated stage and every stage-6 work unit alongside the existing stage-scoped refs), the precedence rules (per-task-type wins over `general.md`; project spec wins over project-scoped refs for that one project), and the surgical-update protocol. "Common principles" section intentionally empty in v1 — no rule yet spans `development` AND `ai_video`.
+- `.claude/agent_refs/project/development.md` — new file. Hosts the light-theme rule verbatim (light app chrome, `color-scheme: light;` only, no `prefers-color-scheme: dark` on chrome, dark `<pre>` carve-outs allowed, `blocker`-severity at validation if violated). Cites follow-up 004 / 005 of `spec_driven` as the origin.
+- `CLAUDE.md` — `## Stage playbooks and reference docs` section extended to describe the new `agent_refs/project/` sibling: required pre-reading at every coordinated stage and stage-6 work unit, recorded in the same `pre_reading_consulted` array, automatically exposed by the existing `EXPOSED_TREE` glob (`.claude/agent_refs/**/*.md`). The "UI theme: light only" bullet under `## Project rules (under projects/)` is removed and replaced by a one-line forward pointer to the new ref location.
+
+Auto-updated:
+- `specs/development/spec_driven/user_input/revised_prompt.md` — bumped Last-regenerated line; updated the "Light-theme app chrome" bullet under "Cross-cutting constraints" to reference `.claude/agent_refs/project/development.md` instead of `CLAUDE.md → Project rules`. Substance unchanged.
+
+No conflicts found in:
+- `specs/development/spec_driven/interview/qa.md` (no Q/A about theme storage location).
+- `specs/development/spec_driven/findings/` (no angle covers ref-folder layout; no theme-source-of-truth mention).
+- `specs/development/spec_driven/final_specs/spec.md` (no FR/NFR/AC pinned the rule's storage location — the spec only says "light app chrome"; that wording is location-agnostic).
+- `specs/development/spec_driven/validation/{strategy,acceptance_criteria,bdd_scenarios,unit_tests,system_tests,security,performance,accessibility}.md` (the rule's substance is unchanged; A11Y-11 dark-`<pre>`-carve-out preserved; no validation language references `CLAUDE.md → Project rules → UI theme` directly).
+- `projects/spec_driven/{backend,frontend}/` (the styles.css and api_security.py changes from follow-up 004 are unaffected by the relocation; no code path reads the rule's location).
+- `specs/development/spec_driven/user_input/follow_ups/004-20260503-133625-light-theme-and-loopback-403-fix.md` (left as the historical record; its "source of truth is `CLAUDE.md`" prose was true at write time and is superseded by this follow-up 005, which the reader sees by reading both in order).
+
+## Follow-up 004 — 2026-05-03 13:36:25
+Source: user_input/follow_ups/004-20260503-133625-light-theme-and-loopback-403-fix.md
+Summary: (a) Apply the new repo-wide `CLAUDE.md` "UI theme: light only" rule to spec_driven by removing every `@media (prefers-color-scheme: dark)` block on app chrome and switching `:root { color-scheme }` from `light dark` to `light`. (b) Fix the `403 forbidden` users hit on `POST /api/regen-prompt` (and the other guarded mutations) when the SPA is opened at `http://localhost:8765/` instead of `http://127.0.0.1:8765/` — the Origin/Host middleware now uses a loopback-equivalence allow-list (`{127.0.0.1, localhost}` at the bound port).
+
+Cross-cutting (NOT under this project's `specs/`):
+- `CLAUDE.md` — added a new "UI theme: light only" bullet under `## Project rules (under projects/)`. This is the source of truth for the light-theme rule; future webapp projects inherit it.
+
+Auto-updated:
+- `specs/development/spec_driven/user_input/revised_prompt.md` — bumped Last-regenerated line; added two bullets under "Cross-cutting constraints" referencing the loopback-alias fix and the light-theme application of the new CLAUDE.md rule.
+- `specs/development/spec_driven/final_specs/spec.md` — FR-9 rewritten to spell out the loopback-equivalence allow-list (`{http://127.0.0.1:<port>, http://localhost:<port>}` for `Origin`; `{127.0.0.1:<port>, localhost:<port>}` for `Host`); foreign domains and IPv6 literals still 403.
+- `specs/development/spec_driven/validation/acceptance_criteria.md` — AC-11 extended with two new branches: `Origin/Host = localhost:8765` → 200 (the previously-uncovered realistic case), and `example.com:8765` at the bound port → 403 (negative confirmation that the allow-list is bounded).
+- `projects/spec_driven/backend/libs/api_security.py` — added `LOOPBACK_HOST_LITERALS`, `BoundOrigin.origin_allow_list()` / `host_allow_list()`, and switched the middleware to membership tests against the precomputed allow-sets.
+- `projects/spec_driven/backend/tests/unit/test_api.py` — added `test_put_with_localhost_origin_succeeds` and `test_post_regen_prompt_with_localhost_origin_succeeds` (regression for the user-reported "Build prompt → forbidden" path).
+- `projects/spec_driven/frontend/src/styles.css` — removed every `@media (prefers-color-scheme: dark)` block on `body`, `aside.sidebar`, `.toolbar`, `.markdown-view`, `.qa-view`, `.regen-panel`, `button`; flipped `:root { color-scheme }` to `light`. Dark `<pre>` palette inside `.regen-prompt-block` / `.markdown-view pre` / `.code-view pre` preserved per NFR-16 / A11Y-11.
+
+No conflicts found in:
+- `specs/development/spec_driven/interview/qa.md` (no Q/A about Origin handling or theme).
+- `specs/development/spec_driven/findings/` (no angle covers Origin allow-list shape; angle-copypaste-prompt-ux's "theme" mention refers to syntax-highlighting themes, unaffected).
+- `specs/development/spec_driven/validation/bdd_scenarios.md` ("Cross-origin save attempt is rejected" still holds; no scenario asserted exact-127.0.0.1 exclusivity, so no contradiction).
+- `specs/development/spec_driven/validation/system_tests.md` (SYS-16 wording covers the hostile case; the new pass case is captured at the AC level).
+- `specs/development/spec_driven/validation/security.md` (binary-byte issue noted on read; no surgical edit attempted — the AC-level allow-list extension covers the contract).
+- `specs/development/spec_driven/validation/accessibility.md` (A11Y-11 on the dark code-block theme is unaffected; the light-theme rule explicitly preserves it).
+
 ## Follow-up 003 — 2026-05-03 13:36:25
 Source: user_input/follow_ups/003-20260503-133625-make-run-backend-frontend.md
 Summary: Split the dev-server story in the `Makefile` into `make run-backend` (FastAPI on 127.0.0.1:8765) and `make run-frontend` (Vite on 127.0.0.1:5173); preserve `make run` as a backend-only alias so AC-29 / SYS-17 stay literal.

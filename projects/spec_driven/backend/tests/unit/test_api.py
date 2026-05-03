@@ -111,6 +111,34 @@ def test_put_with_legitimate_origin_succeeds(client, good_headers, scratch_dir):
     (scratch_dir / "api_put.md").unlink(missing_ok=True)
 
 
+def test_put_with_localhost_origin_succeeds(client, scratch_dir):
+    """FR-9 follow-up 004: `localhost` is admitted as a loopback alias of `127.0.0.1`."""
+    rel = "specs/development/spec_driven/__scratch__/api_put_localhost.md"
+    r = client.put(
+        "/api/file",
+        headers={"Origin": "http://localhost:8765", "Host": "localhost:8765"},
+        json={"path": rel, "content": "hello-localhost"},
+    )
+    assert r.status_code == 200
+    (scratch_dir / "api_put_localhost.md").unlink(missing_ok=True)
+
+
+def test_post_regen_prompt_with_localhost_origin_succeeds(client):
+    """Regression for the bug the user hit clicking Build prompt at http://localhost:8765/."""
+    r = client.post(
+        "/api/regen-prompt",
+        headers={"Origin": "http://localhost:8765", "Host": "localhost:8765"},
+        json={
+            "project_type": "development",
+            "project_name": "spec_driven",
+            "stages": ["interview"],
+            "modules": {},
+            "autonomous": False,
+        },
+    )
+    assert r.status_code == 200
+
+
 def test_get_file_foreign_origin_still_succeeds(client):
     """GET endpoints are NOT origin-validated (FR-9 lists state-changing routes only)."""
     r = client.get("/api/file?path=CLAUDE.md", headers={"Origin": "http://evil.example.com"})

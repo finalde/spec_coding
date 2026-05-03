@@ -52,7 +52,7 @@ The webapp does NOT invoke Claude — it only assembles copy-paste prompts (per 
 
 **FR-8.** `PUT /api/file` validates the body's first 16 bytes as plain text (no NUL bytes, valid UTF-8) for the text extensions. Image extensions (`.png`/`.jpg`) are NOT writable in v1; PUT to an image path returns 415. SVG is NOT in the allowlist (treated as code-execution vector per localhost-fs-sandbox-risks angle).
 
-**FR-9.** Every state-changing endpoint (`PUT /api/file`, `POST /api/regen-prompt`, `POST /api/promote`, `DELETE /api/promote`) validates `Origin` and `Host` headers. Requests without an `Origin` from the bound localhost or with a `Host` other than `127.0.0.1:<bound-port>` return 403 (defense against DNS rebinding / browser-driven CSRF).
+**FR-9.** Every state-changing endpoint (`PUT /api/file`, `POST /api/regen-prompt`, `POST /api/promote`, `DELETE /api/promote`) validates `Origin` and `Host` headers. The accepted set is the loopback-equivalence allow-list at the bound port: `{http://127.0.0.1:<port>, http://localhost:<port>}` for `Origin` and `{127.0.0.1:<port>, localhost:<port>}` for `Host`. Anything else (missing header, foreign domain, wrong port, IPv6 literal) returns 403 (defense against DNS rebinding / browser-driven CSRF). The two loopback literals are admitted because they resolve to the same loopback socket and the browser sends whichever the user typed in the address bar — refusing one of them is a usability bug, not added security.
 
 ### Backend — regeneration prompt assembly
 

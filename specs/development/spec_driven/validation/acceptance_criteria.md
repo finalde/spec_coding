@@ -134,13 +134,17 @@ And no file on disk was modified
 
 ## Feature: Origin / Host validation (CSRF defense) (Spec refs: FR-9, NFR-7, AC-11)
 
-### Scenario: AC-11 — PUT from foreign Origin returns 403
+### Scenario: AC-11 — PUT from foreign Origin returns 403; loopback aliases (`localhost` ↔ `127.0.0.1`) are accepted
 Given the FastAPI backend is bound on `127.0.0.1:8765`
 When a client issues `PUT http://127.0.0.1:8765/api/file` with headers `Origin: http://evil.example.com` and `Host: 127.0.0.1:8765` and JSON body `{"path": "specs/development/spec_driven/findings/scratch.md", "content": "y"}`
 Then the response status is `403`
 And no file on disk was modified
 When a client issues the same `PUT` with `Origin: http://127.0.0.1:8765` and `Host: evil.example.com`
 Then the response status is `403`
+When a client issues the same `PUT` with `Origin: http://localhost:8765` and `Host: localhost:8765` (the realistic developer flow of opening the SPA at `http://localhost:8765/`)
+Then the response status is `200` (per FR-9 follow-up 004 — `localhost` and `127.0.0.1` both resolve to the same loopback socket and the allow-list admits both at the bound port)
+When a client issues the same `PUT` with `Origin: http://example.com:8765` and `Host: example.com:8765`
+Then the response status is `403` (only the two loopback literals are admitted; any other host literal at the bound port still fails)
 And the same protection applies to `POST /api/regen-prompt`, `POST /api/promote`, and `DELETE /api/promote`
 
 ---
