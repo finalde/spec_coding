@@ -127,6 +127,19 @@ The spec_driven webapp's `EXPOSED_TREE` recursive globs (`.claude/skills/agent_t
 - README required and updated alongside any feature change.
 - **Cross-cutting project-output rules** (themes, visual defaults, structural conventions) live in `.claude/agent_refs/project/` per § Stage playbooks and reference docs — NOT in this section.
 
+## AI video rules (under `ai_videos/`)
+
+Detailed output rules live in `.claude/agent_refs/project/ai_video.md` per § Stage playbooks and reference docs. This section captures only the harness contract that other parts of `CLAUDE.md` reference.
+
+- One folder per project at `ai_videos/{task_name}/`. `task_name` is **pinyin or English**, never Chinese (e.g. `chongsheng_zhi_zongcai_furen`). The Chinese title lives in `ai_videos/{name}/README.md`.
+- Folder and file names inside `ai_videos/{name}/` are English/pinyin. **All file content is Chinese.** The "everything Chinese in `ai_videos/`" rule applies to content, not paths.
+- Two sub-types, distinguished at stage-2 interview: `novel` (multi-episode, layout under `episodes/epNN/`) and `short` (single-piece, flat layout). Sub-type is captured in `qa.md` metadata and reasserted in stage-4 spec.
+- Every shot ≤ 15 s. Every shot ships with BOTH a Kling prompt AND a Seedance prompt. Default aspect ratio 9:16. Visuals only in v1 (no audio prompts emitted).
+- Image-first character consistency: each named character gets a Seedream ref-image prompt + a locked Chinese descriptor; the descriptor is re-pasted byte-identically in every shot prompt that names the character.
+- Per-episode (or per-short) `publish.md` with platform metadata is part of the stage-6 contract.
+- README required and in Chinese, updated alongside any feature change.
+- Cross-cutting output rules and the full layout spec live in `.claude/agent_refs/project/ai_video.md`. Per-project deviations live in `specs/ai_video/{name}/` with a divergence note.
+
 ## Event stream
 
 `.audit/adhoc_agents/{date}/{task_id}/events.jsonl` is append-only JSONL. Lines parse independently; atomic line-sized appends are safe. Event types:
@@ -203,6 +216,7 @@ Operational notes:
 - **Selective module regen.** If the prompt selects only some stage modules (e.g., only `validation/security.md` + `performance.md`), delete only those files. Default copy-paste prompts select all.
 - **`changelog.md` and `.audit/` are NEVER regen outputs.** They are the audit log; they get appended to with a record of what was deleted/regenerated.
 - **Project README and Makefile** under `projects/{name}/` are stage-6 outputs and ARE deleted with the rest of the folder.
+- **AI-video novels accept a per-episode regen scope.** When `task_type=ai_video, sub_type=novel`, a regen prompt may declare `scope=episode N` (or `scope=episodes M..N`); the parent then deletes only `ai_videos/{name}/episodes/ep{NN}/` for the named range, preserving `characters/`, `world.md`, `style_guide.md`, `arc_outline.md`, and other episodes' folders. Default remains `scope=project` (whole-folder delete per the table). Shorts have only the project-level scope.
 - **The `agent_team` skill, playbooks, and agent_refs** are NOT regen outputs — they are harness context. Never deleted by a project-scoped regen.
 
 Audit-event contract for any regen: emit `regen.delete.planned` (one line per file before delete), `regen.delete.completed` (with count), `regen.write.completed` (path + size after write) into `events.jsonl`. The webapp's `regen_prompt.py` includes this contract verbatim in every assembled prompt's `### Constraints` section.
@@ -252,6 +266,8 @@ Some tools are **deferred** — schemas not loaded at session start; calling the
 ## Task ID convention
 
 `task_id = "{task_name}-{YYYYMMDD-HHmmss}"`, built once at run start. Use for `.audit/adhoc_agents/{date}/{task_id}/`.
+
+For `task_type=ai_video`, `task_name` is pinyin or English even when the project's natural identifier is a Chinese title (per `agent_refs/project/ai_video.md` rule 1). The Chinese title is captured in `ai_videos/{name}/README.md`, not in the path.
 
 ## General coding rules
 
