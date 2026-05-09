@@ -31,7 +31,9 @@ ai_videos/{name}/
         ├── shotlist.md          # 镜头清单, 每镜≤15s; 含时长/景别/动作/连续性 tokens
         ├── prompts/
         │   ├── shotNN_kling.md
-        │   └── shotNN_seedance.md
+        │   ├── shotNN_seedance.md
+        │   ├── shot01_startframe_seedream.md  # only ep's shot 01 (absolute opening frame)
+        │   └── shotNN_lastframe_seedream.md   # every shot — seam-frame stills per rule #11
         └── publish.md           # 发布信息: 标题/简介/标签/封面建议
 ```
 
@@ -50,8 +52,10 @@ ai_videos/{name}/
 ├── script.md
 ├── shotlist.md                  # 标记 hook 镜头
 ├── prompts/
+│   ├── shot01_startframe_seedream.md  # only shot 01 (absolute opening frame)
 │   ├── shotNN_kling.md
-│   └── shotNN_seedance.md
+│   ├── shotNN_seedance.md
+│   └── shotNN_lastframe_seedream.md   # every shot — seam-frame stills per rule #11
 └── publish.md
 ```
 
@@ -78,7 +82,7 @@ Seedance prompt is text-to-video (it doesn't take character refs in the same way
 
 ### 5. Dual-prompt requirement
 
-Every shot ships with BOTH `shotNN_kling.md` AND `shotNN_seedance.md`. Same scene, different tool. Users decide per-shot which output to keep based on side-by-side comparison.
+Every shot ships with BOTH `shotNN_kling.md` AND `shotNN_seedance.md`. Same scene, different tool. Users decide per-shot which output to keep based on side-by-side comparison. Plus the seam-frame Seedream prompts per rule #11 — `shotNN_lastframe_seedream.md` for every shot, and `shot01_startframe_seedream.md` for the first shot of the video / each episode.
 
 ### 6. 15-second atomicity
 
@@ -105,6 +109,39 @@ Per the per-prompt regen scope flag (`scope=episode | scope=project`):
 - `scope=project` (default): delete the entire `ai_videos/{name}/` folder per `CLAUDE.md` regen-semantics table.
 
 Shorts have only `scope=project`.
+
+### 11. Seam-frame still-image pipeline
+
+AI-video generators (Kling 2.1 Pro, Seedance 1.0 Pro) cap individual clips at ~10–15 s. To stitch clips into a longer video without visible drift, **the last frame of clip N must visually match the first frame of clip N+1** — same character pose, lighting state, prop position, environment. Generating those seam frames as still images first via Seedream, then passing them to Kling as `input_image_urls = [start_frame, end_frame]` (Kling 2.1 Pro accepts up to 4 reference frames), pins both ends of every clip deterministically and eliminates seam drift.
+
+**Per-shot prompt files (mandatory):**
+
+- `prompts/shotNN_lastframe_seedream.md` — Seedream still-image prompt for the final frame of shot NN. **Every shot**.
+- `prompts/shot01_startframe_seedream.md` — Seedream still-image prompt for the absolute opening frame. **Only the first shot of the video** (shorts) **or the first shot of each episode** (novels).
+
+**Frame-prompt body structure** (analogous to `characters/ref_images/<role>_seedream.md` but scene-level, not character-level):
+
+1. 主体定义 — full scene at that frozen instant: character + environment + prop positions + lighting state.
+2. 角色 — re-paste the locked character descriptor block byte-identically (same contract as video shot prompts).
+3. 场景 / 镜头 / 光线/色调 — re-use the SAME tokens as the corresponding video shot prompt's `场景:` and `光线/色调:` lines, so the still is visually consistent with the video's middle.
+4. 姿态 — a frozen instant: exact pose / camera angle / lighting state at the seam moment.
+5. 比例 — 9:16 (or project override).
+6. 负向 — same禁用 list as video prompts.
+
+**Workflow:**
+
+1. Render each `_seedream.md` frame prompt via Seedream; save the PNG next to the prompt:
+   - `prompts/shot01_startframe.png` (only shot 01 of video / each episode)
+   - `prompts/shot{NN}_lastframe.png` (every shot)
+2. For each Kling shot, set `input_image_urls = [start_frame_path, end_frame_path]`:
+   - shot 01: `[shot01_startframe.png, shot01_lastframe.png]`
+   - shot N (N ≥ 2): `[shot{N-1}_lastframe.png, shot{N}_lastframe.png]`
+3. Seedance is text-to-video (no image input). Seam frames are not Seedance API parameters, but their described content MUST match across adjacent shots — re-use the same `场景:` / `光线/色调:` tokens and the locked character descriptor so Seedance text-only outputs read consistently next to neighboring Kling outputs.
+4. Stitch the resulting clips with any video editor (ffmpeg `concat`, CapCut, DaVinci, Premiere). With seam frames pinned, the stitch points should be invisible.
+
+**Loop-back contracts:** when a shot's last frame must equal another shot's start frame (e.g., visual loops where Shot N's tail = Shot 01's head), both prompts still ship; the user generates ONE PNG and re-uses it for both seams. Each prompt body should describe the frame near-identically and explicitly note the loop relationship in a header comment block (e.g., `# 回环契约: 本帧与 shot01_startframe.md 字节级相同`).
+
+*(Originated from follow-up "use last-frame-as-input-image for clip stitching" — 2026-05-06.)*
 
 ## Update protocol
 

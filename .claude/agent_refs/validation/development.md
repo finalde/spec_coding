@@ -18,8 +18,9 @@ Concrete:
 - `playwright.config.ts` ships one `webServer` / project entry per advertised mode.
 - Every `system_tests.md` includes at least one scenario that boots the actual mode, drives a real browser, asserts on rendered DOM (not raw API), and includes a "structural sanity" assertion (sidebar leaves, etc.).
 - Stage-5 strategy that lists fewer e2e profiles than the spec lists runtime modes = `blocker` finding.
+- **Every state-changing endpoint MUST have at least one `pytest` integration test with `serve_static=True`** (or the project's prod-mode equivalent) — not just `serve_static=False`. When a route is missing or shadowed in prod, the static-files mount at `/` (with `html=True`) catches the request and returns 405 (StaticFiles only allows `GET` / `HEAD`). Tests with `serve_static=False` silently pass on the wrong outcome (404 from FastAPI's "no route" path) and never exercise the static-mount-shadowing behavior. Per-endpoint test, plus a class-of-failure sweep iterating `GUARDED_ROUTES` × `serve_static=True` and asserting none return 405. Severity: missing prod-mode coverage on a state-changing endpoint = `blocker`.
 
-*(Originated from run `spec_driven-20260502-clean` (backend-frontend field drift) and run `spec_driven-006` (`make run-frontend` Build-prompt 403).)*
+*(Originated from run `spec_driven-20260502-clean` (backend-frontend field drift), run `spec_driven-006` (`make run-frontend` Build-prompt 403), and follow-up `spec_driven-011` (parent-level `DELETE /api/project` route shadowed by static mount in prod, returning 405; unit tests passed because they used `serve_static=False`).)*
 
 ### 2. API contract tests walk the data the way the consumer walks it
 

@@ -850,6 +850,78 @@ button:disabled {
   margin: 0 0 8px;
 }
 
+/* Danger zone — parent-level project delete (follow-up 010) */
+.danger-zone {
+  margin-top: 32px;
+  padding: 16px 20px;
+  border: 1px solid var(--error-border);
+  border-radius: 4px;
+  background: #fff7f7;
+}
+.danger-zone h2 {
+  margin: 0 0 8px;
+  color: var(--error-text);
+  font-size: 15px;
+}
+.danger-zone-trigger {
+  background: #fff;
+  color: var(--error-text);
+  border: 1px solid var(--error-border);
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-weight: 600;
+}
+.danger-zone-trigger:hover { background: var(--error-bg); }
+.danger-zone-confirm {
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 4px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.danger-zone-confirm ul { margin: 4px 0; padding-left: 24px; }
+.danger-zone-label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.danger-zone-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}
+.danger-zone-buttons { display: flex; gap: 8px; }
+.danger-zone-confirm-btn {
+  background: var(--error-text);
+  color: #fff;
+  border: 1px solid var(--error-text);
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-weight: 600;
+}
+.danger-zone-confirm-btn:disabled { background: var(--error-border); cursor: not-allowed; }
+.danger-zone-cancel {
+  background: var(--bg-toolbar);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 14px;
+}
+.danger-zone-error {
+  background: var(--error-bg);
+  color: var(--error-text);
+  border: 1px solid var(--error-border);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+.danger-zone-result {
+  background: var(--tint-a);
+  border: 1px solid var(--tint-a-border);
+  border-radius: 4px;
+  padding: 10px 14px;
+}
+.danger-zone-result ul { margin: 4px 0; padding-left: 24px; }
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

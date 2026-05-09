@@ -16,6 +16,7 @@ GUARDED_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/regen-prompt"),
         ("POST", "/api/promote"),
         ("DELETE", "/api/promote"),
+        ("DELETE", "/api/project"),
     }
 )
 

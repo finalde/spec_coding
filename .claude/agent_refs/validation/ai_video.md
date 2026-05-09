@@ -40,16 +40,21 @@ Severity:
 - missing Seedream ref-image prompt = `blocker`.
 - drift between two shots' descriptors of the same character within the same episode = `blocker`.
 
-### 4. Dual-prompt presence
+### 4. Dual-prompt presence + seam-frame still-image prompts
 
-Every shot MUST ship with BOTH:
+Every shot MUST ship with:
 
 - `prompts/shotNN_kling.md` — Kling text-to-video or image-to-video prompt.
 - `prompts/shotNN_seedance.md` — Seedance text-to-video prompt.
+- `prompts/shotNN_lastframe_seedream.md` — Seedream still-image prompt for the shot's final frame, per `agent_refs/project/ai_video.md` rule #11. Used as Kling's end-frame anchor and as the start-frame anchor of the next shot for clip-stitching consistency.
 
-Reason: Kling and Seedance produce noticeably different output; the workflow's job is to let the user A/B both per shot.
+Additionally, the **first shot** of the video (or the first shot of each episode for novels) MUST ship with:
 
-Severity: missing one of the two = `blocker`.
+- `prompts/shot01_startframe_seedream.md` — Seedream still-image prompt for the absolute opening frame. Used as Kling's start-frame anchor for shot 01.
+
+Reason: Kling and Seedance produce noticeably different output; the workflow's job is to let the user A/B both per shot. Seam-frame stills are the load-bearing mechanism for stitching multiple ≤15 s clips into a longer video without visible drift across clip boundaries.
+
+Severity: missing any required prompt file = `blocker`.
 
 ### 5. Aspect ratio + platform compliance
 
@@ -88,6 +93,8 @@ After all automated levels pass for a work unit (one episode for novels, the who
 | Hook shot missing or unmarked on a short | `blocker` | First 3 s is the retention battle. |
 | Shot prompt references a character not declared in `characters/` | `blocker` | Character drift waiting to happen. |
 | Continuity token between adjacent shots missing when state should carry over | `warning` | Often invisible until rendered; flag for manual walkthrough. |
+| Missing `shotNN_lastframe_seedream.md` for any shot | `blocker` | Without the seam-frame still, Kling has no `input_image_urls` end-frame anchor and the next shot has no start-frame anchor — visible drift across clip boundaries when stitched. Per `agent_refs/project/ai_video.md` rule #11. |
+| Missing `shot01_startframe_seedream.md` on the first shot of a video / episode | `blocker` | Without the absolute opening frame, Kling shot 01 image-to-video has no start-frame anchor — character / scene / lighting drift in the very first 15 seconds. Per rule #11. |
 
 ## Update protocol
 

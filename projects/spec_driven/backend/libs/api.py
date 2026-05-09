@@ -10,11 +10,13 @@ from pydantic import BaseModel, Field
 
 from libs import file_reader as fr
 from libs import file_writer as fw
+from libs import project_deleter as pd
 from libs import promotions as prom
 from libs.api_security import BoundOrigin, OriginHostMiddleware
 from libs.exposed_tree import ExposedTree, MAX_FILE_BYTES
 from libs.file_reader import FileReader
 from libs.file_writer import FileWriter
+from libs.project_deleter import ProjectDeleter, emit_audit_event
 from libs.promotions import Promotions
 from libs.regen_prompt import PromptTooLarge, RegenPromptBuilder
 from libs.repo_root import RepoRoot
@@ -52,6 +54,12 @@ class RegenPromptBody(BaseModel):
     autonomous: bool = False
 
 
+class ProjectDeleteBody(BaseModel):
+    """Per follow-up 010: parent-level project delete (ai_video task_type only)."""
+    project_type: str
+    project_name: str
+
+
 def create_app(
     repo_root: RepoRoot,
     bound: BoundOrigin,
@@ -66,6 +74,7 @@ def create_app(
     promotions = Promotions(exposed, resolver)
     regen_builder = RegenPromptBuilder(exposed, resolver)
     walker = TreeWalker(exposed)
+    project_deleter = ProjectDeleter(repo_root.path)
 
     app.add_middleware(OriginHostMiddleware, bound=bound)
 
@@ -207,6 +216,37 @@ def create_app(
                 content={"detail": {"kind": "not_found"}},
             )
         return JSONResponse(status_code=200, content=result)
+
+    @app.delete("/api/project")
+    def delete_project(body: ProjectDeleteBody) -> Response:
+        try:
+            result = project_deleter.delete(body.project_type, body.project_name)
+        except pd.UnsupportedTaskType:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "unsupported_task_type", "task_type": body.project_type}},
+            )
+        except pd.InvalidProjectName:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_project_name"}},
+            )
+        except pd.SelfDeleteRefused:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "self_delete_refused"}},
+            )
+        except pd.ProjectNotFound:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": {"kind": "not_found"}},
+            )
+        # Audit event — project deletion is destructive; persist a record.
+        try:
+            emit_audit_event(repo_root.path, result)
+        except OSError:
+            pass  # best-effort; do not fail the delete if audit write fails
+        return JSONResponse(status_code=200, content=result.to_payload())
 
     if serve_static:
         static_dir = Path(__file__).resolve().parent.parent / "static"

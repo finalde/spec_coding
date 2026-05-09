@@ -98,3 +98,16 @@ export interface RegenRequest {
   modules: Record<string, string[]>;
   autonomous: boolean;
 }
+
+/** Per follow-up 010: parent-level project delete (ai_video task_type only). */
+export interface ProjectDeleteRequest {
+  project_type: "ai_video";
+  project_name: string;
+}
+
+export interface ProjectDeleteResult {
+  project_type: string;
+  project_name: string;
+  deleted_paths: string[];
+  not_found_paths: string[];
+}

@@ -2,6 +2,8 @@ import {
   ApiError,
   type ApiErrorDetail,
   type FileResult,
+  type ProjectDeleteRequest,
+  type ProjectDeleteResult,
   type PromoteRequest,
   type PromoteResult,
   type RegenRequest,
@@ -111,4 +113,14 @@ export async function deletePromote(req: UnpromoteRequest): Promise<PromoteResul
     body: JSON.stringify(req),
   });
   return readJson<PromoteResult>(response);
+}
+
+/** Per follow-up 010: delete an entire ai_video project (specs trail + ai_videos output). */
+export async function deleteProject(req: ProjectDeleteRequest): Promise<ProjectDeleteResult> {
+  const response = await fetch("/api/project", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<ProjectDeleteResult>(response);
 }
