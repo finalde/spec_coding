@@ -24,7 +24,7 @@ class TreeWalker:
             "type": "section",
             "name": "root",
             "path": "",
-            "children": [self._ai_videos_section()],
+            "children": [self._ai_videos_section(), self._research_section()],
         }
 
     def _ai_videos_section(self) -> dict[str, Any]:
@@ -40,6 +40,20 @@ class TreeWalker:
         return {
             "type": "section",
             "name": "AI Videos",
+            "path": "",
+            "children": children,
+        }
+
+    def _research_section(self) -> dict[str, Any]:
+        research_root = self._root / "research"
+        children: list[dict[str, Any]] = (
+            self._walk_filtered(research_root, self._is_allowed_leaf)
+            if research_root.is_dir()
+            else []
+        )
+        return {
+            "type": "section",
+            "name": "Research",
             "path": "",
             "children": children,
         }

@@ -6,10 +6,13 @@ Cross-cutting rules about the outputs of every ai_video-task project (`ai_videos
 
 ### 1. Path language
 
-- `task_name` is **pinyin or English**, never Chinese. Example: `chongsheng_zhi_zongcai_furen`, not `重生之总裁夫人`. Reason: Windows + git + downstream tooling stay clean. The Chinese title lives in `ai_videos/{name}/README.md`.
-- Folder names inside `ai_videos/{name}/` are **English or pinyin** (`characters/`, `episodes/ep01/`, `prompts/`, `ref_images/`).
-- File names inside `ai_videos/{name}/` are **English or pinyin** (`main.md`, `shotlist.md`, `shot01_kling.md`).
+- `task_name` is **pinyin or English**, never Chinese. Example: `chongsheng_zhi_zongcai_furen`, not `重生之总裁夫人`. Reason: task_id 构造（`task_id = "{task_name}-{YYYYMMDD-HHmmss}"`）必须 ASCII 稳定；`.audit/adhoc_agents/{date}/{task_id}/` 路径在 Windows + git 下需保持简洁。The Chinese title lives in `ai_videos/{name}/README.md`.
+- Folder names inside `ai_videos/{name}/` 默认为 **English or pinyin** (`characters/`, `episodes/ep01/`, `prompts/`, `ref_images/`)。这些是结构化目录，命名稳定性 > 可读性。
+- File names inside `ai_videos/{name}/` 默认为 **English or pinyin**（`shotlist.md`, `shot01_kling.md`, `episode.md`），但 **角色 / 场景 / 道具等"内容性"文件可 opt-in 中文命名**（`沧冥-魔尊本相.md` / `紫霄宫-禁地暗室.md`），便于在 ai_video_management webapp 中一眼识别"哪个文件对应哪个人物 / 场景"。Opt-in 须在 `specs/ai_video/{name}/final_specs/spec.md` 显式记录 divergence note。
+- 结构性文件（`shotlist.md` / `episode.md` / `shot{NN}_{kling,seedance,lastframe_seedream}.md` / `publish.md` / `arc_outline.md` / `world.md` / `style_guide.md` / `README.md`）保持 English/pinyin —— 这些是骨架，跨项目模板复用率高。
 - File **contents** are **Chinese**. The project's "everything Chinese in `ai_videos/`" rule applies to file content, not paths.
+
+*(Per follow-up `mozun_chongsheng/002` 与 `ai_video_management/004`：现代 Windows + git 已能稳定处理 UTF-8 路径；ai_video_management webapp `is_inside` / `safe_resolve` / 前端 Sidebar 已支持 UTF-8 中文路径段；放宽限制以提升内容文件可识别性。)*
 
 ### 2. Output layout — `sub_type=novel`
 

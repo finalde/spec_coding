@@ -27,13 +27,13 @@ def test_tree_consumer_walk() -> None:
     _walk(tree)
 
 
-def test_tree_single_ai_videos_section() -> None:
-    """Only AI Videos section renders."""
+def test_tree_sections_order() -> None:
+    """Sections render in the FR-18 / FR-43 order: AI Videos, then Research."""
     exposed = ExposedTree(repo_root())
     walker = TreeWalker(exposed)
     tree = walker.build()
     section_names = [child["name"] for child in tree["children"]]
-    assert section_names == ["AI Videos"], section_names
+    assert section_names == ["AI Videos", "Research"], section_names
 
 
 def test_ai_videos_section_has_project_meta_for_wukong() -> None:
@@ -52,14 +52,21 @@ def test_ai_videos_section_has_project_meta_for_wukong() -> None:
     assert wukong["project_meta"]["sub_type"] == "short"
 
 
-def test_no_other_sections_in_tree() -> None:
-    """Sidebar emits exactly one section."""
+def test_research_section_walks_repo_research_dir() -> None:
+    """Follow-up 003: research/ surfaces under the Research section."""
     exposed = ExposedTree(repo_root())
     walker = TreeWalker(exposed)
     tree = walker.build()
-    section_names = [child["name"] for child in tree["children"]]
-    assert section_names == ["AI Videos"]
-    assert len(section_names) == 1
+    research_section = next(
+        (c for c in tree["children"] if c["name"] == "Research"), None
+    )
+    assert research_section is not None, "Research section missing"
+    assert research_section["type"] == "section"
+    if (repo_root() / "research").is_dir():
+        # When the repo's research/ exists with content, the section should
+        # contain at least one child node.
+        names = [c["name"] for c in research_section["children"]]
+        assert names, "Research section is empty despite repo `research/` having content"
 
 
 def test_image_leaves_typed_as_image() -> None:

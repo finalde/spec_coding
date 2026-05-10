@@ -7,12 +7,56 @@ import { ProjectPage } from "./components/ProjectPage";
 import { StagePage } from "./components/StagePage";
 import { fetchTree } from "./api";
 import { collectFilePaths } from "./lib/linkResolver";
+import {
+  type ActiveProject,
+  readActiveProject,
+  writeActiveProject,
+} from "./lib/activeProject";
 import type { TreeNode } from "./types";
+
+function deriveActiveProjectFromPath(pathname: string): ActiveProject | null {
+  const projectMatch = pathname.match(/^\/project\/([^/]+)\/([^/]+)\/?$/);
+  if (projectMatch) {
+    return {
+      type: decodeURIComponent(projectMatch[1]),
+      name: decodeURIComponent(projectMatch[2]),
+    };
+  }
+  const stageMatch = pathname.match(/^\/stage\/([^/]+)\/([^/]+)\/([^/]+)\/?$/);
+  if (stageMatch) {
+    return {
+      type: decodeURIComponent(stageMatch[1]),
+      name: decodeURIComponent(stageMatch[2]),
+    };
+  }
+  if (pathname.startsWith("/file/")) {
+    const encoded = pathname.slice("/file/".length);
+    let decoded = "";
+    try {
+      decoded = decodeURIComponent(encoded);
+    } catch {
+      return null;
+    }
+    const parts = decoded.split("/");
+    if (parts[0] === "specs" && parts.length >= 3 && parts[1] && parts[2]) {
+      return { type: parts[1], name: parts[2] };
+    }
+  }
+  return null;
+}
+
+function sameProject(a: ActiveProject | null, b: ActiveProject | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.type === b.type && a.name === b.name;
+}
 
 export default function App(): JSX.Element {
   const [tree, setTree] = useState<TreeNode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState<number>(0);
+  const [activeProject, setActiveProject] = useState<ActiveProject | null>(() =>
+    readActiveProject(),
+  );
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -29,6 +73,14 @@ export default function App(): JSX.Element {
   useEffect(() => {
     void loadTree();
   }, [loadTree, refreshKey]);
+
+  useEffect(() => {
+    const fromUrl = deriveActiveProjectFromPath(location.pathname);
+    if (fromUrl && !sameProject(fromUrl, activeProject)) {
+      setActiveProject(fromUrl);
+      writeActiveProject(fromUrl);
+    }
+  }, [location.pathname, activeProject]);
 
   const knownPaths = useMemo(() => (tree ? collectFilePaths(tree) : []), [tree]);
 
@@ -49,6 +101,23 @@ export default function App(): JSX.Element {
     [navigate],
   );
 
+  const onPickProject = useCallback(
+    (project: ActiveProject) => {
+      setActiveProject(project);
+      writeActiveProject(project);
+      navigate(
+        `/project/${encodeURIComponent(project.type)}/${encodeURIComponent(project.name)}`,
+      );
+    },
+    [navigate],
+  );
+
+  const onBackToProjects = useCallback(() => {
+    setActiveProject(null);
+    writeActiveProject(null);
+    navigate("/");
+  }, [navigate]);
+
   const onSkipToMain = (e: React.MouseEvent<HTMLAnchorElement>): void => {
     e.preventDefault();
     const main = document.getElementById("main");
@@ -58,15 +127,36 @@ export default function App(): JSX.Element {
     }
   };
 
+  const isLanding = location.pathname === "/";
+
+  if (isLanding) {
+    return (
+      <div className="app-root app-root-landing">
+        <a className="skip-link" href="#main" onClick={onSkipToMain}>
+          Skip to main content
+        </a>
+        <main id="main" className="picker-pane" aria-label="Main content">
+          <Home tree={tree} loadError={error} onPick={onPickProject} />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app-root">
       <a className="skip-link" href="#main" onClick={onSkipToMain}>
         Skip to main content
       </a>
-      <Sidebar tree={tree} currentPath={currentPath} onSelect={onSelect} loadError={error} />
+      <Sidebar
+        tree={tree}
+        currentPath={currentPath}
+        onSelect={onSelect}
+        loadError={error}
+        activeProject={activeProject}
+        onBackToProjects={onBackToProjects}
+      />
       <main id="main" className="main-pane" aria-label="Main content">
         <Routes>
-          <Route path="/" element={<Home tree={tree} />} />
           <Route
             path="/file/*"
             element={

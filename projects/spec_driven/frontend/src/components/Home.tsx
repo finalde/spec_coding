@@ -1,59 +1,55 @@
-import { Link } from "react-router-dom";
 import type { TreeNode } from "../types";
+import type { ActiveProject } from "../lib/activeProject";
 
 export interface HomeProps {
   tree: TreeNode | null;
+  loadError?: string | null;
+  onPick: (project: ActiveProject) => void;
 }
 
-interface ProjectRef {
-  type: string;
-  name: string;
-}
-
-export function Home({ tree }: HomeProps): JSX.Element {
+export function Home({ tree, loadError, onPick }: HomeProps): JSX.Element {
   const projects = tree ? discoverProjects(tree) : [];
   return (
-    <div className="home-view">
-      <h1>spec_driven</h1>
-      <p>
-        Browse and edit the artifacts produced by the spec-driven workflow. Use the sidebar
-        to open any file under the curated tree.
-      </p>
-      {tree === null ? (
-        <p className="muted">Loading tree…</p>
+    <div className="picker-view">
+      <header className="picker-header">
+        <h1>spec_driven</h1>
+        <p className="muted">Pick a project to open its workspace.</p>
+      </header>
+      {loadError ? (
+        <div role="alert" className="sidebar-error">
+          Failed to load tree: {loadError}
+        </div>
+      ) : tree === null ? (
+        <p className="muted">Loading projects…</p>
       ) : projects.length === 0 ? (
-        <p className="muted">
-          {(tree.children ?? []).length} top-level section
-          {(tree.children ?? []).length === 1 ? "" : "s"} loaded.
-        </p>
+        <p className="muted">No projects found under <code>specs/</code>.</p>
       ) : (
-        <section className="home-projects" aria-labelledby="home-projects-heading">
-          <h2 id="home-projects-heading">Projects</h2>
-          <p className="muted">
-            Build a regen prompt that walks any subset of the six pipeline stages.
-          </p>
-          <ul className="home-project-list">
-            {projects.map((p) => (
-              <li key={`${p.type}/${p.name}`} className="home-project-item">
-                <Link to={`/project/${encodeURIComponent(p.type)}/${encodeURIComponent(p.name)}`}>
-                  {p.type}/{p.name}
-                </Link>
-                <span className="muted"> — Build regen prompt for the whole project</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <ul className="picker-list">
+          {projects.map((p) => (
+            <li key={`${p.type}/${p.name}`} className="picker-item">
+              <button
+                type="button"
+                className="picker-link"
+                onClick={() => onPick(p)}
+              >
+                <span className="picker-type">{p.type}</span>
+                <span className="picker-sep">/</span>
+                <span className="picker-name">{p.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
 }
 
-function discoverProjects(tree: TreeNode): ProjectRef[] {
+function discoverProjects(tree: TreeNode): ActiveProject[] {
   const specsSection = (tree.children ?? []).find(
     (c) => c.type === "section" && c.name === "Specs",
   );
   if (!specsSection) return [];
-  const out: ProjectRef[] = [];
+  const out: ActiveProject[] = [];
   for (const typeNode of specsSection.children ?? []) {
     if (typeNode.type !== "directory") continue;
     for (const nameNode of typeNode.children ?? []) {

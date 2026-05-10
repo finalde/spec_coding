@@ -6,7 +6,13 @@ import { Sidebar } from "../src/components/Sidebar";
 function renderSidebar(tree: TreeNode): ReturnType<typeof render> {
   return render(
     <MemoryRouter>
-      <Sidebar tree={tree} currentPath="" onSelect={() => {}} />
+      <Sidebar
+        tree={tree}
+        currentPath=""
+        onSelect={() => {}}
+        activeProject={{ type: "development", name: "spec_driven" }}
+        onBackToProjects={() => {}}
+      />
     </MemoryRouter>,
   );
 }

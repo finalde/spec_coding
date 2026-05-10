@@ -49,12 +49,13 @@ The user is the sole actor — a creator running the pipeline manually. Webapp i
 
 ### EXPOSED_TREE membership
 
-- **FR-7** EXPOSED_TREE includes exactly these 4 roots (recursive globs auto-pick subfolders):
+- **FR-7** EXPOSED_TREE includes exactly these 5 roots (recursive globs auto-pick subfolders):
   1. `ai_videos/**/*.{md,json,jsonl,yaml,yml,txt,png,jpg}`
-  2. `specs/ai_video/**/*.{md,json,jsonl,yaml,yml,txt}`
-  3. `CLAUDE.md`
-  4. `.claude/{skills/agent_team/{SKILL.md, playbooks/*.md}, agent_refs/**/*.md}`
-- **FR-8** `is_inside` predicate (port from `spec_driven/backend/libs/exposed_tree.py:65-92`): drop `projects/` from allowed top-level set; add `ai_videos/`; tighten `specs/**` to `specs/ai_video/**`.
+  2. `research/**/*.{md,json,jsonl,yaml,yml,txt,png,jpg}` (added by follow-up 003 — free-form reference dumps; NOT spec-pipeline output)
+  3. `specs/ai_video/**/*.{md,json,jsonl,yaml,yml,txt}`
+  4. `CLAUDE.md`
+  5. `.claude/{skills/agent_team/{SKILL.md, playbooks/*.md}, agent_refs/**/*.md}`
+- **FR-8** `is_inside` predicate (port from `spec_driven/backend/libs/exposed_tree.py:65-92`): drop `projects/` from allowed top-level set; admit `ai_videos/` and `research/` (added by follow-up 003 — same `_EXCLUDED_DIRS` filter applies); tighten `specs/**` to `specs/ai_video/**`.
 
 ### Mutation surface
 
@@ -73,7 +74,7 @@ The user is the sole actor — a creator running the pipeline manually. Webapp i
 
 ### Tree walk
 
-- **FR-18** `GET /api/tree` returns a recursive `TreeNode[]` with three sections in fixed order: AI Videos, Specs (ai_video), Context.
+- **FR-18** `GET /api/tree` returns a recursive `TreeNode[]` with sections in fixed order: **AI Videos**, **Research**, Specs (ai_video), Context. (Research added by follow-up 003 — walks `research/**` recursively. Specs / Context sections remain not-yet-implemented in current code; that drift is acknowledged and tracked separately. AI Videos and Research are live.)
 - **FR-19** TreeNode shape (port from spec_driven `tree_walker.py` + 2 ai_video extensions):
   ```python
   @dataclass(frozen=True)
@@ -201,7 +202,7 @@ The user is the sole actor — a creator running the pipeline manually. Webapp i
 
 ### Sidebar
 
-- **FR-43** Sidebar renders 3 sections in fixed order: **AI Videos** / **Specs** / **Context** (English labels for app chrome consistency; file content stays Chinese).
+- **FR-43** Sidebar renders sections in fixed order: **AI Videos** / **Research** / **Specs** / **Context** (English labels for app chrome consistency; file content stays Chinese; **Research** added by follow-up 003 and is live; Specs and Context remain not-yet-implemented).
 - **FR-44** For each `ai_videos/{name}/` directory node, render a sub-type badge: `短` (short) or `剧` (novel). When `sub_type=None` (qa.md missing / unparseable), render NO badge.
 - **FR-45** When viewing a file under `ai_videos/{name}/...`, the file viewer's top toolbar shows a "查看规格" link → `?file=specs/ai_video/{name}/` (jumps to project root, not per-file mirror).
 - **FR-46** Sidebar refresh button + auto-bump on PUT success. No fs-watcher.

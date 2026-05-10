@@ -80,7 +80,7 @@ def test_get_tree_unguarded() -> None:
     assert r.status_code == 200
     payload = r.json()
     assert payload["type"] == "section"
-    assert [c["name"] for c in payload["children"]] == ["AI Videos"]
+    assert [c["name"] for c in payload["children"]] == ["AI Videos", "Research"]
 
 
 def test_put_file_extension_rejected_as_400() -> None:

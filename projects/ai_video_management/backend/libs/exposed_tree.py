@@ -12,10 +12,16 @@ _EXCLUDED_DIRS: frozenset[str] = frozenset(
 )
 
 
-class ExposedTree:
-    """The webapp's read/write tree exposes a single root: ai_videos/**.
+_ALLOWED_TOP_LEVEL: frozenset[str] = frozenset({"ai_videos", "research"})
 
-    No other workspace directory is reachable through this sandbox.
+
+class ExposedTree:
+    """The webapp's read/write tree exposes two roots: ai_videos/** and research/**.
+
+    `research/` was added by follow-up 003 for free-form reference dumps. It
+    reuses every existing security control (extension allowlist, _EXCLUDED_DIRS
+    filter, traversal hardening) — only the admitted-first-segment set is
+    widened.
     """
 
     def __init__(self, repo_root: Path) -> None:
@@ -31,6 +37,12 @@ class ExposedTree:
             return []
         return sorted(p for p in ai_videos_root.iterdir() if p.is_dir())
 
+    def research_dirs(self) -> list[Path]:
+        research_root = self._root / "research"
+        if not research_root.is_dir():
+            return []
+        return sorted(p for p in research_root.iterdir() if p.is_dir())
+
     def is_inside(self, rel: str) -> bool:
         if not rel or rel.startswith("/") or "\\" in rel or "\x00" in rel:
             return False
@@ -45,7 +57,7 @@ class ExposedTree:
         if not parts:
             return False
         first = parts[0]
-        if first == "ai_videos":
+        if first in _ALLOWED_TOP_LEVEL:
             for seg in parts:
                 if seg in _EXCLUDED_DIRS:
                     return False

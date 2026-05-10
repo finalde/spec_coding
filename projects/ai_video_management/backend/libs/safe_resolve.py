@@ -11,8 +11,8 @@ _SHORT_NAME = re.compile(r"~\d")
 _EXCLUDED_TOP_LEVEL: frozenset[str] = frozenset(
     {"node_modules", ".git", ".audit", "__pycache__", ".pytest_cache", "dist", "build", ".vite"}
 )
-# Allowed top-level directory: only `ai_videos/`. Anything else is outside the sandbox.
-_ALLOWED_TOP_LEVEL: frozenset[str] = frozenset({"ai_videos"})
+# Allowed top-level directories: `ai_videos/` and `research/`. Anything else is outside the sandbox.
+_ALLOWED_TOP_LEVEL: frozenset[str] = frozenset({"ai_videos", "research"})
 
 
 class SandboxViolation(Exception):
@@ -61,7 +61,6 @@ class SafeResolver:
             return None
         if first not in _ALLOWED_TOP_LEVEL:
             return None
-        # Only ai_videos/** is in scope; no nested gating beyond exclude-list.
         for seg in parts:
             if seg in _EXCLUDED_TOP_LEVEL:
                 return None

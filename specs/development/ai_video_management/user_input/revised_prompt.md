@@ -2,7 +2,11 @@
 
 **task_type:** development
 **task_name:** ai_video_management
-**Composed from:** `raw_prompt.md` + `follow_ups/001-20260505-121536-ai-videos-only-scope.md` + `follow_ups/002-20260505-130548-zero-claude-coupling.md`
+**Composed from:** `raw_prompt.md` + `follow_ups/001-20260505-121536-ai-videos-only-scope.md` + `follow_ups/002-20260505-130548-zero-claude-coupling.md` + `follow_ups/003-20260509-152135-research-folder-and-viewer.md` + `follow_ups/004-20260509-194837-allow-chinese-filenames.md`
+
+**Last regenerated:** 2026-05-09 19:48:37 — header bump for follow-up 004（acknowledge that ai_videos / research artifacts can opt-in to 中文 filenames；已验证 webapp `is_inside` / `safe_resolve` / 前端 Sidebar 已支持 UTF-8 中文路径段，无需代码改动；agent_refs/project/ai_video.md 规则 1 同步 amend 允许中文文件名 opt-in）。
+
+**Prior follow-up:** 2026-05-09 15:21:35 — follow-up 003 (new repo-root `research/` folder for free-form reference dumps; ai_video_management webapp now surfaces it via a sibling **Research** sidebar section walking `research/**/*.{md,json,jsonl,yaml,yml,txt,png,jpg}`; same Origin/Host gate + same EXPOSED_TREE sandbox + same render-mode dispatch as the existing AI Videos section; backend `exposed_tree.py::is_inside` and `tree_walker.py::build` extended; first content drop is 8 仙侠剧 storyline mds under `research/xianxia_storylines/` plus an index README — these are reference / inspiration material for future ai_video projects, NOT spec-pipeline outputs).
 
 ## Goal
 

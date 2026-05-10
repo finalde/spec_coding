@@ -19,7 +19,8 @@ def test_boot_creates_app_without_error() -> None:
     assert app.title == "ai_video_management"
 
 
-def test_get_tree_returns_single_ai_videos_section() -> None:
+def test_get_tree_returns_expected_sections() -> None:
+    """FR-18 / FR-43 (post follow-up 003): AI Videos + Research live, in order."""
     rr = RepoRoot(path=repo_root())
     bound = BoundOrigin(host="127.0.0.1", port=8766)
     client = TestClient(create_app(rr, bound, serve_static=False))
@@ -28,8 +29,7 @@ def test_get_tree_returns_single_ai_videos_section() -> None:
     payload = r.json()
     assert payload["type"] == "section"
     sections = payload["children"]
-    assert len(sections) == 1, f"expected 1 section, got {len(sections)}"
-    assert sections[0]["name"] == "AI Videos"
+    assert [s["name"] for s in sections] == ["AI Videos", "Research"], sections
 
 
 def test_stages_endpoint_dropped() -> None:
