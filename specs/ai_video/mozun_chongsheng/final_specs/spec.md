@@ -47,7 +47,7 @@ Mode: AUTONOMOUS
 
 ### 角色级文件（`characters/`）
 
-- **FR-5** 9 个核心角色 × 1 份 `characters/{中文名-身份}.md`（per follow-up 002，opt-in 中文文件名）。角色集合：
+- **FR-5** 10 个核心角色 × 1 份 `characters/c{N}_{中文名}.md`（per follow-up 011 rule #12.8 命名约定；supersedes follow-up 002 中文 opt-in 命名）。Numbering: c1 主角魔尊本相 → c10 五大宗主反派之最后一人。角色集合：
   1. `沧冥-魔尊本相.md` — 男主魔尊前世
   2. `叶无尘-乞丐转生.md` — 男主乞丐转生
   3. `苏璃月-紫霄圣女.md` — 主女主正派圣女
@@ -67,10 +67,15 @@ Mode: AUTONOMOUS
 
 - **FR-7** `episode.md`（中文）— 本集剧情简介 + 上集回顾（≤ 50 字）+ 本集主线（300-500 字）+ 下集预告（≤ 50 字）+ 情绪节奏（钩 #1 / #2 / #3 三个时间轴定位）+ 涉及角色 + 关键场景。
 - **FR-8** `shotlist.md`（中文 GFM 表格）— 10 行 × 8 列：shot_id / 时长 / 景别 / 镜头运动 / 内容 / 角色 / 场景 / 配色。total ≤ 90s，每镜 ≤15s（默认 8-10s）。
-- **FR-9** `prompts/shot{NN}_kling.md` × 10（中文，每镜一份 Kling image-to-video prompt，含 `input_image_urls[]` 注释指向 seam-frame）。
-- **FR-10** `prompts/shot{NN}_seedance.md` × 10（中文，每镜一份 Seedance text-to-video prompt，**末尾必含"避免: ..." 段** 因 Seedance 无 `negative_prompt` 字段）。
-- **FR-11** `prompts/shot{NN}_lastframe_seedream.md` × 10（中文，每镜一份末帧 Seedream still 立绘 prompt）。
-- **FR-12** `prompts/shot01_startframe_seedream.md` × 1（中文，单集首镜首帧 Seedream still）。
+- **FR-9** `prompts/shot{NN}.md` × 10（中文，每镜**单一**文件，per agent_refs rule #12.6 v2 per follow-up 009; **rule #12.8 命名约定** per follow-up 011）。文件**三段**：
+  - **段 ① Shot context**（human review）— 4 必填子项：`Summary` / `出场角色 / Characters in this shot` table（含 character file path + 是否必需上传备注） / `场景 / Scene`（引用 `scenes/{name}.md` 如立档） / `时长 / Duration`（X seconds + timed beats 摘要；hard 上限 15s）。Pre-009 段 ① 含的 `Reference uploads — pre-flight checklist` 子项 superseded by 段 ②。
+  - **段 ② Reference placeholders**（NEW per follow-up 009）— 表格列出本 shot 涉及的**所有角色 + 所有出现场景** 的 `{ref_xxx}` 占位符 + 替换说明 + 来源 character/scene file path。
+  - **段 ③ 视频 prompt**（copy-paste）— ```text fenced 14-字段 prompt body per rule #12.4 v2/v3 model-agnostic schema：`角色:` / `场景:` / 多角色 `台词 / 字幕` 字段使用 `{ref_xxx}` 占位符内联引用；多角色 dialogue 强制 multi-line script 格式。**人物台词强制原则**（per follow-up 010）— 每 shot 「台词 / 字幕」字段除「真正纯视觉镜头」（≤ 25% of all shots in any ep）外，优先加入至少 1 句人物台词，台词内容衍生自 character bible 的 `## 标志台词或口头禅` (首选) 或 shotlist + episode.md 剧情。
+  - **Seam-frame still prompts 段已废止** per follow-up 009 — drop start/end frame embedded code blocks。
+  - **Visual style 渲染契约**（per follow-up 010, rule #12.6 v3）— webapp 渲染时 ```text fenced code blocks 自动加一键 copy button + `{ref_xxx}` 占位符自动 visual highlight (pill/inline tag styling)；implementation 在 `projects/ai_video_management/frontend/src/markdown/renderer.tsx` + `styles.css`，由 webapp 注入，markdown 文件内容不需要显式包 markup。
+- **FR-10** ~~`prompts/shot{NN}_seedance.md`~~ **已并入 FR-9**（per follow-up 006）。
+- **FR-11** ~~`prompts/shot{NN}_lastframe_seedream.md`~~ **已废止**（per follow-up 009 — drop seam-frame embedded blocks from FR-9 段 ③）。Seam-frame stitching workflow 仍可用 rule #11 独立流程（user 自行用 Seedream 生成 seam frames），但不再 default ship in shot file。
+- **FR-12** ~~`prompts/shot01_startframe_seedream.md`~~ **已废止**（per follow-up 009 — same as FR-11）。
 - **FR-13** `publish.md`（中文）— 本集发布元数据：抖音标题模板 ≤ 25 字、抖音 hashtag 5-10 个 3 层结构、抖音封面建议（含字幕带 y 坐标）、YouTube Shorts 双语标题模板 ≤ 90 字符、YouTube Shorts hashtag 6-8 个、cover-frame shot id（哪个 shot 用作缩略图，默认 shot07 爽点峰值帧）。
 
 ### 修为体系（写入 `world.md`）
@@ -97,30 +102,28 @@ Mode: AUTONOMOUS
 
 ### Prompt 模板与 seam-frame 工作流
 
-- **FR-24** Kling image-to-video prompt 模板（中文，每个 shot 强制字段）：
+- **FR-24** 视频 shot prompt 模板（model-agnostic，per agent_refs rule #12.4，应用于 `_kling.md` / `_seedance.md` / 任何未来 `_{model}.md` variant）：
   ```
-  [参考图: characters/ref_images/{role}_seedream.png + prompts/shot{N-1}_lastframe.png + prompts/shot{N}_lastframe.png]
-  角色: {锁定句子, byte-identical 跨集}
-  场景: {引用 world.md / style_guide.md 关键词}
-  动作: {仅描述运动 — 0-9s 内可完成}
-  镜头: {景别 + 运镜}
-  光线/色调: {从 § 调色锁定 + 光影状态词典 取词}
+  [参考图: characters/ref_images/{role}_seedream.png + prompts/shot{N-1}_lastframe.png + prompts/shot{N}_lastframe.png]   ← 仅当目标模型支持 image-to-video 且参考图已生成
+  角色: {一句话锁定 byte-identical 跨集}     ← 12.4-A: 有参考图则只锁定一句；无参考图则一句锁定 + 体型/发型/服装/道具 inline 展开
+  场景: {引用 scenes/{name}.md 一句话锁定 或 inline 描述}
+  镜头: {景别 + 运动}                         ← 取词自 style_guide.md § 镜头语言关键词字典
+  动作: {timed beats — 0-3s ... / 3-6s ... / 6-end-s ...; 末拍 frozen = 该 shot lastframe seam 的 主体定义/姿态}
+  台词 / 字幕: {内嵌硬字幕 "{text}" — {字体调性} | 后期软字幕 "{text}" — {字体调性} | 无台词 / 默剧}
+  光线/色调: {从 style_guide.md § 调色锁定 + 光影状态词典 取词}
+  节奏: {慢 | 中 | 快 | 顿挫}
+  渲染样式: {re-paste style_guide.md § 正向关键词 ≥ 3 个}
   比例: 9:16
-  时长: ≤10s
+  时长: ≤10s（硬上限 15s）
+  负向: {re-paste style_guide.md § 负向锁定 + 视频专属（如"避免大幅横向运镜"）}
   ```
-  **关键约束（CC-2）**：image-to-video prompt **不要复述图中已有内容**，只描述运动。
-- **FR-25** Seedance text-to-video prompt 模板（中文，每个 shot 强制字段）：
-  ```
-  角色: {锁定句子, byte-identical}
-  场景: {引用 world.md / style_guide.md}
-  动作: {完整描述 — Seedance 无 ref-image, 必须文字给全}
-  镜头: {景别 + 运镜}
-  光线/色调: {从 § 调色锁定 + 光影状态词典}
-  比例: 9:16
-  时长: ≤10s
-  避免: {规避词列表}  ← 强制，因 Seedance 无 negative_prompt 字段
-  ```
-- **FR-26** Seedream 立绘 prompt 模板（角色立绘，10 份）：见 angle-character-and-naming § 3.4 四段式。**渲染样式必须锁定为影视级真人写实** (per follow-up 001)：每份 prompt 的"风格"段使用 `电影级真人写实 + 4K HDR cinematic + 仙侠古装真人剧造型 + 8K 写实人像摄影 + 真实皮肤布料质感 + 实拍剧照风`；"负向"段必含 `anime / cartoon / illustration / chibi / 国漫 / 插画 / 工笔 / 水墨写意 / 二次元 / CGI 3D render / 塑料皮肤 / 卡通色`；类比剧目仍可引用《琉璃》《长月烬明》《苍兰诀》等（这些本就是 live-action 真人剧）。
+  **关键约束（CC-2）**：image-to-video variant（即 `[参考图]` 行存在时）**不复述图中已有内容**，只描述运动。
+- **FR-25** ~~Seedance text-to-video prompt 模板~~ **已并入 FR-24**：自 follow-up 003 起视频 shot prompt 不再按目标 AI 模型分离 schema。`_seedance.md` variant 由于无 `[参考图]` 行，按 12.4-A 规则在 `角色:` 行 inline 展开体型 / 发型 / 服装 / 道具；`负向:` 段保留（Seedance 无 `negative_prompt` 字段，需在 prompt body 内置规避词，由 `负向:` 行承担此职责，无需额外 `避免:` 段）。
+- **FR-26** 角色 reference 单 prompt 文件（10 份，per agent_refs rule #12.5 v2，supersedes follow-up 004 双 prompt 格式 per follow-up 005）。每份文件 = 一段 copy-paste-ready 文字生视频 reference prompt + 5 句标准台词配音对照表：
+  - **文字生视频 reference prompt**（用于 Seedance / Sora / Veo 3 / Runway Gen-3 / Kling 出 12s 360° 棚拍 turntable 样片）：场景 / 镜头 / 光线 / 节奏 / 渲染样式 / 比例 / 时长 / 视频专属负向 8 字段对所有 10 角色 byte-identical（中性灰 cyc + 三点布光 + 标头中景 70mm + 360° 顺时针环绕 12s + 9:16）；`角色:` 字段按 rule 12.4-A 无参考图分支 inline 展开（一句话锁定 + 体型 / 发型 / 服装 / 道具 / 瞳色）；`动作` 段 5 句中文标准台词按角色 bible 的标志台词 / 性格 / 弧光定制（第 1 句 `"我是{中文名}。"` + 第 5 句 `"一、二、三、四、五。"` 跨角色 byte-identical）；保留 follow-up 001 锁定的影视级真人写实渲染样式与 14 项 stylization 负向；保留 follow-up 002 锁定的 18-35 看似青春观感与角色服饰约束。
+  - **Workflow**：用户从文字 prompt 一步生成 turntable 视频；该视频本身作为后续真正 shot prompt 的 video reference 上传输入，锁定形象 + 声线 + 节奏。如需 PNG 立绘喂仅支持 image-to-video 的模型（如 Kling 早期版本），从 turntable 视频抽帧获得，无需独立 image prompt 文件。
+  - 文件内附 5 句台词配音对照表（# / 台词 / 用途 / 时段 / 情绪基调）。
+  - 文件路径沿用 legacy alias `characters/ref_images/{中文名}-{身份}-立绘.md`（filename misleading 因内含视频 prompt 而非立绘，但避免大规模 rename；rule #12.5 v2 显式接受此 alias）。
 - **FR-27** Seedream seam-frame 模板（每镜末帧 + 每集首镜首帧）。每份 seam-frame prompt 必含 `渲染样式: 影视级真人写实` 行，与 FR-26 立绘锁定一致：
   ```
   # {场景描述, 与对应 shot 的视频 prompt 同 token}
@@ -214,7 +217,8 @@ Mode: AUTONOMOUS
 - **NFR-1** 文件命名：`mozun_chongsheng/episodes/epNN/` 数字两位补零（ep01 不是 ep1）；shot id 两位补零（shot01..shot10）。
 - **NFR-2** 字符锁定：9 个角色（10 份立绘）的"一句话锁定"在所有 shot prompt 中 byte-identical 复制（modulo whitespace）。任何角色的描述符在同一集内出现两个版本即视为 blocker（per agent_refs/validation/ai_video.md 规则 3）。
 - **NFR-3** 镜头原子性：每镜 ≤ 15 秒（硬上限），默认 8-10 秒。任何 shot 时长 > 15s 或缺失"时长"字段 = blocker。
-- **NFR-4** 双管线 + seam-frame：每镜必含 `_kling.md` + `_seedance.md` + `_lastframe_seedream.md`；每集首镜必含 `_startframe_seedream.md`。
+- **NFR-4** 单一 shot 文件（per follow-up 009，supersedes follow-up 007 三段要求）：每镜必含**一份** `shot{NN}.md` 文件（含 Shot context + Reference placeholders + 视频 prompt 三段；**Seam-frame still prompts 段已废止**）。无独立 `_lastframe_seedream.md` / `_startframe_seedream.md` 文件，无 embedded seam-frame code blocks。每镜 1 文件；每 ep 10 文件。Character file 也是 1 文件 per 角色（合并 bible + ref turntable per rule #12.5 v3）；`characters/ref_images/` 子目录废止。
+- **NFR-17 (NEW per follow-up 013)** Shot prompt body 字数上限：每 shot fenced ```text 内文 **≤ 2000 字 soft limit / ≤ 2500 字 hard limit**（中文字符 + ASCII 一律按 1 计）。Hard limit 超 = blocker；soft limit 超须有 Shot context Summary 注释（如 cover-frame 全员同框）。Trim 优先级: 角色 line inline body expansion + 5-7 micro-details 不出现在 shot prompt（仅出现在 character ref turntable prompt）→ 渲染样式 ≤ 9 keywords → 负向 ≤ 24 items。
 - **NFR-5** 比例字段：每镜 prompt 必含 `比例: 9:16`（缺失 = blocker）。
 - **NFR-6** Seedance 规避词：每镜 Seedance prompt 必含"避免:"前缀的规避词列表（CC-5 决定，缺失 = blocker）。
 - **NFR-7** Publish 完整性：每集 publish.md 必含抖音 + YouTube Shorts 双套元数据（缺任一 = blocker）。

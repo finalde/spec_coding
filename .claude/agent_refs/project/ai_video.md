@@ -20,23 +20,27 @@ Cross-cutting rules about the outputs of every ai_video-task project (`ai_videos
 ai_videos/{name}/
 ├── README.md                    # Chinese: 项目概要 + 使用说明
 ├── characters/
-│   ├── main.md                  # 主角设定: 面貌/发型/服装/身材/性格/口头禅
-│   ├── support.md               # 配角设定 (one block per role)
+│   ├── main.md                  # 主角设定 (template: rule #12.1)
+│   ├── support.md               # 配角设定 (one block per role; template: rule #12.1)
 │   └── ref_images/
-│       ├── main_seedream.md     # Seedream 立绘 prompt for 主角
+│       ├── main_seedream.md     # Seedream 立绘 (template: rule #12.2)
 │       └── ...
+├── scenes/                      # opt-in: 当 ≥2 shots 复用同一地点 (template: rule #12.3)
+│   ├── {scene_name}.md          # 场景档 — 锁定描述符 + 变化态
+│   └── ref_images/
+│       └── {scene_name}_seedream.md   # 场景立绘 prompt
 ├── world.md                     # 世界观: 时代/地点/规则/视觉基调
-├── style_guide.md               # 风格指南: 镜头语言/光线/色调/转场偏好
+├── style_guide.md               # 风格指南: 镜头语言/光线/色调/转场偏好/字幕规范/负向锁定
 ├── arc_outline.md               # 剧集大纲, 一行/集
 └── episodes/
     └── epNN/
         ├── script.md            # 本集剧本
         ├── shotlist.md          # 镜头清单, 每镜≤15s; 含时长/景别/动作/连续性 tokens
         ├── prompts/
-        │   ├── shotNN_kling.md
-        │   ├── shotNN_seedance.md
-        │   ├── shot01_startframe_seedream.md  # only ep's shot 01 (absolute opening frame)
-        │   └── shotNN_lastframe_seedream.md   # every shot — seam-frame stills per rule #11
+        │   ├── shotNN_kling.md                # template: rule #12.4
+        │   ├── shotNN_seedance.md             # template: rule #12.4
+        │   ├── shot01_startframe_seedream.md  # only ep's shot 01 (template: rule #12.4)
+        │   └── shotNN_lastframe_seedream.md   # every shot (template: rule #12.4)
         └── publish.md           # 发布信息: 标题/简介/标签/封面建议
 ```
 
@@ -48,17 +52,21 @@ At stage 4 the `episodes/` tree contains detailed files only for the first `deta
 ai_videos/{name}/
 ├── README.md
 ├── characters/
-│   ├── main.md
+│   ├── main.md                  # template: rule #12.1
 │   └── ref_images/
-│       └── main_seedream.md
+│       └── main_seedream.md     # template: rule #12.2
+├── scenes/                      # opt-in: 当 ≥2 shots 复用同一地点 (template: rule #12.3)
+│   ├── {scene_name}.md
+│   └── ref_images/
+│       └── {scene_name}_seedream.md
 ├── style_guide.md               # 短片不需要 world.md, 风格信息融入此文件
 ├── script.md
 ├── shotlist.md                  # 标记 hook 镜头
 ├── prompts/
-│   ├── shot01_startframe_seedream.md  # only shot 01 (absolute opening frame)
-│   ├── shotNN_kling.md
-│   ├── shotNN_seedance.md
-│   └── shotNN_lastframe_seedream.md   # every shot — seam-frame stills per rule #11
+│   ├── shot01_startframe_seedream.md  # only shot 01 (template: rule #12.4)
+│   ├── shotNN_kling.md                # template: rule #12.4
+│   ├── shotNN_seedance.md             # template: rule #12.4
+│   └── shotNN_lastframe_seedream.md   # every shot (template: rule #12.4)
 └── publish.md
 ```
 
@@ -83,9 +91,15 @@ Concrete shot-prompt template (Kling, image-to-video):
 
 Seedance prompt is text-to-video (it doesn't take character refs in the same way). Same template minus the `[参考图]` line, with the locked Chinese descriptor as the primary character anchor.
 
-### 5. Dual-prompt requirement
+*(Field-level strict 模板见 rule #12.4；本节保留为高阶语义说明。)*
 
-Every shot ships with BOTH `shotNN_kling.md` AND `shotNN_seedance.md`. Same scene, different tool. Users decide per-shot which output to keep based on side-by-side comparison. Plus the seam-frame Seedream prompts per rule #11 — `shotNN_lastframe_seedream.md` for every shot, and `shot01_startframe_seedream.md` for the first shot of the video / each episode.
+### 5. Single-self-contained-file-per-shot requirement (rev follow-up 007)
+
+Every shot ships with **one** `shotNN.md` self-contained file containing all prompts needed for the shot. The file has three sections per rule #12.6: ① **Shot context** (human review — Summary / Characters / Scene / Duration / Reference uploads checklist) + ② **视频 prompt** (model-agnostic 14-field schema per rule #12.4 v2, ` ```text ` fenced ready-to-copy-paste) + ③ **Seam-frame still prompts** (lastframe Seedream every shot; startframe Seedream only on ep first shot — also code-fenced copy-paste-ready).
+
+No more independent `shotNN_lastframe_seedream.md` / `shot01_startframe_seedream.md` files; they are **embedded** as code blocks inside `shotNN.md`.
+
+*(Evolution: pre-006 `shotNN_kling.md` + `shotNN_seedance.md` → 006 single `shotNN.md` + separate seam-frame `_seedream.md` files → 007 single self-contained `shotNN.md` with everything embedded.)*
 
 ### 6. 15-second atomicity
 
@@ -145,6 +159,737 @@ AI-video generators (Kling 2.1 Pro, Seedance 1.0 Pro) cap individual clips at ~1
 **Loop-back contracts:** when a shot's last frame must equal another shot's start frame (e.g., visual loops where Shot N's tail = Shot 01's head), both prompts still ship; the user generates ONE PNG and re-uses it for both seams. Each prompt body should describe the frame near-identically and explicitly note the loop relationship in a header comment block (e.g., `# 回环契约: 本帧与 shot01_startframe.md 字节级相同`).
 
 *(Originated from follow-up "use last-frame-as-input-image for clip stitching" — 2026-05-06.)*
+
+*(Field-level strict 模板见 rule #12.4；seam-frame body 必须按 12.4 中 `Seedream seam` 列必填字段补齐 `主体定义 / 姿态（frozen instant）/ 渲染样式 / 比例 / 负向`。)*
+
+### 12. Prompt 模板（导演 + prompt master 视角）
+
+四类 prompt-emitting 文件的强制 schema。Claude 同时以 **导演**（timing / framing / blocking）与 **prompt master**（locked vocabulary, byte-stable descriptors）的身份生成。模板字段顺序固定；缺字段 = stage-6 validation 失败。
+
+**跨模板不变量：**
+
+- 角色 / 场景的「一句话锁定」字符串在所有引用它的 prompt 中 byte-identical（contract 同 rule #4），且与目标 AI 模型无关。
+- 比例默认 9:16；项目级 spec 覆盖时记 divergence note。
+- 景别 / 运动 / 光影 / 负向词典统一来自 `style_guide.md`；模板只 re-paste，shot 级别**不新造词**。
+- 「台词」按 v1 visual-only 契约处理：永远不下发为 audio prompt；仅以字幕形式落帧（详见 12.4 「台词 / 字幕」契约）。
+- 「动作」必须以 timed beats 写成（如 `0–3s ... / 3–6s ... / 6–8s ...`），且最后一拍 frozen 状态 = 该 shot 的 `lastframe` 静帧 seam-frame 的「主体定义 / 姿态」描述。
+- **模板 model-agnostic**：rule #12.4 schema 不区分目标 AI 模型（Kling / Seedance / Sora / Veo / Seedream / Midjourney / ...）。文件命名 `shotNN_{model}.md` 仅用于区分输出目标，不影响字段定义。
+
+#### 12.1 角色档 — `characters/{role}.md`
+
+````markdown
+# {role-name} · {epithet}
+
+## 角色定位
+1–2 段：剧中位置 / 出场范围 / 与主角关系 / 段位档位（如适用）。
+
+## 锁定描述符（10 字段，跨集 byte-identical）
+| # | 字段 | 值 |
+|---|---|---|
+| 1 | 性别 / 年龄观感 / 体型 |  |
+| 2 | 面貌（眉/眼/鼻/唇/轮廓） |  |
+| 3 | 瞳色（hex） |  |
+| 4 | 发型 / 发色 |  |
+| 5 | 服装 / 主色（hex） |  |
+| 6 | 标志道具 |  |
+| 7 | 标志动作 |  |
+| 8 | 气质 |  |
+| 9 | 配色 hex（主/辅/点缀/高光） |  |
+| 10 | **一句话锁定**（≤30 字，byte-identical 复制到所有 shot prompts 的 `角色:` 行） |  |
+
+## 性格 / 动机
+要点列表：核心动机 / 表层人设 / 反差点 / 关键弱点。
+
+## 标志台词或口头禅
+1–3 条 byte-stable 短句。shot 中通过「内嵌字幕 / 后期字幕」复用；可空（默剧角色填「无」）。
+
+## 弧光
+1 段：起点 → 关键拐点 → 终点。
+
+## 关键场景
+- ep##/shotNN — 一句描述
+- ...
+
+## 标志能力或动作
+表格（段位 | 能力名 | 视觉关键词）。修真 / 能力题材填段位列；现代题材改填「关键场景动作」列。
+
+## 配音参考（planning-only，v1 不生成 TTS）
+声线 / 语速 / 口音 / 参考演员或角色。仅作未来 TTS 接入元数据，本期不下发。
+
+## 负向
+re-paste `style_guide.md § 负向锁定`，可附 1–2 条角色专属（如「不要看起来超过三十岁」）。
+````
+
+#### 12.2 角色立绘 — `characters/ref_images/{role}_seedream.md`
+
+````markdown
+# Seedream 立绘 prompt — {role-name} · {epithet}
+
+参考: characters/{role}.md
+画幅: 9:16 竖屏 / 4K 原生分辨率
+
+## Prompt
+
+{role-name} · {epithet}。{一句话锁定 byte-identical}
+
+### 主体 / 构图
+{半身 | 全身}立绘，{正面 | 三七 | 侧面}，三庭五眼 {东方 | 混血 | 西方} 面孔，{年龄观感}。
+
+### 面部
+{面貌字段展开：眉/眼/鼻/唇/轮廓}。
+
+### 服装
+{服装字段展开 + 主辅点缀 hex}。
+
+### 姿态
+{标志动作 + 一个手势细节，frozen 化为静帧描述}。
+
+### 背景
+1–2 句概念性背景，对应 `world.md`，主体不被抢戏。色调对齐主/辅/点缀 hex。
+
+### 光源
+{方向 + 色温 + 强度}；如有自身散发光晕（魔气 / 仙气 / 系统提示）单独一行。
+
+### 风格
+re-paste `style_guide.md § 正向关键词` ≥ 3 个 + 类比真人剧 / 演员参考。
+
+## 负向
+re-paste `style_guide.md § 负向锁定` + 角色专属补充。
+````
+
+#### 12.3 场景档 + 场景立绘（NEW）— `scenes/{scene}.md` + `scenes/ref_images/{scene}_seedream.md`
+
+新增 location-reference 层，与角色 pipeline 同构：当 ≥ 2 shots 复用同一地点时，把该地点 lock down 为单一文件，shot prompts 的 `场景:` 行 byte-identical 引用「一句话锁定」。仅出现一次的地点不立档，直接在 shot 级别 inline 描述。
+
+`scenes/{scene}.md`:
+
+````markdown
+# {scene-name}
+
+## 场景定位
+1 段：剧中功能 / 出场集数 / 与剧情关联。
+
+## 锁定描述符（8 字段，跨集 byte-identical）
+| # | 字段 | 值 |
+|---|---|---|
+| 1 | 类型 / 时代 / 室内外 |  |
+| 2 | 空间结构（尺度 / 入口 / 关键区） |  |
+| 3 | 主要建筑或自然元素 |  |
+| 4 | 标志道具或装饰 |  |
+| 5 | 默认光源 / 时辰 |  |
+| 6 | 配色 hex（主/辅/点缀） |  |
+| 7 | 氛围关键词（≤5 词） |  |
+| 8 | **一句话锁定**（≤30 字，byte-identical 复制到所有 shot prompts 的 `场景:` 行） |  |
+
+## 关键变化态
+不同时辰 / 天气 / 事件下的变体（白天 / 夜雨 / 战后焦土）。每变体一行 + 必要 hex 调整。
+
+## 出现镜头
+- ep##/shotNN — 哪个变体
+- ...
+
+## 负向
+re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建筑 / 不要西式柱廊」）。
+````
+
+`scenes/ref_images/{scene}_seedream.md` 与 12.2 角色立绘同构，但替换面部 / 服装 / 姿态 三段为：
+
+- **视角**：推荐拍摄角度 + 焦距感（广角全景 / 标头中景 / 长焦特写片段）。
+- **时辰**：默认变体的具体光源描述（晨雾 / 正午 / 黄昏 / 夜雨 / 雷夜）。
+- **构图**：9:16 竖屏空间分配（前景 / 中景 / 背景的纵向铺陈）。
+
+#### 12.4 镜头 prompt 模板（model-agnostic 二件套：视频 shot + 静帧 seam-frame）
+
+模板按 prompt **用途**（视频 vs 静帧）分列，**不**按目标 AI 模型（Kling / Seedance / Sora / Veo / Seedream / Midjourney / ...）分列。同一 shot 可同时存在多个 model variant 文件（`shotNN_kling.md` / `shotNN_seedance.md` / `shotNN_sora.md` / ...），它们共享同一 schema；模型能力差异只通过 12.4-A「角色字段展开规则」与「`[参考图]` 行是否出现」两点自动适配。
+
+文件命名约定（rev follow-up 006，不再按 model 分 variant）：
+
+- 视频 shot prompt：`shotNN.md`（单一文件；model-agnostic schema；reference 上传方式由文件 metadata 表达）
+- 静帧 seam-frame prompt：`shotNN_{start|last}frame_seedream.md`（seam-frame 仍按 model suffix 命名 — 它们是给 image-only 模型的输入，与视频 shot prompt 用途不同）
+
+视频 shot prompt 文件结构（rule #12.4 v2，per follow-up 006）：
+
+````markdown
+# ep{NN} / shot{NN} · {1-line shot summary from shotlist.md}
+
+## 出场角色 — 上传以下 turntable reference 视频到模型
+
+| 角色 | turntable reference | 备注 |
+|---|---|---|
+| {character name} | `characters/ref_images/{role}-立绘.md` → 渲染 mp4 上传 | {正脸/全景 — turntable 必需 \| 光影/远景 — 无须} |
+| ... | | |
+
+## 复用场景
+
+参考: `scenes/{location}.md`（如已立档；shot prompt `场景:` 行 byte-identical 引用「一句话锁定」）
+
+## seam-frame 输入（可选，仅 image-to-video 模型路径）
+
+input_image_urls = [`shot{N-1}_lastframe.png`, `shot{N}_lastframe.png`]
+（shot01 用 [`shot01_startframe.png`, `shot01_lastframe.png`]）
+
+---
+
+## 视频 prompt — 复制下方代码块到视频生成模型
+
+> **用法**：复制下方代码块整段，粘贴到任何视频生成模型（Seedance / Kling / Sora / Veo / Runway Gen-3 等）。先按"出场角色"表上传该 shot 的 reference 视频；可选 seam-frame PNG 作 `input_image_urls`。
+
+```text
+{rule #12.4 v1 prompt body — 14-field schema}
+```
+````
+
+**出场角色 checklist 派生规则**（per follow-up 006）：
+
+| 角色出场方式 | turntable 是否必需 | 备注示例 |
+|---|---|---|
+| 正脸 / 主体角色 / 中近景 / 特写 | ✅ 必需 | 「主体角色，正脸可见」 |
+| 全景配角 / 跟随主角 | ✅ 推荐 | 「配角，全景出场」 |
+| 光影剪影 / 背影 / 远景 / 不具名 | ❌ 无须 | 「仅光影剪影出现」 |
+| 物件 / 法宝（角色专属道具） | ❌ 无须 | 「仅道具出现，无人形」 |
+
+静帧 seam-frame prompt 文件头（不变）：
+
+```
+# ep{NN} / shot{NN} · seedream {start|last}frame
+```
+
+**字段顺序与必填矩阵**（缺一即 stage-6 validation 失败）：
+
+| # | 字段 | 视频 shot | 静帧 seam |
+|---|---|:---:|:---:|
+| 1  | `[参考图]` (`input_image_urls`) | conditional — 仅当目标模型支持 image-to-video 且参考图已生成 | — |
+| 2  | `角色:` | ✅（按 12.4-A 展开） | ✅（一句话锁定 byte-identical） |
+| 3  | `场景:` (场景档一句话锁定 或 inline) | ✅ | ✅ |
+| 4  | `镜头:` (景别 + 运动) | ✅ | ✅(仅景别 — still 无运动) |
+| 5  | `动作:` (timed beats) | ✅ | — |
+| 6  | `主体定义:` (seam-frame full-frame 描述) | — | ✅ |
+| 7  | `姿态（frozen instant）:` | — | ✅ |
+| 8  | `台词 / 字幕:` (三选一，见下) | ✅ | — |
+| 9  | `光线 / 色调:` | ✅ | ✅ |
+| 10 | `节奏:` (visual-only) | ✅ | — |
+| 11 | `渲染样式:` (re-paste `style_guide.md § 正向关键词`) | ✅ | ✅ |
+| 12 | `比例:` | ✅ | ✅ |
+| 13 | `时长:` (≤15s) | ✅ | — |
+| 14 | `负向:` (re-paste `style_guide.md § 负向锁定`) | ✅ | ✅ |
+
+**12.4-A 角色字段展开规则**（v3 per follow-up 013 — supersedes earlier "无参考图必须 inline 展开" hardcode）：
+
+**Shot prompt 角色 line（rule #12.4 v4）**：
+- `角色:` line = byte-identical 一句话锁定 + face-differentiator only (~50-80 字/char)。
+- **不在 shot prompt 内 inline 展开** body / 发型 / 服装 / 道具 / 5-7 项 micro-details — 这些信息已经 carry 在:
+  1. character ref turntable prompt（同角色文件第二段，上传 turntable.mp4 后 AI 模型从视频 inherit）
+  2. character bible 锁定描述符 #1-#11 段（user 可手动喂模型作为 system prompt 的一部分，但不强制）
+- 这样 shot prompt 字数从 ~250 字/char trim 到 ~80 字/char，缓解 6-char shot 角色 line 1500 字 → 480 字。
+
+**Character ref turntable prompt 角色 line**（rule #12.5 v3 内部 — 与 rule #12.4 解耦）：
+- 仍含 完整 inline expansion + 5-7 项 micro-details（per rule #12.7 v2）—— turntable mp4 渲染时 AI 据此构建角色形象，formal anchor。
+
+**Multi-character shot (≥ 4 角色)** 进一步限制：shot prompt `角色:` line 仅含**前 3 个主体角色**的 locked 一句话 + face-differentiator；其余角色用 1 句话概括（如「其余 5 宗主背景出场（参考各 c{N} character refs）」）。
+
+**Prompt 字数上限契约（rule #12.4 v4 / NFR-17）**：
+
+- **Soft limit: 每 shot prompt body（fenced ```text 内文）≤ 2000 字**（中文字符 + ASCII 一律按 1 计）。Stage-6 validator 警告 if exceed。
+- **Hard limit: ≤ 2500 字**（极端 multi-character cover-frame shot 可例外但必有 explicit 注释 in Shot context Summary 说明 "本 shot 为 cover-frame / 全员同框，prompt 长度上限放宽"）。Hard limit 超 = blocker。
+- 字数计 fenced ```text 内文（不含 ``` 标记 + 不含 Shot context / Reference placeholders 段 + 不含 Seam-frame still prompts 段）。
+
+**渲染样式 / 负向 字数 trim 政策（rule #12.4 v4）**：
+
+- 渲染样式 line ≤ 9 核心 keywords（推荐组合：影视级真人写实 + cinematic + 4K HDR + 真实毛孔细节 + 真人皮肤真实质感 + 亚洲俊男靓女 + 三庭五眼东方面孔 + 仙侠真人剧主演级颜值 + photorealism 强化 1 项）。
+- 负向 line ≤ 24 核心 items（去重 anime/cartoon/manga 变体；保留 14 项 stylization 核心 + 5 项 AI-同质化 + 5 项 photorealism + 项目专属如 不要现代服饰 / 不要文字水印 / 不要多余手指 / 不要镜头穿模）。
+
+规则与目标模型解耦：参考图存在与否、模型类型差异、photorealism 关键词总数等都不影响 字数上限契约。
+
+**Markdown-style 视觉渲染契约（rule #12.4 v4 + rule #12.6 v3 amend per follow-up 013）：**
+
+- Webapp 渲染 ```text fenced code blocks 时，对 prompt body 内 field labels (`角色:` / `场景:` / `镜头:` / `动作:` / `台词 / 字幕:` / `节奏:` / `光线 / 色调:` / `渲染样式:` / `比例:` / `时长:` / `负向:`) 应用 CSS field-label highlight (推荐 暖橙色粗体)。
+- Implementation: ReactMarkdown `pre` component override (`CopyableCode`) parse children → split by line → 行首匹配 field label 时 wrap label 在 `<span className="field-label">` 内；rest of line 原样。
+- innerText / clipboard 行为保持纯文本（user click copy 复制纯文本，无 HTML markup 损失）。
+- 视觉效果：prompt body 看起来像结构化 markdown 文档（field-value layout），而非 plain monospace 块。
+
+**镜头取词契约**：景别 / 运动必须出自 `style_guide.md § 镜头语言关键词字典`（每个项目须维护至少景别 + 运动两张表）；`镜头:` 行格式 = `{景别} + {运动}（一句运动节奏描述）`。静帧 seam 行格式 = `{景别}` 单独。
+
+**动作 timing 契约**：
+
+- beats 时长之和 = `时长:` 字段。例：8s shot ⇒ 必须落成 `0–3s ... / 3–6s ... / 6–8s ...`。
+- 最后一拍 frozen 状态 = 该 shot 的 `shotNN_lastframe_seedream.md` 中 `主体定义` + `姿态（frozen instant）` 描述。两文件同时改、同时保（regen 时一起删一起写）。
+- 中间拍可省略（一拍到底），但必须显式写「`0–{时长}s ...`」，避免 stage-6 validator 误判 missing。
+
+**台词 / 字幕契约（v1 visual-only）**：三选一，由 `script.md` 决定，shot prompt 透传：
+
+1. **内嵌硬字幕** — 写入 prompt body 让生成器把字幕烙进帧。
+   行格式：`台词 / 字幕: 内嵌硬字幕 "{台词原文}" — {字体调性}`
+   示例：`台词 / 字幕: 内嵌硬字幕 "当年你们怎么对我，今日我便十倍奉还" — 方正粗黑 白底黑边`
+2. **后期软字幕** — prompt body 不含任何字幕 token；台词记录在文件末尾 `### 后期字幕（不入 prompt）` 块，剪辑期叠字幕。
+   行格式：`台词 / 字幕: 后期软字幕 "{台词原文}" — {字体调性}`
+3. **默剧 / 无台词** — `台词 / 字幕: 无台词 / 默剧`，prompt body 不得出现任何 dialogue token。
+
+字幕样式默认遵循 `style_guide.md § 字幕规范`；该项目无字幕规范段时，stage-2 interview 须补齐。
+
+**节奏取词**：四档枚举 — `慢`（含慢镜 50%）/ `中`（标准 100%）/ `快`（含快剪短切）/ `顿挫`（停顿 + 爆点）。仅描述视觉节奏，**不混入音乐节拍**（v1 visual-only）。
+
+**Cross-reference**：rule #4（角色 image-to-video 高阶模板）与 rule #11（seam-frame 还原模板）保留作为语义说明；本节 12.4 是字段级强契约。如二者矛盾，**以 12.4 为准**。Rule #5 dual-prompt 政策（每 shot 至少 `_kling.md` + `_seedance.md` 双 variant 输出）仍生效，但二者共享 12.4 的同一 schema —— variant 之间的差异仅来自「参考图是否出现」与 12.4-A 展开规则，schema 字段与字段顺序完全一致。
+
+*(Originated from follow-up "导演 + prompt master 模板化" — 2026-05-10；rev — follow-up "model-agnostic templates" — 2026-05-10：把 Kling/Seedance 三件套抽象为视频/静帧二件套；新增 12.4-A 角色字段展开规则；shot prompt 文件命名统一为 `shotNN_{model}.md`。)*
+
+#### 12.5 角色 reference 单 prompt 文件（character video-reference template）
+
+每个角色一份「视频 reference」文件，**同文件内一段 copy-paste-ready 文字生视频 reference prompt** + 一张 5 句标准台词配音对照表。该文件 supersedes 旧的「立绘单 prompt」格式（rule #12.2 完全），把 character pipeline 从「PNG 单参考」升级为「360° turntable 视频 + 标准声线 reference 一站到位」。
+
+**为什么单 prompt 即够：**
+
+Seedance / Sora / Veo / Runway Gen-3 等支持 **video-as-reference** 的视频模型已成主流（2026 年），用户从文字 prompt 一步生成 turntable 视频后，**该视频本身**作为后续所有 shot prompt 的 video reference 上传即可——形象 + 声线 + 节奏一次锁定。PNG 立绘步骤被 collapsed；如需 PNG（喂 Kling image-to-video 等仍在用的 image-input 模型），从 turntable 视频抽帧即可，无需独立 image prompt。
+
+**文件位置约定（rule #12.5 v3，per follow-up 009）：**
+
+每角色一份**单一自包含** `characters/{中文名}-{身份}.md` 文件——含 bible 全段（rule #12.1 内容）+ video reference prompt 段（本 rule 之前 schema 内容）。**`characters/ref_images/` 文件夹废止**——bible 与 ref turntable prompt 共存于同一 character file。
+
+新结构：
+
+```
+characters/
+├── {中文名1}-{身份1}.md   # 自包含: bible (角色定位/锁定描述符11字段/性格/标志台词/弧光/关键场景/标志能力/配音参考/负向) + 视频 reference prompt (turntable + 5 句标准台词 + 配音对照表)
+├── {中文名2}-{身份2}.md
+...
+```
+
+文件结构：
+
+````markdown
+# {中文名} · {身份}
+
+## 角色定位
+（per rule #12.1）
+
+## 锁定描述符（11 字段，跨集 byte-identical）
+（per rule #12.1 + #12.7：含 6 子项 face-differentiator + 标志特征点 row #11）
+
+## 性格 / 动机
+## 标志台词或口头禅
+## 弧光
+## 关键场景
+## 标志能力或动作
+## 配音参考（planning-only，v1 不生成 TTS）
+## 负向
+
+---
+
+# 视频 reference prompt — Seedance / Kling / Sora / Veo / Runway Gen-3（360° 转身样片 + 标准台词）
+
+> **用法**：复制下方代码块整段，粘贴到支持 video reference 的 AI 视频模型...
+
+```text
+{turntable prompt body}
+```
+
+### 5 句标准台词（中文，配音演员对照表）
+
+| ... |
+````
+
+**文件 schema：**
+
+````markdown
+# {中文名} · {身份} — 视频 reference prompt
+
+参考: characters/{中文名}-{身份}.md
+画幅: 9:16 竖屏 / 4K 原生分辨率
+
+> **文件说明**：本文件含一段可直接 copy-paste 的视频 reference prompt + 一张 5 句标准台词配音对照表。文件名沿用 `-立绘.md` 作为 legacy alias（per rule #12.5 v2）。
+
+---
+
+## 文字生视频 reference prompt — Seedance / Kling / Sora / Veo / Runway Gen-3（360° 转身样片 + 标准台词）
+
+> **用法**：复制下方代码块整段，粘贴到支持 video reference 的 AI 视频模型（Seedance / Sora / Veo 3 / Runway Gen-3 / Kling 等）。**该样片本身**作为后续真正 shot 视频的 video reference 输入，锁定形象 + 声线 + 节奏。
+
+```text
+{中文名} · {身份} — 角色 reference 转身样片（turntable + 标准台词）
+
+角色: {一句话锁定 byte-identical} + {体型 / 发型 / 服装 / 道具 inline 展开 per rule 12.4-A 无参考图分支}
+
+场景: 中性灰 #808080 摄影棚 cyc wall 无缝背景，地面同灰，无家具无道具，环境光均匀。
+
+镜头: 标头中景（约 70mm 焦距感）+ 360° 顺时针环绕镜，匀速一圈完成；起幅与落幅均为正面（0° = 360°）。
+
+动作（timed beats，12s 一圈）:
+  - 0-3s: 正面起手，自然站姿，{角色姿态 + 眼神跟镜 + 自然呼吸}；说第 1 句台词。
+  - 3-6s: 镜头环绕至右侧 90°，头部微微跟镜半秒；说第 2 句台词。
+  - 6-9s: 镜头环绕至正背 180°，全身后视；说第 3 句台词。
+  - 9-12s: 镜头环绕至左侧 270° → 回到正面 360°，结束在起幅；说第 4 + 第 5 句台词。
+
+台词 / 字幕: 内嵌唇形对齐音频（5 句中文标准台词，按动作 beats 顺序播报；音画同步；字幕方正粗黑 白底黑边）。
+  1. "我是{中文名}。" （0-3s 中性自报家门）
+  2. "{标志台词，from bible}" （3-6s 锁定声线威压 / 情绪基调）
+  3. "{低声 / 内敛 line}" （6-9s 低音域 / 私语）
+  4. "{高声 / 怒喝 line}" （9-10.5s 高音域 / 爆发）
+  5. "一、二、三、四、五。" （10.5-12s 节奏 / 咬字 / 口音校准）
+
+光线 / 色调: 三点布光 — key 45° 顶左 5500K 主光 + fill 右下柔光 4500K 辅光 + back rim 顶后冷光 7000K 轮廓光；地灰 #808080 不抢主体；{角色专属光晕，如魔气 / 仙气 / 系统提示，可选}。影视棚拍标准布光，无戏剧化色温偏移。
+
+节奏: 中（匀速旋转 + 自然呼吸 + 台词稳定播报）。
+
+渲染样式: 影视级真人写实 + cinematic + 4K HDR + 真实皮肤布料质感 + 实拍剧照风 + 唇形对齐音画同步。
+
+比例: 9:16
+
+时长: 12s
+
+负向: {项目级负向锁定 from style_guide.md} / {角色专属负向 from bible} / 不要 镜头穿模 / 不要 唇形与台词错位 / 不要 加速跳帧 / 不要 横向运镜大偏移 / 不要 镜头停顿（要匀速）/ 不要 角色跑出画面 / 不要 镜头回切倒退（要单向 360°）。
+```
+
+### 5 句标准台词（中文，配音演员对照表）
+
+| # | 台词 | 用途 | 时段 | 情绪基调 |
+| --- | --- | --- | --- | --- |
+| 1 | 我是{中文名}。 | 中性自报家门 | 0-3s | 平稳 / 中音 |
+| 2 | {标志台词} | 锁定声线威压 / 情绪基调 | 3-6s | {character-specific} |
+| 3 | {低声 / 内敛 line} | 低音域 / 私语 | 6-9s | {character-specific} |
+| 4 | {高声 / 爆发 line} | 高音域 / 怒喝 | 9-10.5s | {character-specific} |
+| 5 | 一、二、三、四、五。 | 节奏 / 咬字 / 口音校准 | 10.5-12s | 平稳 / 清晰 |
+
+参考 `配音参考` 段（characters/{中文名}-{身份}.md）。
+````
+
+**5 句台词设计原则（byte-stable）：**
+
+- 第 1 / 第 5 句对所有角色 byte-identical（仅替换 `{中文名}`）。
+- 第 2 句 = 角色 bible 的 `## 标志台词或口头禅` 第 1 条直接 copy。`无（默剧角色）` 时填一句符合角色定位的零度宣言。
+- 第 3 句 = 低声内敛，从 bible 的 `## 性格 / 动机` 关键弱点 / 反差点推导。
+- 第 4 句 = 高声爆发，从 bible 的 `## 弧光` 关键拐点 / `## 关键场景` 战斗高潮推导。
+- 一旦写入文件，跨 follow-up 不随机改（声线 reference 必须可重复对照）。
+
+**Turntable 视频 prompt 锁定字段（10+ 角色 byte-identical，仅 `角色:` 与 `动作` 段 5 句台词随角色变化）：**
+
+`场景` / `镜头` / `光线 / 色调` / `节奏` / `渲染样式` / `比例` / `时长` / 视频专属负向 8 个字段在所有角色 turntable prompt 中 byte-identical。这样 10+ 角色的 turntable 输出可剪辑成「角色介绍合集」。
+
+**模型路径与 PNG 抽帧：**
+
+- **支持 video reference 的视频模型**（Seedance / Sora / Veo 3 / Runway Gen-3 / Kling 等）：直接 copy-paste 此 prompt 生成 turntable 视频；视频本身作为后续 shot prompt 的 reference 上传。
+- **仅 image-to-video 的旧模型**（Kling 早期版本，需 PNG input）：从 turntable 视频抽一帧（推荐 0s 正面帧）作为 PNG，喂 Kling image-to-video。无需独立 image prompt 文件。
+- **声线 lock**：v1 visual-only 模型输出静音视频，5 句台词作为唇形 reference；v2 audio-aware 模型输出含音频的 voice reference，整段视频作为 video-to-video reference 喂下游 shot prompt。
+
+**与 rule #12.2 的关系：**
+
+rule #12.5 v2 **完全 supersedes rule #12.2**。rule #12.2（角色立绘 prompt 单文件 8 子段结构）不再生效——character pipeline 不再独立生成 image prompt 文件。如历史 ai_video 项目仍保留 rule #12.2 格式的立绘 prompt 文件，可保持原状作为 archive，但新生成的 character ref 文件按 rule #12.5 v2 schema。
+
+*(Originated from follow-up "character dual-prompt copy-paste file" — 2026-05-10；rev — follow-up "drop image prompt, video-only" — 2026-05-10：Seedance 等已支持 video reference 上传，①号 image prompt 块去除；rule #12.2 完全 superseded；workflow simplified to 单 prompt → turntable 视频 → 后续 shot reference 一站到位。)*
+
+#### 12.6 单一 shotNN.md 文件 schema（v2，per follow-up 009）
+
+每 shot 一份 `shotNN.md` 文件，含三段：① 人类 review 用的 Shot context；② **Reference placeholders**（NEW per follow-up 009）— 列出本 shot 涉及的所有角色 + 背景场景 placeholder，user paste 到 Seedance 等模型时手动替换；③ 视频 prompt 代码块（含 `{ref_xxx}` placeholder 内联引用 + 多角色 dialogue script 格式）。
+
+**Seam-frame still prompts 段已废止**（per follow-up 009 — drop start/end frame embedded code blocks）。Seam-frame 工作流仍保留作为 rule #11 的可选高阶 stitching 文档，但默认不在 shot file 内 ship；user 自行用 Seedream 生成 seam frames（image-to-video 模型路径）。
+
+supersedes rule #5（pre-007 双管线 / 三件套 file 模型）+ rule #11 在 shot file 内嵌的 seam-frame block 部分（rule #11 stitching workflow 仍可独立用）。
+
+**完整文件 schema（v2，per follow-up 009）：**
+
+`````markdown
+# ep{NN} / shot{NN} · {1-line shot summary from shotlist.md 内容 column}
+
+## Shot context — human review
+
+**Summary**: {2-3 句 — 本 shot 的叙事 / 视觉 / 钩点。derive from shotlist + episode.md。}
+
+**出场角色 / Characters in this shot**:
+
+| 角色 | 在本 shot 的角色 / 出场方式 | character file | turntable 必需 |
+|---|---|---|---|
+| {char1} | {正脸主体 / 全景配角 / 光影剪影 / 物件...} | `characters/{role}.md` | ✅ / ❌ |
+
+**场景 / Scene**: {location + 时辰 + 氛围 + 配色}; references `scenes/{name}.md` if applicable, otherwise inline.
+
+**时长 / Duration**: {X seconds — hard 上限 15s}。Timed beats: {0-3s / 3-6s / 6-Xs 摘要}。
+
+---
+
+## Reference placeholders — 复制 prompt 前请准备好以下 reference 并替换占位符
+
+| Placeholder | 替换为 | 来源 |
+|---|---|---|
+| `{ref_<char_name>}` | 该角色 turntable.mp4 / 角色 reference 视频 | `characters/{role}.md` 渲染所得 |
+| `{ref_<scene_short>}` | 该场景 background reference 视频 / 图 | `scenes/{name}.md` 渲染所得（若立档）/ user 自备 |
+
+每 shot 列出**所有出场角色 + 所有出现场景** 的 placeholder。
+
+---
+
+## 视频 prompt — 复制下方代码块到视频生成模型
+
+> **用法**：① 先按上方 Reference placeholders 表准备好 reference 文件并上传到模型。② 把下方代码块整段粘贴到 Seedance / Sora / Veo / Runway / Kling，**手动把 `{ref_xxx}` 占位符替换为模型识别的 reference 标记**（每模型语法略不同：Seedance 上传后用 `[reference]` 链接 / Kling 用 `input_image_urls` / 其他模型按其文档）。
+
+```text
+角色: {ref_<char1>} {char1 一句话锁定，含 face-differentiator}；{ref_<char2>} {char2 锁定}（若多角色）...
+场景: {ref_<scene>} {scene 一句话锁定 或 inline 描述}
+镜头: {景别 + 运动}
+动作: {timed beats — 0-3s ... / 3-6s ... / 6-Xs ...}
+台词 / 字幕（多角色 script 格式，per rule #12.4 v3）:
+  - {ref_<char1>} {char1}: {内嵌硬字幕 | 后期软字幕 | 默剧} "{台词原文}" — {字体调性}
+  - {ref_<char2>} {char2}: ...
+  - 旁白 / 标题: ...（如有 narrator/titlecard 字幕）
+光线 / 色调: ...
+节奏: {慢 | 中 | 快 | 顿挫}
+渲染样式: {影视级真人写实 + cinematic + 4K HDR + ... + 亚洲俊男靓女 + 东方传统五官 + ...}
+比例: 9:16
+时长: {≤15s}
+负向: {项目级 14 项 stylization + 11 项 AI-同质化 + 视频专属负向 / 不要 镜头穿模 / etc.}
+```
+`````
+
+**Placeholder 命名规范（v2 per follow-up 009）：**
+
+- 角色 placeholder: `{ref_<中文名>}`（如 `{ref_沧冥}`）或 `{ref_<中文名>-<身份>}`（如 `{ref_叶无尘-乞丐}` — 若角色多形态需区分）
+- 场景 placeholder: `{ref_<scene 简称>}`（如 `{ref_长阶顶}` / `{ref_紫霄宫}` — 取 scene 一句话锁定的关键词缩写）
+- 半角花括号 `{}` 包裹（user copy-paste 后 find/replace 友好）。
+- 占位符必须 **同时**出现在「Reference placeholders 段」表中 + 「视频 prompt」code block 内文中，user 替换时一对一对应。
+
+**Shot context「出场角色」段已不含 turntable reference path** — reference path 信息**全部移到 Reference placeholders 段**避免重复。「出场角色」段保留 turntable 必需 ✅/❌ 列作为 review 提示。
+
+**「Shot context」段必填子项 5 项**（缺一即 stage-6 validation 失败）：
+
+1. `**Summary**:` — 2-3 句本 shot 概述。
+2. `**出场角色 / Characters in this shot**:` 表 — 每行 = 1 角色 + 出场方式 + turntable reference path + 是否必需。Per follow-up 006 出场方式派生规则。
+3. `**场景 / Scene**:` — location + 时辰 + 氛围 + 配色，引用 `scenes/{name}.md`（如已立档）。
+4. `**时长 / Duration**:` — `X seconds — hard 上限 15s` + timed beats 摘要（与视频 prompt body 的 `动作:` timed beats 同步；hard 上限是 rule #6 的 15s）。
+5. `**Reference uploads — pre-flight checklist**:` — checkbox 列表 turntable + (可选) seam-frame PNGs。
+
+**多角色 `台词 / 字幕` 扩展格式**（rule #12.4 v3 amend per follow-up 007）：
+
+支持 multi-line 列每个角色的台词：
+
+```
+台词 / 字幕:
+  - 沧冥: 内嵌硬字幕 "当年你们怎么对我，今日我便十倍奉还。" — 方正粗黑 白底黑边
+  - 白月清: 后期软字幕 "你怎敢..." — 方正粗黑 白底黑边
+  - 旁白 / 标题: 内嵌硬字幕 "——五合天封禁阵" — 方正粗黑 白底黑边
+```
+
+或保留单行短格式（仅 1 角色 / 默剧）：
+
+```
+台词 / 字幕: 内嵌硬字幕 "{台词}" — 方正粗黑 白底黑边
+台词 / 字幕: 无台词 / 默剧
+```
+
+**15s 硬上限 + timed-beats 重排原则：**
+
+- Rule #6（每 shot ≤ 15s）仍生效。Hard 上限不可超。
+- 「Shot context」段的 `Duration` 行**显式列出 timed beats 摘要**（例: "8s — 0-3s 雷柱 / 3-6s 合围 / 6-8s 炸开"），帮用户一眼看到节奏分配；与视频 prompt body 的 `动作:` timed beats 字面同步。
+- **多角色 dialogue 时段建议 ≤ 4s 一句**（中文 8-12 字平均 3-4s 念完）；如 dialogue 总时长 > 1/2 shot 时长，节奏标 `慢` 给唇形留时间。
+- Action 与 dialogue 同时段时，timed beats 行用 `+` 连接：`0-3s: 沧冥赤瞳一闪 + 白月清「你怎敢...」`。
+
+**人物台词强制原则（per follow-up 010）：**
+
+- 每 shot 「台词 / 字幕」字段除「真正纯视觉镜头」（≤ 25% of all shots in any ep — 例如 lightning 合围 / 法宝群攻全景 / 闪剪 cliffhanger 等）外，**优先加入至少 1 句人物台词**（multi-line script 格式 if 多角色）。
+- 台词内容**衍生自**:
+  1. 角色 bible 的 `## 标志台词或口头禅`（首选；保持声线一致 + 角色 voice tonal 锁定）
+  2. shotlist 内容 + episode.md 剧情节奏（次选；shot-specific dialogue / 旁白 / 标题字幕）
+- 单角色 shot 的 dialogue 可保留单行 short format；多角色 shot 必用 multi-line script 格式（每角色一行 `- {ref_<char>} <char>: ...`）。
+- 默剧 shot 仍可有「旁白 / 标题」字幕（title card / narrator subtitle），不算违反人物台词原则——但优先级低于实际人物 dialogue。
+
+**Visual style 渲染契约（per follow-up 010）：**
+
+- Webapp 渲染 markdown 时（如 `projects/ai_video_management/frontend/`），所有 ```text``` / ```yaml``` / 等 fenced code blocks **必含一键 copy button**（top-right corner，hover 显眼，点击 copy → 短暂 "已复制 ✓" feedback）。Implementation: ReactMarkdown 的 `pre` component override + `navigator.clipboard.writeText` + transient state for visual feedback.
+- `{ref_xxx}` 占位符在 rendered markdown view 中**视觉 highlight**（pill / inline tag styling）—— 让用户在 review 时清楚识别哪些 token 要替换。Implementation: 代码外的 markdown 文本中（如 Reference placeholders 表）用 regex pre-pass 包 `<span class="ref-placeholder">{ref_xxx}</span>`；**代码块内**保持 raw `{ref_xxx}` 不修改 markup（保证 copy button 复制纯文本，不带 HTML markup）。
+- 这两个 渲染契约是 webapp 实现层面的要求，不是 markdown 文件内容层面的要求；shotNN.md / character.md 文件内**不需要**显式包 placeholder pill markup 或 copy button；webapp 自动注入。
+
+**Cross-reference**：
+
+- Rule #12.4 v2 视频 prompt 14-字段 schema 仍生效，作为 `## 视频 prompt` 段 ```text ``` 代码块的内容标准。
+- Rule #12.4 v2 静帧 seam 列字段（主体定义 / 姿态 frozen instant / etc.）仍生效，作为 `## Seam-frame still prompts` 段两个代码块的内容标准。
+- Rule #11 seam-frame 工作流契约（loop-back / 抽帧 / Kling input_image_urls）仍生效；只是文件级别从独立 `_seedream.md` 折叠为内嵌代码块。
+- Rule #12.5 v2 character ref 文件依然独立（character pipeline 与 shot pipeline 解耦）；rule #12.6 的合并仅作用于 shot 级别。
+
+*(Originated from follow-up "single self-contained shot file" — 2026-05-10。Supersedes rule #5 file-set requirement; supersedes rule #11 seam-frame independent file structure; multi-character `台词` extension introduced.)*
+
+#### 12.7 Cross-character facial differentiation + 亚洲俊男靓女审美锚点（per follow-up 008）
+
+为防止 AI 生成多角色面孔同质化（"AI 通用脸"问题），character bible 锁定描述符 #2「面貌」从单字段扩展为 **6 子项 + 必填「标志特征点」unique-identifier**；项目级 style_guide.md 锁定**亚洲俊男靓女审美锚点**。
+
+**12.7-A 锁定描述符 #2 面貌 6 子项（rule #12.1 amend；rule #12.7 v2 per follow-up 012 expand to 5-7 micro-details per character）：**
+
+| 子项 | 内容 | 必填 |
+|---|---|---|
+| 脸型 | 国字脸 / 鹅蛋脸 / 瓜子脸 / 方圆脸 / 鸭蛋脸 / 长脸 / 心型脸 / 菱形脸（8 类） | ✅ |
+| 眉形 | 剑眉 / 卧蚕眉 / 柳叶眉 / 一字眉 / 八字眉 / 远山眉（6 类）+ 粗细 + 走向（高挑 / 平直 / 微聚） | ✅ |
+| 眼型 | 丹凤眼 / 桃花眼 / 杏仁眼 / 狐狸眼 / 三角眼 / 圆眼（6 类）+ 单/双眼皮 + 眼距（窄 / 中 / 宽）+ 眼尾（上挑 / 下垂 / 平） | ✅ |
+| 鼻型 | 高挺直鼻 / 蒜头鼻 / 鹰钩鼻 / 朝天鼻 / 蓄水鼻 / 短鼻（6 类）+ 鼻翼宽窄 | ✅ |
+| 唇型 + 牙齿 | 薄唇 / 厚唇 / M 唇 / 一字唇 / 樱桃唇（5 类）+ 唇色 + (可选) 牙齿特征（虎牙 / 整齐贝齿 / 含微豁齿） | ✅ |
+| **标志特征点 + 5-7 项 distinctive 微细节**（rule #12.7 v2，per follow-up 012）| **唯一识别符**（每角色 1-2 项 byte-stable）+ **覆盖 5 大维度的 5-7 项 micro-details**：① 眼周细节（上眼睑 / 卧蚕 / 下眼袋 / 内眼角 / 眼尾纹）② 鼻形细节（鼻头圆尖 / 鼻翼厚度 / 鼻孔形 / 山根高度）③ 唇形细节（上唇厚度 / 下唇厚度 / 唇峰锐 / 唇角下垂或上扬）④ 下颌细节（下颌轮廓硬度 / 颧骨高度 / 下巴形 / 喉结）⑤ 皮肤细节（肤色冷暖 / 毛孔可见度 / 法令纹 / 颈纹 / 唯一标记） | ✅ |
+
+锁定描述符 #10「一句话锁定」必含 **face-differentiator token**（即「标志特征点」字段的核心元素），让一句话锁定本身就 carry 唯一识别符，shot prompt 引用该锁定时自动获得辨识度。
+
+**12.7-B Cross-character similarity 一致性规则：**
+
+任两个 character bible 的「锁定描述符 #2」6 子项必须满足：
+- 至少 **2 子项 + 标志特征点** 不同。
+- 「标志特征点」绝不重复（每角色独占 1-2 个 byte-stable 唯一标记，跨角色互斥）。
+- 即使同类型角色（两个剑修 / 两个仙女）也须有可视化区分点。
+
+Stage-6 validator scan：跨 N 角色 bible 计算 6 子项 + 标志特征点 cross-character similarity 矩阵；任两人 ≥ 5 子项相同 OR 标志特征点重复 OR 缺失 = **blocker**。
+
+**12.7-B+ 真人写实强化锚点（rule #12.7 v2，per follow-up 012）：**
+
+style_guide.md § 渲染样式锁定 段必含 follow-up 012 的 8 项 photorealism 强化正向（每份 prompt 必含 ≥ 4 个）+ 14 项扩展 photorealism 负向（每份 prompt 必含全部）。这些关键词专门解决 "AI 生成偏卡通 / 动漫感" 问题，密集输入 photorealism 信号让模型拉向 真人摄影 / Netflix HDR drama 标准。每 character ref turntable + shot prompt 的 `渲染样式:` line 必 carry ≥ 4 项 photorealism 强化正向；`负向:` line 必 carry 全 14 项扩展负向。
+
+**12.7-C 项目级亚洲俊男靓女审美锚点（style_guide.md amend）：**
+
+每项目的 style_guide.md 须含 § 亚洲俊男靓女审美锚点 段，包含：
+
+1. **男性角色锚点表**：按角色类型（冷峻威压 / 清亮少年 / 烈火宗主 / 道貌温润 / 剑修冷锋 / etc.）列代表演员（中日韩古装真人剧主演级，例：罗云熙澹台烬 / 成毅战神 / 王鹤棣东方青苍 / 朱一龙沈巍 / 张哲瀚温客行 / etc.），每角色至少绑定 1-2 名演员锚点。
+2. **女性角色锚点表**：按角色类型（仙气清冷 / 妖娆烟火 / 清纯灵动 / 端庄秀丽 / etc.）列代表演员（白鹿黎苏苏 / 虞书欣小兰花 / 杨紫颜淡 / 章若楠 / 文淇 / 倪妮 / etc.）。
+3. **通用正向关键词**（每份 prompt 必含 ≥ 2 个）：
+
+```
+亚洲俊男靓女 / 东方传统五官 / 三庭五眼东方面孔
+中日韩古装剧主角脸 / 仙侠真人剧主演级颜值
+真实电影选角 / 大陆古装一线演员 / 港台日韩明星脸
+```
+
+4. **通用负向关键词**（每份 prompt 必含全部）：
+
+```
+不要 AI 生成同质化脸 / 不要 AI 通用脸 / 不要 模板化俊男靓女 / 不要 千篇一律的丹凤眼锥子脸
+不要 西方审美面孔 / 不要 欧美选角风 / 不要 浓眉大眼欧化
+不要 同款脸 / 不要 跨角色面孔重复 / 不要 网红脸 / 不要 整容脸模板
+```
+
+**12.7-D 应用到下游 prompt：**
+
+- **Character bible** (rule #12.1 amend per 12.7-A)：锁定描述符 #2 面貌 6 子项 + 「标志特征点」必填行；锁定描述符 #10 一句话锁定 含 face-differentiator token。
+- **Character ref turntable prompt** (rule #12.5 v2 amend)：`角色:` 字段 inline 展开 carry 「标志特征点」+ 锚定的 1-2 名 specific 演员类比（不止 generic "live-action 真人剧"）；负向段补 11 项 AI-同质化负向。
+- **Shot prompt** (rule #12.4 v2 amend)：`角色:` 字段 inline 展开同步 carry 「标志特征点」+ 演员锚点；负向段同步补 11 项 AI-同质化负向。
+
+face-differentiator token 与一句话锁定一同 byte-stable 跨集 byte-identical 复制（rule #5 / NFR-2 一致性约束扩展到 face-differentiator）。
+
+*(Originated from follow-up "facial differentiation + Asian aesthetic" — 2026-05-10。Solves AI-generated samey-faces problem; locks Asian (中日韩) handsome/beautiful aesthetic with specific actor anchors per role type.)*
+
+#### 12.8 Character / Scene 命名约定 cN_/sN_（per follow-up 011）
+
+为防止 character / scene 文件名混乱 + placeholder ↔ 文件 mismatch + reference dangling，强制命名约定：
+
+**Filename + folder pattern (rule #12.8 v2 per follow-up 014)：**
+
+- Character: `characters/c{N}_{中文名}/c{N}_{中文名}.md` (folder of same name; folder also holds user-rendered turntable.mp4 + ref.png + 等 media，gitignored per NFR-18)
+- Scene: `scenes/s{N}_{shortname}/s{N}_{shortname}.md` (same folder schema)
+- Shot: `episodes/ep{NN}/prompts/shot{NN}/shot{NN}.md` (same folder schema; folder holds rendered shot video + thumbnail，gitignored)
+
+**Placeholder pattern (unchanged)：**
+
+- `{ref_c{N}_{中文名}}` (e.g., `{ref_c1_沧冥}`)
+- `{ref_s{N}_{shortname}}` (e.g., `{ref_s1_长阶顶}`)
+
+**Numbering rules：**
+
+- N 从 1 起递增（不从 0；不补零）。
+- 一旦分配后**不可重排** (renumber)。即使删除 character / scene，也保持原 N 不复用；新增只能 append（c11_, s7_, etc.）。
+- 排序原则（仅 initial 分配时使用）：
+  - Character: 主角 → 主女主 → 副女主 → 反派
+  - Scene: cross-ep chronological 出现顺序（首次出现的 ep + shot 越早，N 越小）
+- 未立档 location 也可预分配 sN_ placeholder（如 `{ref_s7_山道平台}`），后续立档时 N 已锁定，无需 renumber。
+
+**Reference validation contract（stage-6 validator NFR-16）：**
+
+- 每 shot.md 中所有 `{ref_c{N}_*}` placeholder 必须有对应 `characters/c{N}_*.md` 文件存在。
+- 每 shot.md 中所有 `{ref_s{N}_*}` placeholder 必须有对应 `scenes/s{N}_*.md` 文件存在 OR 标注为「未立档 — inline 描述」（s{N}_ 前缀已分配 + placeholder 引用，但无文件）。
+- Reference placeholders table 「来源」列 path + 出场角色 table 「character file」列 path 必须 byte-identical 匹配实际文件 path。
+- Dangling placeholder（引用但无文件 + 未标注 "未立档"）= blocker。
+- Cross-character / cross-scene N 唯一性（任两个 character N 不冲突；scene 同理）= blocker。
+
+**与 rule #12.5 v3 / #12.6 v2 的互动：**
+
+- Character file (rule #12.5 v3 自包含 schema：bible + turntable ref) → 直接 rename to `c{N}_{中文名}.md`。
+- Scene file (rule #12.7 8-字段 bible + ref turntable / 立绘) → mirror character pipeline → merged into single `s{N}_{shortname}.md` per follow-up 011 + per the schema:
+
+````markdown
+# {scene-name}
+
+{scene bible content per rule #12.7 — 场景定位 / 锁定描述符 / 关键变化态 / 出现镜头 / 负向}
+
+---
+
+# 场景 reference prompt — Seedream / Midjourney / Imagen / Flux（场景立绘）
+
+> **用法**：复制下方代码块整段，粘贴到 text-to-image 模型 → 输出场景立绘 PNG。
+
+```text
+{flatten 场景立绘 prompt body — 主体/构图、视角、时辰、背景、光源、风格、负向 inline-labeled}
+```
+````
+
+- Shot file (rule #12.6 v2 三段 schema): 出场角色 table 第 3 列 path + Reference placeholders table 第 3 列 path + 视频 prompt code block 内 `{ref_xxx}` placeholders **全部** byte-rename 到 cN_/sN_ 命名。
+
+*(Originated from follow-up "naming convention + scenes merge" — 2026-05-10。Solves: ① reference dangling 风险；② character/scene 文件名 chaos；③ scenes/ref_images/ 子目录与 characters/ pipeline 不对齐 — mirror characters merge per follow-up 009。)*
+
+#### 12.9 Folder-per-asset + Media gitignore + Webapp display 契约（per follow-up 014）
+
+每个 character / scene / shot 是一个**同名文件夹**（containing 同名 .md prompt + user-rendered media assets）。Webapp 渲染时 inline 显示 image media + 内嵌播放 video media。
+
+**Folder schema：**
+
+```
+characters/c{N}_{name}/
+├── c{N}_{name}.md         # tracked in git (prompt content)
+├── turntable.mp4          # gitignored (user-rendered character ref video)
+├── ref.png                # gitignored (Seedream 立绘 PNG)
+└── ... (其他 media, gitignored)
+
+scenes/s{N}_{name}/
+├── s{N}_{name}.md         # tracked
+├── ref.png                # gitignored
+└── ... (其他 media)
+
+episodes/ep{NN}/prompts/shot{NN}/
+├── shot{NN}.md            # tracked
+├── shot{NN}_kling.mp4     # gitignored (Kling 渲染输出)
+├── shot{NN}_seedance.mp4  # gitignored (Seedance 渲染输出)
+├── shot{NN}_thumbnail.png # gitignored (缩略图)
+└── ... (其他 media)
+```
+
+**Media gitignore（NFR-18）：**
+
+`.gitignore` 必含：
+
+```
+ai_videos/**/*.mp4
+ai_videos/**/*.mov
+ai_videos/**/*.webm
+ai_videos/**/*.mkv
+ai_videos/**/*.avi
+ai_videos/**/*.png
+ai_videos/**/*.jpg
+ai_videos/**/*.jpeg
+ai_videos/**/*.webp
+ai_videos/**/*.gif
+ai_videos/**/*.bmp
+```
+
+prompt .md 文件继续 tracked。
+
+**Webapp display 契约：**
+
+`projects/ai_video_management/frontend/`:
+- 当 user 选中 character / scene / shot folder（vs 选中 .md 文件）时，display：
+  1. 同名 .md 文件渲染（默认显示 c1_沧冥/c1_沧冥.md 等）
+  2. 该 folder 内所有 image files (.png/.jpg/.jpeg/.webp/.gif/.bmp) → `<img>` inline display
+  3. 该 folder 内所有 video files (.mp4/.mov/.webm/.mkv/.avi) → `<video controls>` HTML5 player
+- Media files 按文件名字典序展示。
+- Backend (`projects/ai_video_management/backend/`) 须能 serve raw media bytes for any path under `ai_videos/` (return correct MIME type)。
+
+**Path 引用更新（applied to shot files in follow-up 014）：**
+
+OLD path → NEW path（applied across 50 shot files 出场角色 table + Reference placeholders source column）：
+
+| OLD | NEW |
+|---|---|
+| `characters/c1_沧冥.md` | `characters/c1_沧冥/c1_沧冥.md` |
+| ... (10 chars) | ... |
+| `scenes/s1_长阶顶.md` | `scenes/s1_长阶顶/s1_长阶顶.md` |
+| ... (6 scenes) | ... |
+
+*(Originated from follow-up "folder-per-asset + media gitignore + webapp display" — 2026-05-10. Solves: ① media files 与 prompt 关联存储 (same folder)；② git 仓库 size 不因 binary media 膨胀；③ webapp 直接预览 media，无需另开外部 player。)*
 
 ## Update protocol
 

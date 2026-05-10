@@ -174,12 +174,76 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 .markdown-view pre {
   background: var(--pre-bg); color: var(--pre-fg);
-  border: 1px solid var(--pre-border); border-radius: 4px;
-  padding: 12px 14px; overflow-x: auto;
+  border: 1px solid var(--pre-border); border-radius: 6px;
+  padding: 14px 16px; overflow-x: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 13px; line-height: 1.55;
+  font-size: 13px; line-height: 1.6;
 }
 .markdown-view pre code { background: transparent; padding: 0; color: inherit; }
+
+/* Copy-button-enabled code block wrapper (per follow-up 010) */
+.markdown-view .code-block-wrapper {
+  position: relative;
+  margin: 14px 0;
+}
+.markdown-view .code-block-wrapper > pre {
+  margin: 0;
+  padding-top: 38px;
+}
+.markdown-view .code-block-wrapper > .copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--pre-fg);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+  z-index: 1;
+}
+.markdown-view .code-block-wrapper > .copy-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.markdown-view .code-block-wrapper > .copy-btn:active {
+  transform: translateY(1px);
+}
+.markdown-view .code-block-wrapper > .copy-btn.copied {
+  background: rgba(56, 161, 105, 0.28);
+  color: #b7f5cd;
+  border-color: rgba(56, 161, 105, 0.6);
+}
+
+/* Field-label highlight (per follow-up 013, rule #12.4 v4) — bold orange keys for prompt structure */
+.markdown-view .code-block-wrapper .field-label {
+  color: #f5a96d;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Reference placeholder pill (per follow-up 010) — visual highlight for {ref_xxx} tokens */
+.markdown-view .ref-placeholder {
+  display: inline-block;
+  background: rgba(99, 102, 241, 0.16);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 4px;
+  padding: 0 6px;
+  margin: 0 1px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.markdown-view pre .ref-placeholder,
+.markdown-view code .ref-placeholder {
+  background: rgba(99, 102, 241, 0.22);
+  color: #c7d2fe;
+}
 .markdown-view blockquote {
   border-left: 4px solid var(--border-strong);
   margin: 12px 0; padding: 4px 12px; color: var(--text-muted);

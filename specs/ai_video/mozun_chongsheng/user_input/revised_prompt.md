@@ -5,9 +5,21 @@
 **task_name:** mozun_chongsheng
 **Composed from:** `raw_prompt.md`
 **First generated:** 2026-05-09 16:42:05
-**Last regenerated:** 2026-05-09 19:48:37 — header bump for follow-up 002 (人物年龄观感全面下调到 18-35 看似青春 + 加 俊朗/貌美/英气 关键词；服饰升级锦缎绣纹；柳红袖肚兜 → 朱红绫上襦 + 锦缎围裙（妖娆但不暴露）；方鼎元 鹤发银白长须 → 乌发玉簪三缕短须；全部角色文件改用中文名命名 沧冥-魔尊本相.md 等；agent_refs/project/ai_video.md 规则 1 amend 允许中文 opt-in；277 lock 替换 + 31 filename 替换覆盖 173 文件；20 旧英文文件已 rm)。
+**Last regenerated:** 2026-05-10 15:57:51 — header bump for follow-up 014 (三件事：(A) 每个 char/scene/shot .md 文件转为同名文件夹，原 .md 移入文件夹内；user 后续生成的 mp4/png 等媒体资产也放入该文件夹。(B) ai_video_management webapp 升级显示 .png/.jpg/.webp 图片 + 播放 .mp4/.mov 视频。(C) 媒体文件 gitignore (`ai_videos/**/*.{mp4,mov,webm,png,jpg,jpeg,webp,gif}`)。Rule #12.5 v4 + #12.6 v3 + #12.8 v2 + 新增 rule #12.9 amend；FR-5/6/9 + NFR-18 amend。)
 
-**Prior follow-up:** 2026-05-09 19:26:14 — follow-up 001 渲染样式锁定 影视级真人写实 / cinematic / live-action（保持有效）。
+**Prior follow-up 013:** 2026-05-10 15:41:33 — shot prompt ≤2000 字 + Markdown-style field-label 视觉渲染（保持有效）。
+**Prior follow-up 012:** 2026-05-10 15:15:46 — photorealism + micro-details（保持在 character ref 内）。
+**Prior follow-up 011:** 2026-05-10 14:59:30 — scenes 合并 + cN_/sN_ 命名约定（保持有效）。
+**Prior follow-up 010:** 2026-05-10 14:46:48 — visual style + copy button + 人物台词（保持有效）。
+**Prior follow-up 009:** 2026-05-10 14:08:54 — 合并 character files + Reference placeholders + 删 seam-frame embedded blocks（保持有效）。
+**Prior follow-up 008:** 2026-05-10 13:44:00 — 面孔差异化 + 亚洲俊男靓女审美锚点（保持有效）。
+**Prior follow-up 007:** 2026-05-10 13:25:13 — 单一自包含 shot 文件 (Shot context + 视频 prompt + Seam-frame still prompts 三段) — 第 ③ 段被本 follow-up 删除；前两段保留。
+**Prior follow-up 006:** 2026-05-10 13:05:17 — per shot 合并 `_kling.md` + `_seedance.md` → 单文件（保持有效）。
+**Prior follow-up 005:** 2026-05-10 11:34:24 — character ref 文件简化为单 video reference prompt（保持有效）。
+**Prior follow-up 004:** 2026-05-10 10:36:01 — 角色 dual-prompt + 5 句台词 + Turntable 锁定字段（部分被 follow-up 005 覆盖：①号 image prompt 块已删；②号 video prompt + 5 句台词 + Turntable 锁定字段保持有效）。
+**Prior follow-up 003:** 2026-05-10 09:50:45 — rule #12 model-agnostic 二件套抽象 + ~100 shot prompts 补 台词/节奏 字段 + 新增 scenes/ 复用场景层（保持有效）。
+**Prior follow-up 002:** 2026-05-09 19:48:37 — 18-35 看似青春 + 锦缎绣纹 + 柳红袖不暴露 + 中文文件命名（保持有效）。
+**Prior follow-up 001:** 2026-05-09 19:26:14 — 影视级真人写实 / cinematic / live-action 渲染样式锁定（保持有效）。
 
 ## Goal — 想做什么
 

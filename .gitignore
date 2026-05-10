@@ -224,3 +224,18 @@ projects/spec_driven/backend/static/
 # validation, findings, self-evolution logs). Not committed.
 # NOTE: primary user deliverables live under top-level /reports/ and ARE tracked.
 .audit/
+
+# Media files generated under ai_videos/ (per follow-up 014, NFR-18)
+# Heavy binaries — user-rendered turntable mp4 / scene reference png / shot video output etc.
+# Prompt .md files (alongside in same folder) ARE tracked.
+ai_videos/**/*.mp4
+ai_videos/**/*.mov
+ai_videos/**/*.webm
+ai_videos/**/*.mkv
+ai_videos/**/*.avi
+ai_videos/**/*.png
+ai_videos/**/*.jpg
+ai_videos/**/*.jpeg
+ai_videos/**/*.webp
+ai_videos/**/*.gif
+ai_videos/**/*.bmp
