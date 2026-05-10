@@ -21,7 +21,7 @@
 | Placeholder | 替换为 | 来源 |
 |---|---|---|
 | `{ref_c1_沧冥}` | 沧冥 turntable.mp4 / 角色 reference 视频（末段赤瞳大特写正脸需 turntable 锁定） | `characters/c1_沧冥/c1_沧冥.md` 渲染所得 |
-| `{ref_s9_识海}` | 蒙太奇识海空间 background reference 视频 / 图（本集独有过渡空间，未立档；user 自备或留空依靠 prompt 描述） | user 自备 |
+| `{ref_s9_识海}` | 蒙太奇识海空间 background reference 视频 / 图（采用「默认态」六切片快剪 + 末段赤瞳定格；过渡帧基底由场景 reference 提供，切片本体在 shot 内逐段合成） | `scenes/s9_识海/s9_识海.md` 渲染所得 |
 
 ---
 

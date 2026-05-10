@@ -1,25 +1,52 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TreeNode } from "../types";
+import { renameMedia } from "../api";
+import { ApiError, type TreeNode } from "../types";
 
 export interface SidebarProps {
   tree: TreeNode | null;
   currentPath: string;
   onSelect: (path: string) => void;
   loadError?: string | null;
+  onTreeReload?: () => void;
 }
 
 interface FlatNode { node: TreeNode; depth: number; parentPath: string | null; }
 
-export function Sidebar({ tree, currentPath, onSelect, loadError }: SidebarProps): JSX.Element {
+export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }: SidebarProps): JSX.Element {
   const treeRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameToast, setRenameToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const onRenameClick = useCallback(
+    async (e: React.MouseEvent, dramaPath: string) => {
+      e.stopPropagation();
+      if (renamingPath) return;
+      setRenamingPath(dramaPath);
+      setRenameToast(null);
+      try {
+        const result = await renameMedia(dramaPath);
+        const summary = `已重命名 ${result.renamed.length} / 跳过 ${result.skipped.length} / 失败 ${result.errors.length}`;
+        setRenameToast({ kind: result.errors.length > 0 ? "err" : "ok", text: summary });
+        if (onTreeReload) onTreeReload();
+      } catch (err) {
+        const msg = err instanceof ApiError
+          ? `重命名失败: ${err.detail?.kind ?? err.status}`
+          : `重命名失败: ${err instanceof Error ? err.message : String(err)}`;
+        setRenameToast({ kind: "err", text: msg });
+      } finally {
+        setRenamingPath(null);
+      }
+    },
+    [onTreeReload, renamingPath],
+  );
 
   useEffect(() => {
     if (!tree) return;
     const accum: Record<string, boolean> = {};
     const walk = (node: TreeNode): void => {
-      if (node.type === "file" || node.type === "image") return;
+      if (node.type === "file" || node.type === "image" || node.type === "video") return;
       if (node.path) accum[node.path] = true;
       for (const c of node.children ?? []) walk(c);
     };
@@ -82,7 +109,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError }: SidebarProps
   const onItemKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, item: FlatNode): void => {
     const items = flat;
     const index = items.findIndex((i) => i.node.path === item.node.path);
-    const isLeaf = item.node.type === "file" || item.node.type === "image" || (item.node.children ?? []).length === 0;
+    const isLeaf = item.node.type === "file" || item.node.type === "image" || item.node.type === "video" || (item.node.children ?? []).length === 0;
     const isOpen = expanded[item.node.path] === true;
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -101,7 +128,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError }: SidebarProps
       else if (item.parentPath) focusByPath(treeRef.current, item.parentPath, setFocusedPath);
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      if (item.node.type === "file" || item.node.type === "image") onSelect(item.node.path);
+      if (item.node.type === "file" || item.node.type === "image" || item.node.type === "video") onSelect(item.node.path);
       else toggle(item.node.path);
     }
   };
@@ -123,14 +150,34 @@ export function Sidebar({ tree, currentPath, onSelect, loadError }: SidebarProps
 
   return (
     <nav className="sidebar" aria-label="File tree">
+      {renameToast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`sidebar-toast sidebar-toast-${renameToast.kind}`}
+        >
+          {renameToast.text}
+          <button
+            type="button"
+            className="sidebar-toast-dismiss"
+            aria-label="关闭"
+            onClick={() => setRenameToast(null)}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
       <div ref={treeRef} role="tree" aria-label="File tree" className="tree">
         {flat.map((item) => {
-          const isLeaf = item.node.type === "file" || item.node.type === "image";
+          const isLeaf = item.node.type === "file" || item.node.type === "image" || item.node.type === "video";
           const hasChildren = (item.node.children ?? []).length > 0;
           const isOpen = expanded[item.node.path] === true || item.depth === 0;
           const isActive = currentPath === item.node.path;
           const isFocused = focusedPath === item.node.path;
           const subType = item.node.project_meta?.sub_type;
+          const dramaPathParts = item.node.path ? item.node.path.split("/") : [];
+          const isDrama = item.node.type === "directory" && dramaPathParts.length === 2 && dramaPathParts[0] === "ai_videos";
+          const isRenamingThis = renamingPath === item.node.path;
           return (
             <div
               key={item.node.path || item.node.name}
@@ -157,12 +204,25 @@ export function Sidebar({ tree, currentPath, onSelect, loadError }: SidebarProps
                 </button>
               ) : null}
               {item.node.type === "image" ? <span aria-hidden="true" className="tree-icon">🖼</span> : null}
+              {item.node.type === "video" ? <span aria-hidden="true" className="tree-icon">🎬</span> : null}
               <span className="tree-label">{item.node.name}</span>
               {subType ? (
                 <span className={`subtype-badge subtype-${subType}`}
                   aria-label={`项目类型: ${subType === "novel" ? "剧" : "短"}`}>
                   {subType === "novel" ? "剧" : "短"}
                 </span>
+              ) : null}
+              {isDrama ? (
+                <button
+                  type="button"
+                  className="drama-rename-btn"
+                  aria-label={`按 parent folder 重命名 ${item.node.name} 下所有图片视频`}
+                  disabled={renamingPath !== null}
+                  title="按 parent folder 重命名所有图片/视频"
+                  onClick={(e) => onRenameClick(e, item.node.path)}
+                >
+                  {isRenamingThis ? "重命名中…" : "🏷 重命名"}
+                </button>
               ) : null}
             </div>
           );

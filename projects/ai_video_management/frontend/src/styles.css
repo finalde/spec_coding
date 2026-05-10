@@ -117,6 +117,59 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .subtype-badge.subtype-short { background: #e0f2fe; color: #075985; border: 1px solid #7dd3fc; }
 .subtype-badge.subtype-novel { background: #fef3c7; color: #78350f; border: 1px solid #fbbf24; }
 
+/* Drama-level rename-media button (per follow-up 007) */
+.drama-rename-btn {
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  background: var(--bg-toolbar);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.drama-rename-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+.drama-rename-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Sidebar toast (rename result summary) */
+.sidebar-toast {
+  margin: 8px 12px 4px;
+  padding: 6px 28px 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  position: relative;
+}
+.sidebar-toast-ok {
+  background: var(--tint-a);
+  border: 1px solid var(--tint-a-border);
+  color: #1a4d2e;
+}
+.sidebar-toast-err {
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error-text);
+}
+.sidebar-toast-dismiss {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
 /* Main pane */
 .main-pane { overflow: auto; padding: 16px 24px; background: var(--bg); }
 .main-pane:focus { outline: none; }
@@ -216,6 +269,72 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   background: rgba(56, 161, 105, 0.28);
   color: #b7f5cd;
   border-color: rgba(56, 161, 105, 0.6);
+}
+
+/* Media view (per follow-up 005 ai_video_management) — full-bleed image / video viewer */
+.media-view {
+  padding: 24px;
+  text-align: center;
+  background: var(--bg);
+}
+.media-view img,
+.media-view video {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: 6px;
+  background: var(--bg-toolbar);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+}
+.media-view video { width: 100%; }
+
+/* Sibling media gallery (per follow-up 005) — show same-folder media inline below markdown */
+.sibling-media-grid {
+  margin: 32px 0 8px 0;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-toolbar);
+  border-radius: 6px;
+}
+.sibling-media-grid h3 {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0 0 12px 0;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.sibling-media-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.sibling-media-item {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  max-width: 320px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+}
+.sibling-media-item img,
+.sibling-media-item video {
+  display: block;
+  max-width: 304px;
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  background: #000;
+  border-radius: 3px;
+}
+.sibling-media-item figcaption {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 /* Field-label highlight (per follow-up 013, rule #12.4 v4) — bold orange keys for prompt structure */

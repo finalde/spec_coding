@@ -2,11 +2,16 @@
 
 **task_type:** development
 **task_name:** ai_video_management
-**Composed from:** `raw_prompt.md` + `follow_ups/001-20260505-121536-ai-videos-only-scope.md` + `follow_ups/002-20260505-130548-zero-claude-coupling.md` + `follow_ups/003-20260509-152135-research-folder-and-viewer.md` + `follow_ups/004-20260509-194837-allow-chinese-filenames.md`
+**Composed from:** `raw_prompt.md` + `follow_ups/001-20260505-121536-ai-videos-only-scope.md` + `follow_ups/002-20260505-130548-zero-claude-coupling.md` + `follow_ups/003-20260509-152135-research-folder-and-viewer.md` + `follow_ups/004-20260509-194837-allow-chinese-filenames.md` + `follow_ups/005-20260510-161839-media-display-playback.md` + `follow_ups/006-20260510-164054-stale-runtime-instructions.md` + `follow_ups/007-20260510-170438-rename-media-to-parent-folder.md`
 
-**Last regenerated:** 2026-05-09 19:48:37 — header bump for follow-up 004（acknowledge that ai_videos / research artifacts can opt-in to 中文 filenames；已验证 webapp `is_inside` / `safe_resolve` / 前端 Sidebar 已支持 UTF-8 中文路径段，无需代码改动；agent_refs/project/ai_video.md 规则 1 同步 amend 允许中文文件名 opt-in）。
+**Last regenerated:** 2026-05-10 17:04:38 — header bump for follow-up 007（drama-level rename-media 按钮 + `POST /api/rename-media` 后端 endpoint，把每个短剧 folder 树下 image/video 文件按 immediate parent folder name 重命名，重复扩展名按 lexicographic 顺序加 1/2/3 序号；只 touch media 文件，不删/不增/不下钻子文件夹的 media 跨 folder 合并）。
 
-**Prior follow-up:** 2026-05-09 15:21:35 — follow-up 003 (new repo-root `research/` folder for free-form reference dumps; ai_video_management webapp now surfaces it via a sibling **Research** sidebar section walking `research/**/*.{md,json,jsonl,yaml,yml,txt,png,jpg}`; same Origin/Host gate + same EXPOSED_TREE sandbox + same render-mode dispatch as the existing AI Videos section; backend `exposed_tree.py::is_inside` and `tree_walker.py::build` extended; first content drop is 8 仙侠剧 storyline mds under `research/xianxia_storylines/` plus an index README — these are reference / inspiration material for future ai_video projects, NOT spec-pipeline outputs).
+**Prior follow-up 006:** 2026-05-10 16:40:54 — runtime reload procedure documentation（保持有效 — 仅 documentation）。
+
+**Prior follow-up 005:** 2026-05-10 16:18:39 — media display + playback (backend `/api/media` route + frontend Reader video/image rendering + SiblingMedia gallery)（保持有效）。
+
+**Prior follow-up 004:** 2026-05-09 19:48:37 — 中文 filename opt-in（保持有效）。
+**Prior follow-up 003:** 2026-05-09 15:21:35 — research/ folder + viewer（保持有效）。
 
 ## Goal
 

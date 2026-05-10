@@ -59,8 +59,9 @@ The user is the sole actor — a creator running the pipeline manually. Webapp i
 
 ### Mutation surface
 
-- **FR-9** Exactly 4 state-changing endpoints, no more: `PUT /api/file`, `POST /api/regen-prompt`, `POST /api/promote`, `DELETE /api/promote`. No file create / delete / upload endpoints.
-- **FR-10** Read endpoints: `GET /api/tree`, `GET /api/file?path={path}`. Both honor EXPOSED_TREE sandbox.
+- **FR-9** Exactly 4 state-changing endpoints, no more: `PUT /api/file`, `POST /api/regen-prompt`, `POST /api/promote`, `DELETE /api/promote`. No file create / delete / upload endpoints. <!-- Per follow-up 001: regen-prompt + promote endpoints are dropped. Per follow-up 007: drama-scoped `POST /api/rename-media` added (rename-only, no create/delete/upload — see FR-9b). -->
+- **FR-9b** (follow-up 007) `POST /api/rename-media` — drama-scoped batch rename for image+video files. Body `{path: "ai_videos/{drama}"}` (must resolve to an immediate child directory of `ai_videos/`). Recursively scans, renames each media file to `{immediate-parent-folder-name}.{ext}` (one file per ext) or `{name}{N}.{ext}` (multiple, lexicographic order, N starting at 1). Two-pass via temp names to avoid intra-folder collisions. Returns `{renamed:[{from,to}],skipped:[],errors:[{path,message}]}`. Origin/Host gate applies. No file create/delete/upload — rename only.
+- **FR-10** Read endpoints: `GET /api/tree`, `GET /api/file?path={path}`, `GET /api/media?path={path}` (added by follow-up 005 — bypasses 1 MiB cap with HTTP-range FileResponse). All honor EXPOSED_TREE sandbox.
 
 ### Security
 

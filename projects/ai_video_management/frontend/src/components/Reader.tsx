@@ -10,9 +10,13 @@ import { ImageRefView } from "./ImageRefView";
 import { Renderer } from "../markdown/renderer";
 import { CodeView } from "../markdown/CodeView";
 import { JsonlView } from "../markdown/JsonlView";
+import { SiblingMedia } from "./SiblingMedia";
 import { detectShotPair } from "../lib/shotPairing";
-import { fetchFile, putFile } from "../api";
+import { fetchFile, mediaUrl, putFile } from "../api";
 import { ApiError, type FileResult } from "../types";
+
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
+const VIDEO_EXTS = new Set([".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"]);
 
 export interface ReaderProps {
   knownPaths: string[];
@@ -33,8 +37,20 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
   const [saveError, setSaveError] = useState<Error | null>(null);
   const [conflict, setConflict] = useState<{ current_mtime: string } | null>(null);
 
+  const ext = path ? extOf(path) : "";
+  const isMediaImage = IMAGE_EXTS.has(ext);
+  const isMediaVideo = VIDEO_EXTS.has(ext);
+  const isMediaOnly = isMediaVideo || (isMediaImage && ext !== ".png" && ext !== ".jpg");
+
   const load = useCallback(async () => {
     if (!path) return;
+    if (isMediaOnly) {
+      // Media files (video / non-png-jpg images) are streamed via /api/media —
+      // skip /api/file fetch entirely (videos can exceed the 1 MB limit).
+      setFile({ path, content: "", encoding: "media", bytes: 0, mtime: 0, mtime_http: "" });
+      setError(null);
+      return;
+    }
     try {
       const f = await fetchFile(path);
       setFile(f);
@@ -42,7 +58,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [path]);
+  }, [path, isMediaOnly]);
 
   useEffect(() => {
     setFile(null); setError(null); setEditing(false); setSaveError(null); setConflict(null);
@@ -85,8 +101,8 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
   }
   if (!file) return <div className="muted">Loading…</div>;
 
-  const ext = extOf(path);
-  const isImage = ext === ".png" || ext === ".jpg" || ext === ".jpeg";
+  const isImage = isMediaImage;
+  const isVideo = isMediaVideo;
   const isMarkdown = ext === ".md";
   const isJsonl = ext === ".jsonl";
   const isCode = ext === ".json" || ext === ".yaml" || ext === ".yml";
@@ -95,7 +111,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
   const shotPair = isMarkdown ? detectShotPair(path) : null;
   const isShotPair = shotPair !== null;
   const isShotlistTable = path.startsWith("ai_videos/") && path.endsWith("/shotlist.md");
-  const isImageRef = (isMarkdown && /\/ref_images\/[^/]+_seedream\.md$/.test(path)) || isImage;
+  const isImageRef = (isMarkdown && /\/ref_images\/[^/]+_seedream\.md$/.test(path));
 
   const filename = path.split("/").pop() ?? path;
 
@@ -103,7 +119,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
     <div className="reader">
       <div className="reader-toolbar" role="toolbar" aria-label="File toolbar">
         <Breadcrumb path={path} />
-        {!isImage ? (
+        {!isImage && !isVideo ? (
           <button type="button" className="reader-edit-toggle"
             onClick={() => setEditing((e) => !e)}
             aria-label={editing ? "Stop editing" : "Edit file"} aria-pressed={editing}>
@@ -111,7 +127,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
           </button>
         ) : null}
       </div>
-      {editing && !isImage && !isShotPair && !isImageRef ? (
+      {editing && !isImage && !isVideo && !isShotPair && !isImageRef ? (
         <Editor
           initialContent={file.content} filename={filename}
           onSave={onSave} onClose={() => setEditing(false)}
@@ -122,7 +138,15 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
         />
       ) : (
         <div className="reader-body">
-          {isImageRef ? (
+          {isVideo ? (
+            <div className="media-view">
+              <video controls preload="metadata" src={mediaUrl(path)} />
+            </div>
+          ) : isMediaImage && ext !== ".png" && ext !== ".jpg" ? (
+            <div className="media-view">
+              <img src={mediaUrl(path)} alt={filename} />
+            </div>
+          ) : isImageRef ? (
             <ImageRefView primaryFile={file} primaryPath={path} knownPaths={knownPaths} />
           ) : isShotPair ? (
             <ShotPairView primaryFile={file} primaryPath={path} knownPaths={knownPaths} />
@@ -141,6 +165,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
           ) : isMarkdown ? (
             <ParseFallback rawText={file.content} componentName="MarkdownView">
               <Renderer content={file.content} currentPath={path} knownPaths={knownPaths} />
+              <SiblingMedia currentPath={path} knownPaths={knownPaths} />
             </ParseFallback>
           ) : isTxt ? (
             <pre className="text-view">{file.content}</pre>

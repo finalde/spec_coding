@@ -1,4 +1,4 @@
-export type TreeNodeType = "section" | "directory" | "file" | "image";
+export type TreeNodeType = "section" | "directory" | "file" | "image" | "video";
 
 export interface ProjectMeta {
   sub_type: "novel" | "short" | null;

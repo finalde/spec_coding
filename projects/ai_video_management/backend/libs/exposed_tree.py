@@ -5,6 +5,14 @@ from pathlib import Path
 ALLOWED_EXTENSIONS: frozenset[str] = frozenset(
     {".md", ".json", ".yaml", ".yml", ".jsonl", ".txt", ".png", ".jpg"}
 )
+# Media files (per follow-up 005): visible in sidebar tree; served via /api/media
+# (raw FileResponse, bypasses MAX_FILE_BYTES). User-rendered turntable mp4 / scene
+# ref png / shot output video etc. — gitignored, but webapp displays inline.
+MEDIA_EXTENSIONS: frozenset[str] = frozenset(
+    {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
+     ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
+)
+TREE_VISIBLE_EXTENSIONS: frozenset[str] = ALLOWED_EXTENSIONS | MEDIA_EXTENSIONS
 MAX_FILE_BYTES: int = 1_048_576
 
 _EXCLUDED_DIRS: frozenset[str] = frozenset(

@@ -23,7 +23,7 @@
 |---|---|---|
 | `{ref_c6_白月清}` | 白月清 turntable.mp4 | `characters/c6_白月清/c6_白月清.md` |
 | `{ref_c7_赵焚天}` | 赵焚天 turntable.mp4（仅末 3s 剪影使用） | `characters/c7_赵焚天/c7_赵焚天.md` |
-| `{ref_s7_山道平台}` | 魔气长阶 山道中段平台 background reference | 未立档；user 自备或用 `scenes/s1_长阶顶/s1_长阶顶.md` 山道态作近似 |
+| `{ref_s7_山道平台}` | 魔气长阶 山道中段平台 background reference 视频 / 图（采用「阴笑定格态」变化态） | `scenes/s7_山道平台/s7_山道平台.md` 渲染所得 |
 | `{ref_s3_铸器堂}` | 玄炎宗 铸器堂 background reference（末段闪剪使用） | `scenes/s3_铸器堂/s3_铸器堂.md` |
 
 ---

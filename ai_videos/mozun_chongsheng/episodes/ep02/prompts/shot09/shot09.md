@@ -21,7 +21,7 @@
 | Placeholder | 替换为 | 来源 |
 |---|---|---|
 | `{ref_c6_白月清}` | 白月清 turntable.mp4 | `characters/c6_白月清/c6_白月清.md` |
-| `{ref_s7_山道平台}` | 魔气长阶 山道中段平台 background reference | 未立档；user 自备或用 `scenes/s1_长阶顶/s1_长阶顶.md` 山道态作近似 |
+| `{ref_s7_山道平台}` | 魔气长阶 山道中段平台 background reference 视频 / 图（采用「下行独行态」变化态） | `scenes/s7_山道平台/s7_山道平台.md` 渲染所得 |
 
 ---
 

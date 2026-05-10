@@ -61,7 +61,13 @@ export default function App(): JSX.Element {
       <a className="skip-link" href="#main" onClick={onSkipToMain}>
         Skip to main content
       </a>
-      <Sidebar tree={tree} currentPath={currentPath} onSelect={onSelect} loadError={error} />
+      <Sidebar
+        tree={tree}
+        currentPath={currentPath}
+        onSelect={onSelect}
+        loadError={error}
+        onTreeReload={() => setRefreshKey((k) => k + 1)}
+      />
       <main id="main" className="main-pane" aria-label="Main content">
         <div className="a11y-live-region" aria-live="polite" id="aria-live-toast" />
         <Routes>

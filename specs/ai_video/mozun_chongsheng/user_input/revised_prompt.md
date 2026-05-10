@@ -5,8 +5,10 @@
 **task_name:** mozun_chongsheng
 **Composed from:** `raw_prompt.md`
 **First generated:** 2026-05-09 16:42:05
-**Last regenerated:** 2026-05-10 15:57:51 — header bump for follow-up 014 (三件事：(A) 每个 char/scene/shot .md 文件转为同名文件夹，原 .md 移入文件夹内；user 后续生成的 mp4/png 等媒体资产也放入该文件夹。(B) ai_video_management webapp 升级显示 .png/.jpg/.webp 图片 + 播放 .mp4/.mov 视频。(C) 媒体文件 gitignore (`ai_videos/**/*.{mp4,mov,webm,png,jpg,jpeg,webp,gif}`)。Rule #12.5 v4 + #12.6 v3 + #12.8 v2 + 新增 rule #12.9 amend；FR-5/6/9 + NFR-18 amend。)
+**Last regenerated:** 2026-05-10 18:15:00 — header bump for follow-up 016 (把 follow-up 011 暂留为 placeholder 的三个未立档场景升级为完整 scene 文件 — `s7_山道平台`（ep02）、`s8_云海`（ep05/shot02）、`s9_识海`（ep05/shot08）；schema 完全镜像 s1-s6 既定模式（8 字段锁定描述符 + 变化态 + Seedream image prompt + Seedance 2.9s video reference prompt）；s9_识海 非物理空间，reference 段给出黑底过渡帧基底；六个 shot reference 行从 "未立档" 改为指向新 scenes md。)
 
+**Prior follow-up 015:** 2026-05-10 17:09:02 — 角色 / 场景 reference 视频 prompt 12s → 2.9s + 角色 turntable "1,2,3" + 场景追加 video reference 段（rule #12.5 v4 + rule #12.10 NEW；保持有效）。
+**Prior follow-up 014:** 2026-05-10 15:57:51 — folder-per-asset + media gitignore + webapp display（保持有效；本 follow-up 仅在 folder-per-asset 基础上更新 prompt 内容，不动 folder schema）。
 **Prior follow-up 013:** 2026-05-10 15:41:33 — shot prompt ≤2000 字 + Markdown-style field-label 视觉渲染（保持有效）。
 **Prior follow-up 012:** 2026-05-10 15:15:46 — photorealism + micro-details（保持在 character ref 内）。
 **Prior follow-up 011:** 2026-05-10 14:59:30 — scenes 合并 + cN_/sN_ 命名约定（保持有效）。

@@ -2,6 +2,70 @@
 
 Append-only follow-up audit log。每条记录该 follow-up 改了什么、哪些下游 artifact 被同步 surgical patch。
 
+## Follow-up 016 — 2026-05-10 18:15:00
+Source: user_input/follow_ups/016-20260510-181500-promote-scene-stubs-s7-s8-s9.md
+Summary: 把 follow-up 011 中暂留为 placeholder 的三个未立档场景升级为完整 scene 文件 — `s7_山道平台`（ep02）、`s8_云海`（ep05/shot02）、`s9_识海`（ep05/shot08）。覆盖每个 shot md 的 `{ref_sN_*}` 引用都有对应 `scenes/sN_*/sN_*.md` 文件支撑（含 8 字段锁定描述符 + 关键变化态 + 出现镜头 + Seedream 立绘 image prompt + Seedance 2.9s reference video prompt 三段，schema 完全镜像 s1-s6）。s9_识海 是非物理空间，reference 段给出"硬切闪黑过渡帧 + 黑底持续无光"基底，切片本体在 shot08 内由各源场景 reference 单独抽帧合成。
+
+Auto-updated:
+- `ai_videos/mozun_chongsheng/scenes/s7_山道平台/s7_山道平台.md` — 新建（ep02 上行 / 平台默认 / 下行独行 / 阴笑定格 四态；锁定描述符 主沉黑 #0a0a0a / 辅银白高光 #f5f5f0 / 点缀冷青 #1a3038 + 护黄金 #a8842c；与 s1_长阶顶 区分通过 "中段山道纵深 / 灯柱冷青 / 星河斜悬而非天顶"）。
+- `ai_videos/mozun_chongsheng/scenes/s8_云海/s8_云海.md` — 新建（ep05/shot02 魂火悬停默认态；锁定描述符 主沉黑 / 辅银白云海 / 点缀暗血红赤瞳 + 远山深青 + 护黄金虚影衣纹；reference 段魂火虚影合成位留空待 shot 内合成）。
+- `ai_videos/mozun_chongsheng/scenes/s9_识海/s9_识海.md` — 新建（ep05/shot08 蒙太奇六切片快剪 + 末段赤瞳定格态；reference 段为黑底过渡帧基底 — 不强行套用 establishing + 横移 + 推近 三段，因黑底无运镜；切片本体由各源场景 reference 单独抽帧合成）。
+- `ai_videos/mozun_chongsheng/episodes/ep02/prompts/shot02/shot02.md` — Reference placeholders 表 `{ref_s7_山道平台}` 行 surgical replace（"未立档；user 自备..." → 指向 `scenes/s7_山道平台/s7_山道平台.md` 渲染所得 + "采用上行态"）。
+- `ai_videos/mozun_chongsheng/episodes/ep02/prompts/shot03/shot03.md` — 同上，`{ref_s7_山道平台}` 行（"采用平台默认态"）。
+- `ai_videos/mozun_chongsheng/episodes/ep02/prompts/shot09/shot09.md` — 同上，`{ref_s7_山道平台}` 行（"采用下行独行态"）。
+- `ai_videos/mozun_chongsheng/episodes/ep02/prompts/shot10/shot10.md` — 同上，`{ref_s7_山道平台}` 行（"采用阴笑定格态"）。
+- `ai_videos/mozun_chongsheng/episodes/ep05/prompts/shot02/shot02.md` — `{ref_s8_云海}` 行 surgical replace（"过渡场景未立档，user 自备" → 指向 `scenes/s8_云海/s8_云海.md` + "采用默认态魂火悬停"）。
+- `ai_videos/mozun_chongsheng/episodes/ep05/prompts/shot08/shot08.md` — `{ref_s9_识海}` 行 surgical replace（"本集独有过渡空间，未立档..." → 指向 `scenes/s9_识海/s9_识海.md` + "采用默认态六切片快剪 + 末段赤瞳定格；过渡帧基底由场景 reference 提供，切片本体在 shot 内逐段合成"）。
+- `specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md` — Last regenerated header bumped to 2026-05-10 18:15:00 + follow-up 016 摘要；prior follow-up 015 备注（保持有效）。
+
+总计 patch 文件: **3 新 scene files + 6 shot reference rows + 1 revised_prompt.md = 10 文件**。
+
+No conflicts found in:
+- `final_specs/spec.md` — FR / NFR / AC 不涉及具体场景列表（ep+shot 列表是执行层），新增三个场景立档不触发 spec 重写。
+- `validation/strategy.md` + level files — 既有 "every {ref_xxx} placeholder must resolve to a real ref source" criterion 现得到加强，但无新校验项需引入。
+- `interview/qa.md` — stage 2 决策不枚举具体 scene 列表。
+- `findings/dossier.md` + angle files — research 阶段不区分 placeholder vs 立档。
+- `world.md` / `arc_outline.md` / `style_guide.md` / `README.md` — 三个新场景在大纲中已隐含（魔气长阶中段 / 高空魂火飞遁 / 蒙太奇识海段在 ep02 + ep05 narrative 中均有），无大纲层变更。
+- `.claude/agent_refs/project/ai_video.md` — Rule #12.5 v4 + Rule #12.10 (follow-up 015 引入) 直接被本 follow-up 应用 — 三个新场景文件 schema 严格遵守 rule，无 rule 改动。
+- 其它 ep01/ep03/ep04 + ep05 其余 shot 文件 — 不引用 s7/s8/s9，不动。
+
+User next steps:
+1. 按新建的 `scenes/s7_山道平台/s7_山道平台.md` / `scenes/s8_云海/s8_云海.md` / `scenes/s9_识海/s9_识海.md` 内的 image prompt + 2.9s video prompt 渲染立绘 PNG + reference mp4，置入对应 scene 文件夹（命名 `s7_山道平台.png` / `s7_山道平台1.mp4` 等，与 s1-s6 一致）。
+2. 上传新场景 reference 到 Seedance / Kling 测试 6 个 shot 的实际生成效果，确认 placeholder 解析正常。
+3. 现有 6 个 shot prompt 文件已自动指向新 scenes md，不需重渲 shot prompt 自身；仅需切换 reference 上传源。
+
+Severity: scene placeholder 未立档导致 "user 自备 / 留空依靠 prompt 描述" 退化属 **major** 等级（工作流降级但不阻塞），本 follow-up 完成后修复。后续若新增 ep06+ 引入新场景，遵循同一立档规约 append `s10_*` 等。
+
+## Follow-up 015 — 2026-05-10 17:09:02
+Source: user_input/follow_ups/015-20260510-170902-compress-reference-videos-2.9s.md
+Summary: 把所有用于"建模"角色 / 场景的 reference 视频 prompt 时长从 12s 压到 **2.9s**（Seedance 等下游视频模型的 video reference 上传约束）。角色 turntable 动作 beats 重排为 全身远景定场 + 360° 快环 + 面部中近景推近 三段；5 句多情绪台词（自报家门 / 标志台词 / 低声 / 高声 / 数字校准）→ "1, 2, 3" 三个数字（byte-identical 跨所有 10 角色，仅作声线 timbre + 咬字基线 anchor）。**新增**：场景 reference 视频 prompt 段（rule #12.10）— 与 Seedream 立绘 image prompt 并存于场景文件，2.9s 内 广角全景 + 中景横移 + 长焦推近 三段。Rule #12.5 v3 → v4；新增 rule #12.10。
+
+Auto-updated:
+- `.claude/agent_refs/project/ai_video.md` — Rule #12.5 v3 → v4 amend (turntable 12s → 2.9s, 5 句台词 → 3 数字 "1, 2, 3", 动作 beats 重排为 全身远景定场 + 360° 快环 + 面部推近 三段, 锁定字段从 8 个增至 9 个含台词 byte-identical)；新增 Rule #12.10「场景 reference 视频 prompt（2.9s 多角度建模样片）」(12.10-A 场景文件 schema 扩展为 bible + image prompt + video prompt 三段；12.10-B 场景视频 prompt body schema；12.10-C scene reference 上传与 shot prompt 联动 + 多场景 byte-identical 锁定字段)。
+- `ai_videos/mozun_chongsheng/characters/c{1..10}_*/c{N}_*.md`（10 文件，c10 已是新 schema，9 文件 surgical patch）— 文件说明、prompt 段头、code block title、`镜头:`、动作 timed beats、`台词 / 字幕:`、`节奏:`、`时长:`、`负向:` tail、5 句台词表 → 3 句数字计数台词表 全部更新；`角色:` line + `场景:` line + `光线 / 色调:` (含角色专属光晕) + `渲染样式:` + `比例:` + 配音参考段保持不变。
+- `ai_videos/mozun_chongsheng/scenes/s{1..6}_*/s{N}_*.md`（6 文件）— 现有 `# 场景 reference prompt — Seedream...（场景立绘）` 段头 → `# 场景 reference image prompt — Seedream...（场景立绘静帧 / image-only fallback）`；末尾追加新段 `# 场景 reference video prompt — Seedance / Sora / Veo / Runway Gen-3 / Kling（2.9s 多角度建模样片）` 含 11 字段 prompt body；prompt body 内 `场景:` / `镜头:` / `光线 / 色调:` 引用各场景 bible 锁定描述符 #3 / #5 / #6 / #8 字段（自动从 markdown 表格解析）。
+- `specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md` — Last regenerated header bumped to 2026-05-10 17:09:02 + follow-up 015 摘要；prior follow-up 014 备注（保持有效）。
+- `.audit/adhoc_agents/2026-05-10/compress_2.9s_followup015/` — 工具脚本 (`update_characters.py` + `update_scenes.py`) 留底，便于审计本次 surgical patch 的具体替换 pattern。
+
+总计 patch 文件: **1 agent_refs (rule #12.5 v4 + rule #12.10 新增) + 9 character files (c10 已就位) + 6 scene files + 1 revised_prompt.md = 17 文件 (+ 2 audit scripts)**。
+
+No conflicts found in:
+- `final_specs/spec.md` — FR / NFR / AC 不涉及具体 reference 视频时长 (FR-5/6 描述 Seedream 立绘 + Kling/Seedance shot prompt schema，未规定 reference 长度)；rule #12.5 / #12.10 是 agent_refs 实现细节，不进 spec。
+- `validation/strategy.md` + 3 level files — validation level 不含 "reference 视频时长" 校验项；现有 ai_video.md 8 levels 仍全部适用。
+- `interview/qa.md` — stage 2 决策不涉及 reference 视频时长。
+- `findings/dossier.md` + 5 angle files — research 阶段未触及 reference 视频时长。
+- `world.md` / `arc_outline.md` / `style_guide.md` / `README.md` — 项目级 visual / narrative 锁定文件，无 reference 视频时长字段。
+- `episodes/ep{NN}/prompts/shot{NN}/shot{NN}.md`（50 shot files）— shot prompt schema (rule #12.6 v3) 不变；scene reference 视频上传逻辑由 user 操作时识别，不引入新 prompt 字段。
+- `c10_司空玄/c10_司空玄.md` — 已是 2.9s + 1, 2, 3 schema (script 检测到无需 patch)，可能是先前 ad-hoc 更新 / 模板演化的产物，与 follow-up 015 后状态等价。
+
+User next steps:
+1. 重新生成 10 份角色 turntable mp4（按更新后的 c{N}_{name}.md → 视频 reference prompt 段渲染，2.9s ≤ 上限）。
+2. 重新生成 6 份场景 reference video mp4（按更新后的 s{N}_{name}.md → 场景 reference video prompt 段渲染）；旧的 s1_长阶顶[1-3].mp4 / c1_沧冥[1-2].mp4 等 12s 资产可归档或覆盖。
+3. 上传新 reference mp4 到 Seedance 测试 ≤ 2.9s 是否通过上传约束。
+4. 现有 50 份 shot prompt 不需重渲，仅需把 reference 上传环节切换为新 mp4 即可（shot prompt 内的 `{ref_xxx}` placeholder 不变）。
+
+Severity: reference 视频长度违反下游模型上传约束属 **blocker** 等级（无法生成下游 shot 视频），本 follow-up 完成后修复。后续若 Seedance / 其他模型放宽约束，可单独 follow-up 把 2.9s 上调。
+
 ## Follow-up 014 — 2026-05-10 15:57:51
 Source: user_input/follow_ups/014-20260510-155751-folder-per-md-media-display.md
 Summary: 三件事：(A) **每个 character / scene / shot .md 文件转为同名文件夹**，原 .md 移入文件夹内（10 chars + 6 scenes + 50 shots = 66 mv 操作）；(B) **媒体文件 gitignore** — `ai_videos/**/*.{mp4,mov,webm,mkv,avi,png,jpg,jpeg,webp,gif,bmp}` 不入 git；(C) Path 引用更新 — 50 shot files 内 character / scene path 引用从 `characters/c1_沧冥.md` 改为 `characters/c1_沧冥/c1_沧冥.md` (16 path renames × 50 files)。新增 rule #12.9 + NFR-18。Webapp media display 实现 deferred 到独立 surgical follow-up（需 backend 加 /api/media 路由 + frontend SiblingMedia 组件，本 follow-up 仅完成 file system + git 部分）。

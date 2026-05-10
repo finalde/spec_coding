@@ -3,10 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from libs.exposed_tree import ALLOWED_EXTENSIONS, ExposedTree
+from libs.exposed_tree import ExposedTree, TREE_VISIBLE_EXTENSIONS
 from libs.sub_type_lookup import lookup as sub_type_lookup
 
-_IMAGE_EXTENSIONS: frozenset[str] = frozenset({".png", ".jpg"})
+_IMAGE_EXTENSIONS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
+_VIDEO_EXTENSIONS: frozenset[str] = frozenset({".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"})
 
 
 class TreeWalker:
@@ -105,11 +106,16 @@ class TreeWalker:
         return children
 
     def _is_allowed_leaf(self, p: Path) -> bool:
-        return p.suffix.lower() in ALLOWED_EXTENSIONS
+        return p.suffix.lower() in TREE_VISIBLE_EXTENSIONS
 
     def _leaf_for(self, f: Path) -> dict[str, Any]:
         ext = f.suffix.lower()
-        node_type = "image" if ext in _IMAGE_EXTENSIONS else "file"
+        if ext in _VIDEO_EXTENSIONS:
+            node_type = "video"
+        elif ext in _IMAGE_EXTENSIONS:
+            node_type = "image"
+        else:
+            node_type = "file"
         return {"type": node_type, "name": f.name, "path": self._rel(f)}
 
     def _rel(self, p: Path) -> str:

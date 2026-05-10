@@ -21,7 +21,7 @@
 | Placeholder | 替换为 | 来源 |
 |---|---|---|
 | `{ref_c1_沧冥}` | 沧冥 turntable.mp4 / 角色 reference 视频（虚影态光影呈现，turntable 非必需仅备用） | `characters/c1_沧冥/c1_沧冥.md` 渲染所得 |
-| `{ref_s8_云海}` | 高空云海 background reference 视频 / 图（过渡场景未立档，user 自备） | user 自备 |
+| `{ref_s8_云海}` | 高空云海 background reference 视频 / 图（采用「默认态」魂火悬停） | `scenes/s8_云海/s8_云海.md` 渲染所得 |
 
 ---
 

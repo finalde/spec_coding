@@ -60,7 +60,30 @@ export async function putFile(
   return readJson<WriteResult>(response);
 }
 
+export interface RenameMediaResult {
+  renamed: { from: string; to: string }[];
+  skipped: string[];
+  errors: { path: string; message: string }[];
+}
+
+export async function renameMedia(path: string): Promise<RenameMediaResult> {
+  const response = await fetch("/api/rename-media", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<RenameMediaResult>(response);
+}
+
 /** Build a same-origin URL for image preview, with mtime cache-buster. */
 export function imageUrl(path: string, mtime: number): string {
   return `/api/file?path=${encodeURIComponent(path)}&mtime=${encodeURIComponent(String(mtime))}`;
+}
+
+/** Build a same-origin URL for raw media (image / video) via /api/media route.
+ * Bypasses /api/file's base64 + 1 MB limit. Per follow-up 005.
+ */
+export function mediaUrl(path: string, mtime?: number): string {
+  const cb = mtime !== undefined ? `&mtime=${encodeURIComponent(String(mtime))}` : "";
+  return `/api/media?path=${encodeURIComponent(path)}${cb}`;
 }
