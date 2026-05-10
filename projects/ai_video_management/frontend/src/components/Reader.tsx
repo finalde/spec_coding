@@ -165,7 +165,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
           ) : isMarkdown ? (
             <ParseFallback rawText={file.content} componentName="MarkdownView">
               <Renderer content={file.content} currentPath={path} knownPaths={knownPaths} />
-              <SiblingMedia currentPath={path} knownPaths={knownPaths} />
+              <SiblingMedia currentPath={path} knownPaths={knownPaths} onChange={onSaved} />
             </ParseFallback>
           ) : isTxt ? (
             <pre className="text-view">{file.content}</pre>

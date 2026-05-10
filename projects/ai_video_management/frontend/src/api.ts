@@ -75,6 +75,29 @@ export async function renameMedia(path: string): Promise<RenameMediaResult> {
   return readJson<RenameMediaResult>(response);
 }
 
+export interface ArchiveMediaResult {
+  from: string;
+  to: string;
+}
+
+export async function archiveMedia(path: string): Promise<ArchiveMediaResult> {
+  const response = await fetch("/api/archive-media", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ArchiveMediaResult>(response);
+}
+
+export async function unarchiveMedia(path: string): Promise<ArchiveMediaResult> {
+  const response = await fetch("/api/unarchive-media", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ArchiveMediaResult>(response);
+}
+
 /** Build a same-origin URL for image preview, with mtime cache-buster. */
 export function imageUrl(path: string, mtime: number): string {
   return `/api/file?path=${encodeURIComponent(path)}&mtime=${encodeURIComponent(String(mtime))}`;

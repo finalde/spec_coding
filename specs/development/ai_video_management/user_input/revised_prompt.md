@@ -2,9 +2,11 @@
 
 **task_type:** development
 **task_name:** ai_video_management
-**Composed from:** `raw_prompt.md` + `follow_ups/001-20260505-121536-ai-videos-only-scope.md` + `follow_ups/002-20260505-130548-zero-claude-coupling.md` + `follow_ups/003-20260509-152135-research-folder-and-viewer.md` + `follow_ups/004-20260509-194837-allow-chinese-filenames.md` + `follow_ups/005-20260510-161839-media-display-playback.md` + `follow_ups/006-20260510-164054-stale-runtime-instructions.md` + `follow_ups/007-20260510-170438-rename-media-to-parent-folder.md`
+**Composed from:** `raw_prompt.md` + `follow_ups/001-20260505-121536-ai-videos-only-scope.md` + `follow_ups/002-20260505-130548-zero-claude-coupling.md` + `follow_ups/003-20260509-152135-research-folder-and-viewer.md` + `follow_ups/004-20260509-194837-allow-chinese-filenames.md` + `follow_ups/005-20260510-161839-media-display-playback.md` + `follow_ups/006-20260510-164054-stale-runtime-instructions.md` + `follow_ups/007-20260510-170438-rename-media-to-parent-folder.md` + `follow_ups/008-20260510-201826-archive-unarchive-media.md`
 
-**Last regenerated:** 2026-05-10 17:04:38 — header bump for follow-up 007（drama-level rename-media 按钮 + `POST /api/rename-media` 后端 endpoint，把每个短剧 folder 树下 image/video 文件按 immediate parent folder name 重命名，重复扩展名按 lexicographic 顺序加 1/2/3 序号；只 touch media 文件，不删/不增/不下钻子文件夹的 media 跨 folder 合并）。
+**Last regenerated:** 2026-05-10 20:18:26 — header bump for follow-up 008（per-file archive / unarchive media — SiblingMedia tile 上 inline button 把单个 image/video 移动到同 folder 下的 `archive/` 子目录，反向亦可；后端两个新 endpoint `POST /api/archive-media` + `POST /api/unarchive-media`；archive/ 在 tree sidebar 作为常规 folder 显示；unarchive 后若 archive/ 空则自动 rmdir；rename-media batch 规则不变（archive/ 内文件也参与 rename））。
+
+**Prior follow-up 007:** 2026-05-10 17:04:38 — drama-level rename-media 按钮 + `POST /api/rename-media`（保持有效）。
 
 **Prior follow-up 006:** 2026-05-10 16:40:54 — runtime reload procedure documentation（保持有效 — 仅 documentation）。
 

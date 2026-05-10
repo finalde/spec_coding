@@ -1,7 +1,8 @@
 """API surface for ai_video_management.
 
-5 endpoints: `GET /api/tree`, `GET /api/file`, `PUT /api/file`,
-`GET /api/media`, `POST /api/rename-media`.
+7 endpoints: `GET /api/tree`, `GET /api/file`, `PUT /api/file`,
+`GET /api/media`, `POST /api/rename-media`, `POST /api/archive-media`,
+`POST /api/unarchive-media`.
 """
 from __future__ import annotations
 
@@ -19,6 +20,16 @@ from libs.api_security import BoundOrigin, OriginHostMiddleware, SecurityHeaders
 from libs.exposed_tree import MEDIA_EXTENSIONS, ExposedTree
 from libs.file_reader import FileReader
 from libs.file_writer import FileWriter
+from libs.media_archiver import (
+    AlreadyArchived,
+    InvalidPath as ArchiveInvalidPath,
+    MediaArchiver,
+    MoveFailed,
+    NotFound as ArchiveNotFound,
+    NotInArchive,
+    NotMedia,
+    TargetExists,
+)
 from libs.media_renamer import DramaNotFound, InvalidDramaPath, MediaRenamer
 from libs.repo_root import RepoRoot
 from libs.safe_resolve import SafeResolver
@@ -49,6 +60,10 @@ class RenameMediaBody(BaseModel):
     path: str
 
 
+class ArchiveMediaBody(BaseModel):
+    path: str
+
+
 def create_app(
     repo_root: RepoRoot,
     bound: BoundOrigin,
@@ -62,6 +77,7 @@ def create_app(
     writer = FileWriter(exposed, resolver)
     walker = TreeWalker(exposed)
     media_renamer = MediaRenamer(exposed, resolver)
+    media_archiver = MediaArchiver(exposed, resolver)
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(OriginHostMiddleware, bound=bound)
@@ -197,6 +213,70 @@ def create_app(
 
     @app.api_route("/api/rename-media", methods=["GET", "PUT", "PATCH", "DELETE"])
     def rename_media_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "POST"},
+        )
+
+    @app.post("/api/archive-media")
+    def archive_media(body: ArchiveMediaBody) -> Response:
+        try:
+            result = media_archiver.archive(body.path)
+        except ArchiveInvalidPath:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "invalid_path"}})
+        except NotMedia:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "extension_not_allowed"}})
+        except AlreadyArchived:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "already_archived"}})
+        except ArchiveNotFound:
+            return JSONResponse(status_code=404, content={"detail": {"kind": "not_found"}})
+        except TargetExists as exc:
+            return JSONResponse(
+                status_code=409,
+                content={"detail": {"kind": "target_exists", "target": str(exc)}},
+            )
+        except MoveFailed as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": {"kind": "move_failed", "message": str(exc)}},
+            )
+        return JSONResponse(status_code=200, content=result.to_payload())
+
+    @app.api_route("/api/archive-media", methods=["GET", "PUT", "PATCH", "DELETE"])
+    def archive_media_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "POST"},
+        )
+
+    @app.post("/api/unarchive-media")
+    def unarchive_media(body: ArchiveMediaBody) -> Response:
+        try:
+            result = media_archiver.unarchive(body.path)
+        except ArchiveInvalidPath:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "invalid_path"}})
+        except NotMedia:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "extension_not_allowed"}})
+        except NotInArchive:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "not_in_archive"}})
+        except ArchiveNotFound:
+            return JSONResponse(status_code=404, content={"detail": {"kind": "not_found"}})
+        except TargetExists as exc:
+            return JSONResponse(
+                status_code=409,
+                content={"detail": {"kind": "target_exists", "target": str(exc)}},
+            )
+        except MoveFailed as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": {"kind": "move_failed", "message": str(exc)}},
+            )
+        return JSONResponse(status_code=200, content=result.to_payload())
+
+    @app.api_route("/api/unarchive-media", methods=["GET", "PUT", "PATCH", "DELETE"])
+    def unarchive_media_method_not_allowed() -> Response:
         return JSONResponse(
             status_code=405,
             content={"detail": {"kind": "method_not_allowed"}},

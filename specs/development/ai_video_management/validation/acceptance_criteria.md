@@ -286,6 +286,41 @@ And GET /api/tree 返回 200 且 body 是长度 3 的数组（结构性断言，
 ```
 *失败 = `critical`（development.md 严重度表：boot-time exception）。*
 
+#### Scenario U3.12 — `POST /api/rename-media` drama-scoped batch（follow-up 007）
+# 来源 FR: FR-9b
+[automated]
+
+```gherkin
+Given fixture drama at `ai_videos/{tmp_drama}/` with sample shot folder containing 2 mp4 + 1 png with arbitrary names
+When POST /api/rename-media with body {path: "ai_videos/{tmp_drama}"}
+Then 响应 200 + body 含 renamed[]: {from, to} 列表 + skipped[] + errors[]
+And 同 ext 多文件 → {parent}{N}.{ext} 序号；单 ext 单文件 → {parent}.{ext} 无序号
+And path = "ai_videos/" 单层 / "ai_videos/{tmp_drama}/sub/sub" 多层 → 400 invalid_drama_path
+And path 指向不存在的 drama → 404 not_found
+And 非 POST → 405
+```
+
+#### Scenario U3.13 — `POST /api/archive-media` + `POST /api/unarchive-media`（follow-up 008）
+# 来源 FR: FR-9c, FR-9d
+[automated]
+
+```gherkin
+Given fixture media file at `ai_videos/{tmp_drama}/x/foo.mp4`（archive/ 不存在）
+When POST /api/archive-media with body {path: "ai_videos/{tmp_drama}/x/foo.mp4"}
+Then 响应 200 + body = {from: "ai_videos/{tmp_drama}/x/foo.mp4", to: "ai_videos/{tmp_drama}/x/archive/foo.mp4"}
+And 磁盘上 archive/ 已被 mkdir + 文件已 rename 进去
+When 二次 POST /api/archive-media 对已 archive 的同一 path → 404 not_found（源已不存在）
+When POST /api/archive-media 对 path 已在 archive/ 内 → 400 already_archived
+When POST /api/archive-media 对 .md 文件 → 400 extension_not_allowed
+When POST /api/archive-media 对 archive/foo.mp4 已存在的 target → 409 target_exists
+When POST /api/unarchive-media with body {path: "ai_videos/{tmp_drama}/x/archive/foo.mp4"}
+Then 响应 200 + body = {from: "...archive/foo.mp4", to: ".../foo.mp4"}
+And 磁盘上 archive/ 已被 rmdir（空了）+ foo.mp4 已 rename 回 parent
+When POST /api/unarchive-media 对非 archive/ 内文件 → 400 not_in_archive
+When 非 POST → 405
+And 两个端点均经过 Origin/Host gate（foreign Origin → 403，与 PUT /api/file 一致）
+```
+
 ### U4 — frontend scaffolding
 
 #### Scenario U4.1 — 前端骨架文件就位 + 依赖固定
@@ -640,6 +675,9 @@ And 路径处理在 Windows 上无 \ / 混合错位（ImageRefView 与 ShotPairV
 | FR-7 | U1.2 |
 | FR-8 | U1.2 |
 | FR-9 | U3.8 |
+| FR-9b | U3.12 (rename-media，follow-up 007) |
+| FR-9c | U3.13 (archive-media，follow-up 008) |
+| FR-9d | U3.13 (unarchive-media，follow-up 008) |
 | FR-10 | U3.8 |
 | FR-11 | U3.2, U3.3* |
 | FR-12 | U3.4 |

@@ -337,6 +337,37 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
+/* Per-file archive button (per follow-up 008) — inline button on each media tile */
+.sibling-media-archive-btn {
+  align-self: flex-end;
+  margin-top: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+}
+.sibling-media-archive-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg);
+}
+.sibling-media-archive-btn:disabled {
+  cursor: progress;
+  opacity: 0.55;
+}
+.sibling-media-item.is-archived {
+  opacity: 0.7;
+  background: var(--bg-toolbar);
+}
+.sibling-media-item.is-archived img,
+.sibling-media-item.is-archived video {
+  filter: grayscale(0.5);
+}
+
 /* Field-label highlight (per follow-up 013, rule #12.4 v4) — bold orange keys for prompt structure */
 .markdown-view .code-block-wrapper .field-label {
   color: #f5a96d;

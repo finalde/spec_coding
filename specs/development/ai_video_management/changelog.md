@@ -2,6 +2,34 @@
 
 Append-only follow-up audit log. Each entry records what the follow-up changed and which downstream artifacts were patched in the same turn.
 
+## Follow-up 008 — 2026-05-10 20:18:26
+Source: user_input/follow_ups/008-20260510-201826-archive-unarchive-media.md
+Summary: 在 SiblingMedia 每个 media tile 上加一个 inline "📦 Archive" / "↺ Unarchive" 按钮，点击把单个 image/video 文件移动到（或移出）同 folder 下的 `archive/` 子目录。新增两个后端 endpoint `POST /api/archive-media` + `POST /api/unarchive-media`；archive/ 在 tree sidebar 作为常规 folder 显示（不加进 `_EXCLUDED_DIRS`）；unarchive 后若 archive/ 已空自动 rmdir；rename-media batch 不跳 archive/（archive/ 内文件按 parent name "archive" 也参与 rename — 用户决策）。
+
+Auto-updated:
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — Last regenerated bumped to 2026-05-10 20:18:26；Composed-from list 加 follow-up 008；header 摘要描述新功能；prior follow-up 007 line 移到 prior 列表。
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-1 backend libs 列表加 `media_archiver.py` (follow-up 008)；FR-9 注释扩展提及 follow-up 008 的 archive endpoints；新增 FR-9c (`POST /api/archive-media`) 与 FR-9d (`POST /api/unarchive-media`) 描述 body / response / error surface (`400 invalid_path/extension_not_allowed/already_archived/not_in_archive`、`404 not_found`、`409 target_exists`、`500 move_failed`)；FR-9b 注释提示 archive/ 不被 rename-media 排除。
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — FR→Scenario 矩阵加 FR-9b (U3.12) / FR-9c (U3.13) / FR-9d (U3.13) 行；新增 Scenario U3.12 (rename-media，补 follow-up 007 缺漏) + U3.13 (archive/unarchive-media 完整错误码面 + Origin/Host gate)。
+- `projects/ai_video_management/backend/libs/media_archiver.py` (NEW) — `MediaArchiver` 类 + `MoveResult` dataclass + 异常 `InvalidPath/NotFound/NotMedia/AlreadyArchived/NotInArchive/TargetExists/MoveFailed`；`archive(rel)` 入口 validate path（在 sandbox 内 + ext ∈ MEDIA_EXTENSIONS + 文件存在 + 不是 symlink + parent 不是 archive）→ mkdir archive/（exist_ok=True）→ 检查目标不存在 → atomic `Path.rename()`；`unarchive(rel)` 入口 validate path + 要求 parent.name == "archive" → 检查目标 parent dir 不存在同名 → atomic rename → 若 archive/ 空则 rmdir（best-effort）；`ARCHIVE_DIR_NAME = "archive"` constant 公开导出。
+- `projects/ai_video_management/backend/libs/api.py` — module docstring "5 endpoints" → "7 endpoints"；imports 加 `media_archiver` 全部异常 + `MediaArchiver`（用 `as ArchiveInvalidPath/ArchiveNotFound` 别名避免与 media_renamer 同名异常冲突）；`ArchiveMediaBody` Pydantic model；`media_archiver = MediaArchiver(exposed, resolver)` 实例化；`POST /api/archive-media` 路由 (200 / 400 invalid_path/extension_not_allowed/already_archived / 404 not_found / 409 target_exists / 500 move_failed) + `POST /api/unarchive-media` 路由 (同 400 套 + `not_in_archive` / 404 / 409 / 500)；两个端点各自的 GET/PUT/PATCH/DELETE 405 method-not-allowed guard。
+- `projects/ai_video_management/frontend/src/api.ts` — 新增 `ArchiveMediaResult` type + `archiveMedia(path)` + `unarchiveMedia(path)` POST helpers，签名 `Promise<{from: string, to: string}>`。
+- `projects/ai_video_management/frontend/src/components/SiblingMedia.tsx` — Props 加 `onChange?: () => void`；新 helper `findArchivedMedia` 扫 `<currentParent>/archive/` 内 media；新 `MediaTile` 子组件渲染 figure + per-tile "📦 Archive" / "↺ Unarchive" button（in-flight disabled、`aria-label`、tooltip）；section 内拆 "📁 Folder media" + "📦 Archived · 已归档" 两个 grid；archive / unarchive 成功后 `announce()` 写 `#aria-live-toast` 并调 `onChange`；错误时 announce 错误 kind。
+- `projects/ai_video_management/frontend/src/components/Reader.tsx` — `<SiblingMedia>` 透传 `onChange={onSaved}`（命名复用：archive/unarchive 也是 tree mutation → 触发 refreshKey bump）。
+- `projects/ai_video_management/frontend/src/styles.css` — 新增 `.sibling-media-archive-btn` (右下角浮动 inline button，11px pill 风格 + hover/disabled 状态) + `.sibling-media-item.is-archived` (opacity 0.7 + 灰阶 filter 0.5) 视觉降权区分已归档 tile。
+
+Verification (smoke checks):
+- Python imports compile clean: `from libs.media_archiver import MediaArchiver, ARCHIVE_DIR_NAME` + `from libs.api import create_app` 无异常。
+- Frontend `npx tsc --noEmit` 无新错误（仅 vite.config.ts 两个 pre-existing 错误，与本 follow-up 无关）。
+- 两个 endpoints 405 guard 与已有 `/api/rename-media` 形状一致。
+
+Deferred (not in this follow-up):
+- backend pytest under `backend/tests/` for `media_archiver.py` + `api.py /api/{archive,unarchive}-media` 路由（与 follow-up 005/006/007 一致推迟到批量补测）。
+- e2e Playwright 验证 per-tile button 行为（同上推迟）。
+- 批量归档 / 多选归档（v1 per-file，单独 follow-up 触发批量）。
+- archive/ 嵌套层级限制（v1 不阻止 `archive/archive/`，只用 immediate parent.name 判定）。
+
+Severity: Low — additive feature, no breaking changes, no schema changes to existing endpoints. archive/ 与 rename-media 的交互（archive/ 内文件也参与 rename）是用户主动选择的 design tradeoff，不属 bug。
+
 ## Follow-up 007 — 2026-05-10 17:04:38
 Source: user_input/follow_ups/007-20260510-170438-rename-media-to-parent-folder.md
 Summary: 在每个短剧（drama）level 加一个 "🏷 重命名" 按钮，点击触发后端递归扫描该短剧 folder 树下所有 image/video 文件，按 immediate parent folder name 重命名（同扩展名 1 个 → `{folder}.ext`，多个 → `{folder}1.ext`、`{folder}2.ext`、…，按 lexicographic 顺序）。新增 `POST /api/rename-media` endpoint；只 touch media 文件；非法路径 / 非 drama-level 拒绝；两阶段 temp-rename 处理 intra-folder collision；refresh tree on完成。
