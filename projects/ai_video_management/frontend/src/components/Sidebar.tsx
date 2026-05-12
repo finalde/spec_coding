@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { renameMedia } from "../api";
+import { importFromDownloads } from "../api";
 import { ApiError, type TreeNode } from "../types";
+import { ActorPoolGenerator } from "./ActorPoolGenerator";
 
 export interface SidebarProps {
   tree: TreeNode | null;
@@ -18,6 +19,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameToast, setRenameToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [generatorOpen, setGeneratorOpen] = useState<boolean>(false);
 
   const onRenameClick = useCallback(
     async (e: React.MouseEvent, dramaPath: string) => {
@@ -26,14 +28,17 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
       setRenamingPath(dramaPath);
       setRenameToast(null);
       try {
-        const result = await renameMedia(dramaPath);
-        const summary = `已重命名 ${result.renamed.length} / 跳过 ${result.skipped.length} / 失败 ${result.errors.length}`;
-        setRenameToast({ kind: result.errors.length > 0 ? "err" : "ok", text: summary });
+        const result = await importFromDownloads(dramaPath);
+        const errorCount = result.errors.length + result.rename.errors.length;
+        const summary =
+          `已导入 ${result.moved.length} / 未分类 ${result.unmatched.length} ` +
+          `/ 已重命名 ${result.rename.renamed.length} / 失败 ${errorCount}`;
+        setRenameToast({ kind: errorCount > 0 ? "err" : "ok", text: summary });
         if (onTreeReload) onTreeReload();
       } catch (err) {
         const msg = err instanceof ApiError
-          ? `重命名失败: ${err.detail?.kind ?? err.status}`
-          : `重命名失败: ${err instanceof Error ? err.message : String(err)}`;
+          ? `导入失败: ${err.detail?.kind ?? err.status}`
+          : `导入失败: ${err instanceof Error ? err.message : String(err)}`;
         setRenameToast({ kind: "err", text: msg });
       } finally {
         setRenamingPath(null);
@@ -176,7 +181,10 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
           const isFocused = focusedPath === item.node.path;
           const subType = item.node.project_meta?.sub_type;
           const dramaPathParts = item.node.path ? item.node.path.split("/") : [];
-          const isDrama = item.node.type === "directory" && dramaPathParts.length === 2 && dramaPathParts[0] === "ai_videos";
+          const isAiVideoChild = item.node.type === "directory" && dramaPathParts.length === 2 && dramaPathParts[0] === "ai_videos";
+          const isSystemFolder = isAiVideoChild && dramaPathParts[1].startsWith("_");
+          const isDrama = isAiVideoChild && !isSystemFolder;
+          const isActorsRoot = isAiVideoChild && dramaPathParts[1] === "_actors";
           const isRenamingThis = renamingPath === item.node.path;
           return (
             <div
@@ -205,6 +213,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
               ) : null}
               {item.node.type === "image" ? <span aria-hidden="true" className="tree-icon">🖼</span> : null}
               {item.node.type === "video" ? <span aria-hidden="true" className="tree-icon">🎬</span> : null}
+              {isActorsRoot ? <span aria-hidden="true" className="tree-icon">🎭</span> : null}
               <span className="tree-label">{item.node.name}</span>
               {subType ? (
                 <span className={`subtype-badge subtype-${subType}`}
@@ -216,18 +225,34 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                 <button
                   type="button"
                   className="drama-rename-btn"
-                  aria-label={`按 parent folder 重命名 ${item.node.name} 下所有图片视频`}
+                  aria-label={`从 Downloads 导入近 7 天的图片/视频到 ${item.node.name} 并按 parent folder 重命名`}
                   disabled={renamingPath !== null}
-                  title="按 parent folder 重命名所有图片/视频"
+                  title="从 Downloads 按文件名分类导入近 7 天的图片/视频，并按 parent folder 重命名"
                   onClick={(e) => onRenameClick(e, item.node.path)}
                 >
-                  {isRenamingThis ? "重命名中…" : "🏷 重命名"}
+                  {isRenamingThis ? "导入并重命名中…" : "📥 导入 + 重命名"}
+                </button>
+              ) : null}
+              {isActorsRoot ? (
+                <button
+                  type="button"
+                  className="drama-rename-btn"
+                  aria-label="生成新一批 AI 演员人脸"
+                  title="调用 pollinations.ai 生成一批新演员人脸，按属性 label 入库"
+                  onClick={(e) => { e.stopPropagation(); setGeneratorOpen(true); }}
+                >
+                  🎭 生成演员
                 </button>
               ) : null}
             </div>
           );
         })}
       </div>
+      <ActorPoolGenerator
+        open={generatorOpen}
+        onClose={() => setGeneratorOpen(false)}
+        onGenerated={() => { if (onTreeReload) onTreeReload(); }}
+      />
     </nav>
   );
 }

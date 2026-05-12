@@ -74,3 +74,36 @@ def test_csp_header_on_responses() -> None:
     csp = r.headers.get("content-security-policy", "")
     assert "default-src 'self'" in csp
     assert "img-src 'self'" in csp
+
+
+def test_all_post_endpoints_registered() -> None:
+    """Follow-up 012: catch stale-route regressions early.
+
+    If a state-changing endpoint disappears (rename / typo / accidental
+    removal), the failure mode is FastAPI returning a default 405 to the
+    browser — confusing for users. Boot-smoke asserts every documented
+    POST route is present so this regression trips CI rather than UX.
+    """
+    rr = RepoRoot(path=repo_root())
+    bound = BoundOrigin(host="127.0.0.1", port=8766)
+    app = create_app(rr, bound, serve_static=False)
+    registered: set[tuple[str, str]] = set()
+    for route in app.routes:
+        methods = getattr(route, "methods", None)
+        path = getattr(route, "path", None)
+        if methods and path:
+            for m in methods:
+                registered.add((m, path))
+    expected = {
+        ("POST", "/api/rename-media"),
+        ("POST", "/api/archive-media"),
+        ("POST", "/api/unarchive-media"),
+        ("POST", "/api/import-from-downloads"),
+        ("POST", "/api/actors/generate"),
+        ("GET", "/api/actors"),
+        ("POST", "/api/casting/assign"),
+        ("DELETE", "/api/casting/assign"),
+        ("GET", "/api/casting"),
+    }
+    missing = expected - registered
+    assert not missing, f"endpoints missing from app.routes: {sorted(missing)}"

@@ -7,8 +7,14 @@
  * Per follow-up 008: each tile gets a per-file Archive / Unarchive button. The
  * archive/ subfolder of the current md folder is also surfaced as an "Archived"
  * subsection so users can unarchive without navigating into archive/.
+ *
+ * Per follow-up 011: multi-select via always-visible corner checkbox on each
+ * tile + per-section toolbar (Select all / Clear / Archive Selected (N) or
+ * Unarchive Selected (N)). Batch ops loop the existing per-file endpoints
+ * serially with continue-on-error aggregation; per-tile single-file buttons
+ * retained for quick single archives.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { archiveMedia, mediaUrl, unarchiveMedia } from "../api";
 import { ApiError } from "../types";
 
@@ -67,26 +73,66 @@ function announce(message: string): void {
   }
 }
 
+function basename(path: string): string {
+  return path.split("/").pop() ?? path;
+}
+
+function errorKind(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.detail?.kind ?? `HTTP ${err.status}`;
+  }
+  if (err instanceof Error) return err.message;
+  return "unknown_error";
+}
+
 interface MediaTileProps {
   path: string;
   archived: boolean;
   busy: boolean;
+  selected: boolean;
+  selectionBusy: boolean;
+  onToggleSelect: (path: string) => void;
   onArchive: (path: string) => void;
   onUnarchive: (path: string) => void;
 }
 
-function MediaTile({ path, archived, busy, onArchive, onUnarchive }: MediaTileProps): JSX.Element {
+function MediaTile({
+  path,
+  archived,
+  busy,
+  selected,
+  selectionBusy,
+  onToggleSelect,
+  onArchive,
+  onUnarchive,
+}: MediaTileProps): JSX.Element {
   const ext = extOf(path);
   const isVideo = VIDEO_EXTS.has(ext);
-  const filename = path.split("/").pop() ?? path;
+  const filename = basename(path);
   const url = mediaUrl(path);
   const handleClick = (): void => {
     if (busy) return;
     if (archived) onUnarchive(path);
     else onArchive(path);
   };
+  const className = [
+    "sibling-media-item",
+    archived ? "is-archived" : "",
+    selected ? "is-selected" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <figure className={archived ? "sibling-media-item is-archived" : "sibling-media-item"}>
+    <figure className={className}>
+      <input
+        type="checkbox"
+        className="tile-checkbox"
+        checked={selected}
+        disabled={selectionBusy}
+        onChange={() => onToggleSelect(path)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Select ${filename}`}
+      />
       {isVideo ? (
         <video controls preload="metadata" src={url} />
       ) : (
@@ -110,10 +156,79 @@ function MediaTile({ path, archived, busy, onArchive, onUnarchive }: MediaTilePr
   );
 }
 
+interface ToolbarProps {
+  total: number;
+  selectedCount: number;
+  busy: boolean;
+  archived: boolean;
+  onSelectAll: () => void;
+  onClear: () => void;
+  onBatch: () => void;
+}
+
+function Toolbar({
+  total,
+  selectedCount,
+  busy,
+  archived,
+  onSelectAll,
+  onClear,
+  onBatch,
+}: ToolbarProps): JSX.Element {
+  const allSelected = selectedCount > 0 && selectedCount === total;
+  const actionLabel = archived
+    ? `↺ Unarchive Selected (${selectedCount})`
+    : `📦 Archive Selected (${selectedCount})`;
+  const actionAria = archived
+    ? `Unarchive ${selectedCount} selected files`
+    : `Archive ${selectedCount} selected files`;
+  return (
+    <div className="sibling-media-toolbar" role="toolbar">
+      <button
+        type="button"
+        onClick={onSelectAll}
+        disabled={busy || allSelected || total === 0}
+        aria-label="Select all media in this section"
+      >
+        Select all
+      </button>
+      <button
+        type="button"
+        onClick={onClear}
+        disabled={busy || selectedCount === 0}
+        aria-label="Clear selection"
+      >
+        Clear
+      </button>
+      <button
+        type="button"
+        className="sibling-media-toolbar-primary"
+        onClick={onBatch}
+        disabled={busy || selectedCount === 0}
+        aria-label={actionAria}
+      >
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
 export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMediaProps): JSX.Element | null {
   const siblings = useMemo(() => findSiblingMedia(currentPath, knownPaths), [currentPath, knownPaths]);
   const archived = useMemo(() => findArchivedMedia(currentPath, knownPaths), [currentPath, knownPaths]);
   const [busyPath, setBusyPath] = useState<string | null>(null);
+  const [busy, setBusy] = useState<boolean>(false);
+  const [selectedActive, setSelectedActive] = useState<Set<string>>(() => new Set());
+  const [selectedArchived, setSelectedArchived] = useState<Set<string>>(() => new Set());
+
+  // Drop selected paths that no longer exist in the lists after a tree refresh
+  // (e.g., archive op moved them across sections — old paths become stale).
+  useEffect(() => {
+    setSelectedActive((prev) => prune(prev, siblings));
+  }, [siblings]);
+  useEffect(() => {
+    setSelectedArchived((prev) => prune(prev, archived));
+  }, [archived]);
 
   if (siblings.length === 0 && archived.length === 0) return null;
 
@@ -121,10 +236,10 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
     setBusyPath(path);
     try {
       await archiveMedia(path);
-      announce(`Archived ${path.split("/").pop() ?? path}`);
+      announce(`Archived ${basename(path)}`);
       onChange?.();
     } catch (err) {
-      announce(formatError("Archive failed", err));
+      announce(`Archive failed: ${errorKind(err)}`);
     } finally {
       setBusyPath(null);
     }
@@ -134,13 +249,60 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
     setBusyPath(path);
     try {
       await unarchiveMedia(path);
-      announce(`Unarchived ${path.split("/").pop() ?? path}`);
+      announce(`Unarchived ${basename(path)}`);
       onChange?.();
     } catch (err) {
-      announce(formatError("Unarchive failed", err));
+      announce(`Unarchive failed: ${errorKind(err)}`);
     } finally {
       setBusyPath(null);
     }
+  };
+
+  const toggleActive = (path: string): void => {
+    setSelectedActive((prev) => toggle(prev, path));
+  };
+  const toggleArchivedSel = (path: string): void => {
+    setSelectedArchived((prev) => toggle(prev, path));
+  };
+
+  const handleBatchArchive = async (): Promise<void> => {
+    const paths = siblings.filter((p) => selectedActive.has(p));
+    if (paths.length === 0) return;
+    setBusy(true);
+    const successes: string[] = [];
+    const failures: { name: string; kind: string }[] = [];
+    for (const p of paths) {
+      try {
+        await archiveMedia(p);
+        successes.push(p);
+      } catch (err) {
+        failures.push({ name: basename(p), kind: errorKind(err) });
+      }
+    }
+    setSelectedActive(new Set());
+    setBusy(false);
+    onChange?.();
+    announce(buildBatchAnnounce("Archived", successes.length, failures));
+  };
+
+  const handleBatchUnarchive = async (): Promise<void> => {
+    const paths = archived.filter((p) => selectedArchived.has(p));
+    if (paths.length === 0) return;
+    setBusy(true);
+    const successes: string[] = [];
+    const failures: { name: string; kind: string }[] = [];
+    for (const p of paths) {
+      try {
+        await unarchiveMedia(p);
+        successes.push(p);
+      } catch (err) {
+        failures.push({ name: basename(p), kind: errorKind(err) });
+      }
+    }
+    setSelectedArchived(new Set());
+    setBusy(false);
+    onChange?.();
+    announce(buildBatchAnnounce("Unarchived", successes.length, failures));
   };
 
   return (
@@ -148,13 +310,25 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
       {siblings.length > 0 ? (
         <>
           <h3>📁 Folder media · 同 folder 媒体</h3>
+          <Toolbar
+            total={siblings.length}
+            selectedCount={selectedActive.size}
+            busy={busy}
+            archived={false}
+            onSelectAll={() => setSelectedActive(new Set(siblings))}
+            onClear={() => setSelectedActive(new Set())}
+            onBatch={handleBatchArchive}
+          />
           <div className="sibling-media-row">
             {siblings.map((p) => (
               <MediaTile
                 key={p}
                 path={p}
                 archived={false}
-                busy={busyPath === p}
+                busy={busy || busyPath === p}
+                selected={selectedActive.has(p)}
+                selectionBusy={busy}
+                onToggleSelect={toggleActive}
                 onArchive={handleArchive}
                 onUnarchive={handleUnarchive}
               />
@@ -165,13 +339,25 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
       {archived.length > 0 ? (
         <>
           <h3>📦 Archived · 已归档</h3>
+          <Toolbar
+            total={archived.length}
+            selectedCount={selectedArchived.size}
+            busy={busy}
+            archived
+            onSelectAll={() => setSelectedArchived(new Set(archived))}
+            onClear={() => setSelectedArchived(new Set())}
+            onBatch={handleBatchUnarchive}
+          />
           <div className="sibling-media-row sibling-media-archived">
             {archived.map((p) => (
               <MediaTile
                 key={p}
                 path={p}
                 archived
-                busy={busyPath === p}
+                busy={busy || busyPath === p}
+                selected={selectedArchived.has(p)}
+                selectionBusy={busy}
+                onToggleSelect={toggleArchivedSel}
                 onArchive={handleArchive}
                 onUnarchive={handleUnarchive}
               />
@@ -183,11 +369,35 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
   );
 }
 
-function formatError(prefix: string, err: unknown): string {
-  if (err instanceof ApiError) {
-    const kind = err.detail?.kind ?? `HTTP ${err.status}`;
-    return `${prefix}: ${kind}`;
+function toggle(prev: Set<string>, path: string): Set<string> {
+  const next = new Set(prev);
+  if (next.has(path)) next.delete(path);
+  else next.add(path);
+  return next;
+}
+
+function prune(prev: Set<string>, current: string[]): Set<string> {
+  const valid = new Set(current);
+  let dirty = false;
+  const next = new Set<string>();
+  for (const p of prev) {
+    if (valid.has(p)) next.add(p);
+    else dirty = true;
   }
-  if (err instanceof Error) return `${prefix}: ${err.message}`;
-  return `${prefix}: unknown error`;
+  return dirty ? next : prev;
+}
+
+function buildBatchAnnounce(
+  verb: string,
+  okCount: number,
+  failures: { name: string; kind: string }[],
+): string {
+  const parts: string[] = [];
+  if (okCount > 0) parts.push(`${verb} ${okCount} file${okCount === 1 ? "" : "s"}`);
+  if (failures.length > 0) {
+    const detail = failures.map((f) => `${f.name} (${f.kind})`).join(", ");
+    parts.push(`failed ${failures.length}: ${detail}`);
+  }
+  if (parts.length === 0) return `${verb}: no files selected`;
+  return parts.join("; ");
 }

@@ -98,6 +98,113 @@ export async function unarchiveMedia(path: string): Promise<ArchiveMediaResult> 
   return readJson<ArchiveMediaResult>(response);
 }
 
+export interface ImportFromDownloadsResult {
+  moved: { from: string; to: string; kind: string }[];
+  unmatched: { from: string; to: string; kind: string }[];
+  errors: { path: string; message: string }[];
+  rename: RenameMediaResult;
+}
+
+export async function importFromDownloads(path: string): Promise<ImportFromDownloadsResult> {
+  const response = await fetch("/api/import-from-downloads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ImportFromDownloadsResult>(response);
+}
+
+export interface ActorAttrs {
+  ethnicity: string;
+  gender: string;
+  age_range: string;
+  look: string;
+  style: string;
+  notes?: string;
+}
+
+export interface ActorInfo extends ActorAttrs {
+  id: string;
+  image_path: string;
+  mtime: number;
+}
+
+export interface GenerateActorsResult {
+  generated: { id: string; image_path: string; attrs: ActorAttrs; seed: number }[];
+  errors: { requested_id: string; message: string }[];
+}
+
+export interface GenerateActorsRequest extends ActorAttrs {
+  count: number;
+}
+
+export async function generateActors(req: GenerateActorsRequest): Promise<GenerateActorsResult> {
+  const response = await fetch("/api/actors/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<GenerateActorsResult>(response);
+}
+
+export async function listActors(): Promise<{ actors: ActorInfo[] }> {
+  const response = await fetch("/api/actors", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<{ actors: ActorInfo[] }>(response);
+}
+
+export interface CastEntry {
+  role: string;
+  actor_id: string;
+  notes: string;
+}
+
+export interface CastingResult {
+  path: string;
+  entries: CastEntry[];
+}
+
+export async function fetchCasting(path: string): Promise<CastingResult> {
+  const response = await fetch(`/api/casting?path=${encodeURIComponent(path)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<CastingResult>(response);
+}
+
+export async function castingAssign(
+  path: string,
+  role: string,
+  actor_id: string,
+  notes = "",
+): Promise<CastingResult> {
+  const response = await fetch("/api/casting/assign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, role, actor_id, notes }),
+  });
+  return readJson<CastingResult>(response);
+}
+
+export async function castingUnassign(path: string, role: string): Promise<CastingResult> {
+  const response = await fetch("/api/casting/assign", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, role }),
+  });
+  return readJson<CastingResult>(response);
+}
+
+export const ATTR_OPTIONS = {
+  ethnicity: ["asian", "east-asian", "south-asian", "caucasian", "african", "latino", "middle-eastern", "mixed"] as const,
+  gender: ["male", "female"] as const,
+  age_range: ["18-25", "26-35", "36-50", "51-65", "65+"] as const,
+  look: ["handsome", "beautiful", "cute", "mature", "rugged", "soft", "aristocratic", "fierce"] as const,
+  style: ["modern-casual", "period-ancient-china", "period-western", "business", "streetwear", "sci-fi", "fantasy"] as const,
+};
+
 /** Build a same-origin URL for image preview, with mtime cache-buster. */
 export function imageUrl(path: string, mtime: number): string {
   return `/api/file?path=${encodeURIComponent(path)}&mtime=${encodeURIComponent(String(mtime))}`;

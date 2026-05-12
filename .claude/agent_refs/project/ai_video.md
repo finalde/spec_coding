@@ -888,15 +888,15 @@ OLD path → NEW path（applied across 50 shot files 出场角色 table + Refere
 
 *(Originated from follow-up "folder-per-asset + media gitignore + webapp display" — 2026-05-10. Solves: ① media files 与 prompt 关联存储 (same folder)；② git 仓库 size 不因 binary media 膨胀；③ webapp 直接预览 media，无需另开外部 player。)*
 
-#### 12.10 场景 reference 视频 prompt（2.9s 多角度建模样片，per follow-up "compress reference videos to 2.9s"）
+#### 12.10 场景 reference 视频 prompt（3.9s all-angle 建模样片，per follow-up 010 "scene reference 3.9s + 全角度起手正面"）
 
-镜像 character turntable pipeline（rule #12.5 v4），为每个立档场景增加 **场景 reference 视频 prompt** 段，与现有 Seedream 立绘 image prompt（rule #12.8 v2 schema）并存：image prompt 喂 image-only 模型 / 静帧 fallback；video prompt 喂 Seedance 等 video-as-reference 模型，用 2.9s 极速多角度样片让模型抓到场景空间结构 + 主要建筑或自然元素 + 标志道具材质 + 配色 hex + 时辰光源。
+镜像 character turntable pipeline（rule #12.5 v4，仍保持 2.9s 不动），为每个立档场景增加 **场景 reference 视频 prompt** 段，与现有 Seedream 立绘 image prompt（rule #12.8 v2 schema）并存：image prompt 喂 image-only 模型 / 静帧 fallback；video prompt 喂 Seedance 等 video-as-reference 模型，用 **3.9s** 极速 **all-angle**（起手正面 + 水平 360° 环绕 + 垂直三视角 + 中景横移 + 长焦特写）样片让模型抓到场景空间结构 + 多角度几何 + 主要建筑或自然元素 + 标志道具材质 + 配色 hex + 时辰光源。
 
-**为什么 2.9s 硬上限：**
+**为什么 3.9s 硬上限（per follow-up 010 — 把 scene reference 从 v1 的 2.9s 三段升到 v2 的 3.9s 五段）：**
 
-与 character turntable 同因 — Seedance 等下游模型的 video reference 上传约束（≤ 2.9s 最稳）。本 rule 把 scene reference 视频时长锁在 **2.9s**；运镜可极快（不是给观众看，是给模型抓 feature 的），但要稳定不抖。**重点：2.9s 内最大化场景空间 / 多角度 / 材质细节 信息密度** —— Seedance 抓到「广角全景定场 + 中景轨道横移 + 长焦特写推近」三段即够 reference 用。
+与 character turntable 同因 — Seedance 等下游模型的 video reference 上传时长约束。Scene reference 的核心 KPI 是「空间几何 + 多角度覆盖」，比 character turntable（单体 360°）要承载更多维度的信息（前后左右四面 × 上中下三层 × 材质道具特写）。v1 的 2.9s 三段（establishing + 横移 + 推近）只能覆盖水平面两段 + 一个细节段，**几何上信息密度不够，下游 shot 视频常出现"侧面 / 后方建筑细节失真"** —— 因为 reference 里就没有侧面 / 后方的像素信息。v2 把时长放宽到 **3.9s**，把动作分段从三段升到 **五段**：① 正面建场 ② 水平 360° 环绕 ③ 垂直三视角 ④ 中景轨道横移 ⑤ 长焦特写，几何上覆盖球面采样的主轴（水平四面 + 垂直三层）+ 道具材质特写。运镜可极快（reference 不给观众看，是给模型抓 feature 的），稳定不抖即可。本视频纯视觉 reference — **不要任何音频 / BGM / 音效 / 旁白 / 环境音**；prompt body 显式声明该约束。
 
-**12.10-A 场景文件 schema 扩展（rule #12.8 v2 amend）：**
+**12.10-A 场景文件 schema 扩展（rule #12.8 v2 amend，3.9s v2 schema）：**
 
 每场景文件 `scenes/s{N}_{shortname}/s{N}_{shortname}.md` 在原 schema（bible + Seedream 立绘 image prompt）后追加 **场景 reference 视频 prompt** 段：
 
@@ -917,40 +917,44 @@ OLD path → NEW path（applied across 50 shot files 出场角色 table + Refere
 
 ---
 
-# 场景 reference video prompt — Seedance / Sora / Veo / Runway Gen-3 / Kling（2.9s 多角度建模样片）
+# 场景 reference video prompt — Seedance / Sora / Veo / Runway Gen-3 / Kling（3.9s all-angle 建模样片）
 
-> **用法**：复制下方代码块整段，粘贴到支持 video reference 的 AI 视频模型。**该样片本身**作为后续真正 shot 视频的 video reference 输入，锁定场景空间 + 材质 + 配色 + 时辰光源。**注意：≤ 2.9s 硬上限**（reference 上传约束 per rule #12.10）。
+> **用法**：复制下方代码块整段，粘贴到支持 video reference 的 AI 视频模型。**该样片本身**作为后续真正 shot 视频的 video reference 输入，锁定场景空间 + 材质 + 配色 + 时辰光源 + 多角度几何。**注意：≤ 3.9s 硬上限**（reference 上传约束 per rule #12.10 v2）。**视频纯视觉，无任何音频 / BGM / 音效 / 旁白。**
 
 ```text
-{scene video reference prompt body — 2.9s schema per rule #12.10-B}
+{scene video reference prompt body — 3.9s v2 schema per rule #12.10-B}
 ```
 ````
 
-**12.10-B 场景视频 reference prompt body schema：**
+**12.10-B 场景视频 reference prompt body schema（v2 — 3.9s all-angle 五段）：**
 
 ```text
-{scene-name} — 场景 reference 多角度建模样片（establishing + 中景横移 + 特写推近）
+{scene-name} — 场景 reference 全角度建模样片（正面建场 + 水平 360° 环绕 + 垂直三视角 + 中景横移 + 长焦特写）
 
 场景: {一句话锁定 byte-identical from scenes/s{N}/锁定描述符 #8} + {时辰 + 主要建筑或自然元素 + 配色 hex 主/辅/点缀 from 锁定描述符 #5/6}
 
-镜头: 三段拼接 — ① 广角全景起手（约 24mm 焦距感）+ 微仰摇展示空间结构与天际线/顶部；② 中景快速轨道横移（约 35mm 焦距感）扫过主要建筑或自然元素与关键区位（入口 / 中心 / 边界）；③ 长焦推近（约 85mm 焦距感）至标志道具或材质细节（雕饰 / 纹理 / 标志装饰）。无抖动；运镜可极快但要稳定。
+镜头: 五段拼接 — ① 正面建场（约 24mm 焦距感）+ 大全景平视，展示场景空间结构 / 天际线 / 顶部 / 主朝向（起手必须 front view，给 Seedance 锁定主体身份 + 主朝向信号）；② 水平 360° 环绕弧线（约 24-35mm 焦距感）+ 平行视角顺时针扫过 右侧 → 后方 → 左侧 → 回到正面，覆盖场景四面观；③ 垂直三视角（约 28mm 焦距感）+ 高位俯视 → 平视 → 低位仰视，覆盖鸟瞰 / 平观 / 仰望三层；④ 中景轨道横移（约 35mm 焦距感）扫过主要建筑或自然元素与关键区位（入口 / 中心 / 边界）；⑤ 长焦推近（约 85mm 焦距感）至标志道具或材质细节（雕饰 / 纹理 / 标志装饰），最后 0.3s 定格。无抖动；运镜可极快但要稳定。
 
-动作（timed beats，2.9s 极速三段 — 信息密度优先；本视频是 reference，不是给观众看的，运镜可极快）:
-  - 0-1s: 远景定场 — 广角全景展示场景空间结构与天际线/顶部，镜头微仰摇半秒。
-  - 1-2s: 中景快速轨道横移 — 扫过主要建筑或自然元素，覆盖入口 / 中心 / 边界三关键区。
-  - 2-2.9s: 长焦推近至标志道具或材质细节（雕饰 / 纹理 / 标志装饰），定格 0.3s。
+动作（timed beats，3.9s 极速五段 — 全角度信息密度优先；本视频是 reference，不是给观众看的，运镜可极快但要稳定不抖）:
+  - 0-0.8s: 正面建场（front establishing）— 大全景正面广角平视，展示场景空间结构 + 天际线 / 顶部 + 主朝向。Front view 是 Seedance 抓"场景身份 + 主朝向"的最强信号，必须放在首段且不可省。
+  - 0.8-1.7s: 水平 360° 环绕弧线 — 平行视角顺时针扫过 右侧 → 后方 → 左侧 → 回到正面（约 0.9s 完成四面观），覆盖场景水平面全角度。
+  - 1.7-2.5s: 垂直三视角扫描 — 高位俯视（鸟瞰空间布局）→ 平视（标准观察视角）→ 低位仰视（仰望顶部 / 天空 / 高耸元素），覆盖垂直面三层。
+  - 2.5-3.3s: 中景轨道横移 — 扫过主要建筑或自然元素，覆盖入口 / 中心 / 边界三关键区。
+  - 3.3-3.9s: 长焦推近至标志道具或材质细节（雕饰 / 纹理 / 标志装饰），最后 0.3s 定格。
 
 光线 / 色调: 默认时辰光源 from 锁定描述符 #5；配色 hex 主/辅/点缀 from 锁定描述符 #6 严格遵守，不漂移。
 
-节奏: 极快（2.9s 内完成 全景 + 横移 + 推近 — 信息密度优先，运镜可快但要稳定无抖动）。
+节奏: 极快（3.9s 内完成 正面建场 + 水平 360° + 垂直三视角 + 横移 + 特写 — 全角度信息密度优先，运镜可极快但要稳定无抖动）。
 
 渲染样式: 影视级真人写实 + cinematic + 4K HDR + 真实材质质感 + 实拍剧照风。
 
 比例: 9:16
 
-时长: 2.9s
+音频: 无（视频纯视觉 reference，不要 BGM / 音效 / 旁白 / 环境音）。
 
-负向: {项目级负向锁定 from style_guide.md} / {场景专属负向 from scenes/s{N}/锁定描述符 #负向} / 不要 镜头抖动 / 不要 时辰错乱（与锁定描述符 #5 不符）/ 不要 配色偏离 hex 锁定 / 不要 现代化/西式元素混入（如场景档明确禁止）/ 不要 角色人物入画（场景 reference 纯环境，无角色）/ 不要 超过 2.9s（reference 上传硬上限）。
+时长: 3.9s
+
+负向: {项目级负向锁定 from style_guide.md} / {场景专属负向 from scenes/s{N}/锁定描述符 #负向} / 不要 镜头抖动 / 不要 时辰错乱（与锁定描述符 #5 不符）/ 不要 配色偏离 hex 锁定 / 不要 现代化/西式元素混入（如场景档明确禁止）/ 不要 角色人物入画（场景 reference 纯环境，无角色）/ 不要 起手非正面（必须 front view 建场）/ 不要 任何音频 / BGM / 音效 / 旁白 / 环境音 / 不要 超过 3.9s（reference 上传硬上限）。
 ```
 
 **12.10-C Scene reference 上传与下游 shot prompt 联动：**
@@ -959,11 +963,11 @@ OLD path → NEW path（applied across 50 shot files 出场角色 table + Refere
 - 未立档场景（仅 1 shot 出现，inline 描述）：不生成 scene reference 视频；shot prompt 的 `场景:` 行 inline 描述足够。
 - Shot prompt 文件 schema（rule #12.6 v2）不变 —— scene reference 视频上传逻辑由 user 操作时识别，不引入新 prompt 字段。
 
-**Turntable 视频 prompt 锁定字段（多场景 byte-identical，仅 `场景:` 段随场景变化）：**
+**Scene video reference prompt 锁定字段（多场景 byte-identical，仅 `场景:` 段随场景变化）：**
 
-`镜头` / `光线 / 色调（除时辰光源 token）` / `节奏` / `渲染样式` / `比例` / `时长（=2.9s）` / 视频专属负向 7 个字段在所有场景 video reference prompt 中 byte-identical。这样 6+ 场景的 reference 视频输出可剪辑成「场景巡礼合集」。
+`镜头` / `光线 / 色调（除时辰光源 token）` / `节奏` / `渲染样式` / `比例` / `音频（=无）` / `时长（=3.9s）` / 视频专属负向 **8 个字段**在所有场景 video reference prompt 中 byte-identical（v2：从 v1 的 7 字段增加 `音频`，时长锁值由 2.9s 改 3.9s）。这样 6+ 场景的 reference 视频输出可剪辑成「场景巡礼合集」。
 
-*(Originated from follow-up "compress reference videos to 2.9s" — 2026-05-10. Solves: ① Seedance 等下游模型 reference 上传时长上限约束；② 场景 pipeline 与 character pipeline 不对齐 — 现在两者都有 2.9s video reference + image fallback 双轨；③ 用户原工作流已在为场景生成 video reference，rule 补齐模板。)*
+*(Originated from follow-up "compress reference videos to 2.9s" — 2026-05-10；amended by follow-up 010 "scene ref video 3.9s + all-angle + front-start" — 2026-05-11，把时长从 2.9s 提到 3.9s、动作分段从三段重写为五段 all-angle 序列、显式声明 visuals-only 无音频。Solves: ① v1 的 2.9s 三段在几何上覆盖不足，shot 视频常出现侧面 / 后方细节失真；② 用户工作流确认 reference 上传上限可放宽到 3.9s；③ 显式给 Seedance 提示 visuals-only，避免下游模型 hallucinate audio track。Character turntable rule #12.5 不一致地保留 2.9s — 因为单体 360° 在 2.9s 内已足够覆盖。)*
 
 ## Update protocol
 

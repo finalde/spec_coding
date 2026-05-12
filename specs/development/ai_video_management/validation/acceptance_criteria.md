@@ -300,6 +300,37 @@ And path 指向不存在的 drama → 404 not_found
 And 非 POST → 405
 ```
 
+#### Scenario U3.14 — `POST /api/import-from-downloads` 分类导入 + chain rename（follow-up 009）
+# 来源 FR: FR-9e
+[automated]
+
+```gherkin
+Given fixture drama at `ai_videos/{tmp_drama}/` with characters/c1_aaa/ + scenes/s1_bbb/ + episodes/ep01/prompts/shot01/
+And fixture Downloads dir (env AI_VIDEO_MGMT_DOWNLOADS_DIR) containing:
+  * kling_c1_aaa_test.mp4 (mtime: now-1d)
+  * scene_s1_bbb_v2.png (mtime: now-2d)
+  * ep01_shot01_seedance.mp4 (mtime: now-3d)
+  * random_unrelated.mp4 (mtime: now-1h)
+  * old_stuff.mp4 (mtime: now-30d, BEYOND window)
+  * trailer_doc.pdf (non-media, must skip)
+  * a_symlink.mp4 (symlink, must skip)
+When POST /api/import-from-downloads with body {path: "ai_videos/{tmp_drama}"}
+Then 响应 200
+And response.moved 含 3 项：kling_c1_aaa_test.mp4 → characters/c1_aaa (kind=character)，scene_s1_bbb_v2.png → scenes/s1_bbb (kind=scene)，ep01_shot01_seedance.mp4 → episodes/ep01/prompts/shot01 (kind=shot)
+And response.unmatched 含 1 项：random_unrelated.mp4 → ai_videos/{tmp_drama}/not_matched/random_unrelated.mp4 (kind=unmatched)
+And response.errors[] 不含 old_stuff.mp4 / trailer_doc.pdf / a_symlink.mp4（这些被 window/ext/symlink 静默跳过，不计入 errors）
+And response.rename = {renamed:[...重命名前 3 个 + 不含 not_matched 内的文件...], skipped:[], errors:[]}
+And 磁盘上 ai_videos/{tmp_drama}/not_matched/random_unrelated.mp4 保留原文件名（未被 rename 触及）
+And 磁盘上 ai_videos/{tmp_drama}/characters/c1_aaa/c1_aaa.mp4 已被 rename
+When 第二次 POST /api/import-from-downloads 对同一 drama（Downloads 已空）
+Then 响应 200 + moved=[] + unmatched=[] + errors=[] + rename.renamed=[]
+When path 非 drama-level（如 "ai_videos/" 或 "ai_videos/{drama}/sub"）→ 400 invalid_drama_path
+When path 指向不存在 drama → 404 not_found
+When AI_VIDEO_MGMT_DOWNLOADS_DIR 指向不存在路径 → 500 downloads_dir_missing
+When 非 POST → 405
+And 端点经过 Origin/Host gate（foreign Origin → 403）
+```
+
 #### Scenario U3.13 — `POST /api/archive-media` + `POST /api/unarchive-media`（follow-up 008）
 # 来源 FR: FR-9c, FR-9d
 [automated]
@@ -319,6 +350,55 @@ And 磁盘上 archive/ 已被 rmdir（空了）+ foo.mp4 已 rename 回 parent
 When POST /api/unarchive-media 对非 archive/ 内文件 → 400 not_in_archive
 When 非 POST → 405
 And 两个端点均经过 Origin/Host gate（foreign Origin → 403，与 PUT /api/file 一致）
+```
+
+#### Scenario U3.15 — `POST /api/actors/generate` 批量生成 + pollinations.ai 出站 HTTP（follow-up 014）
+# 来源 FR: FR-9f, FR-86
+[automated]
+
+```gherkin
+Given 空目录 ai_videos/_actors/ 不存在
+And ActorPool 的 httpx 客户端被 monkey-patch 为返回固定 12-byte JPEG payload（模拟 pollinations.ai 成功响应）
+When POST /api/actors/generate with body {count: 3, ethnicity: "asian", gender: "male", age_range: "18-25", look: "handsome", style: "modern-casual", notes: "test"}
+Then 响应 200
+And response.generated 长度 = 3
+And response.generated[0].id = "actor_0001"，[1].id = "actor_0002"，[2].id = "actor_0003"
+And 磁盘上 ai_videos/_actors/actor_0001/actor_0001.jpg 存在 + actor_0001.md 存在
+And actor_0001.md 含属性表（ethnicity / gender / age_range / look / style / notes）+ 组装的英文 prompt + seed
+When 第二次 POST /api/actors/generate 同一参数 count=2
+Then 响应 200 + generated[0].id = "actor_0004"，[1].id = "actor_0005"（ID 单调自增，不复用）
+When POST body 中 ethnicity = "klingon"（不在 enum） → 400 invalid_attribute
+When POST body 中 count = 0 或 count = 21 → 400 invalid_attribute（同 kind，code 复用）
+When ActorPool 客户端 monkey-patch 为模拟 timeout → 那 1 张归 errors[]，其它 (count - 1) 张正常生成；状态 200
+When 非 POST → 405
+```
+
+#### Scenario U3.16 — casting.md upsert / delete + GET /api/casting + GET /api/actors（follow-up 014）
+# 来源 FR: FR-9g, FR-9h, FR-10b, FR-10c
+[automated]
+
+```gherkin
+Given fixture drama at ai_videos/{tmp_drama}/ + pool 内 actor_0001 / actor_0002 已存在（fixture 创建）
+And ai_videos/{tmp_drama}/casting.md 不存在
+When POST /api/casting/assign with body {path: "ai_videos/{tmp_drama}", role: "c1_主角", actor_id: "actor_0001", notes: "魔尊"}
+Then 响应 200 + path = "ai_videos/{tmp_drama}/casting.md" + entries 长度 = 1
+And 磁盘上 casting.md 被创建，含 header + markdown 表，含 1 行 c1_主角 → actor_0001 → 魔尊
+When POST 同一 role 但 actor_id = "actor_0002"（修改 cast）
+Then 响应 200 + entries 长度 = 1（覆盖，不重复）+ row 现在指向 actor_0002
+When POST 新 role "c2_配角" actor_id = "actor_0001"
+Then 响应 200 + entries 长度 = 2
+When GET /api/casting?path=ai_videos/{tmp_drama}
+Then 响应 200 + entries = [{role: "c1_主角", actor_id: "actor_0002", notes: ""}, {role: "c2_配角", actor_id: "actor_0001", notes: ""}]
+When DELETE /api/casting/assign with body {path, role: "c1_主角"}
+Then 响应 200 + entries 长度 = 1 + c1_主角 row 已删
+When POST /api/casting/assign with body {path, role: "c3", actor_id: "actor_9999"}（不存在）
+Then 响应 400 invalid_actor_id
+When POST body 中 path = "ai_videos/" 或 "ai_videos/{drama}/sub" → 400 invalid_drama_path
+When path 指向不存在 drama → 404 not_found
+When GET /api/actors
+Then 响应 200 + actors 数组按 id 升序，每条含 ethnicity / gender / age_range / look / style / notes / image_path / mtime
+And 缺 sidecar md 或 jpg 的 actor folder 静默跳过（warning logged 但不进 response）
+When 非 POST/DELETE 到 /api/casting/assign → 405
 ```
 
 ### U4 — frontend scaffolding
@@ -678,7 +758,14 @@ And 路径处理在 Windows 上无 \ / 混合错位（ImageRefView 与 ShotPairV
 | FR-9b | U3.12 (rename-media，follow-up 007) |
 | FR-9c | U3.13 (archive-media，follow-up 008) |
 | FR-9d | U3.13 (unarchive-media，follow-up 008) |
+| FR-9e | U3.14 (import-from-downloads，follow-up 009) |
+| FR-9f | U3.15 (actors/generate，follow-up 014) |
+| FR-9g | U3.16 (casting/assign，follow-up 014) |
+| FR-9h | U3.16 (casting/assign DELETE，follow-up 014) |
 | FR-10 | U3.8 |
+| FR-10b | U3.16 (GET /api/actors，follow-up 014) |
+| FR-10c | U3.16 (GET /api/casting，follow-up 014) |
+| FR-86 | U3.15 (attribute schema enums，follow-up 014) |
 | FR-11 | U3.2, U3.3* |
 | FR-12 | U3.4 |
 | FR-13 | U3.5 |

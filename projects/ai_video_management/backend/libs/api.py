@@ -1,8 +1,10 @@
 """API surface for ai_video_management.
 
-7 endpoints: `GET /api/tree`, `GET /api/file`, `PUT /api/file`,
+13 endpoints: `GET /api/tree`, `GET /api/file`, `PUT /api/file`,
 `GET /api/media`, `POST /api/rename-media`, `POST /api/archive-media`,
-`POST /api/unarchive-media`.
+`POST /api/unarchive-media`, `POST /api/import-from-downloads`,
+`POST /api/actors/generate`, `GET /api/actors`,
+`POST /api/casting/assign`, `DELETE /api/casting/assign`, `GET /api/casting`.
 """
 from __future__ import annotations
 
@@ -16,10 +18,13 @@ from pydantic import BaseModel
 
 from libs import file_reader as fr
 from libs import file_writer as fw
+from libs.actor_pool import ActorAttrs, ActorPool, GenerationDirMissing, InvalidAttribute
 from libs.api_security import BoundOrigin, OriginHostMiddleware, SecurityHeadersMiddleware
+from libs.casting import Casting, InvalidActorId, InvalidRole
 from libs.exposed_tree import MEDIA_EXTENSIONS, ExposedTree
 from libs.file_reader import FileReader
 from libs.file_writer import FileWriter
+from libs.downloads_importer import DownloadsDirMissing, DownloadsImporter
 from libs.media_archiver import (
     AlreadyArchived,
     InvalidPath as ArchiveInvalidPath,
@@ -64,6 +69,32 @@ class ArchiveMediaBody(BaseModel):
     path: str
 
 
+class ImportFromDownloadsBody(BaseModel):
+    path: str
+
+
+class GenerateActorsBody(BaseModel):
+    count: int
+    ethnicity: str
+    gender: str
+    age_range: str
+    look: str
+    style: str
+    notes: str = ""
+
+
+class CastingAssignBody(BaseModel):
+    path: str
+    role: str
+    actor_id: str
+    notes: str = ""
+
+
+class CastingUnassignBody(BaseModel):
+    path: str
+    role: str
+
+
 def create_app(
     repo_root: RepoRoot,
     bound: BoundOrigin,
@@ -78,6 +109,17 @@ def create_app(
     walker = TreeWalker(exposed)
     media_renamer = MediaRenamer(exposed, resolver)
     media_archiver = MediaArchiver(exposed, resolver)
+    downloads_importer = DownloadsImporter(exposed, resolver, media_renamer)
+    actor_pool = ActorPool(exposed, resolver)
+    # Eager-create the actor pool folder on startup (follow-up 015): the sidebar
+    # "🎭 生成演员" button is bound to the `_actors/` tree row, so the folder
+    # must exist before the user can trigger the first batch — otherwise the UI
+    # entry point is invisible.
+    try:
+        actor_pool.actors_dir().mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    casting = Casting(exposed, resolver, media_renamer, actor_pool)
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(OriginHostMiddleware, bound=bound)
@@ -281,6 +323,159 @@ def create_app(
             status_code=405,
             content={"detail": {"kind": "method_not_allowed"}},
             headers={"Allow": "POST"},
+        )
+
+    @app.post("/api/import-from-downloads")
+    def import_from_downloads(body: ImportFromDownloadsBody) -> Response:
+        try:
+            result = downloads_importer.import_drama(body.path)
+        except InvalidDramaPath:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_drama_path"}},
+            )
+        except DramaNotFound:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": {"kind": "not_found"}},
+            )
+        except DownloadsDirMissing as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": {"kind": "downloads_dir_missing", "path": str(exc)}},
+            )
+        return JSONResponse(status_code=200, content=result.to_payload())
+
+    @app.api_route("/api/import-from-downloads", methods=["GET", "PUT", "PATCH", "DELETE"])
+    def import_from_downloads_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "POST"},
+        )
+
+    @app.post("/api/actors/generate")
+    def actors_generate(body: GenerateActorsBody) -> Response:
+        try:
+            attrs = ActorAttrs(
+                ethnicity=body.ethnicity,
+                gender=body.gender,
+                age_range=body.age_range,
+                look=body.look,
+                style=body.style,
+                notes=body.notes,
+            )
+            result = actor_pool.generate_batch(attrs, body.count)
+        except InvalidAttribute as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_attribute", "message": str(exc)}},
+            )
+        except GenerationDirMissing as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": {"kind": "actors_dir_unwritable", "message": str(exc)}},
+            )
+        return JSONResponse(status_code=200, content=result.to_payload())
+
+    @app.api_route("/api/actors/generate", methods=["GET", "PUT", "PATCH", "DELETE"])
+    def actors_generate_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "POST"},
+        )
+
+    @app.get("/api/actors")
+    def actors_list() -> Response:
+        actors = [a.to_dict() for a in actor_pool.list_actors()]
+        return JSONResponse(status_code=200, content={"actors": actors})
+
+    @app.api_route("/api/actors", methods=["POST", "PUT", "PATCH", "DELETE"])
+    def actors_list_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "GET"},
+        )
+
+    @app.get("/api/casting")
+    def casting_read(path: str = Query(...)) -> Response:
+        try:
+            result = casting.read(path)
+        except InvalidDramaPath:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_drama_path"}},
+            )
+        except DramaNotFound:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": {"kind": "not_found"}},
+            )
+        return JSONResponse(status_code=200, content=result.to_payload())
+
+    @app.post("/api/casting/assign")
+    def casting_assign(body: CastingAssignBody) -> Response:
+        try:
+            result = casting.assign(body.path, body.role, body.actor_id, body.notes)
+        except InvalidDramaPath:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_drama_path"}},
+            )
+        except InvalidRole as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_role", "message": str(exc)}},
+            )
+        except InvalidActorId as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_actor_id", "message": str(exc)}},
+            )
+        except DramaNotFound:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": {"kind": "not_found"}},
+            )
+        return JSONResponse(status_code=200, content=result.to_payload())
+
+    @app.delete("/api/casting/assign")
+    def casting_unassign(body: CastingUnassignBody) -> Response:
+        try:
+            result = casting.unassign(body.path, body.role)
+        except InvalidDramaPath:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_drama_path"}},
+            )
+        except InvalidRole as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_role", "message": str(exc)}},
+            )
+        except DramaNotFound:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": {"kind": "not_found"}},
+            )
+        return JSONResponse(status_code=200, content=result.to_payload())
+
+    @app.api_route("/api/casting/assign", methods=["GET", "PUT", "PATCH"])
+    def casting_assign_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "POST, DELETE"},
+        )
+
+    @app.api_route("/api/casting", methods=["POST", "PUT", "PATCH", "DELETE"])
+    def casting_read_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "GET"},
         )
 
     if serve_static:

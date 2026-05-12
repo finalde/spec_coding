@@ -56,10 +56,16 @@ class MediaRenamer:
         self._exposed = exposed
         self._resolver = resolver
 
-    def rename_drama(self, rel_drama_path: str) -> RenameResult:
+    def rename_drama(
+        self,
+        rel_drama_path: str,
+        excluded_folder_names: frozenset[str] | None = None,
+    ) -> RenameResult:
         drama_dir = self._validate_drama(rel_drama_path)
         result = RenameResult()
         excluded = self._exposed.excluded_dirs()
+        if excluded_folder_names:
+            excluded = frozenset(excluded | excluded_folder_names)
         ops: list[RenameOp] = []
         skipped_paths: list[str] = []
         for folder in self._iter_folders(drama_dir, excluded):
@@ -70,6 +76,11 @@ class MediaRenamer:
         for sk in skipped_paths:
             result.skipped.append(sk)
         return result
+
+    def validate_drama(self, rel: str) -> Path:
+        """Public wrapper around _validate_drama for use by sibling modules
+        (e.g. DownloadsImporter) that need the same drama-path validation."""
+        return self._validate_drama(rel)
 
     def _validate_drama(self, rel: str) -> Path:
         if not isinstance(rel, str) or rel == "":

@@ -2,10 +2,17 @@
 
 **task_type:** development
 **task_name:** ai_video_management
-**Composed from:** `raw_prompt.md` + `follow_ups/001-20260505-121536-ai-videos-only-scope.md` + `follow_ups/002-20260505-130548-zero-claude-coupling.md` + `follow_ups/003-20260509-152135-research-folder-and-viewer.md` + `follow_ups/004-20260509-194837-allow-chinese-filenames.md` + `follow_ups/005-20260510-161839-media-display-playback.md` + `follow_ups/006-20260510-164054-stale-runtime-instructions.md` + `follow_ups/007-20260510-170438-rename-media-to-parent-folder.md` + `follow_ups/008-20260510-201826-archive-unarchive-media.md`
+**Composed from:** `raw_prompt.md` + `follow_ups/001-20260505-121536-ai-videos-only-scope.md` + `follow_ups/002-20260505-130548-zero-claude-coupling.md` + `follow_ups/003-20260509-152135-research-folder-and-viewer.md` + `follow_ups/004-20260509-194837-allow-chinese-filenames.md` + `follow_ups/005-20260510-161839-media-display-playback.md` + `follow_ups/006-20260510-164054-stale-runtime-instructions.md` + `follow_ups/007-20260510-170438-rename-media-to-parent-folder.md` + `follow_ups/008-20260510-201826-archive-unarchive-media.md` + `follow_ups/009-20260511-195638-import-from-downloads-classifier.md` + `follow_ups/010-20260511-120454-scene-ref-video-3.9s-all-angles.md` + `follow_ups/011-20260511-202546-batch-archive-media-multi-select.md` + `follow_ups/012-20260511-122833-backend-autoreload-stale-routes.md` + `follow_ups/013-20260511-125029-batch-trim-character-mp4-to-2.9s.md` + `follow_ups/014-20260512-201500-actor-face-pool-casting-ref-video.md` + `follow_ups/015-20260512-210500-actors-bootstrap-folder.md`
 
-**Last regenerated:** 2026-05-10 20:18:26 — header bump for follow-up 008（per-file archive / unarchive media — SiblingMedia tile 上 inline button 把单个 image/video 移动到同 folder 下的 `archive/` 子目录，反向亦可；后端两个新 endpoint `POST /api/archive-media` + `POST /api/unarchive-media`；archive/ 在 tree sidebar 作为常规 folder 显示；unarchive 后若 archive/ 空则自动 rmdir；rename-media batch 规则不变（archive/ 内文件也参与 rename））。
+**Last regenerated:** 2026-05-12 21:05:00 — header bump for follow-up 015（修 follow-up 014 留下的 chicken-and-egg UX bug：用户启动 webapp 后看不到 "🎭 生成演员" 按钮 —— 按钮绑在 sidebar 的 `_actors/` 行，而 `_actors/` 目录仅在首次成功生成后才 lazy 创建，所以新用户找不到入口。**Fix**：`api.py:create_app()` 在实例化 `ActorPool` 后立即 eager `mkdir(parents=True, exist_ok=True)` `ai_videos/_actors/`，文件夹永远存在 → sidebar 永远渲染该行 → 按钮永远可见。零业务逻辑改动，已有 `_actors/` 安装零影响。）
 
+**Prior follow-up 014:** 2026-05-12 20:15:00 — actor face pool + casting workflow（保持有效；follow-up 015 修其 bootstrap bug，行为契约不变）。
+**Prior follow-up 013:** 2026-05-11 12:50:29 — 一次性 data-op 把 19 个 character mp4 trim 到 ≤ 2.9s（保持有效；ref-video 生成仍遵守此约束）。
+**Prior follow-up 012:** 2026-05-11 12:28:33 — backend `--reload` default（保持有效）。
+**Prior follow-up 011:** 2026-05-11 20:25:46 — SiblingMedia multi-select + 批量 archive/unarchive（保持有效）。
+**Prior follow-up 010:** 2026-05-11 12:04:54 — scene reference video 3.9s all-angle 序列（cross-project rule，webapp 不受影响，保持有效）。
+**Prior follow-up 009:** 2026-05-11 19:56:38 — 导入 + 重命名一键流程（保持有效）。
+**Prior follow-up 008:** 2026-05-10 20:18:26 — per-file archive / unarchive media（保持有效；011 在其基础上加批量层）。
 **Prior follow-up 007:** 2026-05-10 17:04:38 — drama-level rename-media 按钮 + `POST /api/rename-media`（保持有效）。
 
 **Prior follow-up 006:** 2026-05-10 16:40:54 — runtime reload procedure documentation（保持有效 — 仅 documentation）。

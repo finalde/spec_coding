@@ -2,6 +2,44 @@
 
 Append-only follow-up audit log。每条记录该 follow-up 改了什么、哪些下游 artifact 被同步 surgical patch。
 
+## Cross-project data-op cascade — 2026-05-12
+Source: `specs/development/ai_video_management/user_input/follow_ups/013-20260511-125029-batch-trim-character-mp4-to-2.9s.md`（**跨项目 data-op，本项目无 own follow-up；本条仅作 cross-ref 审计**）。
+Summary: 把本项目 `characters/c*/c*.mp4` 19 个 character turntable mp4 in-place re-encode trim 到 ≤ 2.9s，对齐 `agent_refs/project/ai_video.md` rule #12.5 v4 的 Seedance reference ≤2.9s 上传约束。原时长 3-15s 不等（用户手工渲染），后时长 11 个精确 2.9s + 8 个 2.92s（mp4 packet-boundary ~20ms 过冲，远低于 3s 实际上限）。19/19 成功。详细 before/after 表见 `specs/development/ai_video_management/changelog.md` 同条 follow-up 013 entry。
+
+Auto-updated:
+- `ai_videos/mozun_chongsheng/characters/c10_司空玄/{c10_司空玄1,c10_司空玄2}.mp4` (2 个) — re-encoded H.264/AAC，时长统一 ≤2.9s
+- `ai_videos/mozun_chongsheng/characters/c1_沧冥/{c1_沧冥1..5}.mp4` (5 个) — re-encoded H.264/AAC，时长统一 ≤2.9s
+- `ai_videos/mozun_chongsheng/characters/c3_苏璃月/{c3_苏璃月1..4}.mp4` (4 个) — re-encoded H.264/AAC，时长统一 ≤2.9s
+- `ai_videos/mozun_chongsheng/characters/c4_柳红袖/c4_柳红袖.mp4` — re-encoded H.264/AAC 2.9s
+- `ai_videos/mozun_chongsheng/characters/c5_苓夭夭/c5_苓夭夭.mp4` — re-encoded H.264/AAC 2.92s
+- `ai_videos/mozun_chongsheng/characters/c6_白月清/c6_白月清.mp4` — re-encoded H.264/AAC 2.92s
+- `ai_videos/mozun_chongsheng/characters/c7_赵焚天/{c7_赵焚天1,2,3}.mp4` (3 个) — re-encoded H.264/AAC，时长统一 ≤2.9s
+- `ai_videos/mozun_chongsheng/characters/c8_方鼎元/c8_方鼎元.mp4` — re-encoded H.264/AAC 2.9s
+- `ai_videos/mozun_chongsheng/characters/c9_韩夺心/c9_韩夺心.mp4` — re-encoded H.264/AAC 2.9s
+
+No conflicts found in:
+- `specs/ai_video/mozun_chongsheng/user_input/` — 项目主线未 own 此 follow-up（hook 标 ai_video_management 项目语境；本条仅作 cross-ref）
+- `specs/ai_video/mozun_chongsheng/interview/qa.md` / `findings/` / `final_specs/spec.md` / `validation/*` — data-op 不冲突现有 spec
+- `characters/c*/c*_seedream.md`（Seedream 立绘 prompt） — 不动；image-only fallback，不引用 mp4
+- `episodes/ep*/prompts/shot*/shot*.md`（shot prompt） — `{ref_c{N}_*}` placeholder 按文件名引用 mp4，path 不变；shot prompt 文件本身不需要 patch
+- `scenes/s*/s*.md` 与 `scenes/s*/*.mp4`（scene reference 视频）— 明确排除（rule #12.10 v2 锁 3.9s，与本批 character 2.9s 操作正交）
+- README.md / arc_outline.md / style_guide.md / world.md — 无引用变化
+
+## Cross-project rule cascade — 2026-05-11 12:04:54
+Source: `specs/development/ai_video_management/user_input/follow_ups/010-20260511-120454-scene-ref-video-3.9s-all-angles.md`（**跨项目 rule change，本项目无 own follow-up；本条仅作 cross-ref 审计**）。
+Summary: `agent_refs/project/ai_video.md` rule #12.10 由 v1（2.9s 三段 establishing/横移/推近）升至 v2（3.9s 五段 all-angle: 正面建场 + 水平 360° 环绕 + 垂直三视角 + 中景横移 + 长焦特写；起手必须 front view；新增 byte-identical `音频: 无` 字段；负向加 visual-only 锁定）。本项目 9 个场景档作为已生成 artifact，依规则随之 surgical patch。
+
+Auto-updated:
+- `ai_videos/mozun_chongsheng/scenes/s1_长阶顶/s1_长阶顶.md` 至 `s8_云海/s8_云海.md`（8 个常规场景）— 「场景 reference video prompt」段重写为 3.9s 五段 all-angle schema：header `2.9s 多角度建模样片` → `3.9s all-angle 建模样片`；用法行 `≤ 2.9s 硬上限` → `≤ 3.9s 硬上限`，并加 `**视频纯视觉，无任何音频 / BGM / 音效 / 旁白。**` 提示；code block 内 `镜头: 三段拼接` → `镜头: 五段拼接`（① 正面建场 / ② 水平 360° 环绕 / ③ 垂直三视角 / ④ 中景横移 / ⑤ 长焦特写）；`动作 timed beats` 由 3 段重写为 5 段（0-0.8s 正面建场 / 0.8-1.7s 水平 360° / 1.7-2.5s 垂直三视角 / 2.5-3.3s 中景横移 / 3.3-3.9s 长焦特写）；`节奏: 极快（2.9s 内...）` → `节奏: 极快（3.9s 内...全角度信息密度优先）`；`比例: 9:16` 之后新增 `音频: 无（视频纯视觉 reference...）` 行；`时长: 2.9s` → `时长: 3.9s`；负向加 `不要 起手非正面（必须 front view 建场）` + `不要 任何音频 / BGM / 音效 / 旁白 / 环境音`，并把 `不要 超过 2.9s` → `不要 超过 3.9s`。s7 保持原有 `关键区位（平台中心 / 阶身上行段 / 阶身下行段）` 不变；s8 保持 `角色人物入画（场景 reference 纯环境，无角色，魂火虚影合成位留空）` 这一项目特有负向；s8 因「微俯摇」原文与 s1-s7 微仰摇不同，独立做镜头段重写，覆盖云海垂直三视角 = 高位俯瞰云顶起伏 / 平视云海与远山天际 / 低位仰视云海上方天幕。
+- `ai_videos/mozun_chongsheng/scenes/s9_识海/s9_识海.md`（蒙太奇过渡帧特殊变体）— 不套用 v2 五段 all-angle schema（识海非物理空间，无几何可建）；仅做时长 + 音频字段升级：header `2.9s 多角度建模样片` → `3.9s 纯黑底过渡帧基底（蒙太奇场景特殊变体）`；用法说明保留"识海非物理空间"段并显式声明 `rule #12.10 v2 默认 schema 不适用` + 加 `**视频纯视觉，无任何音频 / BGM / 音效 / 旁白。**`；code block 标题加 `蒙太奇场景特殊变体，all-angle 五段 schema 不适用`；`镜头` 段更新枚举（加无水平环绕无垂直三视角）；`动作 timed beats` 从 3 段（0-1 / 1-2 / 2-2.9）扩到 4 段（0-1 / 1-2 / 2-3 / 3-3.9，全程黑底持续无光），同时声明`本场景蒙太奇特殊变体，不走 all-angle 五段 schema`；`节奏: 静（2.9s ...）` → `节奏: 静（3.9s ...）`；加 `音频: 无` 行；`时长: 2.9s` → `时长: 3.9s`；负向加 `不要 任何音频 / BGM / 音效 / 旁白 / 环境音` + 把 `不要 超过 2.9s` → `不要 超过 3.9s`。
+
+No conflicts found in:
+- `specs/ai_video/mozun_chongsheng/user_input/` — 项目主线本未 own 此 follow-up（hook 标记 ai_video_management 项目语境；用户三选题再次确认 follow-up 持久化位置）
+- `specs/ai_video/mozun_chongsheng/interview/qa.md` / `findings/` / `final_specs/spec.md` / `validation/*` — rule v2 改动不冲突现有项目 spec
+- `characters/c*/c*.md` turntable reference video prompt — character turntable 由 rule #12.5 v4 锁在 2.9s 不动（用户在三选题中确认 character turntable 保持 2.9s）
+- `episodes/ep*/prompts/shot*/shot*.md` shot prompt — shot prompt 文件 schema（rule #12.6 v2）不变，scene reference 视频上传逻辑由 user 操作识别，不引入新 prompt 字段
+- README.md / arc_outline.md / style_guide.md / world.md — 时长 / schema 升级不影响项目级文档
+
 ## Follow-up 016 — 2026-05-10 18:15:00
 Source: user_input/follow_ups/016-20260510-181500-promote-scene-stubs-s7-s8-s9.md
 Summary: 把 follow-up 011 中暂留为 placeholder 的三个未立档场景升级为完整 scene 文件 — `s7_山道平台`（ep02）、`s8_云海`（ep05/shot02）、`s9_识海`（ep05/shot08）。覆盖每个 shot md 的 `{ref_sN_*}` 引用都有对应 `scenes/sN_*/sN_*.md` 文件支撑（含 8 字段锁定描述符 + 关键变化态 + 出现镜头 + Seedream 立绘 image prompt + Seedance 2.9s reference video prompt 三段，schema 完全镜像 s1-s6）。s9_识海 是非物理空间，reference 段给出"硬切闪黑过渡帧 + 黑底持续无光"基底，切片本体在 shot08 内由各源场景 reference 单独抽帧合成。

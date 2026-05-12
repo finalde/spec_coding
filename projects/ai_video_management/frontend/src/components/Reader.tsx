@@ -7,6 +7,7 @@ import { Editor } from "./Editor";
 import { ShotPairView } from "./ShotPairView";
 import { ShotlistTableView } from "./ShotlistTableView";
 import { ImageRefView } from "./ImageRefView";
+import { CastingView } from "./CastingView";
 import { Renderer } from "../markdown/renderer";
 import { CodeView } from "../markdown/CodeView";
 import { JsonlView } from "../markdown/JsonlView";
@@ -112,6 +113,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
   const isShotPair = shotPair !== null;
   const isShotlistTable = path.startsWith("ai_videos/") && path.endsWith("/shotlist.md");
   const isImageRef = (isMarkdown && /\/ref_images\/[^/]+_seedream\.md$/.test(path));
+  const isCasting = isMarkdown && /^ai_videos\/[^/]+\/casting\.md$/.test(path);
 
   const filename = path.split("/").pop() ?? path;
 
@@ -127,7 +129,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
           </button>
         ) : null}
       </div>
-      {editing && !isImage && !isVideo && !isShotPair && !isImageRef ? (
+      {editing && !isImage && !isVideo && !isShotPair && !isImageRef && !isCasting ? (
         <Editor
           initialContent={file.content} filename={filename}
           onSave={onSave} onClose={() => setEditing(false)}
@@ -146,6 +148,8 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
             <div className="media-view">
               <img src={mediaUrl(path)} alt={filename} />
             </div>
+          ) : isCasting ? (
+            <CastingView castingPath={path} onChange={onSaved} />
           ) : isImageRef ? (
             <ImageRefView primaryFile={file} primaryPath={path} knownPaths={knownPaths} />
           ) : isShotPair ? (
