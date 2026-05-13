@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
-import { ATTR_OPTIONS, generateActors } from "../api";
+/** ActorPoolGenerator: enum dropdowns + count + resolution → preview prompts
+ * → user confirms → 9-worker pool fires the actual gen with the previewed
+ * seeds (so the Kling-bound prompt is byte-equal to what the user reviewed).
+ *
+ * follow-up 014: initial modal + dropdowns
+ * follow-up 017: progress visibility
+ * follow-up 027: 9-way concurrent worker pool
+ * follow-up 029: resolution dropdown (normal/2K/4K)
+ * follow-up 032: pre-fire preview step + seeds round-trip
+ */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ATTR_OPTIONS, generateActors, previewPrompts, type PromptPreviewResult } from "../api";
 import { ApiError } from "../types";
 
 export interface ActorPoolGeneratorProps {
@@ -8,6 +18,19 @@ export interface ActorPoolGeneratorProps {
   onGenerated: () => void;
 }
 
+interface Progress {
+  done: number;
+  failed: number;
+  total: number;
+  inFlight: number;
+  phase: "idle" | "generating";
+  errors: { i: number; message: string }[];
+  generatedIds: string[];
+}
+
+const CONCURRENCY = 9;
+const MAX_BATCH_COUNT = 50;
+
 export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGeneratorProps): JSX.Element | null {
   const [ethnicity, setEthnicity] = useState<string>(ATTR_OPTIONS.ethnicity[0]);
   const [gender, setGender] = useState<string>(ATTR_OPTIONS.gender[0]);
@@ -15,23 +38,35 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
   const [look, setLook] = useState<string>(ATTR_OPTIONS.look[0]);
   const [style, setStyle] = useState<string>(ATTR_OPTIONS.style[0]);
   const [notes, setNotes] = useState<string>("");
+  const [resolution, setResolution] = useState<string>(ATTR_OPTIONS.resolution[0]);
   const [count, setCount] = useState<number>(5);
   const [busy, setBusy] = useState<boolean>(false);
+  const [previewBusy, setPreviewBusy] = useState<boolean>(false);
+  const [preview, setPreview] = useState<PromptPreviewResult | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const cancelledRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!open) {
       setToast(null);
+      setProgress(null);
       setBusy(false);
+      setPreview(null);
+      setPreviewError(null);
+      setPreviewBusy(false);
+      cancelledRef.current = false;
     }
   }, [open]);
 
-  const onSubmit = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
+  const onPreview = useCallback(async () => {
+    if (busy || previewBusy) return;
+    setPreviewBusy(true);
+    setPreviewError(null);
     setToast(null);
     try {
-      const result = await generateActors({
+      const result = await previewPrompts({
         count,
         ethnicity,
         gender,
@@ -39,38 +74,143 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
         look,
         style,
         notes,
+        resolution,
       });
-      const ok = result.generated.length;
-      const err = result.errors.length;
-      setToast({
-        kind: err > 0 ? "err" : "ok",
-        text: `已生成 ${ok} / 失败 ${err}`,
-      });
-      onGenerated();
+      setPreview(result);
     } catch (err) {
       const msg =
         err instanceof ApiError
-          ? `生成失败: ${err.detail?.kind ?? err.status}`
-          : `生成失败: ${err instanceof Error ? err.message : String(err)}`;
-      setToast({ kind: "err", text: msg });
+          ? `${err.status} ${err.detail?.kind ?? err.message}`
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      setPreviewError(`预览失败: ${msg}`);
     } finally {
-      setBusy(false);
+      setPreviewBusy(false);
     }
-  }, [ageRange, busy, count, ethnicity, gender, look, notes, onGenerated, style]);
+  }, [ageRange, busy, count, ethnicity, gender, look, notes, previewBusy, resolution, style]);
+
+  const onConfirmGenerate = useCallback(async () => {
+    if (!preview || busy) return;
+    setBusy(true);
+    setToast(null);
+    cancelledRef.current = false;
+    const seedsList = preview.prompts.map((p) => p.seed);
+    const total = seedsList.length;
+    const errors: { i: number; message: string }[] = [];
+    const generatedIds: string[] = [];
+    let done = 0;
+    let failed = 0;
+    let inFlight = 0;
+    setProgress({ done, failed, total, inFlight: 0, phase: "idle", errors, generatedIds });
+
+    let nextSlot = 1;
+    const claimSlot = (): number | null => {
+      if (cancelledRef.current) return null;
+      if (nextSlot > total) return null;
+      const slot = nextSlot;
+      nextSlot += 1;
+      return slot;
+    };
+
+    const flush = (): void => {
+      setProgress({
+        done,
+        failed,
+        total,
+        inFlight,
+        phase: "generating",
+        errors: [...errors],
+        generatedIds: [...generatedIds],
+      });
+    };
+
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const slot = claimSlot();
+        if (slot === null) return;
+        inFlight += 1;
+        flush();
+        try {
+          const result = await generateActors({
+            count: 1,
+            ethnicity,
+            gender,
+            age_range: ageRange,
+            look,
+            style,
+            notes,
+            resolution,
+            seeds: [seedsList[slot - 1]],
+          });
+          if (result.generated.length > 0) {
+            done += 1;
+            generatedIds.push(result.generated[0].id);
+          }
+          for (const e of result.errors) {
+            failed += 1;
+            errors.push({ i: slot, message: `${e.requested_id}: ${e.message}` });
+          }
+        } catch (err) {
+          failed += 1;
+          const msg =
+            err instanceof ApiError
+              ? `${err.status} ${err.detail?.kind ?? err.message}`
+              : err instanceof Error
+                ? err.message
+                : String(err);
+          errors.push({ i: slot, message: msg });
+        } finally {
+          inFlight -= 1;
+        }
+        onGenerated();
+        flush();
+      }
+    };
+
+    const workerCount = Math.min(CONCURRENCY, total);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+    setProgress((p) => (p ? { ...p, inFlight: 0, phase: "idle" } : null));
+    const wasCancelled = cancelledRef.current;
+    setToast({
+      kind: failed > 0 || wasCancelled ? "err" : "ok",
+      text: wasCancelled
+        ? `已中断 — 已生成 ${done} / 失败 ${failed} / 跳过 ${total - done - failed}`
+        : `已生成 ${done} / 失败 ${failed}`,
+    });
+    setBusy(false);
+    setPreview(null);
+  }, [ageRange, busy, ethnicity, gender, look, notes, onGenerated, preview, resolution, style]);
+
+  const requestCancel = useCallback(() => {
+    cancelledRef.current = true;
+  }, []);
+
+  const onCloseRequest = useCallback(() => {
+    if (busy) {
+      cancelledRef.current = true;
+      return;
+    }
+    onClose();
+  }, [busy, onClose]);
+
+  const cancelPreview = useCallback(() => {
+    setPreview(null);
+  }, []);
 
   if (!open) return null;
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="生成演员人脸" onClick={onClose}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="生成演员人脸" onClick={onCloseRequest}>
       <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>🎭 生成演员人脸</h2>
           <button
             type="button"
             className="modal-close"
-            onClick={onClose}
-            aria-label="关闭"
-            disabled={busy}
+            onClick={onCloseRequest}
+            aria-label={busy ? "中断后关闭" : "关闭"}
           >
             ×
           </button>
@@ -78,39 +218,46 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
         <div className="modal-body">
           <div className="form-grid">
             <Field label="民族" id="ethnicity">
-              <select value={ethnicity} onChange={(e) => setEthnicity(e.target.value)} disabled={busy}>
+              <select value={ethnicity} onChange={(e) => setEthnicity(e.target.value)} disabled={busy || previewBusy}>
                 {ATTR_OPTIONS.ethnicity.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </Field>
             <Field label="性别" id="gender">
-              <select value={gender} onChange={(e) => setGender(e.target.value)} disabled={busy}>
+              <select value={gender} onChange={(e) => setGender(e.target.value)} disabled={busy || previewBusy}>
                 {ATTR_OPTIONS.gender.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </Field>
             <Field label="年龄段" id="age_range">
-              <select value={ageRange} onChange={(e) => setAgeRange(e.target.value)} disabled={busy}>
+              <select value={ageRange} onChange={(e) => setAgeRange(e.target.value)} disabled={busy || previewBusy}>
                 {ATTR_OPTIONS.age_range.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </Field>
             <Field label="外貌气质" id="look">
-              <select value={look} onChange={(e) => setLook(e.target.value)} disabled={busy}>
+              <select value={look} onChange={(e) => setLook(e.target.value)} disabled={busy || previewBusy}>
                 {ATTR_OPTIONS.look.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </Field>
             <Field label="风格" id="style">
-              <select value={style} onChange={(e) => setStyle(e.target.value)} disabled={busy}>
+              <select value={style} onChange={(e) => setStyle(e.target.value)} disabled={busy || previewBusy}>
                 {ATTR_OPTIONS.style.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </Field>
-            <Field label="数量 (1–20)" id="count">
+            <Field label={`数量 (1–${MAX_BATCH_COUNT})`} id="count">
               <input
                 type="number"
                 min={1}
-                max={20}
+                max={MAX_BATCH_COUNT}
                 value={count}
-                onChange={(e) => setCount(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-                disabled={busy}
+                onChange={(e) => setCount(Math.max(1, Math.min(MAX_BATCH_COUNT, Number(e.target.value) || 1)))}
+                disabled={busy || previewBusy}
               />
+            </Field>
+            <Field label="画质" id="resolution">
+              <select value={resolution} onChange={(e) => setResolution(e.target.value)} disabled={busy || previewBusy}>
+                {ATTR_OPTIONS.resolution.map((o) => (
+                  <option key={o} value={o}>{o === "normal" ? "普通 (~1024px, Kling 原始)" : o.toUpperCase()}</option>
+                ))}
+              </select>
             </Field>
           </div>
           <Field label="备注 (可选)" id="notes">
@@ -118,11 +265,20 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              disabled={busy}
+              disabled={busy || previewBusy}
               maxLength={500}
               placeholder="例如：用于古装仙侠剧主角"
             />
           </Field>
+
+          {previewError ? (
+            <div role="alert" className="modal-toast modal-toast-err">{previewError}</div>
+          ) : null}
+
+          {progress ? (
+            <ProgressPanel progress={progress} busy={busy} />
+          ) : null}
+
           {toast ? (
             <div role="status" aria-live="polite" className={`modal-toast modal-toast-${toast.kind}`}>
               {toast.text}
@@ -130,17 +286,123 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
           ) : null}
         </div>
         <div className="modal-footer">
-          <button type="button" onClick={onClose} disabled={busy}>取消</button>
+          {busy ? (
+            <button type="button" onClick={requestCancel} disabled={cancelledRef.current}>
+              {cancelledRef.current ? "正在停止…" : "停止"}
+            </button>
+          ) : (
+            <button type="button" onClick={onClose} disabled={previewBusy}>关闭</button>
+          )}
           <button
             type="button"
             className="modal-primary"
-            onClick={onSubmit}
-            disabled={busy}
+            onClick={onPreview}
+            disabled={busy || previewBusy}
           >
-            {busy ? `生成中… (${count} 张)` : "生成"}
+            {busy && progress
+              ? `生成中… (${progress.done + progress.failed} / ${progress.total})`
+              : previewBusy
+                ? "计算预览中…"
+                : "预览 prompt"}
           </button>
         </div>
       </div>
+      {preview ? (
+        <PromptPreviewModal
+          preview={preview}
+          onCancel={cancelPreview}
+          onConfirm={onConfirmGenerate}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+interface PreviewModalProps {
+  preview: PromptPreviewResult;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+function PromptPreviewModal({ preview, onCancel, onConfirm }: PreviewModalProps): JSX.Element {
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="预览将发送到 Kling 的 prompt" onClick={onCancel}>
+      <div className="modal-panel prompt-preview-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>📝 预览 prompt ({preview.prompts.length} 张) — 画质 {preview.resolution}</h2>
+          <button type="button" className="modal-close" onClick={onCancel} aria-label="关闭预览">×</button>
+        </div>
+        <div className="modal-body">
+          <p className="prompt-preview-hint">
+            以下是将发送给 Kling API 的 final prompt，每张图片一份（含 variance + anti-wax + camera cue）。确认后立即开始 9 路并发生成。
+          </p>
+          <ol className="prompt-preview-list">
+            {preview.prompts.map((p, idx) => (
+              <li key={p.seed} className="prompt-preview-card">
+                <div className="prompt-preview-meta">
+                  <strong>第 {idx + 1} 张</strong>
+                  <span className="prompt-preview-seed">seed: {p.seed}</span>
+                  <span className="prompt-preview-seed">{p.prompt.length} 字符</span>
+                </div>
+                <details>
+                  <summary className="prompt-preview-toggle">
+                    {p.prompt.slice(0, 180)}{p.prompt.length > 180 ? "…" : ""}
+                  </summary>
+                  <pre className="prompt-preview-body">{p.prompt}</pre>
+                </details>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="modal-footer">
+          <button type="button" onClick={onCancel}>取消</button>
+          <button type="button" className="modal-primary" onClick={onConfirm}>
+            ✓ 确认发送 ({preview.prompts.length})
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProgressPanel({ progress, busy }: { progress: Progress; busy: boolean }): JSX.Element {
+  const pct = progress.total > 0 ? Math.round(((progress.done + progress.failed) / progress.total) * 100) : 0;
+  const phaseLabel = progress.phase === "generating" ? "🔄 生成中…" : "";
+  return (
+    <div className="progress-panel" role="status" aria-live="polite">
+      <div className="progress-summary">
+        <span>
+          {busy ? `${phaseLabel} ${progress.done + progress.failed} / ${progress.total}` : `✓ 完成: ${progress.done + progress.failed} / ${progress.total}`}
+          {" · "}
+          <span className="progress-ok">✓ {progress.done}</span>
+          {" · "}
+          <span className="progress-err">✗ {progress.failed}</span>
+          {busy && progress.inFlight > 0 ? (
+            <> {" · "} <span className="progress-inflight">⚡ 并发 {progress.inFlight}</span></>
+          ) : null}
+          {" · "}
+          {pct}%
+        </span>
+      </div>
+      <div className="progress-bar" aria-label={`进度 ${pct}%`}>
+        <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
+      </div>
+      {progress.generatedIds.length > 0 ? (
+        <details className="progress-details">
+          <summary>已生成 {progress.generatedIds.length} 张</summary>
+          <code>{progress.generatedIds.join(", ")}</code>
+        </details>
+      ) : null}
+      {progress.errors.length > 0 ? (
+        <details className="progress-details progress-details-err" open>
+          <summary>失败 {progress.errors.length} 张 — 查看原因</summary>
+          <ul>
+            {progress.errors.map((e, idx) => (
+              <li key={idx}><strong>#{e.i}</strong>: {e.message}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </div>
   );
 }

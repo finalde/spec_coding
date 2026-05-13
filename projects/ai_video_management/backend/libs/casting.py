@@ -94,6 +94,38 @@ class Casting:
         self._write(casting_path, drama_dir.name, entries)
         return CastingResult(path=self._rel(casting_path), entries=[e.to_dict() for e in entries])
 
+    def unassign_actor_everywhere(self, actor_id: str) -> list[dict[str, str]]:
+        """Sweep every drama's casting.md, remove rows where actor_id matches.
+
+        Per follow-up 026 cascade requirement: called by `POST /api/actors/delete`
+        before the actor folder is moved so casting.md never references a deleted
+        actor. Best-effort over the drama set: missing casting.md → skip;
+        OS error on read / write → propagates (endpoint maps to 500).
+        Returns a list of `{drama, role}` removed entries for the endpoint's
+        response so the UI can report how many casting references were cleared.
+        """
+        ai_videos = self._resolver.root / "ai_videos"
+        if not ai_videos.is_dir():
+            return []
+        removed: list[dict[str, str]] = []
+        for drama_dir in sorted(ai_videos.iterdir(), key=lambda p: p.name):
+            if not drama_dir.is_dir() or drama_dir.is_symlink():
+                continue
+            if drama_dir.name.startswith("_"):
+                continue
+            casting_path = drama_dir / CASTING_FILE_NAME
+            if not casting_path.is_file():
+                continue
+            entries = self._parse(casting_path)
+            kept = [e for e in entries if e.actor_id != actor_id]
+            if len(kept) == len(entries):
+                continue
+            for e in entries:
+                if e.actor_id == actor_id:
+                    removed.append({"drama": drama_dir.name, "role": e.role})
+            self._write(casting_path, drama_dir.name, kept)
+        return removed
+
     @staticmethod
     def _validate_role(role: str) -> None:
         if not isinstance(role, str) or not role.strip():

@@ -13,6 +13,12 @@ stale and the browser hits FastAPI's default 405 fallback.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
+from libs.env_loader import load_env_file
+
+load_env_file(Path(__file__).resolve().parent.parent / ".env")
+
 from libs.api import create_app
 from libs.api_security import BoundOrigin
 from libs.repo_root import RepoRoot

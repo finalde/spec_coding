@@ -148,6 +148,27 @@ Detailed output rules live in `.claude/agent_refs/project/ai_video.md` per § St
 
 The parent writes during stage 6 runtime validation and at the start of each coordinated stage to record `pre_reading_consulted`.
 
+## Prompt triage gate (every prompt)
+
+Before doing any work, triage how the current prompt relates to the spec-driven ecosystem. This runs on **every** prompt — including casual ones — and produces exactly one of three outcomes:
+
+1. **Common-level rule** — the prompt establishes a rule, convention, or contract that affects all spec-driven projects, the workflow itself, or the harness. Extract the abstracted rule (NOT the prompt's wording or its non-spec-driven framing) and update the right common surface:
+   - Workflow contracts, state surfaces, cross-cutting conventions → `CLAUDE.md`.
+   - Stage-procedure changes → `.claude/skills/agent_team/SKILL.md` or `.claude/skills/agent_team/playbooks/{interview,research,validation}.md`.
+   - Accumulated institutional memory (stage-scoped or output-scoped) → `.claude/agent_refs/{interview,research,validation,project}/{general.md,<task_type>.md}` per § Stage playbooks and reference docs.
+   - Harness config (hooks, permissions, env) → `.claude/settings.json` / `settings.local.json`.
+2. **Project-scoped instruction** — the prompt adds intent to one existing spec-driven project. Run § Follow-up prompt handling below.
+3. **Neither** — casual chat, general question, or task with no spec-driven impact (e.g., "hello", a one-off shell question). No persistence. Answer normally.
+
+Rules for outcome 1 (common-level updates):
+
+- **Extract the rule, not the prompt.** Strip examples that don't generalize, personal framing, and any non-spec-driven preamble. The committed text should read as a project convention, not a quoted instruction.
+- **Surgical edits only.** Add the smallest unit that captures the rule (one section / one bullet / one ref row). Don't restructure surrounding text.
+- **If the prompt is ambiguous** between common-level and project-scoped, ASK the user — do not silently pick.
+- **"Nothing to update" is a valid conclusion** — but only after the triage is actually run. Skipping the triage is the failure mode.
+
+The triage is itself a state-surface discipline: every rule the user gives must land in one of the surfaces named in § State surfaces, or be deliberately classified as non-persistent.
+
 ## Follow-up prompt handling
 
 Once a spec-driven project exists, follow-up chat may contain additional intent for it. Triage every new prompt before doing anything else.

@@ -2,6 +2,860 @@
 
 Append-only follow-up audit log. Each entry records what the follow-up changed and which downstream artifacts were patched in the same turn.
 
+## Follow-up 033 — 2026-05-13 00:25:47
+Source: user_input/follow_ups/033-20260513-002547-filename-convention-and-filters.md
+Summary: 用户："lets introduce some convention for the actor file names, it should be always {民族}__{性别}__{年龄段}.jpg, and then in the main 演员池page, lets add filters, like filter by race, filter by gendor, filter by age etc. and make your best guess to update existing actors to follow this new rule"。三个相关改动：jpg 文件名约定 + grid filter UI + 自动 migration。
+
+Backend:
+- `libs/actor_pool.py`:
+  - 新增 `_NEW_FILENAME_RE = re.compile(r"^[^/\\]+__[^/\\]+__[^/\\]+\.jpg$")` + helper `_attrs_to_filename(attrs)` 返回 `{ethnicity}__{gender}__{age_range}.jpg`
+  - 新增 helper `_find_actor_jpg(folder)`：先找匹配 `_NEW_FILENAME_RE` 的 jpg，没有则 fallback 找 `{folder.name}.jpg` (legacy)
+  - 修改 `generate_batch`：jpg 路径 `actor_folder / _attrs_to_filename(attrs)` 替代 `actor_folder / f"{actor_id}.jpg"`
+  - 修改 `list_actors`：先校验 sidecar 存在，然后 `_find_actor_jpg(child)` 找 jpg；image_path 反映实际 filename
+  - 修改 `actor_exists`：`_find_actor_jpg(folder) is not None`
+  - 修改 `_reap_incomplete_folders`："有 jpg" 检查改为 `_find_actor_jpg`，partial migration 中间状态不被误判为 incomplete
+  - 新方法 `migrate_filenames() -> dict[str, int]`：idempotent 扫 `_actors/`，per-folder try/except；已含 `_NEW_FILENAME_RE` jpg → skip；含 legacy `actor_NNNN.jpg` + sidecar → parse attrs → rename；目标已存在 → skip；返回 `{migrated, skipped, errors}`；跳过 `_deleted/_actors/`（构造期不动）
+  - `ActorPool.__init__` 末尾自动调 `migrate_filenames()`（try/except 兜底，best-effort，不阻塞启动）
+- 零 API 改动 — 全部 frontend / sidecar 兼容自动 fall through
+
+Frontend:
+- `src/components/ActorGrid.tsx`:
+  - 加常量 `FILTER_ALL = "__all__"`
+  - 新增 3 个 state: `filterEthnicity` / `filterGender` / `filterAgeRange`，default `FILTER_ALL`
+  - 派生 `filteredActors`：先 filter，再分页
+  - filter 变化时 `setPage(0)`
+  - header `<h2>` 显示 `filtered / total`
+  - 新增 `<div className="actor-grid-filters">` 三个 `<select>` (民族/性别/年龄段) + "全部" default option，复用 `ATTR_OPTIONS`
+- `src/styles.css`：加 `.actor-grid-filters` (flex + gap + flex-wrap) + label/select 样式
+- 零 api.ts 改动
+
+Spec / validation:
+- `final_specs/spec.md` FR-9f: 描述新文件名 `{ethnicity}__{gender}__{age_range}.jpg`；sidecar 保持 `actor_NNNN.md` 不变；migration 在 `__init__` 自动跑
+- `final_specs/spec.md` FR-91: 加 filter UI 描述 + filter→page reset 0 + header 显示 `filtered/total`
+- `validation/security.md` 无新 carve-out — migration 仅 rename 在 EXPOSED_TREE 内；filter 纯前端
+- `validation/acceptance_criteria.md`: U3.15 加 jpg 文件名格式 + sidecar 不变 + auto-migrate 断言；U3.18 加 filter UI 断言
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 033；Last regenerated 改 2026-05-13 00:25:47；header summary 重写为 033 内容；Prior 032/031 更新
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/actor_pool.py` — `_NEW_FILENAME_RE` + `_attrs_to_filename` + `_find_actor_jpg` + generate path + `list_actors` + `actor_exists` + `_reap_incomplete_folders` + `migrate_filenames` + 构造期自动调用
+- `projects/ai_video_management/frontend/src/components/ActorGrid.tsx` — 3 filter state + filteredActors + 3 dropdown UI + header count
+- `projects/ai_video_management/frontend/src/styles.css` — `.actor-grid-filters` rules
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-9f / FR-91 改写
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.15 / U3.18 加断言
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header / composed-from / 033 summary
+- `specs/development/ai_video_management/user_input/follow_ups/033-20260513-002547-filename-convention-and-filters.md` (NEW)
+
+No conflicts found in:
+- follow-up 032 (preview-then-confirm)：preview 计算的 prompt 不依赖 jpg filename，033 不动 preview 流程
+- follow-up 031 (anti-wax prompt)：prompt 内容不变，仅文件名约定改
+- follow-up 030 (grid bulk/assign)：filter 与 select mode 互相独立；filter + select 同时使用：在 filtered set 上 select / delete / assign
+- follow-up 028 (ActorGrid)：filter 是新 surface，分页 / tile click 行为保留
+- follow-up 026 (actor delete) + 014 (casting)：actor_id (folder 名) 仍稳定，casting.md 不需要重写
+- backend tests：boot-smoke 7/7 仍 pass；migration 在空 `_actors/` 上 no-op
+
+Verification:
+- `_attrs_to_filename(attrs)` → `'asian__male__18-25.jpg'` ✓
+- `generate_batch` 写入 `actor_0001/asian__male__18-25.jpg` 而非 `actor_0001.jpg` ✓
+- `list_actors` 返回新文件名路径 ✓
+- `migrate_filenames` legacy → 新格式 + idempotent re-run noop ✓
+- `pytest tests/test_boot_smoke.py`: 7/7 ✓
+
+## Follow-up 032 — 2026-05-13 00:19:36
+Source: user_input/follow_ups/032-20260513-001936-grid-page-size-and-prompt-preview.md
+Summary: 用户："每页的演员展示上限可以多一点， 比如50个，当batch gen以前，加一个步骤，然我review 以下你准备发给kling api的prompt的final 版本，我确定之后点另一个button 在执行"。两个小改: PAGE_SIZE 12→50；新 `POST /api/actors/preview-prompts` endpoint + `generate_batch` 接 `seeds: list[int]` 实现字节级一致 preview-then-confirm。
+
+Backend:
+- `libs/actor_pool.py` 新增 `preview_prompts(attrs, count, resolution)` 方法：校验 attrs/count/resolution → 计算 N 个 `{seed: base_seed+i, prompt: _build_prompt(attrs, _variance_for(seed, gender))}` 返回 `{prompts: [...], resolution}`；不写磁盘 / 不调 Kling / 不分配 actor folder
+- `generate_batch` 签名加 `seeds: list[int] | None = None`：当提供时校验 `len == count` + 全 int（否则 `InvalidAttribute`）；主循环改为 `seed = seeds[i] if seeds is not None else base_seed + i`
+- `libs/api.py`: `GenerateActorsBody.seeds: list[int] | None = None`；新 endpoint `POST /api/actors/preview-prompts` 复用同 body（seeds 字段被 preview 忽略）→ 调 `actor_pool.preview_prompts` → 200 + JSON；新 method-not-allowed handler → 405；`actors_generate` 把 `body.seeds` 传给 `generate_batch`
+- docstring endpoint count 15 → 16；endpoint 列表加 `POST /api/actors/preview-prompts`
+
+Frontend:
+- `src/api.ts` 加 `PromptPreviewResult` interface + `previewPrompts(req)` POST `/api/actors/preview-prompts`；`GenerateActorsRequest.seeds?: number[]`
+- `src/components/ActorPoolGenerator.tsx` 大改:
+  - 新 state: `previewBusy` / `preview: PromptPreviewResult | null` / `previewError`
+  - 主按钮 onClick 从 `onSubmit` 改为 `onPreview`：调 `previewPrompts` → 设 preview state → 自动打开内嵌 `PromptPreviewModal`
+  - `onSubmit` 重写为 `onConfirmGenerate`：从 preview 取 seeds，构造 worker pool，每 worker 调 `generateActors({..., seeds: [previewSeeds[slot-1]]})`
+  - 新内嵌组件 `PromptPreviewModal`: 显示 N 张 `<details>` 卡片，summary 显示前 180 字符 + 展开；footer "取消" / "✓ 确认发送 (N)"
+  - 主按钮 label：`"预览 prompt"` / `"计算预览中…"` / `"生成中… (X/N)"`
+  - Modal close 重置 preview state
+- `src/components/ActorGrid.tsx`: `PAGE_SIZE = 12` → `PAGE_SIZE = 50`
+- `src/styles.css`: 加 `.prompt-preview-panel` / `.prompt-preview-hint` / `.prompt-preview-list` / `.prompt-preview-card` / `.prompt-preview-meta` / `.prompt-preview-seed` / `.prompt-preview-toggle` / `.prompt-preview-body` 8 条 rules
+
+Spec / validation:
+- `final_specs/spec.md` 新增 **FR-9j** `POST /api/actors/preview-prompts` 完整契约 (body / response shape / 无副作用 / preview→confirm 流程)
+- `final_specs/spec.md` FR-9f body 加 `seeds?: list[int]`；详述 seeds 校验
+- `final_specs/spec.md` FR-88: 主按钮改为 "预览 prompt"；描述内嵌 PromptPreviewModal + 确认发送 流程
+- `final_specs/spec.md` FR-91: PAGE_SIZE 12 → 50（两处）
+- `validation/security.md` 无新 carve-out — preview 是 read-only dry-run（无 Kling 调用 / 无文件 IO）；seeds 来自用户但走 InvalidAttribute 校验，仅作为 `_variance_for` RNG seed（无路径 / shell injection 面）；JSON response ~75KB / 50 prompts × 1500 chars 仍合理范围
+- `validation/acceptance_criteria.md` U3.15 加 preview→confirm seeds 字节级一致 + seeds 长度校验 + seeds 类型校验 + 405 + PAGE_SIZE=50 断言
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 032；Last regenerated 改 2026-05-13 00:19:36；header summary 重写为 032 内容；Prior 031/030/029 与 032 的 surface 关系更新
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/actor_pool.py` — `preview_prompts` + `generate_batch` seeds 参数
+- `projects/ai_video_management/backend/libs/api.py` — `GenerateActorsBody.seeds` + 新 endpoint + method-not-allowed + docstring
+- `projects/ai_video_management/frontend/src/api.ts` — `PromptPreviewResult` + `previewPrompts` + `GenerateActorsRequest.seeds`
+- `projects/ai_video_management/frontend/src/components/ActorPoolGenerator.tsx` — preview 流程改写 + `PromptPreviewModal`
+- `projects/ai_video_management/frontend/src/components/ActorGrid.tsx` — PAGE_SIZE 50
+- `projects/ai_video_management/frontend/src/styles.css` — 8 条 preview-modal rules
+- `specs/development/ai_video_management/final_specs/spec.md` — 新 FR-9j + FR-9f/FR-88/FR-91 改
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.15 加 preview 断言
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header / composed-from / 032 summary
+- `specs/development/ai_video_management/user_input/follow_ups/032-20260513-001936-grid-page-size-and-prompt-preview.md` (NEW)
+
+No conflicts found in:
+- follow-up 031 (anti-wax prompt)：032 preview 显示的就是 031 改写后的 prompt，含 anti-wax + camera cue —— preview 真实反映 Kling 收到的内容
+- follow-up 030 (grid bulk/assign)：PAGE_SIZE 50 不影响 select 模式 / 跨页 selection / bulk delete / assign 流程
+- follow-up 029 (variance + resolution + Pillow)：preview 调 `_variance_for` 与 `_build_prompt`，与 generate 同代码路径
+- follow-up 027 (concurrency)：seeds 流让每个 worker 用确定的 seed，9 路并发不变
+- follow-up 026 (actor delete)：032 不动 delete 路径
+- backend tests：boot-smoke 7/7 仍 pass
+
+Verification:
+- `preview_prompts(attrs, 3, 'normal')` 返 3 个 {seed, prompt}，每 prompt ≥1000 字符 + 含 anti-wax keywords ✓
+- `generate_batch(attrs, 3, 'normal', seeds=preview.seeds)` 写入 sidecar，prompt 与 preview 字节级一致 ✓
+- `generate_batch` seeds 长度 mismatch → `InvalidAttribute` ✓
+- `generate_batch` seeds 含非 int → `InvalidAttribute` ✓
+- `pytest tests/test_boot_smoke.py`: 7/7 ✓
+- 全套 `pytest tests/`: 18 pass / 5 pre-existing fail（零回归）
+
+## Follow-up 031 — 2026-05-13 00:16:00
+Source: user_input/follow_ups/031-20260513-001600-photorealism-no-wax-face.md
+Summary: 用户："请确保kling生成的人像是真人，目前生成的太假了，一看就是AI生成的，有的甚至像是蜡像脸"。Backend-only prompt 改写修 Kling 输出的蜡像脸 / 过度光滑 / 完美对称问题。
+
+Backend:
+- `libs/actor_pool.py`:
+  - 改写 `_build_prompt(attrs, variance="")`:
+    - 移除 `"photorealistic"` + `"sharp focus"` + `"8k"` 三个 AI/CG-correlated token（这些 token 在训练数据中常关联 render/CG aesthetic，把 Kling 推向蜡像脸）
+    - 开头从 `"portrait headshot of ..."` → `"candid unposed portrait photograph of ..."`（candid + photograph 暗示真实照片）
+    - 末尾追加固定段: `"natural ambient lighting, neutral uncluttered background, natural skin texture with visible pores and subtle imperfections, slight natural facial asymmetry, RAW unedited photograph aesthetic, no plastic skin, no waxy smoothness, no symmetrical perfection, no CG render look"` — positive 描述 + "no X" 形式的 anti-token（Kling text-to-image 不支持 negative_prompt 字段，但 prompt 内含 "no X" 仍有缓解效果）
+  - 新增第 **18 个 variance pool `_VARIANCE_PHOTOREALISM`** (12 items): 真实相机 / 镜头 / 胶卷感 — Canon EOS R5 85mm f/1.4, Sony A7 IV 50mm f/1.8, Fujifilm X-T5 classic-chrome, Hasselblad medium-format, Kodak Portra 400 grain, Cinestill 800T halation, Leica M11, iPhone 15 Pro candid, Nikon Z9 105mm f/1.4, Pentax 67 medium-format, 35mm point-and-shoot, Polaroid SX-70。每 fragment 60-90 字符
+  - `_variance_for(seed, gender)` 末尾加 `rng.sample(_VARIANCE_PHOTOREALISM, k=2)` — batch 中每张抽 2 个不同 camera/film cue，使一批生成像多个摄影师拍的而非同一 AI 出
+- 长度 length-guard 不变（仍 ≥1000 chars）；signature 兼容
+
+Frontend:
+- 零改动 — 用户感知通过 backend prompt 改写自动生效，UX surface 不变
+
+Spec / validation:
+- `final_specs/spec.md` FR-9f: "17 池" → "18 池"；加 anti-wax 永久注入描述 (移除 photorealistic/sharp focus/8k + 追加 RAW/natural skin/no waxy 等)
+- `validation/security.md`: 无新 carve-out — variance pool 仍 server-side hardcoded，prompt 改写不引入新输入面
+- `validation/acceptance_criteria.md` U3.15: 加三项断言 — (a) sidecar 不含 "photorealistic"/"sharp focus"/"8k" 单独 token；(b) sidecar 含 "candid"/"natural skin texture"/"no waxy smoothness"/"RAW unedited"；(c) sidecar 至少含一项 `_VARIANCE_PHOTOREALISM` camera cue
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 031；Last regenerated 改 2026-05-13 00:16:00；header summary 重写为 031 内容；新增 "Prior follow-up 030" 行；Prior 029 描述更新（031 在其 17 池基础上加 PHOTOREALISM 第 18 池）
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/actor_pool.py` — `_build_prompt` 重写 + 新 pool + `_variance_for` 增 sample
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-9f 文案
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.15 加三断言
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header / composed-from / 031 summary + Prior 030/029 行
+- `specs/development/ai_video_management/user_input/follow_ups/031-20260513-001600-photorealism-no-wax-face.md` (NEW)
+
+No conflicts found in:
+- follow-up 030 (grid bulk delete + assign)：030 仅改 frontend，031 仅改 backend prompt，正交
+- follow-up 029 (rich variance + resolution)：031 在其 17 池基础上加第 18 池；`_build_prompt` 签名不变；resolution / Pillow / length-guard / sidecar 不动
+- follow-up 027 (concurrency)：generate_batch 主循环不动；只是每张的 prompt 文本变化
+- 已存在的 actor_0001..0009 sidecar：不重新生成（retro-fit 不在范围）；新生成立刻有 anti-wax + camera cue
+- backend tests：boot-smoke 7/7 仍 pass
+
+Verification:
+- `_build_prompt(attrs)` 输出不含 "photorealistic" / "sharp focus" / "8k"，含 "candid"/"natural skin texture"/"RAW unedited"/"no waxy" ✓
+- `_variance_for(seed=1, 'male')` 输出含至少一个 `_VARIANCE_PHOTOREALISM` 元素（Canon/Sony/Fujifilm/etc. 关键词出现）✓
+- variance 长度仍 ≥1000 ✓
+- `pytest tests/test_boot_smoke.py`: 7/7 ✓
+- 全套 `pytest tests/`: 18 pass / 5 pre-existing fail（零回归）
+
+## Follow-up 030 — 2026-05-13 00:11:16
+Source: user_input/follow_ups/030-20260513-001116-grid-bulk-delete-and-assign.md
+Summary: 用户："在演员池页面，加入以下功能，第一个是bulk delelte，第二个功能是assign charactor, 给我drop down的选项，先选择哪个短剧，在选择短剧里的人物，然后确定后，此演员会标记参演这部短剧的这个角色。一个演员可以同时出演多部剧.you may need a more powerful data store to store this kind of relationship..."。Interactive 决策: 复用 per-drama `casting.md`（many-to-many 原生支持）+ 单一 window.confirm + 客户端 loop 批量删除。**零 backend 改动** — 全部 frontend feature 走现有 endpoints。
+
+Frontend:
+- `src/components/ActorGrid.tsx` 大幅扩展：
+  - 新增 props `tree: TreeNode | null`, `onChange: () => void`
+  - 新 state: `selectMode` / `selectedIds: Set<string>` (跨页保留) / `busyBulk` / `assignOpen`
+  - 派生 `DramaChoice[]` from tree (`extractDramas`)：filter `ai_videos/` 直接子目录 non-`_*`，对每个 drama 找 `characters/c*/` 子目录名
+  - Tile click: select mode → `toggleSelected(id)`；否则 → navigate (现有行为)
+  - Header 加 "✅ 选择" / "✕ 退出选择" 切换按钮
+  - Tiles 加 `actor-tile-selected` class + checkmark overlay
+  - Sticky footer bar (selectMode 时显示)：`已选 N / 总 M` + 全选 / 全清 / 🗑 批量删除 / 🎬 分配角色 按钮
+  - `onBulkDelete`：window.confirm 单次 → loop `deleteActor(id)` for each id → 累计 ok/fail/unassign 计数 → toast + tree reload + onChange
+  - 新内嵌组件 `AssignCharacterModal`：drama `<select>` + character `<select>` (filter regex `^c\d+(_.*)?$`) + notes textarea + 确认按钮 → loop `castingAssign(drama.path, role, actor_id, notes)` for each selected id → toast + onChange
+- `src/App.tsx`：`<Route path="/actors" element={<ActorGrid tree={tree} onChange={() => setRefreshKey(...)} />} />`
+- `src/styles.css`：加 `.actor-grid-header-actions` / `.actor-tile-selected` (蓝边 + box-shadow) / `.actor-grid-checkbox` (overlay 左上角圆形 checkbox) / `.actor-grid-select-bar` (sticky bottom + box-shadow) / `.actor-grid-select-count` (monospace) / 按钮 hover/disabled + `.actor-grid-bulk-delete` 危险红 hover
+
+Backend:
+- 零改动。所有逻辑走现有：
+  - `POST /api/actors/delete` (FR-9i / follow-up 026) — 自带 cascade unassign
+  - `POST /api/casting/assign` (FR-9g / follow-up 014)
+  - `GET /api/tree` (FR-10) — 提取 dramas + characters
+
+Spec / validation:
+- `final_specs/spec.md` FR-91 大幅扩展：select mode + 跨页 Set selection + sticky footer + bulk delete 单 window.confirm + loop + per-actor 错误隔离 + assign modal (drama dropdown 从 tree 派生 + character dropdown regex `^c\d+(_.*)?$` + loop castingAssign + per-drama casting.md 原生支持多剧) 全部说明
+- `validation/security.md` 无新 carve-out — 全部复用已有 endpoint surfaces
+- `validation/acceptance_criteria.md` U3.18：加 select mode 切换 / 跨页 selection 保留 / 批量删除 toast + cascade / assign 模态 drama+character dropdown + 多剧分配同 actor 不冲突 断言
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 030；Last regenerated 改 2026-05-13 00:11:16；header summary 重写为 030 内容；Prior 029 / 028 与 030 的 surface 关系标注
+
+Auto-updated:
+- `projects/ai_video_management/frontend/src/components/ActorGrid.tsx` — select mode + bulk delete + AssignCharacterModal + 派生 dramas
+- `projects/ai_video_management/frontend/src/App.tsx` — `<ActorGrid tree onChange />` props
+- `projects/ai_video_management/frontend/src/styles.css` — 8 条新 rules + sticky footer
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-91 扩展
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.18 扩展
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header / composed-from / 030 summary
+- `specs/development/ai_video_management/user_input/follow_ups/030-20260513-001116-grid-bulk-delete-and-assign.md` (NEW)
+
+No conflicts found in:
+- follow-up 029 (rich variance + resolution)：030 不动 generate 路径
+- follow-up 028 (ActorGrid)：030 在其基础上扩展，分页 + 单 tile click → detail 默认行为不变
+- follow-up 026 (actor delete)：030 通过 client-side loop 复用相同 endpoint
+- follow-up 014 (CastingView)：030 写入相同 `casting.md` markdown 表；CastingView 读视图自动反映新写入
+- `backend/libs/casting.py.Casting.unassign_actor_everywhere`：bulk delete 时每张都自动 cascade unassign
+- backend tests：boot-smoke 7/7 仍 pass（零 backend 改动）
+
+Verification:
+- `pytest tests/test_boot_smoke.py`: 7/7 ✓
+- 全套 `pytest tests/`: 18 pass / 5 pre-existing fail (与 029 同基线，零回归)
+- Frontend tsc：新 ActorGrid 类型零错误（vite.config.ts 2 个 pre-existing path-typing 错误与本 follow-up 无关）
+
+## Follow-up 029 — 2026-05-13 00:00:12
+Source: user_input/follow_ups/029-20260513-000012-richer-variance-and-resolution-picker.md
+Summary: 用户："当生成一个batch的时候，你需要加一些random的形容词到prompt里，... 你至少要加1000字以上的random形容词，然后在发给kling api。 然后生成的时候应该让我选在像素，default可以不用2k，4k 普通画质就可以"。Interactive 决策：resolution 选项 = 普通 / 2K / 4K，default 普通。
+
+Backend:
+- `libs/actor_pool.py` 加 17 个 variance pool tuples（gender-aware look archetype + gender-aware face features + jawline + cheekbones + brow + nose + lips + eyes + hair length/style/color + skin tone/texture + expression + mood + lighting + photography）；每池 8-14 项，每项 30-60 字符
+- 重写 `_variance_for(seed, gender)`：每池 1-3 picks，~30-40 fragments 总和；末尾 `while len(result) < 1000:` 兜底循环；同 seed 完全可复现
+- 加 `_RESOLUTION_PRESETS = {"normal": None, "2k": 2048, "4k": 4096}` + `DEFAULT_RESOLUTION = "normal"` + `RESOLUTION_OPTIONS = frozenset(...)`；常量 `JPEG_QUALITY = 95`
+- `generate_batch(attrs, count, resolution="normal")` 签名扩展；校验 `resolution in RESOLUTION_OPTIONS` 否则 raise `InvalidAttribute`；Kling 返回 bytes 后若 `target_px is not None` 调 `_resize_jpeg(bytes, target_px)`；失败归入 `errors[]: resize_failed`，batch 继续
+- 新静态方法 `_resize_jpeg(jpeg_bytes, target_px)`：Pillow `Image.open(BytesIO)` → `.convert("RGB")` → `.resize((target_px, target_px), Image.LANCZOS)` → `save(buf, "JPEG", quality=95)`
+- `_build_sidecar(actor_id, attrs, prompt, seed, resolution="normal")` 加 resolution 字段到属性表
+- `result.generated[i]` 携带 `"resolution"` 字段
+- `__all__` 加 `DEFAULT_RESOLUTION` + `RESOLUTION_OPTIONS`
+- imports 加 `random` (follow-up 027 已加) + `io.BytesIO` + `from PIL import Image`
+- `libs/api.py`：`GenerateActorsBody.resolution: str = "normal"`；`actors_generate` 把 `body.resolution` 传给 `generate_batch`
+- `backend/requirements.txt` 加 `pillow>=10.0`
+
+Frontend:
+- `src/api.ts`：`GenerateActorsRequest.resolution?: string`；`ATTR_OPTIONS.resolution = ["normal", "2k", "4k"] as const`
+- `src/components/ActorPoolGenerator.tsx`：`useState<string>("normal")` for resolution；onSubmit pass through；useCallback dep 加 resolution；form-grid 加第 7 个 dropdown "画质"，option label "普通 (~1024px, Kling 原始)" / "2K" / "4K"
+
+Spec / validation:
+- `final_specs/spec.md` FR-9f 重写：body 加 `resolution`；详述 17 池 + ≥1000 字符 length-guard + Pillow Lanczos resize + `resize_failed` 错误类
+- `final_specs/spec.md` FR-86：加 `resolution` enum 行
+- `final_specs/spec.md` FR-88：六 → 七 dropdown，注明 resolution UX
+- `validation/security.md` carve-out #7：加 (d) Pillow image-decode + resize hardening（仅信任 Kling JPEG / 已 SSRF-vetted / 5MB cap 前置 / 失败兜底）+ (e) resolution enum closed schema；Pillow 新 dep 跟踪上游 advisories
+- `validation/acceptance_criteria.md` U3.15：标题加 "+ 029 rich variance + resolution"；新增 ≥1000 字符断言 + resolution=2k → 2048×2048 / 4k → 4096×4096 / normal → Kling 原始 / 8k → 400 invalid_attribute 四个分支
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 029；Last regenerated 改 2026-05-13 00:00:12；header summary 重写为 029 内容；Prior 028 / 027 描述与 029 的 surface 关系
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/actor_pool.py` — 17 池 + `_variance_for` 重写 + `_RESOLUTION_PRESETS` + `_resize_jpeg` + `generate_batch` 签名 + `_build_sidecar` resolution 字段 + `__all__`
+- `projects/ai_video_management/backend/libs/api.py` — `GenerateActorsBody.resolution` + 传参
+- `projects/ai_video_management/backend/requirements.txt` — `pillow>=10.0`
+- `projects/ai_video_management/frontend/src/api.ts` — `GenerateActorsRequest.resolution` + `ATTR_OPTIONS.resolution`
+- `projects/ai_video_management/frontend/src/components/ActorPoolGenerator.tsx` — 第 7 dropdown + state + dep
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-9f 重写 + FR-86 / FR-88 扩展
+- `specs/development/ai_video_management/validation/security.md` — carve-out #7 加 (d) / (e)
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.15 扩
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header / composed-from / 029 summary
+- `specs/development/ai_video_management/user_input/follow_ups/029-20260513-000012-richer-variance-and-resolution-picker.md` (NEW)
+
+No conflicts found in:
+- follow-up 028 (ActorGrid)：029 不动 grid 路径；grid 仍用 `/api/actors` + lazy thumbnail，2K/4K 选项不影响 grid 行为
+- follow-up 027 (concurrency + race-safe)：029 在 `_variance_for` 函数体扩展 pools，不动外层并发 / 分配 / cap
+- follow-up 026 (actor delete)：029 不重叠 delete 路径
+- follow-up 025 (Kling-only)：KlingProvider / JWT / SSRF-vet / cap 完全不动；resolution upscale 仅作用于 provider 返回的 bytes
+- 已生成的 `_actors/actor_0001..0009` 老 sidecar：不重写（历史 artifact 保留；未来 regen 才有 `resolution` 字段 + 长 variance prompt）
+- backend tests：boot-smoke 7/7 仍 pass
+
+Verification (inline smoke):
+- `_variance_for(seed=1, gender='male')` 输出长度 ≥ 1000；`_variance_for(seed=1, gender='male')` 二次调用 byte-equal（可复现）✓
+- `_variance_for(seed=1, gender='male')` ≠ `_variance_for(seed=2, gender='male')` (不同 seed 不同 variance) ✓
+- `_resize_jpeg(test_1024_jpeg, 2048)` 输出 Pillow 解码 size = (2048, 2048) ✓
+- `_resize_jpeg(test_1024_jpeg, 4096)` 输出 size = (4096, 4096) ✓
+- `generate_batch(attrs, count=1, resolution="invalid")` raise InvalidAttribute ✓
+- `pytest tests/test_boot_smoke.py`: 7/7 ✓
+- 全套 `pytest tests/`: 18 pass / 5 pre-existing fail (与 028 同基线，零回归)
+
+## Follow-up 028 — 2026-05-12 23:43:09
+Source: user_input/follow_ups/028-20260512-234309-actor-grid-view.md
+Summary: 用户："current view of actors is only one at a time, need to first give me a grid like view to compare all pictures you could do paging if cannot fit all into one page, but one at a time is not efficient"。**新 `ActorGrid` 视图**: 一屏多图对比的演员池 grid，替代单张点击 workflow。**零 backend 改动** — 全部走 follow-up 014 已存的 `GET /api/actors` + follow-up 005 的 `GET /api/media`。
+
+Frontend:
+- `src/components/ActorGrid.tsx` (NEW)：React 组件，mount 时 `listActors()` → 内部 state；`PAGE_SIZE = 12`；响应式 CSS grid `repeat(auto-fill, minmax(180px, 1fr))`；每 tile 是 `<button>` 含 `<img loading="lazy">` + `actor_NNNN` + 4 个属性 chip (ethnicity / gender / age_range / look)；click 触发 `navigate('/file/' + encodeURIComponent(image_path))`；pagination 控件 (首页 / 上一页 / `第 N / M 页` / 下一页 / 末页) 仅 `actors.length > 12` 时渲染；empty / loading / error 三态 (error banner + reloadKey state-bump 重试)；`aria-live="polite"` 在页码指示
+- `src/App.tsx`：import `ActorGrid`；加 `<Route path="/actors" element={<ActorGrid />} />`
+- `src/components/Sidebar.tsx`：import `useNavigate` from `react-router-dom`；构造期拿 `navigate`；在 `isActorsRoot` 现有 🎭 生成演员 按钮后加 🔲 网格 按钮 sibling，onClick 跳 `/actors`
+- `src/styles.css`：新增 14 条 `.actor-grid-page` / `.actor-grid-header` / `.actor-grid-pagination` / `.actor-grid-page-indicator` / `.actor-grid` / `.actor-tile` (hover + focus-visible) / `.actor-tile-image` / `.actor-tile-meta` / `.actor-tile-id` / `.actor-tile-chips` / `.actor-tile-chip` / `.actor-grid-empty` rules
+
+Backend:
+- 零改动（`GET /api/actors` from follow-up 014 已满足全部数据需求）
+
+Spec / validation:
+- `final_specs/spec.md` 新增 **FR-91** ActorGrid 完整契约 (route / fetch / tile / pagination / empty/loading/error 三态)
+- `final_specs/spec.md` 扩 **FR-87** 提及网格按钮 + 路由 + 入口位置
+- `validation/acceptance_criteria.md` 新增 **U3.18** scenario：空池 empty state / 5 actors 无分页 / 13 actors 跨页 2 / 25 actors 3 页 / tile click → `/file/{path}` / error retry
+- `validation/acceptance_criteria.md` 覆盖矩阵加 `FR-91 | U3.18 (ActorGrid 分页，follow-up 028)`
+- `validation/security.md` 无新 carve-out — grid 是纯 GET 读取面 (`/api/actors`)，follow-up 014 carve-out 已涵盖；本 follow-up 不引入新写入面或新出站 HTTP
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 028；Last regenerated 改 2026-05-12 23:43:09；header summary 重写为 028 内容；Prior 027 / 026 跟 028 的 surface 关系标注
+
+Auto-updated:
+- `projects/ai_video_management/frontend/src/components/ActorGrid.tsx` (NEW) — paginated grid
+- `projects/ai_video_management/frontend/src/App.tsx` — 加 `/actors` route + import
+- `projects/ai_video_management/frontend/src/components/Sidebar.tsx` — 加 🔲 按钮 + `useNavigate`
+- `projects/ai_video_management/frontend/src/styles.css` — 14 条新 CSS rules
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-91 新增 + FR-87 扩展
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.18 scenario + matrix
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header / composed-from / 028 summary
+- `specs/development/ai_video_management/user_input/follow_ups/028-20260512-234309-actor-grid-view.md` (NEW)
+
+No conflicts found in:
+- follow-up 027 (concurrency + variance)：028 不动 generate 路径或 actor_pool，完全正交
+- follow-up 026 (actor delete)：028 不重叠 delete 按钮，sidebar 🗑 仍是删除入口；grid 是 read-only
+- follow-up 025 (Kling-only)：028 不动 provider
+- follow-up 014 (CastingView)：CastingView 的 assign-mode grid 是 drama-scoped + filtered；ActorGrid 是 pool-level + 无 filter，surface 独立
+- follow-up 022 (sidebar collapse-all)：028 加按钮但不动 collapse 逻辑
+- `_actors/_deleted/` (follow-up 026)：grid 不显示已删除 actor（`GET /api/actors` 只 list `_actors/` 不含 `_deleted/`），一致行为
+
+Verification:
+- `pytest tests/test_boot_smoke.py`: **7/7 通过** ✓ (零 backend 改动)
+- 全套 `pytest tests/`: 18 pass / 5 pre-existing fail (与 follow-up 027 完成时同样基线，零回归)
+- TypeScript 编译：新 `ActorGrid.tsx` 导入 / 类型零错误（vite.config.ts 的 2 个 pre-existing path-typing 错误与本 follow-up 无关）
+- 手工验证：route `/actors` 渲染、tile click 跳 `/file/...`、pagination 按钮 disabled/enabled 切换正确
+
+## Follow-up 027 — 2026-05-12 23:26:56
+Source: user_input/follow_ups/027-20260512-232656-concurrency-and-variance.md
+Summary: 用户："current generation of actor picture is too slow, kling api allow 9 concurrent request, please remove any limitation on your side and leverage the 9 concurrency on kling api, also, when I let you do batch generation, you should introduce a lot of variance to the text on top of the basic info, ..."。**两个独立修复**: (1) **9-way 并发** — frontend `ActorPoolGenerator` 从串行 await 改用 9-worker pool (`CONCURRENCY=9` 对齐 Kling API)；20 张 batch 从 ~50s 降到 ~6-9s。Backend FastAPI sync endpoint 已经跑在 threadpool，9 个并发请求自然分配 9 个工作线程。(2) **Per-image variance** — `_variance_for(seed, gender)` 从 5 个 server-side 英文 tuple pool (gender-specific face features / skin tones / face shapes / eye descriptors / hair descriptors) 按 seed 抽 fragment 注入 prompt，避免同 base prompt 产生 near-duplicates。**Race-safe ID 分配**：之前的 "pre-compute `next_id + offset`" 在 9 并发下同 id 冲突；改用 `_allocate_actor_id` 循环 `mkdir(exist_ok=False)` 原子分配；`_reap_incomplete_folders` 独立提取，仅 batch 开始调一次（之前混在 `_next_actor_id_num` 内会跟 concurrent allocators 互相 reap）。**`MAX_BATCH_COUNT` 20→50**。
+
+Backend:
+- `libs/actor_pool.py`: import 加 `random`；新增 `_MAX_ID_ALLOC_SCAN = 1000` 常量
+- 加 5 个 variance pool tuples (`_VARIANCE_FACE_FEATURES_MALE/FEMALE`, `_VARIANCE_SKIN_TONES`, `_VARIANCE_FACE_SHAPES`, `_VARIANCE_EYE_DESCRIPTORS`, `_VARIANCE_HAIR_DESCRIPTORS`)，每池 6-8 项 English fragments
+- 新 module-level fn `_variance_for(seed, gender) -> str`：`random.Random(seed)` 每池 `choice` 一项 join 成单字串；同 seed 同 gender 完全可复现
+- `ActorPool._build_prompt(attrs, variance: str = "") -> str`：在 base parts 中 `attrs.look` 之后 / `style` 之前插入 variance（不传时行为不变，向后兼容）
+- 新方法 `ActorPool._allocate_actor_id(actors_dir) -> tuple[str, Path]`: `mkdir(exist_ok=False)` 循环往上找 free slot；OSError → `GenerationDirMissing`；1000 attempts 越界也 `GenerationDirMissing`
+- `_reap_incomplete_folders(actors_dir)` 提取为独立 staticmethod（之前嵌在 `_next_actor_id_num` 里跟并发 race）；`_next_actor_id_num` 现在纯扫描无副作用
+- `generate_batch` 主循环重写：开头 `_reap_incomplete_folders` 一次；每张图片 `_allocate_actor_id` 原子分配 → `_variance_for(seed, gender)` → `_build_prompt(attrs, variance=...)` → provider call → sidecar 用 varianced prompt
+- `MAX_BATCH_COUNT = 50`
+
+Frontend:
+- `src/components/ActorPoolGenerator.tsx`:
+  - 加常量 `CONCURRENCY = 9` + `MAX_BATCH_COUNT = 50`
+  - `Progress.current: number` → `Progress.inFlight: number`
+  - `onSubmit` 主循环重写为 worker pool：`claimSlot` 抽 slot；9 个 worker `await Promise.all([])` 并发；每 worker 循环到 slot 用完；`inFlight` 计数随 in-flight workers 起落；`cancelledRef` 检查放在 `claimSlot` 内 — 取消时新 slot 拿不到，已 in-flight 的 worker 完成后正常 tally
+  - count 输入 `max={20}` → `max={MAX_BATCH_COUNT}`；clamp 同步
+  - Button busy 文字 `生成中… (current / total)` → `生成中… (done+failed / total)` (current 已被 inFlight 替换，进度按"已完成数"展示更直观)
+  - `ProgressPanel`：增 `⚡ 并发 N` chip 显示当前 in-flight workers
+- `src/styles.css`：加 `.progress-inflight { color: #1e40af; font-weight: 600; }`
+
+Spec / validation:
+- `final_specs/spec.md` FR-9f 重写：详述 race-safe `_allocate_actor_id` (mkdir-exist_ok-False atomic) + variance pool 注入流程 + 9 并发 backend threadpool 路径；count cap 20→50
+- `final_specs/spec.md` FR-88: 模态 count input 上限 20→50；描述 9-worker pool + `⚡ 并发 N` chip
+- `validation/security.md` carve-out #7：增 3 项硬化 — (a) race-safe ID allocation 关闭 9 并发下的 ID 冲突 race；(b) variance pools server-side hardcoded，无新 prompt-injection 面；(c) count cap 50 仍 bound 总 outbound HTTP wave
+- `validation/acceptance_criteria.md` U3.15：标题加 "+ 027 concurrency + variance"；新增断言 (sidecar prompt 互不相同 / 至少含一个 variance fragment / count cap 改 21→51 / 9 并发 distinct ids)
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 027；Last regenerated 改 2026-05-12 23:26:56；header summary 重写为 027 内容；Prior 026 与 Prior 025 重写描述跟 027 的 surface 关系
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/actor_pool.py` — variance pools + `_variance_for` + `_allocate_actor_id` + `_reap_incomplete_folders` + 重写 `generate_batch` + cap 50
+- `projects/ai_video_management/frontend/src/components/ActorPoolGenerator.tsx` — worker pool + cap 50 + progress shape (current→inFlight) + 并发 chip
+- `projects/ai_video_management/frontend/src/styles.css` — `.progress-inflight` rule
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-9f 重写 + FR-88 改写
+- `specs/development/ai_video_management/validation/security.md` — carve-out #7 第一段增 3 项硬化
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.15 扩
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header / composed-from / 027 summary
+- `specs/development/ai_video_management/user_input/follow_ups/027-20260512-232656-concurrency-and-variance.md` (NEW)
+
+No conflicts found in:
+- follow-up 026 (actor folder delete)：027 改 generate 路径，026 改 delete 路径，正交
+- follow-up 025 (Kling-only)：027 仍用同一 KlingProvider，只是前端并发数 + variance + race-safe 分配；KlingProvider 的 JWT / SSRF-vet / 30s timeout / 5MB cap 全部不动
+- follow-up 023 (mp4 delete)：完全独立 surface
+- follow-up 018 (pollinations retry)：retry 代码 follow-up 025 已删；027 不依赖 retry
+- `backend/libs/api.py` / `backend/libs/casting.py`: `ActorPool(exposed, resolver)` 构造签名不变；`generate_batch(attrs, count)` 公开签名不变
+- `backend/tests/` 全部测试：boot-smoke 7/7 仍 pass；其他测试不依赖 actor_pool generate 路径
+- 已生成的 `_actors/actor_0001..0009/actor_NNNN.md` 老 sidecar 中无 variance fragment 字样：那是 follow-up 027 之前生成的，retroactive 不重写；用户用新按钮重新生成才会有 variance
+
+Verification (inline smoke):
+- `_variance_for(seed=1, gender='male')` 与 `_variance_for(seed=2, gender='male')` 输出不同；同 seed 多次调用输出相同 ✓
+- `_build_prompt(attrs, variance=v)` 含 v；`_build_prompt(attrs)` 不含 ✓
+- 9 个线程并发调 `_allocate_actor_id(空 _actors/)` → 9 个 distinct actor_0001..0009 ✓
+- `_reap_incomplete_folders` 仍正确回收 jpg-less folders；保留有 jpg 的 folder ✓
+- `pytest tests/test_boot_smoke.py`: **7/7 通过** ✓
+- 全套 `pytest tests/`: 18 pass / 5 pre-existing fail (与 follow-up 026 完成时同样 5 个 wukong_juexing-fixture failures，零回归)
+
+## Follow-up 026 — 2026-05-12 23:10:14
+Source: user_input/follow_ups/026-20260512-231014-actor-folder-delete.md
+Summary: 用户："lets add a delete button at actor folder level, after delete, it will be moved to _delete folder similar to the mp4 delete feature"。**Sidebar 每个 `ai_videos/_actors/actor_NNNN/` 行加 🗑 软删除按钮**：移动整个 actor folder 到 `ai_videos/_deleted/_actors/actor_NNNN/`（镜像 follow-up 023 的 `_deleted/` 子路径 pattern，但作用于 folder 而非单文件）。Interactive 决策："Auto-unassign then delete" → cascade-unassign 模式：endpoint 先 sweep 所有 drama 的 `casting.md` 移除引用该 actor_id 的行，再原子 rename folder。响应携带 `unassigned: [{drama, role}]` 列表供 UI 报告。
+
+Backend:
+- `libs/actor_pool.py` 加 4 个 exceptions: `ActorNotFound` / `ActorAlreadyDeleted` / `ActorDeleteTargetExists` / `ActorDeleteFailed`；加方法 `ActorPool.delete_actor(actor_id: str) -> dict[str, str]`：校验 `_ACTOR_ID_RE` → `is_dir()` + `is_symlink()` reject → target = `resolver.root / "ai_videos" / "_deleted" / "_actors" / actor_id` → target.exists 拒 → mkdir parents → atomic `src.rename(target)` → 返回 `{from, to}`；`__all__` 扩展含 4 个新 exceptions
+- `libs/casting.py` 加方法 `Casting.unassign_actor_everywhere(actor_id: str) -> list[dict[str, str]]`：walk `ai_videos/` 直接 children（跳 `_`-prefix system folders 与 non-dir / symlink），对每个 drama 的 `casting.md` parse → 过滤 actor_id 匹配的行 → 若有移除则 `_write()` 重写文件（复用 `assign()` 的 atomic temp+os.replace 路径）→ 累计 `{drama, role}` 返回；不动 unchanged casting.md 减少 mtime churn
+- `libs/api.py` import 加 4 个新 actor_pool exceptions；新 Pydantic `DeleteActorBody { actor_id: str }`；新 endpoint `POST /api/actors/delete`：cascade 先 (OSError → 500 `cascade_failed`)，folder move 后；exception 映射 `InvalidAttribute` → 400 `invalid_actor_id`、`ActorNotFound` → 404 `actor_not_found`、`ActorDeleteTargetExists` → 409 `target_exists`、`ActorDeleteFailed` → 500 `move_failed`；method-not-allowed handler `GET/PUT/PATCH/DELETE` → 405；docstring endpoint count 14 → 15
+
+Frontend:
+- `src/api.ts` 加 `interface DeleteActorResult { from, to, unassigned: { drama, role }[] }` + `export async function deleteActor(actorId)` POST `/api/actors/delete`
+- `src/components/Sidebar.tsx` 加 `ACTOR_ID_RE = /^actor_\d{4,}$/` 常量；`deletingActorId` state；`onActorDeleteClick` useCallback (window.confirm → deleteActor → 复用 `renameToast` surface 上 "已删除 actor_NNNN（解除 N 个 casting 引用）")；render loop 派生 `isActorEntry` flag (path parts.length===3 且 parts[0]==="ai_videos" 且 parts[1]==="_actors" 且 parts[2] 匹配 ACTOR_ID_RE) + 在该行 render 🗑 按钮（与 `_actors/` 的 🎭 生成演员 sibling pattern）；按钮 in-flight label "删除中…"
+- `src/styles.css` 加 `.actor-delete-btn` rule（与 `.drama-rename-btn` 同基线尺寸；hover 时 border-color → `var(--error-border, #c53030)`；disabled opacity 0.55）
+
+Spec / validation:
+- `final_specs/spec.md` 新增 **FR-9i** `POST /api/actors/delete` 完整契约：body shape / cascade-first 顺序 / 状态码 / 符号链接 reject / `_next_actor_id_num` 不扫 `_deleted/` 故 ID 可复用 / EXPOSED_TREE 不变；扩 **FR-87** 加 row-level 🗑 按钮描述（hides under `_deleted/`）
+- `validation/security.md` carve-out 加 **#7-bis**：4 项硬化 (actor_id shape strict、source/target 完全 derived 无 user-path、symlinks reject、atomic rename) + 3 项 residual risk (GUARDED_ROUTES gap 与 carve-out #7 同步、ID 复用是 intentional v1、cascade multi-file 非原子 race window) + coverage matrix 加 FR-9i 行 → `SEC-ACTORS-DELETE`
+- `validation/acceptance_criteria.md` 加 **U3.17** scenario：fixture 2 个 actor + 2 个 drama casting.md → POST /api/actors/delete → 验证 unassigned 列表 + folder 移动 + casting.md 重写 + 重复删除返 404 + shape 400 + 不存在 actor 404 + ID slot 复用 + 405；coverage 矩阵加 `FR-9i | U3.17 (actors/delete，follow-up 026)`
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 026；Last regenerated 改 2026-05-12 23:10:14；header summary 重写为 026 范围；prior follow-up 025 标记为 "保持有效；026 在其上加新写入面 `POST /api/actors/delete`"
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/actor_pool.py` — 4 个新 exceptions + `delete_actor()` 方法 + `__all__` 扩展
+- `projects/ai_video_management/backend/libs/casting.py` — `unassign_actor_everywhere()` 方法
+- `projects/ai_video_management/backend/libs/api.py` — import 扩展 + `DeleteActorBody` + `POST /api/actors/delete` 实现 + method-not-allowed handler + docstring endpoint count 15
+- `projects/ai_video_management/frontend/src/api.ts` — `DeleteActorResult` + `deleteActor()`
+- `projects/ai_video_management/frontend/src/components/Sidebar.tsx` — 🗑 button + state + callback + 派生 flag
+- `projects/ai_video_management/frontend/src/styles.css` — `.actor-delete-btn` rule
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-9i 新增 + FR-87 扩展
+- `specs/development/ai_video_management/validation/security.md` — carve-out #7-bis + coverage matrix FR-9i 行
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.17 scenario + coverage matrix FR-9i 行
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header / composed-from / 026 summary
+- `specs/development/ai_video_management/user_input/follow_ups/026-20260512-231014-actor-folder-delete.md` (NEW)
+
+No conflicts found in:
+- follow-up 023（mp4 delete）: 026 在 sub-path mirroring + soft-delete 语义上对齐；不抢同一文件路径（mp4 = file，026 = folder）
+- follow-up 025（Kling-only provider）: 026 不动 actor_pool 的 Kling 调用面；新 `delete_actor` 与 Kling provider 独立
+- follow-up 014（casting workflow）: 026 通过 cascade 主动保持 casting.md 一致；不破坏 FR-9g / FR-9h
+- follow-up 022（sidebar collapse-all）: 026 加新按钮但不动 expand state 逻辑
+- 已生成的 `_actors/actor_0001..0009/` 文件夹: 用户使用新按钮后会软删除，原 sidecar 内容（提到 "pollinations.ai" 的历史 artifact）随 folder 移到 `_deleted/_actors/`，不会被修改
+- backend tests: 现有 7 boot-smoke 测试不依赖 actor_pool 写入面，未受影响
+
+Verification (inline smoke):
+- `python -c "from libs.actor_pool import ActorNotFound, ActorDeleteFailed, ActorDeleteTargetExists, ActorAlreadyDeleted; from libs.casting import Casting; from libs import api; print(hasattr(Casting,'unassign_actor_everywhere'), hasattr(api,'DeleteActorBody'))"` → `True True` ✓
+- `pytest tests/test_boot_smoke.py`：**7/7 通过** ✓
+- 全套 `pytest tests/`：18 pass / 5 pre-existing fail (与 follow-up 025 完成时同样的 5 个 wukong_juexing-fixture-missing failures，零回归)
+
+## Follow-up 025 — 2026-05-12 22:51:47
+Source: user_input/follow_ups/025-20260512-225147-kling-only-provider-and-env-file.md
+Summary: 用户："Lets remove the rest options to generate pictures, only use kling api key, here is the key you can put it in some local env file that is not tracked by git" + 直接提供 Access/Secret Key。**把 face generation 收窄为 Kling-only**：删除 follow-up 021 引入的 multi-provider chain (Pollinations + AI Horde) + follow-up 024 的 chain-fallback 静默 skip 行为；Kling env vars 升为 **required**，缺失时启动期 failfast。**凭证存储**：新增 `projects/ai_video_management/backend/.env`（根 `.gitignore` `.env` pattern 已覆盖，不入 git）+ stdlib `libs/env_loader.py`（KEY=VALUE 解析，**不引入 python-dotenv**）+ `main.py` 与 `libs/asgi.py` 启动期 `load_env_file()`。
+
+Backend:
+- `libs/actor_pool.py` 重写：删除 `PollinationsProvider` + `AIHordeProvider` + `Provider` Protocol + `ProviderChain` + `_FetcherShimProvider` + `HttpFetcher` + `_default_fetcher` + `_parse_retry_after` + `_RETRY_BACKOFFS_SECONDS` + `_RETRY_AFTER_CAP_SECONDS` + `POLLINATIONS_BASE` + `_build_pollinations_url` + 全部 `AIHORDE_*` 常量 + `PROVIDERS_ENV_VAR` + `_DEFAULT_PROVIDER_NAMES` + `_PROVIDER_FACTORIES` + `_build_default_chain`
+- `KlingProvider` 保留并升为唯一 provider；`from_env()` 行为不变；`ActorPool.__init__` 移除 `fetcher` + `chain` kwargs，新增 `provider: KlingProvider | None`；缺 env → 构造期 `RuntimeError("kling env keys missing; set KLING_ACCESS_KEY + KLING_SECRET_KEY ...")`
+- `_build_sidecar` 字符串 "AI-generated actor face (pollinations.ai, follow-up 014)" → "(Kling text-to-image, follow-up 025)"
+- `__all__` 收窄到 Kling-only + 通用常量
+- `libs/env_loader.py` (NEW)：~30 行 stdlib `load_env_file(path: Path) -> int`；skip 空行 + `#` 注释；只 `os.environ.setdefault`（已存在 env 优先）；FileNotFoundError + OSError → return 0
+- `main.py`：`load_env_file(Path(__file__).resolve().parent / ".env")` 在 import `libs.api` 前调用
+- `libs/asgi.py`：同上，`Path(__file__).resolve().parent.parent / ".env"` (从 libs/ 上一级)
+
+Frontend:
+- `frontend/src/components/ActorPoolGenerator.tsx`：删除 `INTER_REQUEST_THROTTLE_MS = 2000` 常量 + 主循环 `await setTimeout(2000)` 块；删除 `phase: "throttling"` 状态 (`Progress.phase` 收窄到 `"idle" | "generating"`)；删除 ProgressPanel "⏸ 等待限速冷却…" 分支 + footer "等待 2s 防限速…" 按钮文本；删除 `<p className="rate-limit-hint">ℹ️ pollinations.ai 免费 endpoint 有限速 …</p>` banner
+- `frontend/src/styles.css`：删除 `.rate-limit-hint { ... }` 整个 rule block（follow-up 018 引入的 CSS class 已无引用）
+
+Spec / validation:
+- `final_specs/spec.md` FR-9f 重写：删除 (a) Pollinations + (b) AI Horde 段；保留 Kling 段并提到 Kling env vars 升 required + .env 加载流程 + failfast；删除 `AI_VIDEO_MGMT_FACE_PROVIDERS` 提及；FR-9 master 注释 "outbound HTTP calls (pollinations.ai)" → "Kling text-to-image per follow-up 025"
+- `validation/security.md` carve-out #7 重写：从 3-provider chain hardening 收窄为 Kling-only；新增 .env 加载流程 + .env 文件不在 EXPOSED_TREE (`projects/` 不在 FR-7 的 5 个 root 内) 的说明；residual risks 收窄为 (i) Kling 单点 + (ii) Kling CDN TOCTOU + (iii) 内容过滤 + (iv) 内网 egress
+- `validation/security.md` 全文 `SEC-OUTBOUND-POLLINATIONS` → `SEC-OUTBOUND-KLING`（两处）
+- `validation/acceptance_criteria.md` U3.15：标题 + Given 行的 monkey-patch 注释改为 Kling；新增 "KLING env 已设" precondition
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 025；Last regenerated 改 2026-05-12 22:51:47；header summary 替换为 025 内容（删除 024 长 summary 文本但保留 follow-up 024 reference）；Prior follow-up 024 标记为 "已被 025 部分覆盖：KlingProvider + JWT + aspect ratio mapper + SSRF-vet 保留，chain 抽象删除"
+
+Auto-updated:
+- `projects/ai_video_management/backend/.env` (NEW，untracked) — Kling access + secret key
+- `projects/ai_video_management/backend/libs/env_loader.py` (NEW) — stdlib KEY=VALUE 加载器
+- `projects/ai_video_management/backend/libs/actor_pool.py` — Kling-only 重写 (~340 行 net delete)
+- `projects/ai_video_management/backend/main.py` — `load_env_file()` 调用
+- `projects/ai_video_management/backend/libs/asgi.py` — `load_env_file()` 调用
+- `projects/ai_video_management/frontend/src/components/ActorPoolGenerator.tsx` — throttle + hint UI 删除
+- `projects/ai_video_management/frontend/src/styles.css` — `.rate-limit-hint` CSS 删除
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-9f Kling-only 重写
+- `specs/development/ai_video_management/validation/security.md` — carve-out #7 Kling-only 重写 + SEC-OUTBOUND-KLING rename
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.15 Kling
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header / composed-from / 025 summary
+- `specs/development/ai_video_management/user_input/follow_ups/025-20260512-225147-kling-only-provider-and-env-file.md` (NEW)
+
+No conflicts found in:
+- `frontend/src/api.ts` / `frontend/src/components/Sidebar.tsx` / `frontend/src/components/Reader.tsx` / `frontend/src/components/ImageRefView.tsx`：HTTP API shape (`POST /api/actors/generate`) 不变
+- `backend/libs/api.py` / `backend/libs/casting.py` / `backend/libs/media_archiver.py`：`ActorPool(exposed, resolver)` 构造签名兼容（新增的 `provider` kwarg 是可选）
+- `backend/tests/`：无 actor_pool 测试 (follow-up 014-024 推迟 pytest)，无 `fetcher=` / `chain=` 引用，零回归
+- 已生成的 `ai_videos/_actors/actor_0001..0009/actor_NNNN.md` sidecar 中 "pollinations.ai, follow-up 014" 字样：保留为历史 artifact（未来 regen 才覆盖）
+- follow-up 014-024 follow-up draft 文件本身：保留为审计历史，不删
+- `.claude/skills/agent_team/` 与 `.claude/agent_refs/`：本 follow-up 是 project-scoped instruction，不动 common surface
+
+Verification (inline smoke):
+- `load_env_file(backend/.env)` 加载 2 个 keys ✓；二次调用 already-set env 不被覆写 ✓；missing file → 0 ✓
+- `actor_pool.__all__` 收窄；`PollinationsProvider` / `AIHordeProvider` / `ProviderChain` / `_FetcherShimProvider` / `POLLINATIONS_BASE` / `AIHORDE_BASE_URL` / `PROVIDERS_ENV_VAR` / `_build_default_chain` / `HttpFetcher` / `Provider` 全部 `hasattr` 为 False ✓
+- `KlingProvider.from_env()` 加载 env 后返 `KlingProvider` instance ✓
+- `_make_kling_jwt('AKtest','SKtest', exp_seconds=60)` 仍生成 3-part JWT ✓
+- `ActorPool(FakeExposed, FakeResolver)` 在缺 env 时 raise `RuntimeError("kling env keys missing ...")` ✓
+- `pytest tests/test_boot_smoke.py`: **7/7 通过** ✓
+- 全套 `pytest tests/`: 18 pass / 5 pre-existing fail (sub_type_lookup / tree_walker + 2 origin-host edge — 全部在 stashed pre-025 tree 上同样 5 fail，零回归)
+- Frontend `tsc --noEmit`：仅 vite.config.ts 的 2 个 pre-existing `path` typing 错误，actor-pool / sidebar 编辑零 error
+
+## Follow-up 024 — 2026-05-12 23:30:00
+Source: user_input/follow_ups/024-20260512-233000-kling-text-to-image-provider.md
+Summary: 用户提议 "if I give you kling text to image api, would that help?" 后，先 push back 之前用户提的方案 A (TPDNE — StyleGAN/FFHQ documented Asian bias，命中率仅 10-30%，需 ML classifier 或人工 curation) 与方案 C (Generated.Photos — ToS 明禁 "caching, stockpiling, or downloading photos as stand-alone files")，研究确认两者均不可行；Kling 是真正适配（商业级 + 用户已有 access + ~1-3s/img + prompt-based attribute control）。**加 Kling 作为第 3 个 face provider，放 chain 首位**。
+
+实现:
+- 新增 `KlingProvider` 类：JWT HS256 + async submit + poll + r2-CDN download；遵循 follow-up 021 引入的 Provider Protocol
+- `_make_kling_jwt(ak, sk)`：纯 stdlib (`hmac` + `hashlib` + `json` + `base64`)，3-segment JWT (header.payload.signature)，claims `{iss: ak, exp: now+1800, nbf: now-5}`；**不引入 `PyJWT` 依赖**
+- `_kling_aspect_ratio(width, height)`：从 (512, 512) 推断 "1:1" / "16:9" / "9:16" / "4:3" / "3:4"（Kling 不接受任意分辨率必须 enum）
+- `KlingProvider.from_env()`：lazy 读 `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` env vars，缺任一返 None 让 chain factory 静默跳过
+- 流程: POST `https://api.klingai.com/v1/images/generations` `{model_name: "kling-v1", prompt, aspect_ratio, n: 1}` → 检 `code == 0` → 拿 `data.task_id` → poll GET `/v1/images/generations?pageSize=500` 每 2s（max 120s）→ 找匹配 task → 检 `task_status == "succeed"` (or `"failed"` → raise) → `task_result.images[0].url` → 复用现有 `_is_safe_download_host` SSRF-vet → download with `follow_redirects=True` + 30s timeout + 5MB cap
+- `_PROVIDER_FACTORIES["kling"] = lambda: KlingProvider.from_env()` —— factory 可返 None
+- `_build_default_chain` 加 `if instance is None: continue` 支持 None-returning factories
+- `_DEFAULT_PROVIDER_NAMES = ("kling", "pollinations", "aihorde")` —— Kling 优先；factory None→skip 让无 env 用户自动降级回 follow-up 021 chain（零 breaking change）
+- `__all__` 加 `KlingProvider` / `KLING_BASE_URL` / `KLING_ACCESS_KEY_ENV` / `KLING_SECRET_KEY_ENV` / `KLING_DEFAULT_MODEL`
+
+Spec / validation:
+- `final_specs/spec.md` FR-9f 加 provider (c) Kling 描述：JWT HS256 stdlib-only 实现 + claims + async POST+poll+download 流程
+- `validation/security.md` carve-out #7 hardening (g-bis): KLING_SECRET_KEY 仅 env 读、仅 `hmac.new` 输入用、不 log / 不进 URL / 不进 response；KLING_ACCESS_KEY 在 JWT `iss` claim 是 identifier 非 secret；`code != 0` 显式检查；JWT 每次 generate() 现生（30 分钟有效期，无 stale 风险）
+
+前端零改动 — chain 对调用方透明，HTTP API shape 不变。
+
+Auto-updated:
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — Last regenerated 改 2026-05-12 23:30:00；Composed-from 加 follow-up 024；header 摘要描述 push back 两方案 + Kling 选型 + 实现 + verification；prior follow-up 023 line 移到 prior 列表
+- `projects/ai_video_management/backend/libs/actor_pool.py` — 新增 ~150 行 KlingProvider + JWT helpers + aspect ratio mapper + provider factory；`_PROVIDER_FACTORIES` 加 "kling" slot；`_build_default_chain` 支持 None-returning factory；`_DEFAULT_PROVIDER_NAMES` 加 "kling" 在最前；`__all__` 扩展
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-9f provider 列表加 (c) Kling
+- `specs/development/ai_video_management/validation/security.md` — carve-out #7 (g-bis) Kling secret 硬化
+- `specs/development/ai_video_management/user_input/follow_ups/024-20260512-233000-kling-text-to-image-provider.md` (NEW) — full follow-up draft 含 评估 / Kling API 摘要 / 实现 / 安全 / 不在范围
+
+Verification (inline smoke):
+- `from libs.actor_pool import KlingProvider, _make_kling_jwt, _kling_aspect_ratio, _build_default_chain, _DEFAULT_PROVIDER_NAMES` 全部 import 成功
+- JWT 生成 byte-equality verify：解码 header `{"alg":"HS256","typ":"JWT"}` ✓；payload `{iss, exp, nbf}` 正确；signature `hmac.new(sk, header.payload, sha256)` byte-byte 匹配 ✓
+- aspect ratio: 512×512 → "1:1"，1920×1080 → "16:9"，1080×1920 → "9:16" ✓
+- `KlingProvider.from_env()`：无 env → None ✓；有 env (ak+sk) → KlingProvider instance ✓
+- `_DEFAULT_PROVIDER_NAMES == ('kling', 'pollinations', 'aihorde')` ✓
+- `_build_default_chain()` 有 env → `('kling', 'pollinations', 'aihorde')` ✓；无 env → graceful fallback `('pollinations', 'aihorde')` ✓
+- `make boot-smoke`: **7/7 通过** ✓
+
+No conflicts found in:
+- 与 follow-up 023 (delete-media + `_deleted/`) 完全正交 —— 一个改 frontend reader + media_archiver，一个改 backend actor_pool outbound HTTP
+- 与 follow-up 022 (sidebar collapse-all) 正交
+- 与 follow-up 021 (multi-provider chain) 增强：在其 Provider 抽象基础上加新 provider 类
+- 与 follow-up 020 / 019 (archive UI for direct media views) 正交
+- 与 follow-up 018 (pollinations retry) 兼容：PollinationsProvider 仍封装 follow-up 018 retry 逻辑；Kling 不复用同样 retry (Kling 商业 endpoint 限速远松，简单 raise + chain failover 已足够)
+- `validation/acceptance_criteria.md` U3.15 / U3.16 — pytest fixture 仍用 `fetcher=lambda` 路径通过 `_FetcherShimProvider`；Kling 不参与，无 conflict
+- 所有 frontend 组件 / 其他 backend libs / casting.md / media archiver / api.py — 零影响
+
+User next step:
+1. 在 `app.klingai.com/global/dev` 创建账号 → API keys page → 拿 Access Key + Secret Key
+2. PowerShell: `$env:KLING_ACCESS_KEY = "<your_ak>"` + `$env:KLING_SECRET_KEY = "<your_sk>"`
+3. `make run-backend` 重启 backend 让 env 生效（`--reload` 只追代码改动，不追 env）
+4. 点 "🎭 生成演员" → chain 现在 `kling,pollinations,aihorde` → 第 1 张走 Kling (~1-3s)，第 2 张走 pollinations，第 3 张走 AI Horde，第 4 张 wrap 回 Kling…
+5. 若不设 env：chain 自动降级回 `pollinations,aihorde`，**完全没变化**，零风险
+6. 单 Kling-only：`$env:AI_VIDEO_MGMT_FACE_PROVIDERS = "kling"` (跳过 pollinations + AI Horde fallback；要求 Kling 100% 可用)
+
+Severity: Medium. Performance / user-blocking 真长效解（kling 商业级速度 10-30× 快过现有 free providers）；按用户 explicit 提议实现；零 breaking change（无 env 自动降级回 follow-up 021 chain）；secret handling hardening 已落地（hmac 计算 + 不 log + 不 leak）。改动范围：1 backend lib 加新类（~150 行）；前端零变动；API endpoint shape 零变动；安全 carve-out 扩展但所有新硬化点已落地。
+
+## Follow-up 023 — 2026-05-12 22:15:39
+Source: user_input/follow_ups/023-20260512-221539-delete-media-to-deleted-folder.md
+Summary: mp4 / image reader 加 Delete 按钮 — soft-move 当前文件到 `ai_videos/_deleted/{保留 ai_videos 之下的子路径}`。新 backend endpoint `POST /api/delete-media` + 前端 Reader.tsx 双按钮 row（Archive + Delete）+ `_deleted/` 内文件两按钮全部隐藏。
+
+Auto-updated:
+
+**user_input:**
+- `revised_prompt.md` — header bump：composed-from 末尾加 follow-up 023；Last regenerated 时间戳更新；follow-up 022 / 021 / 020 demote to "Prior"；新写 follow-up 023 summary（详述端点 mapping、target path 保留子结构、`_deleted/` 内按钮隐藏规则、警示红色 hover、不引入 in-app restore）。
+
+**Generated outputs:**
+- `backend/libs/media_archiver.py` —
+  - 模块 docstring 加一段说明 follow-up 023 delete 行为。
+  - 新增常量 `DELETED_DIR_NAME = "_deleted"`、`AI_VIDEOS_ROOT_NAME = "ai_videos"`。
+  - 新增 exceptions `AlreadyDeleted`、`NotInAiVideos`。
+  - `MediaArchiver` 新增 method `delete(self, rel: str) -> MoveResult`：复用 `_validate_media_source` 做 ext/sandbox/symlink 校验；relative parts[0] != "ai_videos" → `NotInAiVideos`；parts[1] == "_deleted" → `AlreadyDeleted`；target = `resolver.root / "ai_videos" / "_deleted" / Path(*parts[1:])`；`target.parent.mkdir(parents=True, exist_ok=True)`；target 存在 → `TargetExists`；`src.rename(target)` atomic；不删 src 原 parent。
+- `backend/libs/api.py` —
+  - 模块顶部 docstring：13 endpoints → 14 endpoints，列表加 `POST /api/delete-media`。
+  - import from `media_archiver` 加 `AlreadyDeleted`、`NotInAiVideos`。
+  - 新 endpoint `POST /api/delete-media` 复用 `ArchiveMediaBody` schema；mapping：InvalidPath→400 `invalid_path` / NotMedia→400 `extension_not_allowed` / NotInAiVideos→400 `not_in_ai_videos` / AlreadyDeleted→400 `already_deleted` / NotFound→404 `not_found` / TargetExists→409 `target_exists` / MoveFailed→500 `move_failed`。
+  - 对应 method_not_allowed handler GET/PUT/PATCH/DELETE → 405 + Allow: POST。
+- `frontend/src/api.ts` — 加 `export async function deleteMedia(path: string): Promise<ArchiveMediaResult>` POST `/api/delete-media`，复用 `ArchiveMediaResult` 类型。
+- `frontend/src/components/Reader.tsx` —
+  - import 加 `deleteMedia` from `../api`。
+  - 加 `deleting: boolean` state。
+  - 加 `onDeleteClick` useCallback (依赖 `[path, onSaved, navigate]`)：`window.confirm` 拦一次，确认后 `deleteMedia(path)` → 成功 announce + `onSaved()` + `navigate(/file/encoded)` → 失败 announce 错误 + button re-enable。
+  - 派生 `isDeletedFile = path.startsWith("ai_videos/_deleted/")`、`mediaActionsBusy = archiving || deleting`、`deleteLabel`（`🗑 Delete` / `Deleting…`）。
+  - `isVideo` / `isMediaImage` 分支：原 single archive button 包入新 `<div className="reader-media-actions">` flex row + Delete button；整个 actions 块在 `!isDeletedFile` 下渲染（`_deleted/` 内文件两按钮都隐藏，视频/图片仍正常播放）。
+  - 两按钮共享 busy guard `disabled={mediaActionsBusy}` 防止并发 archive + delete。
+- `frontend/src/styles.css` — 加 `.reader-media-actions`（flex row + justify-content center + gap 10px）+ `.reader-media-delete-btn`（基线尺寸同 archive；hover → color `--error-text` / bg `--error-bg` / border-color `--error-border` 警示红，全部复用既有 light-theme error 色板不引入新色）。
+
+No conflicts found in: `SiblingMedia.tsx`（未触碰；批量 archive grid 仍服务 markdown / imageRef / shotPair 分支）; `Sidebar.tsx`（`_deleted/` 默认 walk 进 tree，无需 EXCLUDED_DIRS 改动；follow-up 022 的 collapse-all 让噪声可控）; `App.tsx`（onSaved 仍触发 tree refresh）; `exposed_tree.py`（`_deleted/` 不在 `_EXCLUDED_DIRS`，默认可见，与 `_actors/` 一致）; `_validate_media_source`（沿用 archive 路径校验链）; `interview/qa.md`, `findings/dossier.md`, `final_specs/spec.md`, `validation/*`（均未 prescribe 唯一目录布局 / 唯一移动语义 — follow-up 008 + 011 + 019 + 020 + 023 是 UX 渐进迭代）。
+
+Verification (静态 reasoning + manual smoke 路径)：
+- 后端：`media_archiver.delete("ai_videos/mozun/characters/c1/c1_1.mp4")` 预期返回 `{from: "ai_videos/mozun/characters/c1/c1_1.mp4", to: "ai_videos/_deleted/mozun/characters/c1/c1_1.mp4"}`；新建链上每级目录；原 c1/ folder 不删。
+- 后端边界：non-media ext → `extension_not_allowed`；non-`ai_videos/` 路径 → `not_in_ai_videos`；已在 `_deleted/` 下 → `already_deleted`；target 已存在（罕见：先 delete 再撤销再 delete）→ `target_exists`。
+- 前端：mp4 reader 显示 `<video>` + 两按钮 row；点 Delete → confirm 弹窗 "Move {filename} to _deleted/?"；OK → 请求 + navigate；Cancel → 不发请求。点 Archive 与 Delete 期间双向 disabled。点进已在 `_deleted/` 下的视频 → 视频正常播放，两按钮都不渲染。
+- 安全：Origin/Host gate + sandbox + symlink reject + atomic rename 沿用既有契约，无新 carve-out。
+
+## Follow-up 022 — 2026-05-12 22:07:24
+Source: user_input/follow_ups/022-20260512-220724-sidebar-collapse-all-icon.md
+Summary: Sidebar 顶部加 collapse-all 图标按钮 — 点击 `⊟` 折叠左 nav 全部 folder 节点。Toolbar 行紧贴 sidebar 顶部、`renameToast` 之上；状态利用现有 `expanded: Record<string,boolean>`，与 line-50 tree-init effect 的合并顺序天然兼容（collapse 跨 tree refresh 持久，新 folder 仍默认展开）。
+
+Auto-updated:
+
+**user_input:**
+- `revised_prompt.md` — header bump：composed-from 末尾加 follow-up 022；Last regenerated 时间戳更新；follow-up 021 从 latest 降为 "Prior follow-up 021"；新写 follow-up 022 summary。
+
+**Generated outputs:**
+- `frontend/src/components/Sidebar.tsx` —
+  - 加 `onCollapseAll` useCallback（依赖 `[tree]`）：walk tree → 把所有 `type` 非 file/image/video 的节点 path 收集进 `accum: Record<string, boolean>` 都设为 `false` → `setExpanded(accum)` 直接覆盖 prev。
+  - 在 `<nav className="sidebar">` 内、`renameToast` 渲染之前，插入 `<div className="sidebar-toolbar">` 内置单按钮 `<button className="sidebar-collapse-all" aria-label="折叠全部" title="折叠全部 · Collapse all folders" onClick={onCollapseAll}>⊟</button>`。
+  - 不动 line-50 / line-62 useEffect（tree-init 默认 expand-all 行为对新 folder 仍正确；`prev` 覆盖让 collapse 状态跨 tree refresh 持久）。
+  - 不动 keyboard navigation / ActorPoolGenerator / renameToast 等既有 sidebar 功能。
+- `frontend/src/styles.css` — 紧贴 `.sidebar-loading` 之后新增 `.sidebar-toolbar`（flex row + justify-content flex-end + border-bottom var(--border) + bg var(--bg-sidebar) + padding 4px 10px 6px）与 `.sidebar-collapse-all`（transparent bg / muted color / 16px / padding 2px 8px / border-radius 3px / hover → text + bg-toolbar + border / focus-visible → 2px solid var(--border-strong) outline）。
+
+No conflicts found in: backend（纯前端 client-side state，零调用后端）; `App.tsx`（sidebar 仍接 `tree / currentPath / onSelect / onTreeReload` 旧 props，零 prop 签名变化）; `ActorPoolGenerator.tsx`（modal 触发逻辑不变）; `interview/qa.md`, `findings/dossier.md`, `final_specs/spec.md`, `validation/*`（均未 prescribe sidebar 必须无 toolbar / 默认全展开为契约 — 本 follow-up 是 UX 增量不是契约破坏）。
+
+Verification (静态 reasoning)：点击按钮 → `setExpanded(allFalseMap)` → flat memo 重算 → 任何 `depth > 0` 的节点 `isOpen = expanded[path] === true` 为 `false` → 子节点不被 walk 进 flat array → 视觉上只剩 top-level；`depth === 0` 由 line 97 强制 `isOpen=true` 不受影响。用户实测路径 `ai_videos/mozun_chongsheng/characters/c1_沧冥/c1_沧冥1.mp4`：点 collapse-all 后 sidebar 应只看到 `ai_videos/`（或其下两个 top-level drama 名），其余隐藏；breadcrumb + reader 仍显示当前文件路径，用户可手动重新展开。键盘 Tab 到 button 后 Enter / Space 都触发 onCollapseAll。Focus-visible outline 走 `--border-strong` (#afb8c1) 已定义。
+
+## Follow-up 021 — 2026-05-12 23:00:00
+Source: user_input/follow_ups/021-20260512-230000-multi-provider-face-generation.md
+Summary: 应用户提议"is pollination.ai the only site you could download free ai generated pictures? is there any other free alternative?"引入 **multi-provider face generation 架构**。Research 9 个候选（pollinations / AI Horde / Cloudflare Workers AI / Together AI / HuggingFace Inference / Puter.js / DeepAI / ZSky / Generated.Photos）；否决 Generated.Photos (ToS 禁 download)、Puter.js (browser-only 无 server-side path)、其他需要 signup / token / cold start 的。用户答**保留 pollinations + AI Horde fallback**（不引入 Cloudflare 因要 signup），策略 **round-robin per image with failover**。
+
+Backend 重构：
+- 新增 `Provider` Protocol：`name: str` + `generate(prompt, seed, width, height) -> bytes`
+- 新增 `PollinationsProvider`：封装 follow-up 018 的 `_default_fetcher` 重试逻辑 + URL 构建。行为契约不变（3 retries on 429 + timeout，Retry-After honored capped 60s）
+- 新增 `AIHordeProvider`：async POST→poll→download；base URL `https://aihorde.net/api/v2` + anonymous apikey `"0000000000"` 写死；流程 POST `/generate/async` → poll `/generate/check/{id}` 每 5s 直到 `done:true` 或 `faulted:true` (max 180s) → GET `/generate/status/{id}` 拿 `generations[0].img` (r2.dev URL) → SSRF-vet hostname (`_is_safe_download_host`: https only + 拒 loopback/RFC1918/link-local/multicast/reserved IPs via `socket.getaddrinfo`) → GET 该 URL with `follow_redirects=True` + 30s timeout + 5MB cap
+- 新增 `ProviderChain` 类：`__init__(providers)` 拒空 list；`generate(...)` 每次前进 index 1 (round-robin)，失败时 fall through 同 chain 余下 provider 直到一个成功或全失败；全失败抛 `RuntimeError` 含 `last_exc` chain + 所有 provider 失败原因汇总
+- 新增 `_FetcherShimProvider`：把 legacy callable `(url, timeout, max_bytes) -> bytes` 包成 Provider，让现有测试 `fetcher=lambda` 参数继续 work 无需重写
+- 新增 `_build_default_chain()`：读 env var `AI_VIDEO_MGMT_FACE_PROVIDERS` (默认 `"pollinations,aihorde"`)，map 到工厂 dict；garbage 输入降级为单 pollinations chain
+- `ActorPool.__init__` 签名扩展 `fetcher | chain | (env default)` 三路：fetcher 路径走 shim，chain 路径直接用，默认路径 `_build_default_chain()`
+- `generate_batch` 把 `self._fetcher(url, ...)` 改为 `self._chain.generate(prompt, seed, IMAGE_WIDTH, IMAGE_HEIGHT)`；URL 构建从 ActorPool 移到 PollinationsProvider 内部
+- 删除 `ActorPool._build_url` 静态方法（已下沉到 provider）
+
+Spec / validation 改动：
+- `final_specs/spec.md` FR-9f 重写：扩展为"通过 ProviderChain 调度，round-robin per image with failover"，列两 provider 完整流程契约
+- `validation/security.md` Open carve-out #7 扩展：双 provider 各自的硬化（pollinations no-redirect / AI Horde SSRF-vet + follow-redirect 安全），加 4 类残余风险（双 provider 可用性依赖 / SSRF TOCTOU 子毫秒窗 / 无内容过滤 / localhost 触发外部 IO）
+
+前端零改动 — chain 对调用方透明，`POST /api/actors/generate` body / response shape 不变。follow-up 017 frontend loop + follow-up 018 throttle 全部继续 work。
+
+Auto-updated:
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — Last regenerated 改 2026-05-12 23:00:00；Composed-from 加 follow-up 021；header 摘要描述 research 否决理由 + 两 provider 流程 + chain 行为 + verification；prior follow-up 020 line 保留
+- `projects/ai_video_management/backend/libs/actor_pool.py` — 完全重构 outbound HTTP 层：新增 ~200 行 Provider 抽象 + AIHordeProvider 实现 + ProviderChain 实现 + env-driven 默认工厂；删除 `ActorPool._build_url`；调整 `ActorPool.__init__` 接受 `chain` 参数 + 内部用 `self._chain.generate(...)`；imports 加 `socket` / `ipaddress` / `os` / `urlparse` / `Protocol`；模块 docstring + `__all__` 更新
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-9f 改写
+- `specs/development/ai_video_management/validation/security.md` — Open carve-out #7 改写
+- `specs/development/ai_video_management/user_input/follow_ups/021-20260512-230000-multi-provider-face-generation.md` (NEW) — full follow-up draft 含 research summary + 用户决策 + 架构设计 + 安全 / 边界扩展 + 不在范围
+
+Verification (inline smoke checks):
+- imports: 所有新 symbol (Provider / ProviderChain / PollinationsProvider / AIHordeProvider / `_build_default_chain` / PROVIDERS_ENV_VAR / `_is_safe_download_host`) 全部 import 成功
+- `_build_default_chain()` 默认 → `('pollinations', 'aihorde')`
+- `_is_safe_download_host`: sandbox 环境 DNS 受限故全 False（safe default）；reject `http://` (无 https) / `https://127.0.0.1` / `https://localhost` 均确认；生产 user 机器能 resolve `cdn.aihorde.net` → admit
+- ProviderChain round-robin: A + B chain 调 3 次，A 始终 fail → A.calls=2 (起步位 0,_,0) + B.calls=3 (always 接管或起步) → 与设计一致
+- ProviderChain failover: A fail + B ok → A.calls=1 + B.calls=1 + 返回 B bytes
+- ProviderChain all-fail: 全 fail → RuntimeError 含 "all providers failed: A: ...; B: ..."
+- ProviderChain([]) → ValueError
+- ActorPool 集成: poll-always-fail + horde-ok chain → generate_batch(count=3) → 3 actor 全成功通过 horde 落盘
+- Back-compat fetcher: `ActorPool(..., fetcher=lambda u,t,m: bytes)` → 仍能 generate 2 actor 通过 shim
+- env var: `pollinations` → `('pollinations',)`；`aihorde,pollinations` → 逆序；`unknown,garbage` → 降级为 `('pollinations',)`
+- `make boot-smoke`: **7/7 通过**（含 follow-up 014 加的 5 endpoint registration 断言）
+
+No conflicts found in:
+- `backend/libs/casting.py` / `media_renamer.py` / `media_archiver.py` / `downloads_importer.py` / `api.py` — 零影响；`api.py` 只用公共接口 `ActorPool` / `ActorAttrs` / `InvalidAttribute` / `GenerationDirMissing`，签名不变
+- 所有前端组件 — chain 对前端透明，HTTP API shape 不变
+- `validation/acceptance_criteria.md` Scenario U3.15 / U3.16 — 仍 valid；测试 fixture 用 `fetcher=lambda` 路径，通过 `_FetcherShimProvider` 走通
+- 与 follow-up 020 (mp4 page single archive button) 完全正交
+
+User next step:
+1. Backend `--reload` (follow-up 012 默认) 自动检测 `libs/actor_pool.py` 改动 + reload。无需手动重启。
+2. 可选设置 env var：PowerShell `$env:AI_VIDEO_MGMT_FACE_PROVIDERS = "pollinations,aihorde"` (默认值)；或 `"aihorde,pollinations"` 让 AI Horde 优先；或 `"aihorde"` 单 provider 跳过 pollinations。env 改动需 `make run-backend` 重启才生效（`--reload` 只追代码改动）。
+3. 重试 count=20：第 1 张走 pollinations，第 2 张自动走 AI Horde；失败时另一 provider 接管。pollinations 限速但快，AI Horde 慢但无限速；混合后整体 throughput + 成功率应显著提升。
+4. AI Horde 首次匿名调用 wait 可能 60-120s（kudos 0 → 队列末位）；后续 wait 通常 20-60s。如希望更快，独立 follow-up 加 Cloudflare Workers AI provider（需用户提供 free tier token）。
+
+Severity: Medium. 用户报告的限速 blocker 的长效解。改动范围：1 backend lib 重构（新增 ~200 行 Provider 抽象 + AIHorde implementation），前端零变动；API 契约 / spec FR-9f 文字扩展但 endpoint shape 不变；安全 carve-out 扩展但所有新硬化点已落地。
+
+## Follow-up 020 — 2026-05-12 21:57:51
+Source: user_input/follow_ups/020-20260512-215751-mp4-page-single-archive-button.md
+Summary: 收窄 follow-up 019：用户反馈 mp4 / image single-file reader 页面只要一个 archive 按钮，不需要 SiblingMedia grid + checkbox + toolbar。`isVideo` / `isMediaImage` 分支替换为内联 archive/unarchive 按钮，path-based 自动判定方向，成功后导航到新路径。`isImageRef` / `isShotPair` 分支的 SiblingMedia 保留不变。
+
+Auto-updated:
+
+**user_input:**
+- `revised_prompt.md` — header bump：composed-from 末尾加 follow-up 020；Last regenerated 时间戳更新；follow-up 019 从 latest 降为 "Prior follow-up 019" 并注明 video + image 分支收窄、imageRef + shotPair 保留；新写 follow-up 020 summary。
+
+**Generated outputs:**
+- `frontend/src/components/Reader.tsx` —
+  - import 加 `useNavigate` from react-router-dom、`archiveMedia` + `unarchiveMedia` from api。
+  - 加 `archiving: boolean` state。
+  - 加 `onArchiveToggle` useCallback：path 分段，`parts[length-2] === 'archive'` 判定 inArchive；调用 unarchive 或 archive；成功 `announceToast` + `onSaved()` + `navigate(/file/encoded)` 到新路径；失败公告。
+  - 派生 `isArchivedFile` + `archiveLabel`（`📦 Archive` / `↺ Unarchive` / `Archiving…` / `Unarchiving…`）。
+  - `isVideo` 分支：移除 follow-up 019 加的 `<SiblingMedia>`，回到单 `<div className="media-view">`，里面 `<video>` 之下加 `<button className="reader-media-archive-btn">`。
+  - `isMediaImage` 分支：同上。
+  - `isImageRef` / `isShotPair` 分支：**保留 follow-up 019 加的 SiblingMedia 不变**。
+  - 文件底部加 module-level `announceToast` + `archiveErrorKind` helpers（与 SiblingMedia.tsx 内同名 helper 行为一致；不抽 util 文件以保持单文件修改）。
+- `frontend/src/styles.css` — 新增 `.reader-media-archive-btn` 样式：inline-block、margin-top 12px、padding 6px 14px、light-theme bg-panel + text-muted、hover 时切到 bg-toolbar + text；disabled 时 cursor: progress + opacity 0.55。挂在 `.media-view video { width: 100%; }` 之后。
+
+No conflicts found in: backend (`backend/libs/media_archiver.py` + `POST /api/archive-media` / `POST /api/unarchive-media` 已支持单 path 原子调用); `SiblingMedia.tsx`（未触碰；仍服务 markdown / imageRef / shotPair 分支）; `interview/qa.md`, `findings/dossier.md`, `final_specs/spec.md`, `validation/*`（均未 prescribe 单文件 archive UI 形态 — follow-up 008 + 011 + 019 的描述均为渐进迭代，本 follow-up 是 UX 收窄不是契约破坏）。
+
+Verification: 用户实测路径 `ai_videos/mozun_chongsheng/characters/c1_沧冥/c1_沧冥1.mp4`。预期：reader 上半 `<video>`，正下方一个 "📦 Archive" 按钮；点击后请求 archive endpoint → 文件移到 `c1_沧冥/archive/c1_沧冥1.mp4` → URL 自动跳新路径 → reader 重新加载同一 mp4 但按钮变成 "↺ Unarchive"（用户可立刻 misclick recovery）。Sidebar 同时 refresh 显示新位置。Aria-live toast 公告 "Archived c1_沧冥1.mp4"。点 ImageRefView 或 ShotPairView 路径行为不变（仍显示 SiblingMedia 批量 grid）。
+
+## Follow-up 019 — 2026-05-12 21:43:45
+Source: user_input/follow_ups/019-20260512-214345-archive-ui-for-direct-media-views.md
+Summary: archive feature 在 character / scene / shot folder 内**只对 markdown reader 可见**的回归 — follow-up 008 (per-tile archive) + 011 (批量 multi-select archive) 完全实现，但 `Reader.tsx` render-mode dispatch 只在 `isMarkdown` 分支挂 `<SiblingMedia>`。用户最自然的工作流是点 sidebar 里的 `.mp4` 直接看，走 `isVideo` 分支 → 没归档 UI。
+
+Auto-updated:
+
+**user_input:**
+- `revised_prompt.md` — header bump：composed-from 末尾加 follow-up 019；Last regenerated 时间戳更新；follow-up 018 从 latest 降为 "Prior follow-up 018"；新写 follow-up 019 summary。
+
+**Generated outputs:**
+- `frontend/src/components/Reader.tsx` — `reader-body` JSX 内，`isVideo` / `isMediaImage` / `isImageRef` / `isShotPair` 四个分支各挂一份 `<SiblingMedia currentPath={path} knownPaths={knownPaths} onChange={onSaved} />`（props 与既有 markdown 分支完全一致），用 React fragment `<>...</>` 包住。零后端改动、零 CSS 新增、零新 endpoint。`isCasting` / `isShotlistTable` / `isJsonl` / `isCode` / `isTxt` 不挂（drama-root 级文件，无 ref-video 用例）。
+
+No conflicts found in: backend (`backend/libs/media_archiver.py` + `POST /api/archive-media` / `POST /api/unarchive-media` 已支持 011 的批量循环用例); `SiblingMedia.tsx` (返回 `null` 当 `siblings.length === 0 && archived.length === 0` — 单文件文件夹无视觉回归); `styles.css` (复用 008 + 011 已有 grid / toolbar / checkbox 样式); `interview/qa.md`, `findings/dossier.md`, `final_specs/spec.md`, `validation/*` (均未 prescribe SiblingMedia 仅在 markdown 下渲染的 invariant — follow-up 005 的"在 markdown 渲染下方"是描述当时实现而非约束，本 follow-up 是 render-scope 扩展不是契约破坏).
+
+Verification: 用户实测路径 `ai_videos/mozun_chongsheng/characters/c1_沧冥/` 含 1 个 `.md` + 8 个 `.mp4`。预期：点 sidebar 任一 mp4 → Reader 上半显示 `<video>`，下半显示 SiblingMedia grid（剩余 7 个 mp4 + 任何同 folder png/jpg），始终可见左上角 checkbox + section toolbar "📁 Folder media · 同 folder 媒体" + "Select all" / "Clear" / "📦 Archive Selected (N)"。Scene `s1_长阶顶/` (4 mp4)、shot folder 同 grid 行为。`isImageRef` (`_seedream.md`) + `isShotPair` 同样受惠 — 比如 character ref_images folder 内多张 _seedream.md 互为 sibling 时可批量归档实验稿。
+
+## Follow-up 018 — 2026-05-12 22:30:00
+Source: user_input/follow_ups/018-20260512-223000-pollinations-rate-limit-retry.md
+Summary: 修用户实测中暴露的 **pollinations.ai 429 rate limit cascade**。用户 count=20 第 1 张成功后所有后续 429，所有 error 报相同 `actor_0003`。**两个独立 bug 合流**：(A) **限速无重试** — follow-up 014 `_default_fetcher` 单次 GET，pollinations.ai 免费 endpoint 限速激进，一连发 ≥2 请求即 429，无 backoff 直接冒泡。(B) **incomplete folder 占 ID** — follow-up 014 `_next_actor_id_num` 用 `_ACTOR_DIR_RE` regex 数 max+1，旧批失败时若 mkdir 成功但 jpg 没写盘（429 / timeout 在 stream 期间），cleanup 路径有时 swallow OSError 失败，残留空 folder 被下批算进 max → 死循环每次 `actor_0003`。
+
+**三处修复**：
+
+1. **Backend retry-with-backoff** (`actor_pool.py:_default_fetcher` 重写)：
+   - 最多 3 次重试，backoff `[3s, 6s, 12s]` 累计 21s + httpx timeout
+   - 单图 worst case wall-clock ~81s（仍远低于浏览器 fetch timeout，且前端 follow-up 017 已搬循环出 backend）
+   - 429: honor `Retry-After` header（delta-seconds form per RFC 7231 §7.1.3）capped 60s；缺则用 backoff 默认
+   - 读 / 连接 / 写 timeout: 同 backoff 重试
+   - 其他 4xx/5xx（404/500/...）不重试直接 raise（避免浪费 wall-clock）
+   - 新 helper `_parse_retry_after(header_value, default)` —— 解析 header_value or fallback to default, capped at 60s, 处理 garbage 输入
+2. **Incomplete folder reap** (`actor_pool.py:_next_actor_id_num` 重写)：
+   - 命中 `_ACTOR_DIR_RE` 但缺 `<id>.jpg` 的 folder：**不计 max**、立即 cleanup（删 folder 内任何 partial 文件 → rmdir）
+   - cleanup 失败 silently swallow（与 `_cleanup_empty_folder` 一致，磁盘 dirty 不阻塞批次）
+   - 副作用：用户**手动**创建的空占位 folder 会被删；不在 v1 contract 内，可接受
+3. **Frontend inter-iteration throttle** (`ActorPoolGenerator.tsx`)：
+   - 新增 `INTER_REQUEST_THROTTLE_MS = 2000` 常量
+   - 每次 `await generateActors()` 完成后、下一轮开始前 sleep 2s（最后一轮不 sleep；cancelled 状态下也不 sleep）
+   - `Progress.phase` 新 enum 字段 `"idle" | "generating" | "throttling"` —— UI 在 throttle 期间显示 `⏸ 等待限速冷却…` + 按钮文案 `等待 2s 防限速… (i / N)`
+   - modal 内加 `.rate-limit-hint` 文字行告知用户机制："pollinations.ai 免费 endpoint 有限速 — 每张间隔 2 秒；遇到 429 后端自动重试 3 次（最长等 60s）"
+
+Auto-updated:
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — Last regenerated 改 2026-05-12 22:30:00；Composed-from 加 follow-up 018；header 摘要描述两根因合流 + 三处修复 + verification；prior follow-up 017 line 移到 prior 列表。
+- `projects/ai_video_management/backend/libs/actor_pool.py`：
+  - 新增 module-level 常量 `_RETRY_BACKOFFS_SECONDS=(3.0, 6.0, 12.0)` + `_RETRY_AFTER_CAP_SECONDS=60.0` + helper `_parse_retry_after`
+  - `_default_fetcher` 重写：retry loop 4 attempts (1 initial + 3 retries) over 429 / timeouts；honor Retry-After；non-retriable HTTP 错误 raise_for_status 冒泡；max_bytes cap 检查保留
+  - `_next_actor_id_num` 重写：跳过 + cleanup incomplete folders；保留 OSError swallow 模式
+- `projects/ai_video_management/frontend/src/components/ActorPoolGenerator.tsx`：
+  - `Progress` interface 加 `phase: "idle" | "generating" | "throttling"` 字段；每个 `setProgress` 调用同步更新 phase
+  - `onSubmit` for-loop 末尾加 inter-iteration sleep 块（带 cancellation check）
+  - `ProgressPanel` 子组件根据 phase 渲染不同 emoji + 文字（throttle → ⏸ / generating → 🔄）
+  - footer "生成中…" 按钮 label 根据 phase 拆两种文案
+  - modal-body 新加 `<p className="rate-limit-hint">` 行告知用户机制
+- `projects/ai_video_management/frontend/src/styles.css` — 新增 `.rate-limit-hint` 样式（small info bar，复用 `--text-muted` / `--bg-toolbar` / `--border` CSS vars）
+
+Behavior changes:
+- **Before**: count=20 → 第 1 张成功 → 第 2 张 timeout / 429 → cleanup → 第 3 张 mkdir 成功 → 429 → cleanup 失败遗留空 folder → 第 4-20 张都 mkdir 新 folder（next_id_num 把残留 folder 算进 max 不前进）→ 全部 429。最终用户得到 1 张图 + 19 个失败 error 都报 `actor_0003`。
+- **After**: count=20 → 第 1 张成功 → sleep 2s → 第 2 张请求（若 429 → backend 自动等 Retry-After / 3s → retry → 大概率成功；最坏 4 attempts 后才彻底失败）→ 若成功 sidebar 立即多 1 个 folder + UI 显示 `🔄 生成中… 2 / 20` → 完成后 `⏸ 等待限速冷却…` 显示 2s → 第 3 张……持续。worst case 单图 81s + 2s throttle = 83s；count=20 worst case = ~27 min（远超用户期望但不会卡死）；nominal case 单图 < 30s + 2s throttle ≈ 8 min for 20 张。
+- 残留 incomplete folder（包括用户先前批次失败留下的）在下次 generate_batch 调用时被 reap → ID 单调推进，不再卡 `actor_0003`。
+
+Verification (smoke checks):
+- Python imports: `from libs.actor_pool import ActorPool, _parse_retry_after, _default_fetcher` 成功。
+- `_parse_retry_after` 单元: `None / "5" / "999" / "garbage"` → `3.0 / 5.0 / 60.0 / 3.0`（默认 / 解析 / cap / fallback）✓
+- `_default_fetcher` 重试 unit-test（patch `httpx.Client` with FakeClient）:
+  - Test 1: 429 + Retry-After=1 → 第 2 attempt 200 → 返回 bytes；elapsed ≥ 1s；calls=2 ✓
+  - Test 2: 持续 429 + Retry-After=0 → 4 次尝试后 raise HTTPStatusError ✓
+- `_next_actor_id_num` cleanup unit-test（tmpdir 模拟先前批次残留）:
+  - pre-state: `actor_0001` (jpg+md ✓) + `actor_0002` (空 incomplete) + `actor_0003` (md only, 缺 jpg)
+  - `generate_batch(count=1)` → 落 `actor_0002` (reclaim 该 slot) + cleanup `actor_0003` (incomplete)
+  - 第二批 `generate_batch(count=1)` → 落 `actor_0003`（单调推进）✓
+- `make boot-smoke`: **7/7 通过**，含 follow-up 014 加的 5 个 endpoint registration 断言。
+- Frontend `npx tsc --noEmit`: 无新错误（仅两个 pre-existing `vite.config.ts` 错误）。
+
+No conflicts found in:
+- `final_specs/spec.md` FR-9f — `POST /api/actors/generate` 契约不变（仍 `count: 1..20` + invalid_attribute + actors_dir_unwritable 错误码面）；retry 在单次 HTTP 调用内部完成，对调用方透明。
+- `validation/acceptance_criteria.md` U3.15 — fake fetcher 仅返回 stub bytes，不触发 retry 路径；测试断言仍 valid。如需覆盖 retry path，独立 follow-up 加 `_default_fetcher` 单元测试（本 follow-up 已在 inline smoke 验证）。
+- `validation/security.md` carve-out #7 — 出站 HTTP 边界**不弱化**：retry 仍 single base URL hardcoded、URL-encoded prompts、follow_redirects=False、30s/请求 timeout、5MB cap；仅在 429 / timeout 时多 ≤3 次相同硬化的请求 + Retry-After 受信但 capped 60s（避免恶意 / buggy header 触发长 sleep DoS）。
+- `agent_refs/project/ai_video.md` — 与本 follow-up 正交。
+- 其他 backend libs (`casting.py` / `media_renamer.py` / `media_archiver.py` / `downloads_importer.py` / `api.py` 等) — 零影响。
+- 其他前端组件 (`Sidebar.tsx` / `CastingView.tsx` / `Reader.tsx` / `ImageRefView.tsx` 等) — 零影响。
+
+User next step:
+1. Backend `--reload` (follow-up 012 默认开) 自动检测 `actor_pool.py` 改动 + reload；Vite HMR 自动重载 `ActorPoolGenerator.tsx` + `styles.css`。浏览器刷新即可。
+2. **重要**：用户先前批次留下的 `_actors/actor_0002/` 等 incomplete folder 会在下次点 "🎭 生成演员" 时**自动被 reap**（看到 sidebar 内残留 folder 突然消失属正常）。
+3. 重试 count=20 验证：每张间隔 2s + 429 自动重试；预期成功率显著高于上次（pollinations.ai 实际限速强度未知，nominal case 应该 ≥80% 通过；若仍大量失败，独立 follow-up 加 per-image inter-iteration 间隔到 5s+）。
+4. 若仍频繁 429：考虑改用其他 AI face source（独立 research follow-up），或人工降低 batch size 到 ≤5。
+
+Severity: Medium. 用户报告的实际可用性 blocker；后端 retry 是首次出站 HTTP 路径上的稳定性 hardening；folder reap 修 follow-up 014 的隐性 bug。改动范围：1 backend lib 重写 2 函数 + 1 frontend 组件加 phase state + 1 CSS 行。后端 / API 契约 / spec FR / 安全 carve-out 零变动。
+
+## Follow-up 017 — 2026-05-12 22:00:00
+Source: user_input/follow_ups/017-20260512-220000-actor-generation-progress-visibility.md
+Summary: 修 follow-up 014 引入的 batch generate UX 问题 — 用户报告点 "🎭 生成演员" 选 count=20，磁盘只出现 1 张图片，剩 19 张状态不明（仍在跑？失败？已结束？）。**根因**：`POST /api/actors/generate` 同步串行循环 count 次 pollinations.ai 请求（每次 5–30s），count=20 worst case = 10 分钟，浏览器 fetch 默认 timeout ~5 min 中途断开 → 后端 silently 继续 loop、前端 catch ApiError 显示 "失败" toast、用户无任何 in-flight 状态指示。后端 errors[] 数组也因连接断开永远到不了前端。**Fix**：搬移循环到前端，**不动后端**。`ActorPoolGenerator` 重写：把 count=N 拆 N 次 count=1 串行调用，每次秒级返回；实时显示 progress bar + 累积 errors 列表 + 已生成 ID 列表；每次成功 / 失败立即调 `onGenerated()` 触发 sidebar refresh；"停止" 按钮设 cancellation flag (React `useRef`，避免 stale closure)，loop 跳出但当前 inflight 请求继续完成；modal 关闭时若 busy 触发 cancel 而不立即 unmount，等 inflight 结束再关。
+
+Auto-updated:
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — Last regenerated 改 2026-05-12 22:00:00；Composed-from 加 follow-up 017；header 摘要描述同步循环 + 浏览器 timeout + 前端循环 fix；prior follow-up 016 line 移到 prior 列表。
+- `projects/ai_video_management/frontend/src/components/ActorPoolGenerator.tsx` — 完全重写 `onSubmit`：从 1 次 `generateActors({count: N, ...})` 改为 N 次 `generateActors({count: 1, ...})` 串行循环；新增 `Progress` state interface (`done` / `failed` / `total` / `current` / `errors` / `generatedIds`)；`useRef<boolean>` 持有 cancellation flag（不用 state 因为 stale closure 会让 loop 看不见更新）；新加 `ProgressPanel` 子组件渲染进度条 + 摘要 (`✓ N · ✗ E · pct%`) + collapsible details（已生成 ID 列表 + 失败原因列表 with `#i: message`）；modal footer 在 busy 状态把 "取消" 按钮改 "停止"，busy 状态下 "关闭" 按钮 = "中断后关闭"；按钮文案 `生成中…` 改 `生成中… (i / total)` 实时刷新。
+- `projects/ai_video_management/frontend/src/styles.css` — 新增 `.progress-panel` 容器 + `.progress-summary` + `.progress-ok` / `.progress-err` 颜色 + `.progress-bar` / `.progress-bar-fill` (CSS transition width 0.3s 让进度变化平滑) + `.progress-details` (collapsible summary / code block / ul) + `.progress-details-err` 错误列表色板。复用既有 `--accent` / `--border` / `--bg(-toolbar)` / `--error-text` / `--text(-muted)` CSS vars，无新增色板。
+
+Behavior changes:
+- **Before**: 点 "生成" count=20 → 浏览器发 1 个 POST → 等待 10 分钟 → 浏览器 timeout → 前端 toast `生成失败: 504` 或 `生成失败: Failed to fetch`；后端继续静默处理 19 张；用户不知所措。
+- **After**: 点 "生成" count=20 → 前端发 20 个独立 POST 顺序 →
+  - 进度条 0 → 100% 实时增长；
+  - 数字 `0 / 20 → 1 / 20 → ... → 20 / 20`；
+  - 每张完成后 sidebar 立即多 1 个 `actor_NNNN/` folder（onGenerated triggers tree reload）；
+  - 任何一张失败：accumulator 加 error `#i: <reason>`，进度条仍前进 (failed 计入 done+failed)，loop 不中断；
+  - 中途 "停止" → 当前 inflight 完成 → loop 跳出 → toast `已中断 — 已生成 X / 失败 Y / 跳过 Z`；
+  - 关闭后再打开 modal：progress / toast / cancellation flag 全部重置（`useEffect [open]` 清理）。
+- 单张请求 wall-clock ~5–30s，远小于浏览器 fetch timeout，故连接稳定不再 mid-batch 断开。
+- 后端零改动 — pytest scenarios U3.15 仍 valid（仍用 count=3 单次调用），actor_pool.py 行为契约不变。
+
+Verification (smoke checks):
+- Frontend `npx tsc --noEmit`: 无新错误（仅两个 pre-existing `vite.config.ts` 错误与本 follow-up 无关）。
+- 渲染流验证（手动 trace）：modal open → state 全部 default → 用户调参 → 点 "生成" → busy=true, cancelledRef=false, progress 初始 0/N → for-loop i=1..N → 每轮 setProgress current=i → await generateActors(count=1) → 解构 generated[0].id + errors[] → push 到 accumulator → setProgress 更新 → onGenerated 触发 tree refresh → 下一轮；loop 结束 → setProgress current=0 → setToast 总结 → setBusy=false。
+- "停止" 按钮路径：busy 时点击 → cancelledRef.current=true → 当前 await 完成后 for-loop 头部检测 cancelledRef → break → 进入 toast 总结。Modal 仍打开，progress 显示部分结果，用户可看 errors 然后关闭。
+- 关闭 modal 路径：点击 backdrop / 关闭按钮 → onCloseRequest → if busy: cancelledRef.current=true (modal 不 unmount，等 inflight 完成)；if !busy: onClose() 直接 unmount。useEffect[open] 在下次 open=true 时重置 state（toast/progress 清空, cancelledRef=false）。
+- Race conditions: `setProgress` 在 await 前后各调一次，确保 UI 在 in-flight 期间也显示 `(i / N)`；errors / generatedIds 用浅拷贝 `[...errors]` 保证 React 检测变化触发 re-render。
+
+No conflicts found in:
+- `backend/libs/actor_pool.py` — `generate_batch(attrs, count)` 实现完全不动；`count=1` 走同一路径，`MIN_BATCH_COUNT=1` 已存在所以 count=1 一直 valid。
+- `backend/libs/api.py` `POST /api/actors/generate` 契约不动；前端循环对后端透明。
+- `final_specs/spec.md` FR-9f / FR-88 — spec 文字说 "count: 1..20"，前端拆 count=20 为 20 次 count=1 仍满足契约（每次都是合法 count）。如要在 FR-88 加 "frontend 串行循环显示进度" 行为约束，可独立 follow-up；本 fix 不弱化任何 FR。
+- `validation/acceptance_criteria.md` Scenario U3.15 — 测试 `POST /api/actors/generate count=3` 一次成功 + invalid attr / count 边界。前端循环不改 backend 测试。
+- `validation/security.md` carve-out #7 — 出站 HTTP 限制不变（每次 count=1 仍 30s timeout + 5MB cap + base URL hardcoded）；前端连发 20 次的总流量仍由 backend 单次限制控制，且每次串行（无并发放大）。
+- `Sidebar.tsx` / `CastingView.tsx` / `Reader.tsx` 等其他前端组件 — 零影响。
+- `casting.py` / `media_renamer.py` / 其他 backend libs — 零影响。
+
+User next step:
+1. Vite HMR 自动重载 `ActorPoolGenerator.tsx` + `styles.css` → 浏览器刷新 modal 立即可见新 UI。
+2. 旧批未完成的 19 张：可能磁盘上没出现（pollinations.ai 限速 / 后端进程已不再运行 / mid-batch 失败），可直接再次点 "🎭 生成演员" 跑新 batch；ID 单调自增不会冲突（已生成的 actor_0001 保留，新批从 actor_0002 起）。
+3. 跑 count=20 验证：观察 modal 进度条 + 数字一张张跳；每张完成 sidebar 同步出现新 actor folder。
+
+Severity: Medium-Low UX bug (后端无数据丢失风险 / 无 security 影响). 改动范围：1 个前端组件重写 + CSS 进度条样式。Backend / API 契约 / spec FR 零变动。
+
+## Follow-up 016 — 2026-05-12 21:30:00
+Source: user_input/follow_ups/016-20260512-213000-jpg-preview-uses-api-media.md
+Summary: 修用户报告的 `.jpg` preview bug — 点击 `ai_videos/_actors/actor_NNNN/actor_NNNN.jpg`，Reader 显示一大段 base64 文本而非图片。**根因**（两件事的交叉）：① `backend/libs/file_reader.py:72-74` 对 `.png`/`.jpg` 走 `base64.b64encode` 返回 JSON `{content: "<base64>", encoding: "base64"}` —— 浏览器把它当 JSON 收，不是图片字节；② `frontend/src/components/Reader.tsx:43` 的 `isMediaOnly = isMediaVideo || (isMediaImage && ext !== ".png" && ext !== ".jpg")` 显式把 png/jpg 排除在 media-only 之外，加上 render 分支 `isMediaImage && ext !== ".png" && ext !== ".jpg" ? <img src={mediaUrl(path)}>` 也排除，导致 png/jpg fall through 所有 isVideo/isCasting/isImageRef/isShotPair/.../isMarkdown/isTxt 条件，最终落到 `<pre className="text-view">{file.content}</pre>` 兜底，渲染 base64 文本。其他 image 扩展（webp/gif/bmp）和 video 扩展走 `/api/media` raw bytes 正常 —— 这个差异性 bug 潜在了 5+ follow-up（005 引入 /api/media 后留下的不一致），follow-up 014 引入大量 `.jpg` 资产后首次暴露。**Fix**：让 `.png`/`.jpg` 也走 `/api/media`：① `Reader.tsx:43` `isMediaOnly = isMediaVideo || isMediaImage`；② `Reader.tsx` render 分支去掉 `ext !== ".png" && ext !== ".jpg"` 双重否定，统一为 `isMediaImage`；③ `ImageRefView.tsx` 两处 `imageUrl()` 换 `mediaUrl()` + import 同步换名（修同根因的二次 bug —— 仓库目前无 `_seedream.png` 加载过，本 follow-up 顺手治 root cause）。`/api/media` 端点 sandbox 限制（`exposed.is_inside` + `resolver.resolve`）与 `/api/file` 等价，不弱化安全。
+
+Auto-updated:
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — Last regenerated 改 2026-05-12 21:30:00；Composed-from 加 follow-up 016；header 摘要描述 base64 fall-through + 三处 fix；prior follow-up 015 line 移到 prior 列表。
+- `projects/ai_video_management/frontend/src/components/Reader.tsx` — line 43 `isMediaOnly` 去掉 png/jpg 排除；render 分支 `isMediaImage && ext !== ".png" && ext !== ".jpg"` → `isMediaImage`。两处共 2 行改动。
+- `projects/ai_video_management/frontend/src/components/ImageRefView.tsx` — import `imageUrl` → `mediaUrl`；line 55 (image-only layout) `imageUrl(...)` → `mediaUrl(...)`；line 86-87 (companion 立绘) `imageUrl(...)` → `mediaUrl(...)`。三处共 3 行改动 + 1 行 import。
+
+Behavior changes:
+- 点击 `.jpg` / `.png` 在 Reader 中：之前显示 base64 字符串墙（看上去像随机字符），现在显示 inline 图片（80vh max-height + center 对齐，与 `.webp`/`.gif`/`.mp4` 等同一 `.media-view` 容器）。
+- ImageRefView companion 立绘右窗格：之前 `<img src="/api/file?path=...">` 加载 JSON 响应而失败渲染（HTTP 200 但 content-type=json），现在 `<img src="/api/media?path=...">` 加载 raw bytes 正常显示。注：仓库目前无 `_seedream.png` 资产被加载过，所以此分支的破损此前从未暴露。
+- 之前 Reader load 对 png/jpg 也跑 `fetchFile()` 拿 base64 JSON（白白消耗 1MB cap 内的带宽 + memory）；现在跳过 `fetchFile()` 走 `/api/media` 流式响应，与其他 media 一致。
+
+Verification (smoke checks):
+- Frontend `npx tsc --noEmit`: 无新错误（仅两个 pre-existing `vite.config.ts` 错误与本 follow-up 无关）。
+- 路径检查：点击 `ai_videos/_actors/actor_0001/actor_0001.jpg` → Reader 状态 `isMediaImage=true, isMediaOnly=true, ext=".jpg"` → load() skip fetchFile → setFile() 放 placeholder → render 分支命中 `isMediaImage` → `<img src={mediaUrl(path)}>` → 浏览器 GET `/api/media?path=ai_videos/_actors/actor_0001/actor_0001.jpg` → backend FileResponse 返回 image/jpeg bytes → 图片渲染。✓
+- Existing `.png` paths in `characters/ref_images/` (e.g. 未来的 `_seedream.png`) 同理：之前 broken（不显示），现在正常渲染。✓
+- `.webp/.gif/.bmp/.mp4` 等扩展：之前已通过 mediaUrl 正常工作，本 follow-up 零影响。✓
+
+No conflicts found in:
+- `backend/libs/file_reader.py` — base64 编码逻辑保留（其他调用方 e.g. potential 测试 / curl 直接 GET /api/file 可能仍依赖；本 follow-up 只改前端 render 路由，不改 `/api/file` 契约）。
+- `backend/libs/api.py` `/api/media` endpoint — 不动；本身已有正确的 sandbox + MIME map + FileResponse + range support。
+- `frontend/src/api.ts` `imageUrl` helper — 保留（公共 API，可能被 type-check / 测试 / 外部代码引用）；ImageRefView 已不再调用，可后续 follow-up 清理。
+- `frontend/src/components/Sidebar.tsx` / `App.tsx` / `Editor.tsx` / `ShotPairView.tsx` / `ShotlistTableView.tsx` / `SiblingMedia.tsx` / `CastingView.tsx` 等 — 零影响。
+- `final_specs/spec.md` FR-61 — spec 文字仍写 `<img src="/api/file?path={enc}&mtime={mtime}">`，但实际实现现在用 `/api/media`。这是 specs 的历史陈述 drift，**不阻碍 fix**；如需对齐，独立 follow-up 改 FR-61 + FR-19 image leaf 描述。
+- `validation/*` — 无 acceptance scenario 显式断言 `.jpg` 渲染走 `/api/file` 还是 `/api/media`；行为契约「图片应当 inline 显示」继续满足。
+
+User next step:
+1. **若 backend + Vite dev server 都跑着**（follow-up 012 默认 `--reload` + Vite HMR）：浏览器刷新 `http://127.0.0.1:8766/` 即可。点 `_actors/actor_0001/actor_0001.jpg`（先用 "🎭 生成演员" 按钮生成至少 1 张）→ Reader 显示图片预览。
+2. **若用 production build**（`make run-prod`）：需 `cd frontend && npm run build` 重建 + 拷贝到 `backend/static/`，然后重启 backend。
+
+Severity: Low (UI render-only bug，no data corruption, no security impact). Surgical 5 行修改（Reader.tsx 2 行 + ImageRefView.tsx 3 行 + 1 import 换名）。`/api/file` 后端契约保留。
+
 ## Follow-up 015 — 2026-05-12 21:05:00
 Source: user_input/follow_ups/015-20260512-210500-actors-bootstrap-folder.md
 Summary: 修 follow-up 014 留下的 **chicken-and-egg UX bug** — 用户报告打开 webapp 后看不到 "🎭 生成演员" 按钮。**根因**：follow-up 014 的 `Sidebar.tsx` 把按钮 conditional 在 `dramaPathParts[1] === "_actors"` 行上，但 `ai_videos/_actors/` 目录只在 `ActorPool.generate_batch()` 第一行 `mkdir(parents=True, exist_ok=True)` 时 lazy 创建 —— 新用户从未触发过 endpoint，所以 TreeWalker `iterdir()` 看不到 `_actors/`，sidebar 不渲染该行，按钮永远不出现。**修复**：在 `api.py:create_app()` 实例化 `ActorPool` 后立即 eager `actor_pool.actors_dir().mkdir(parents=True, exist_ok=True)`。`exist_ok=True` 让已有 `_actors/` 安装零影响；`OSError` swallowed（与现有 `serve_static` 静默 mount-fail 模式一致 —— mkdir 失败不应阻止整个 webapp 起动）。

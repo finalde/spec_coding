@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { importFromDownloads } from "../api";
+import { useNavigate } from "react-router-dom";
+import { deleteActor, importFromDownloads } from "../api";
 import { ApiError, type TreeNode } from "../types";
 import { ActorPoolGenerator } from "./ActorPoolGenerator";
+
+const ACTOR_ID_RE = /^actor_\d{4,}$/;
 
 export interface SidebarProps {
   tree: TreeNode | null;
@@ -14,12 +17,14 @@ export interface SidebarProps {
 interface FlatNode { node: TreeNode; depth: number; parentPath: string | null; }
 
 export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }: SidebarProps): JSX.Element {
+  const navigate = useNavigate();
   const treeRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameToast, setRenameToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState<boolean>(false);
+  const [deletingActorId, setDeletingActorId] = useState<string | null>(null);
 
   const onRenameClick = useCallback(
     async (e: React.MouseEvent, dramaPath: string) => {
@@ -45,6 +50,37 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
       }
     },
     [onTreeReload, renamingPath],
+  );
+
+  const onActorDeleteClick = useCallback(
+    async (e: React.MouseEvent, actorId: string) => {
+      e.stopPropagation();
+      if (deletingActorId) return;
+      const ok = window.confirm(
+        `Delete ${actorId}? Moves folder to _deleted/_actors/ and unassigns from all casting.md.`,
+      );
+      if (!ok) return;
+      setDeletingActorId(actorId);
+      setRenameToast(null);
+      try {
+        const result = await deleteActor(actorId);
+        const refs = result.unassigned.length;
+        const summary =
+          refs > 0
+            ? `已删除 ${actorId}（解除 ${refs} 个 casting 引用）`
+            : `已删除 ${actorId}`;
+        setRenameToast({ kind: "ok", text: summary });
+        if (onTreeReload) onTreeReload();
+      } catch (err) {
+        const msg = err instanceof ApiError
+          ? `删除失败: ${err.detail?.kind ?? err.status}`
+          : `删除失败: ${err instanceof Error ? err.message : String(err)}`;
+        setRenameToast({ kind: "err", text: msg });
+      } finally {
+        setDeletingActorId(null);
+      }
+    },
+    [deletingActorId, onTreeReload],
   );
 
   useEffect(() => {
@@ -111,6 +147,18 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
     setExpanded((prev) => ({ ...prev, [path]: !prev[path] }));
   }, []);
 
+  const onCollapseAll = useCallback(() => {
+    if (!tree) return;
+    const accum: Record<string, boolean> = {};
+    const walk = (node: TreeNode): void => {
+      if (node.type === "file" || node.type === "image" || node.type === "video") return;
+      if (node.path) accum[node.path] = false;
+      for (const c of node.children ?? []) walk(c);
+    };
+    walk(tree);
+    setExpanded(accum);
+  }, [tree]);
+
   const onItemKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, item: FlatNode): void => {
     const items = flat;
     const index = items.findIndex((i) => i.node.path === item.node.path);
@@ -155,6 +203,17 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
 
   return (
     <nav className="sidebar" aria-label="File tree">
+      <div className="sidebar-toolbar">
+        <button
+          type="button"
+          className="sidebar-collapse-all"
+          aria-label="折叠全部"
+          title="折叠全部 · Collapse all folders"
+          onClick={onCollapseAll}
+        >
+          ⊟
+        </button>
+      </div>
       {renameToast ? (
         <div
           role="status"
@@ -185,6 +244,14 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
           const isSystemFolder = isAiVideoChild && dramaPathParts[1].startsWith("_");
           const isDrama = isAiVideoChild && !isSystemFolder;
           const isActorsRoot = isAiVideoChild && dramaPathParts[1] === "_actors";
+          const isActorEntry =
+            item.node.type === "directory" &&
+            dramaPathParts.length === 3 &&
+            dramaPathParts[0] === "ai_videos" &&
+            dramaPathParts[1] === "_actors" &&
+            ACTOR_ID_RE.test(dramaPathParts[2]);
+          const actorId = isActorEntry ? dramaPathParts[2] : null;
+          const isDeletingThis = actorId !== null && deletingActorId === actorId;
           const isRenamingThis = renamingPath === item.node.path;
           return (
             <div
@@ -234,14 +301,37 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                 </button>
               ) : null}
               {isActorsRoot ? (
+                <>
+                  <button
+                    type="button"
+                    className="drama-rename-btn"
+                    aria-label="生成新一批 AI 演员人脸"
+                    title="调用 Kling text-to-image 生成一批新演员人脸，按属性 label 入库"
+                    onClick={(e) => { e.stopPropagation(); setGeneratorOpen(true); }}
+                  >
+                    🎭 生成演员
+                  </button>
+                  <button
+                    type="button"
+                    className="drama-rename-btn"
+                    aria-label="在网格视图中查看所有演员"
+                    title="网格视图：一屏多图对比，分页浏览"
+                    onClick={(e) => { e.stopPropagation(); navigate("/actors"); }}
+                  >
+                    🔲 网格
+                  </button>
+                </>
+              ) : null}
+              {isActorEntry && actorId ? (
                 <button
                   type="button"
-                  className="drama-rename-btn"
-                  aria-label="生成新一批 AI 演员人脸"
-                  title="调用 pollinations.ai 生成一批新演员人脸，按属性 label 入库"
-                  onClick={(e) => { e.stopPropagation(); setGeneratorOpen(true); }}
+                  className="actor-delete-btn"
+                  aria-label={`软删除 ${actorId}`}
+                  title="软删除 actor — 移到 _deleted/_actors/，并从所有 casting.md 取消分配"
+                  disabled={deletingActorId !== null}
+                  onClick={(e) => onActorDeleteClick(e, actorId)}
                 >
-                  🎭 生成演员
+                  {isDeletingThis ? "删除中…" : "🗑"}
                 </button>
               ) : null}
             </div>

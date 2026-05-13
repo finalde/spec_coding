@@ -98,6 +98,15 @@ export async function unarchiveMedia(path: string): Promise<ArchiveMediaResult> 
   return readJson<ArchiveMediaResult>(response);
 }
 
+export async function deleteMedia(path: string): Promise<ArchiveMediaResult> {
+  const response = await fetch("/api/delete-media", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ArchiveMediaResult>(response);
+}
+
 export interface ImportFromDownloadsResult {
   moved: { from: string; to: string; kind: string }[];
   unmatched: { from: string; to: string; kind: string }[];
@@ -136,6 +145,22 @@ export interface GenerateActorsResult {
 
 export interface GenerateActorsRequest extends ActorAttrs {
   count: number;
+  resolution?: string;
+  seeds?: number[];
+}
+
+export interface PromptPreviewResult {
+  prompts: { seed: number; prompt: string }[];
+  resolution: string;
+}
+
+export async function previewPrompts(req: GenerateActorsRequest): Promise<PromptPreviewResult> {
+  const response = await fetch("/api/actors/preview-prompts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<PromptPreviewResult>(response);
 }
 
 export async function generateActors(req: GenerateActorsRequest): Promise<GenerateActorsResult> {
@@ -145,6 +170,21 @@ export async function generateActors(req: GenerateActorsRequest): Promise<Genera
     body: JSON.stringify(req),
   });
   return readJson<GenerateActorsResult>(response);
+}
+
+export interface DeleteActorResult {
+  from: string;
+  to: string;
+  unassigned: { drama: string; role: string }[];
+}
+
+export async function deleteActor(actorId: string): Promise<DeleteActorResult> {
+  const response = await fetch("/api/actors/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ actor_id: actorId }),
+  });
+  return readJson<DeleteActorResult>(response);
 }
 
 export async function listActors(): Promise<{ actors: ActorInfo[] }> {
@@ -203,6 +243,7 @@ export const ATTR_OPTIONS = {
   age_range: ["18-25", "26-35", "36-50", "51-65", "65+"] as const,
   look: ["handsome", "beautiful", "cute", "mature", "rugged", "soft", "aristocratic", "fierce"] as const,
   style: ["modern-casual", "period-ancient-china", "period-western", "business", "streetwear", "sci-fi", "fantasy"] as const,
+  resolution: ["normal", "2k", "4k"] as const,
 };
 
 /** Build a same-origin URL for image preview, with mtime cache-buster. */

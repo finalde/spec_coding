@@ -888,15 +888,15 @@ OLD path → NEW path（applied across 50 shot files 出场角色 table + Refere
 
 *(Originated from follow-up "folder-per-asset + media gitignore + webapp display" — 2026-05-10. Solves: ① media files 与 prompt 关联存储 (same folder)；② git 仓库 size 不因 binary media 膨胀；③ webapp 直接预览 media，无需另开外部 player。)*
 
-#### 12.10 场景 reference 视频 prompt（3.9s all-angle 建模样片，per follow-up 010 "scene reference 3.9s + 全角度起手正面"）
+#### 12.10 场景 reference 视频 prompt（15s walk-through 建模样片，per follow-up 017 "scene reference 升 3.9s → 15s 单视频 walk-through"）
 
-镜像 character turntable pipeline（rule #12.5 v4，仍保持 2.9s 不动），为每个立档场景增加 **场景 reference 视频 prompt** 段，与现有 Seedream 立绘 image prompt（rule #12.8 v2 schema）并存：image prompt 喂 image-only 模型 / 静帧 fallback；video prompt 喂 Seedance 等 video-as-reference 模型，用 **3.9s** 极速 **all-angle**（起手正面 + 水平 360° 环绕 + 垂直三视角 + 中景横移 + 长焦特写）样片让模型抓到场景空间结构 + 多角度几何 + 主要建筑或自然元素 + 标志道具材质 + 配色 hex + 时辰光源。
+镜像 character turntable pipeline（rule #12.5 v4，仍保持 2.9s 不动），为每个立档场景增加 **场景 reference 视频 prompt** 段，与现有 Seedream 立绘 image prompt（rule #12.8 v2 schema）并存：image prompt 喂 image-only 模型 / 静帧 fallback；video prompt 喂 Kling / Seedance 等 video-as-reference 模型，用 **15s** walk-through 单视频，沿一条几何连续的相机路径（连续 dolly + 平滑 yaw + 垂直俯仰 + 推进 zoom 的复合移动，无剪辑 / 无跳切）依次悬停在 5 个 canonical 视角上，让模型抓到场景空间结构 + 多角度几何 + 主要建筑或自然元素 + 标志道具材质 + 配色 hex + 时辰光源。15s × 30fps = 450 帧，5 个 canonical 悬停帧 + 约 350 张免费"3/4 中间角度"参考帧（user 可后续按需 ffmpeg 抽帧）。
 
-**为什么 3.9s 硬上限（per follow-up 010 — 把 scene reference 从 v1 的 2.9s 三段升到 v2 的 3.9s 五段）：**
+**为什么 15s walk-through（per follow-up 017 — 把 scene reference 从 v2 的 3.9s 五段升到 v3 的 15s 单视频 walk-through）：**
 
-与 character turntable 同因 — Seedance 等下游模型的 video reference 上传时长约束。Scene reference 的核心 KPI 是「空间几何 + 多角度覆盖」，比 character turntable（单体 360°）要承载更多维度的信息（前后左右四面 × 上中下三层 × 材质道具特写）。v1 的 2.9s 三段（establishing + 横移 + 推近）只能覆盖水平面两段 + 一个细节段，**几何上信息密度不够，下游 shot 视频常出现"侧面 / 后方建筑细节失真"** —— 因为 reference 里就没有侧面 / 后方的像素信息。v2 把时长放宽到 **3.9s**，把动作分段从三段升到 **五段**：① 正面建场 ② 水平 360° 环绕 ③ 垂直三视角 ④ 中景轨道横移 ⑤ 长焦特写，几何上覆盖球面采样的主轴（水平四面 + 垂直三层）+ 道具材质特写。运镜可极快（reference 不给观众看，是给模型抓 feature 的），稳定不抖即可。本视频纯视觉 reference — **不要任何音频 / BGM / 音效 / 旁白 / 环境音**；prompt body 显式声明该约束。
+Kling / Seedance 等 video-as-reference 下游模型的 reference 上传上限实测已可放宽至 ≥ 15s（不再是 v2 假设的 3.9s）。v2 的 3.9s 五段把 5 个 canonical 视角硬塞在 3.9s 内 — 单视角 dwell <0.8s、运镜过急，导致 (a) 每个 canonical 帧带 motion blur，作为 reference 不够锐利；(b) 极快运镜下模型偶发"跟不上"，中段材质 / 几何漂移。v3 把时长放宽到 **15s 单视频**，沿一条**几何连续**的相机路径（不能有剪辑 / 跳切 / 剧烈反向）依次悬停在同样 5 个 canonical 视角，每个 dwell ≥ 0.8s 给出锐利静帧。**关键约束：重要 canonical 视角 frontload 在视频前段（t < 6s）** —— Kling / Seedance 在 t > 12s 后进入训练分布边缘，常见失败模式（材质漂、几何缓慢变形、长尾噪点）集中在视频后段；frontload 重要帧后，即便后段翻车，损失的是次要参考图（3/4 角度 / 长焦特写），不至于丢失 hero / reverse 这种 ground truth。15s 也带来副产物 "**中间帧 buffet**" —— 非 canonical 时间点的 ~350 帧是免费的 3/4 角度参考（介于 hero 与 reverse 之间的任意偏移角度），user 可按需抽帧，无需重新调 API。本视频仍是纯视觉 reference — **不要任何音频 / BGM / 音效 / 旁白 / 环境音**；prompt body 显式声明该约束。
 
-**12.10-A 场景文件 schema 扩展（rule #12.8 v2 amend，3.9s v2 schema）：**
+**12.10-A 场景文件 schema 扩展（rule #12.8 v2 amend，15s v3 schema）：**
 
 每场景文件 `scenes/s{N}_{shortname}/s{N}_{shortname}.md` 在原 schema（bible + Seedream 立绘 image prompt）后追加 **场景 reference 视频 prompt** 段：
 
@@ -917,34 +917,38 @@ OLD path → NEW path（applied across 50 shot files 出场角色 table + Refere
 
 ---
 
-# 场景 reference video prompt — Seedance / Sora / Veo / Runway Gen-3 / Kling（3.9s all-angle 建模样片）
+# 场景 reference video prompt — Kling / Seedance / Sora / Veo / Runway Gen-3（15s walk-through 建模样片）
 
-> **用法**：复制下方代码块整段，粘贴到支持 video reference 的 AI 视频模型。**该样片本身**作为后续真正 shot 视频的 video reference 输入，锁定场景空间 + 材质 + 配色 + 时辰光源 + 多角度几何。**注意：≤ 3.9s 硬上限**（reference 上传约束 per rule #12.10 v2）。**视频纯视觉，无任何音频 / BGM / 音效 / 旁白。**
+> **用法**：复制下方代码块整段，粘贴到支持 video reference 的 AI 视频模型（Kling / Seedance 优先）。**该样片本身**作为后续真正 shot 视频的 video reference 输入，锁定场景空间 + 材质 + 配色 + 时辰光源 + 多角度几何。**注意：≤ 15s 硬上限**（reference 上传约束 per rule #12.10 v3，对应 Kling / Seedance 当前 tier）。**视频纯视觉，无任何音频 / BGM / 音效 / 旁白。** 渲染完成后保留 source mp4 与 scene 文件同 folder — 15s × 30fps = 450 帧可作"中间帧 buffet"按需 ffmpeg 抽取 3/4 角度参考图。
 
 ```text
-{scene video reference prompt body — 3.9s v2 schema per rule #12.10-B}
+{scene video reference prompt body — 15s v3 schema per rule #12.10-B}
 ```
 ````
 
-**12.10-B 场景视频 reference prompt body schema（v2 — 3.9s all-angle 五段）：**
+**12.10-B 场景视频 reference prompt body schema（v3 — 15s walk-through，5 canonical dwell 帧 + 中间帧 buffet）：**
 
 ```text
-{scene-name} — 场景 reference 全角度建模样片（正面建场 + 水平 360° 环绕 + 垂直三视角 + 中景横移 + 长焦特写）
+{scene-name} — 场景 reference 15s walk-through 建模样片（一条几何连续的相机路径，依次悬停 5 个 canonical 视角；重要视角 frontload 在 t < 6s）
 
 场景: {一句话锁定 byte-identical from scenes/s{N}/锁定描述符 #8} + {时辰 + 主要建筑或自然元素 + 配色 hex 主/辅/点缀 from 锁定描述符 #5/6}
 
-镜头: 五段拼接 — ① 正面建场（约 24mm 焦距感）+ 大全景平视，展示场景空间结构 / 天际线 / 顶部 / 主朝向（起手必须 front view，给 Seedance 锁定主体身份 + 主朝向信号）；② 水平 360° 环绕弧线（约 24-35mm 焦距感）+ 平行视角顺时针扫过 右侧 → 后方 → 左侧 → 回到正面，覆盖场景四面观；③ 垂直三视角（约 28mm 焦距感）+ 高位俯视 → 平视 → 低位仰视，覆盖鸟瞰 / 平观 / 仰望三层；④ 中景轨道横移（约 35mm 焦距感）扫过主要建筑或自然元素与关键区位（入口 / 中心 / 边界）；⑤ 长焦推近（约 85mm 焦距感）至标志道具或材质细节（雕饰 / 纹理 / 标志装饰），最后 0.3s 定格。无抖动；运镜可极快但要稳定。
+镜头: 一条 15 秒几何连续的相机路径，无剪辑 / 无跳切 / 无淡入淡出 / 无 hard cut。等效焦距随路径段渐变（24mm → 28mm → 28mm → 35mm → 85mm）。沿路径依次悬停 5 个 canonical 视角：① 正面建场（约 24mm 焦距感）+ 大全景平视，展示场景空间结构 / 天际线 / 顶部 / 主朝向（起手必须 front view，给 Kling / Seedance 锁定主体身份 + 主朝向信号，frontload 在视频最开始）；② 反向广角（约 28mm 焦距感）+ 平视环绕至对侧后回看正面方向，覆盖正面建场拍不到的反向 180° 空间；③ 垂直视角（约 28mm 焦距感）+ 高位俯瞰 OR 低位仰望（二选一基于场景类型 — 优先选最能展现场景"顶部 / 高耸元素"或"鸟瞰空间布局"的那一个）；④ 中景轨道横移定格（约 35mm 焦距感）锁定关键区位（入口 / 中心 / 边界中的一处）作为参考帧；⑤ 长焦特写（约 85mm 焦距感）推近至标志道具或材质细节（雕饰 / 纹理 / 标志装饰），定格收尾。**关键运镜约束**：路径必须 monotonic 平滑（一条连续 dolly + 平滑 yaw + 垂直俯仰 + 推进 zoom 的复合移动），不能有剪辑感的 hard cut 或 180° 瞬间反向；速度可慢可中等，但禁止剧烈加速；全程无抖动。
 
-动作（timed beats，3.9s 极速五段 — 全角度信息密度优先；本视频是 reference，不是给观众看的，运镜可极快但要稳定不抖）:
-  - 0-0.8s: 正面建场（front establishing）— 大全景正面广角平视，展示场景空间结构 + 天际线 / 顶部 + 主朝向。Front view 是 Seedance 抓"场景身份 + 主朝向"的最强信号，必须放在首段且不可省。
-  - 0.8-1.7s: 水平 360° 环绕弧线 — 平行视角顺时针扫过 右侧 → 后方 → 左侧 → 回到正面（约 0.9s 完成四面观），覆盖场景水平面全角度。
-  - 1.7-2.5s: 垂直三视角扫描 — 高位俯视（鸟瞰空间布局）→ 平视（标准观察视角）→ 低位仰视（仰望顶部 / 天空 / 高耸元素），覆盖垂直面三层。
-  - 2.5-3.3s: 中景轨道横移 — 扫过主要建筑或自然元素，覆盖入口 / 中心 / 边界三关键区。
-  - 3.3-3.9s: 长焦推近至标志道具或材质细节（雕饰 / 纹理 / 标志装饰），最后 0.3s 定格。
+动作（timed beats，15s walk-through — 5 个 canonical dwell + 平滑 transition；重要视角 frontload 在 t < 6s，因 Kling / Seedance 在 t > 12s 后进入训练分布边缘，长尾失败模式集中在视频后段）:
+  - 0.0-1.0s: **悬停 #1 — 正面建场（Hero）**。完全静止悬停 1 秒固定首帧。大全景正面广角平视，展示场景空间结构 + 天际线 / 顶部 + 主朝向。Front view 是 Kling / Seedance 抓"场景身份 + 主朝向"的最强信号，必须放在首段且不可省。**抽帧建议: t = 0.5s。**
+  - 1.0-4.0s: 缓慢 dolly back + 平滑 yaw 转向，约 180° 平滑环绕过渡至反向位置。
+  - 4.0-4.8s: **悬停 #2 — 反向广角（Reverse）**。完全静止悬停 0.8 秒。从对侧最远点回看正面方向，覆盖正面建场拍不到的另一半空间。**抽帧建议: t = 4.4s。**
+  - 4.8-7.5s: 缓慢推进 + 同步垂直俯仰（缓慢上升至高位 OR 缓慢下沉至低位，二选一基于场景类型），过渡至垂直视角。
+  - 7.5-8.3s: **悬停 #3 — 垂直视角**。完全静止悬停 0.8 秒。高位俯瞰（鸟瞰空间布局）OR 低位仰望（仰望顶部 / 天空 / 高耸元素），二选一。**抽帧建议: t = 7.9s。**
+  - 8.3-11.0s: 缓慢 dolly 至中景轨道位置，横移扫过关键区位（入口 / 中心 / 边界），最终对齐其中一处。
+  - 11.0-11.8s: **悬停 #4 — 中景轨道横移定格**。完全静止悬停 0.8 秒。锁定中景关键区位作为参考帧。**抽帧建议: t = 11.4s。**
+  - 11.8-14.2s: 缓慢 zoom 推进至长焦特写位置（约 85mm 焦距感）。
+  - 14.2-15.0s: **悬停 #5 — 长焦特写（Detail）**。完全静止悬停 0.8 秒收尾。锁定标志道具或材质细节（雕饰 / 纹理 / 标志装饰）作为参考帧。**抽帧建议: t = 14.6s。**
 
-光线 / 色调: 默认时辰光源 from 锁定描述符 #5；配色 hex 主/辅/点缀 from 锁定描述符 #6 严格遵守，不漂移。
+光线 / 色调: 默认时辰光源 from 锁定描述符 #5；配色 hex 主/辅/点缀 from 锁定描述符 #6 严格遵守，15s 全程不漂移。
 
-节奏: 极快（3.9s 内完成 正面建场 + 水平 360° + 垂直三视角 + 横移 + 特写 — 全角度信息密度优先，运镜可极快但要稳定无抖动）。
+节奏: 中等（15s walk-through — 单视角 dwell ≥ 0.8s 给出锐利静帧；transition 段平滑 monotonic，禁止剧烈加速 / 跳切 / 反向；信息密度优先于速度）。
 
 渲染样式: 影视级真人写实 + cinematic + 4K HDR + 真实材质质感 + 实拍剧照风。
 
@@ -952,22 +956,23 @@ OLD path → NEW path（applied across 50 shot files 出场角色 table + Refere
 
 音频: 无（视频纯视觉 reference，不要 BGM / 音效 / 旁白 / 环境音）。
 
-时长: 3.9s
+时长: 15s
 
-负向: {项目级负向锁定 from style_guide.md} / {场景专属负向 from scenes/s{N}/锁定描述符 #负向} / 不要 镜头抖动 / 不要 时辰错乱（与锁定描述符 #5 不符）/ 不要 配色偏离 hex 锁定 / 不要 现代化/西式元素混入（如场景档明确禁止）/ 不要 角色人物入画（场景 reference 纯环境，无角色）/ 不要 起手非正面（必须 front view 建场）/ 不要 任何音频 / BGM / 音效 / 旁白 / 环境音 / 不要 超过 3.9s（reference 上传硬上限）。
+负向: {项目级负向锁定 from style_guide.md} / {场景专属负向 from scenes/s{N}/锁定描述符 #负向} / 不要 镜头抖动 / 不要 剪辑 / 不要 跳切 / 不要 淡入淡出 / 不要 hard cut / 不要 剧烈加速或瞬间反向运动 / 不要 时辰错乱（与锁定描述符 #5 不符）/ 不要 配色偏离 hex 锁定 / 不要 现代化/西式元素混入（如场景档明确禁止）/ 不要 角色人物入画（场景 reference 纯环境，无角色）/ 不要 起手非正面（必须 front view 建场）/ 不要 任何音频 / BGM / 音效 / 旁白 / 环境音 / 不要 超过 15s（reference 上传硬上限）/ 不要 缩短至 < 15s（5 个 canonical dwell + 4 段 transition 信息密度塞不下）。
 ```
 
 **12.10-C Scene reference 上传与下游 shot prompt 联动：**
 
-- 立档场景（≥ 2 shots 复用）：user 渲染 `s{N}_{name}.mp4` 后，在 shot prompt 的 Reference placeholders 表第 2 列填该 mp4 path（与 character turntable 同列处理）。Shot prompt 的 `{ref_s{N}_{name}}` placeholder 仍内联引用，user paste 时上传该 mp4 给 Seedance 即获 scene reference。
+- 立档场景（≥ 2 shots 复用）：user 渲染 `s{N}_{name}.mp4` 后，在 shot prompt 的 Reference placeholders 表第 2 列填该 mp4 path（与 character turntable 同列处理）。Shot prompt 的 `{ref_s{N}_{name}}` placeholder 仍内联引用，user paste 时上传该 mp4 给 Kling / Seedance 即获 scene reference。
 - 未立档场景（仅 1 shot 出现，inline 描述）：不生成 scene reference 视频；shot prompt 的 `场景:` 行 inline 描述足够。
 - Shot prompt 文件 schema（rule #12.6 v2）不变 —— scene reference 视频上传逻辑由 user 操作时识别，不引入新 prompt 字段。
+- **中间帧 buffet 使用**：15s × 30fps = 450 帧。canonical 5 帧的抽帧时间点已在 12.10-B 给出；user 后续若 shot 需要某个 3/4 偏移角度作为额外参考，可在 source mp4（与 scene 文件同 folder）上手动 ffmpeg `-ss <time> -vframes 1 -q:v 1 frame.png` 抽取，无需重新调 API。
 
 **Scene video reference prompt 锁定字段（多场景 byte-identical，仅 `场景:` 段随场景变化）：**
 
-`镜头` / `光线 / 色调（除时辰光源 token）` / `节奏` / `渲染样式` / `比例` / `音频（=无）` / `时长（=3.9s）` / 视频专属负向 **8 个字段**在所有场景 video reference prompt 中 byte-identical（v2：从 v1 的 7 字段增加 `音频`，时长锁值由 2.9s 改 3.9s）。这样 6+ 场景的 reference 视频输出可剪辑成「场景巡礼合集」。
+`镜头` / `光线 / 色调（除时辰光源 token）` / `节奏` / `渲染样式` / `比例` / `音频（=无）` / `时长（=15s）` / 视频专属负向 **8 个字段**在所有场景 video reference prompt 中 byte-identical（v3：时长锁值由 3.9s 改 15s；节奏由 v2 的"极速"改 v3 的"中等"；负向新增 5 项 — 不要剪辑 / 跳切 / 淡入淡出 / hard cut / 剧烈加速或瞬间反向运动；新增 frontload 约束于动作 timed beats）。这样 6+ 场景的 reference 视频输出可剪辑成「场景巡礼合集」。
 
-*(Originated from follow-up "compress reference videos to 2.9s" — 2026-05-10；amended by follow-up 010 "scene ref video 3.9s + all-angle + front-start" — 2026-05-11，把时长从 2.9s 提到 3.9s、动作分段从三段重写为五段 all-angle 序列、显式声明 visuals-only 无音频。Solves: ① v1 的 2.9s 三段在几何上覆盖不足，shot 视频常出现侧面 / 后方细节失真；② 用户工作流确认 reference 上传上限可放宽到 3.9s；③ 显式给 Seedance 提示 visuals-only，避免下游模型 hallucinate audio track。Character turntable rule #12.5 不一致地保留 2.9s — 因为单体 360° 在 2.9s 内已足够覆盖。)*
+*(Originated from follow-up "compress reference videos to 2.9s" — 2026-05-10；amended by follow-up 010 "scene ref video 3.9s + all-angle + front-start" — 2026-05-11；further amended by follow-up 017 "scene ref video 15s walk-through + 5 canonical dwell + frontload important poses + 中间帧 buffet" — 2026-05-13. v3 把时长从 3.9s 放宽到 15s 单视频；动作从五段极速序列重写为一条几何连续路径 + 5 个 canonical dwell 帧（每个 ≥ 0.8s）；显式 frontload 重要视角于 t < 6s 抵御长尾漂移；引入"中间帧 buffet"概念用于 user 按需抽 3/4 角度参考。Solves: ① v2 的 3.9s 五段中单视角 dwell < 0.8s 致 motion blur，参考图锐利度不足；② 极快运镜下偶发模型跟不上，中段材质 / 几何漂移；③ Kling / Seedance reference 上传上限实测已可放宽至 ≥ 15s；④ 通过 frontload 重要视角 + 中间帧 buffet，单条 walk-through 视频信息密度反而高于五段极速序列。Character turntable rule #12.5 不一致地保留 2.9s — 单体 360° 在 2.9s 内已足够覆盖，turntable 不存在场景 ref 的"球面采样多视角"信息密度问题。本规则仅 update 场景 reference 视频；角色 turntable (rule #12.5 v4) 与 shot prompts (rule #12.6 v2) 未触及。)*
 
 ## Update protocol
 

@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-
 import { Sidebar } from "./components/Sidebar";
 import { Reader } from "./components/Reader";
 import { Home } from "./components/Home";
+import { ActorGrid } from "./components/ActorGrid";
 import { fetchTree } from "./api";
 import { collectFilePaths } from "./lib/linkResolver";
 import type { TreeNode } from "./types";
@@ -75,6 +76,10 @@ export default function App(): JSX.Element {
           <Route
             path="/file/*"
             element={<Reader knownPaths={knownPaths} onSaved={() => setRefreshKey((k) => k + 1)} />}
+          />
+          <Route
+            path="/actors"
+            element={<ActorGrid tree={tree} onChange={() => setRefreshKey((k) => k + 1)} />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

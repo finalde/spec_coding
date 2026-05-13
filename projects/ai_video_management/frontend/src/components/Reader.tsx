@@ -1,6 +1,6 @@
 /** Reader: render-mode dispatch by file extension + path pattern. */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Breadcrumb } from "./Breadcrumb";
 import { ParseFallback } from "./ParseFallback";
 import { Editor } from "./Editor";
@@ -13,7 +13,7 @@ import { CodeView } from "../markdown/CodeView";
 import { JsonlView } from "../markdown/JsonlView";
 import { SiblingMedia } from "./SiblingMedia";
 import { detectShotPair } from "../lib/shotPairing";
-import { fetchFile, mediaUrl, putFile } from "../api";
+import { archiveMedia, deleteMedia, fetchFile, mediaUrl, putFile, unarchiveMedia } from "../api";
 import { ApiError, type FileResult } from "../types";
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
@@ -26,6 +26,7 @@ export interface ReaderProps {
 
 export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
   const location = useLocation();
+  const navigate = useNavigate();
   const path = useMemo<string | null>(() => {
     if (!location.pathname.startsWith("/file/")) return null;
     const encoded = location.pathname.slice("/file/".length);
@@ -37,11 +38,13 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
   const [editing, setEditing] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<Error | null>(null);
   const [conflict, setConflict] = useState<{ current_mtime: string } | null>(null);
+  const [archiving, setArchiving] = useState<boolean>(false);
+  const [deleting, setDeleting] = useState<boolean>(false);
 
   const ext = path ? extOf(path) : "";
   const isMediaImage = IMAGE_EXTS.has(ext);
   const isMediaVideo = VIDEO_EXTS.has(ext);
-  const isMediaOnly = isMediaVideo || (isMediaImage && ext !== ".png" && ext !== ".jpg");
+  const isMediaOnly = isMediaVideo || isMediaImage;
 
   const load = useCallback(async () => {
     if (!path) return;
@@ -90,6 +93,40 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
     document.title = dirty ? `* ${base} — ai_video_management` : `${base} — ai_video_management`;
   }, [path]);
 
+  const onArchiveToggle = useCallback(async () => {
+    if (!path) return;
+    const parts = path.split("/");
+    const inArchive = parts.length >= 2 && parts[parts.length - 2] === "archive";
+    setArchiving(true);
+    try {
+      const result = inArchive ? await unarchiveMedia(path) : await archiveMedia(path);
+      announceToast(`${inArchive ? "Unarchived" : "Archived"} ${parts[parts.length - 1] ?? path}`);
+      onSaved();
+      navigate(`/file/${encodeURIComponent(result.to)}`);
+    } catch (err) {
+      announceToast(`${inArchive ? "Unarchive" : "Archive"} failed: ${archiveErrorKind(err)}`);
+    } finally {
+      setArchiving(false);
+    }
+  }, [path, onSaved, navigate]);
+
+  const onDeleteClick = useCallback(async () => {
+    if (!path) return;
+    const name = path.split("/").pop() ?? path;
+    if (!window.confirm(`Move ${name} to _deleted/?`)) return;
+    setDeleting(true);
+    try {
+      const result = await deleteMedia(path);
+      announceToast(`Deleted ${name}`);
+      onSaved();
+      navigate(`/file/${encodeURIComponent(result.to)}`);
+    } catch (err) {
+      announceToast(`Delete failed: ${archiveErrorKind(err)}`);
+    } finally {
+      setDeleting(false);
+    }
+  }, [path, onSaved, navigate]);
+
   if (!path) return <div className="muted">No file selected.</div>;
   if (error) {
     return (
@@ -116,6 +153,14 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
   const isCasting = isMarkdown && /^ai_videos\/[^/]+\/casting\.md$/.test(path);
 
   const filename = path.split("/").pop() ?? path;
+  const pathParts = path.split("/");
+  const isArchivedFile = pathParts.length >= 2 && pathParts[pathParts.length - 2] === "archive";
+  const isDeletedFile = path.startsWith("ai_videos/_deleted/");
+  const mediaActionsBusy = archiving || deleting;
+  const archiveLabel = isArchivedFile
+    ? (archiving ? "Unarchiving…" : "↺ Unarchive")
+    : (archiving ? "Archiving…" : "📦 Archive");
+  const deleteLabel = deleting ? "Deleting…" : "🗑 Delete";
 
   return (
     <div className="reader">
@@ -143,17 +188,51 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
           {isVideo ? (
             <div className="media-view">
               <video controls preload="metadata" src={mediaUrl(path)} />
+              {!isDeletedFile ? (
+                <div className="reader-media-actions">
+                  <button type="button" className="reader-media-archive-btn"
+                    onClick={onArchiveToggle} disabled={mediaActionsBusy}
+                    aria-label={isArchivedFile ? `Unarchive ${filename}` : `Archive ${filename}`}>
+                    {archiveLabel}
+                  </button>
+                  <button type="button" className="reader-media-delete-btn"
+                    onClick={onDeleteClick} disabled={mediaActionsBusy}
+                    aria-label={`Delete ${filename}`}>
+                    {deleteLabel}
+                  </button>
+                </div>
+              ) : null}
             </div>
-          ) : isMediaImage && ext !== ".png" && ext !== ".jpg" ? (
+          ) : isMediaImage ? (
             <div className="media-view">
               <img src={mediaUrl(path)} alt={filename} />
+              {!isDeletedFile ? (
+                <div className="reader-media-actions">
+                  <button type="button" className="reader-media-archive-btn"
+                    onClick={onArchiveToggle} disabled={mediaActionsBusy}
+                    aria-label={isArchivedFile ? `Unarchive ${filename}` : `Archive ${filename}`}>
+                    {archiveLabel}
+                  </button>
+                  <button type="button" className="reader-media-delete-btn"
+                    onClick={onDeleteClick} disabled={mediaActionsBusy}
+                    aria-label={`Delete ${filename}`}>
+                    {deleteLabel}
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : isCasting ? (
             <CastingView castingPath={path} onChange={onSaved} />
           ) : isImageRef ? (
-            <ImageRefView primaryFile={file} primaryPath={path} knownPaths={knownPaths} />
+            <>
+              <ImageRefView primaryFile={file} primaryPath={path} knownPaths={knownPaths} />
+              <SiblingMedia currentPath={path} knownPaths={knownPaths} onChange={onSaved} />
+            </>
           ) : isShotPair ? (
-            <ShotPairView primaryFile={file} primaryPath={path} knownPaths={knownPaths} />
+            <>
+              <ShotPairView primaryFile={file} primaryPath={path} knownPaths={knownPaths} />
+              <SiblingMedia currentPath={path} knownPaths={knownPaths} onChange={onSaved} />
+            </>
           ) : isShotlistTable ? (
             <ParseFallback rawText={file.content} componentName="ShotlistTableView">
               <ShotlistTableView content={file.content} shotlistPath={path} />
@@ -195,4 +274,17 @@ function extOf(path: string): string {
   const dot = path.lastIndexOf(".");
   if (dot < 0) return "";
   return path.slice(dot).toLowerCase();
+}
+
+function announceToast(message: string): void {
+  const region = document.getElementById("aria-live-toast");
+  if (!region) return;
+  region.textContent = "";
+  window.setTimeout(() => { region.textContent = message; }, 30);
+}
+
+function archiveErrorKind(err: unknown): string {
+  if (err instanceof ApiError) return err.detail?.kind ?? `HTTP ${err.status}`;
+  if (err instanceof Error) return err.message;
+  return "unknown_error";
 }

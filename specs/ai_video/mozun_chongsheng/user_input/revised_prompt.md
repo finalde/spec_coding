@@ -5,9 +5,10 @@
 **task_name:** mozun_chongsheng
 **Composed from:** `raw_prompt.md`
 **First generated:** 2026-05-09 16:42:05
-**Last regenerated:** 2026-05-10 18:15:00 — header bump for follow-up 016 (把 follow-up 011 暂留为 placeholder 的三个未立档场景升级为完整 scene 文件 — `s7_山道平台`（ep02）、`s8_云海`（ep05/shot02）、`s9_识海`（ep05/shot08）；schema 完全镜像 s1-s6 既定模式（8 字段锁定描述符 + 变化态 + Seedream image prompt + Seedance 2.9s video reference prompt）；s9_识海 非物理空间，reference 段给出黑底过渡帧基底；六个 shot reference 行从 "未立档" 改为指向新 scenes md。)
+**Last regenerated:** 2026-05-13 10:30:00 — header bump for follow-up 017 (场景 reference 视频 prompt 从 v2 的 3.9s 五段极速 all-angle 改为 v3 的 15s walk-through 单视频：一条几何连续相机路径 + 5 个 canonical dwell（每个 ≥ 0.8s）+ 重要视角 frontload 在 t < 6s + 中间帧 buffet 概念。Rule #12.10 v2 → v3。仅触及场景 reference；角色 turntable rule #12.5 v4 / 2.9s 与 shot prompts rule #12.6 v2 未触及。)
 
-**Prior follow-up 015:** 2026-05-10 17:09:02 — 角色 / 场景 reference 视频 prompt 12s → 2.9s + 角色 turntable "1,2,3" + 场景追加 video reference 段（rule #12.5 v4 + rule #12.10 NEW；保持有效）。
+**Prior follow-up 016:** 2026-05-10 18:15:00 — 把 follow-up 011 暂留为 placeholder 的三个未立档场景升级为完整 scene 文件（s7_山道平台 / s8_云海 / s9_识海；保持有效；本 follow-up 017 在此基础上 update 三者的 video reference 段从 3.9s 到 15s walk-through）。
+**Prior follow-up 015:** 2026-05-10 17:09:02 — 角色 / 场景 reference 视频 prompt 12s → 2.9s + 角色 turntable "1,2,3" + 场景追加 video reference 段（rule #12.5 v4 保持有效；rule #12.10 NEW 已被 follow-up 017 amend 为 v3 / 15s walk-through）。
 **Prior follow-up 014:** 2026-05-10 15:57:51 — folder-per-asset + media gitignore + webapp display（保持有效；本 follow-up 仅在 folder-per-asset 基础上更新 prompt 内容，不动 folder schema）。
 **Prior follow-up 013:** 2026-05-10 15:41:33 — shot prompt ≤2000 字 + Markdown-style field-label 视觉渲染（保持有效）。
 **Prior follow-up 012:** 2026-05-10 15:15:46 — photorealism + micro-details（保持在 character ref 内）。

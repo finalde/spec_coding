@@ -352,25 +352,51 @@ When 非 POST → 405
 And 两个端点均经过 Origin/Host gate（foreign Origin → 403，与 PUT /api/file 一致）
 ```
 
-#### Scenario U3.15 — `POST /api/actors/generate` 批量生成 + pollinations.ai 出站 HTTP（follow-up 014）
+#### Scenario U3.15 — `POST /api/actors/generate` 批量生成 + Kling 出站 HTTP（follow-up 014 + 025 Kling-only + 027 concurrency + variance + 029 rich variance + resolution）
 # 来源 FR: FR-9f, FR-86
 [automated]
 
 ```gherkin
 Given 空目录 ai_videos/_actors/ 不存在
-And ActorPool 的 httpx 客户端被 monkey-patch 为返回固定 12-byte JPEG payload（模拟 pollinations.ai 成功响应）
+And `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` env 已设（fixture 注入，模拟 backend/.env 已加载）
+And ActorPool 的 httpx 客户端被 monkey-patch 为返回固定 12-byte JPEG payload（模拟 Kling submit→poll→download 成功）
 When POST /api/actors/generate with body {count: 3, ethnicity: "asian", gender: "male", age_range: "18-25", look: "handsome", style: "modern-casual", notes: "test"}
 Then 响应 200
 And response.generated 长度 = 3
 And response.generated[0].id = "actor_0001"，[1].id = "actor_0002"，[2].id = "actor_0003"
 And 磁盘上 ai_videos/_actors/actor_0001/actor_0001.jpg 存在 + actor_0001.md 存在
 And actor_0001.md 含属性表（ethnicity / gender / age_range / look / style / notes）+ 组装的英文 prompt + seed
+And 三张 sidecar 中记录的 prompt 互不相同（per-image variance phrase 注入；follow-up 027）
+And 每张 sidecar 的 prompt 至少含一个 _VARIANCE_FACE_FEATURES / _VARIANCE_SKIN_TONES / _VARIANCE_FACE_SHAPES / _VARIANCE_EYE_DESCRIPTORS / _VARIANCE_HAIR_DESCRIPTORS 元素
 When 第二次 POST /api/actors/generate 同一参数 count=2
 Then 响应 200 + generated[0].id = "actor_0004"，[1].id = "actor_0005"（ID 单调自增，不复用）
 When POST body 中 ethnicity = "klingon"（不在 enum） → 400 invalid_attribute
-When POST body 中 count = 0 或 count = 21 → 400 invalid_attribute（同 kind，code 复用）
+When POST body 中 count = 0 或 count = 51 → 400 invalid_attribute（cap follow-up 027 升到 50；51 越界）
 When ActorPool 客户端 monkey-patch 为模拟 timeout → 那 1 张归 errors[]，其它 (count - 1) 张正常生成；状态 200
 When 非 POST → 405
+And 9 并发 POST /api/actors/generate count=1 在同一空 `_actors/` 上 → 全部 200 + 9 个 distinct `actor_NNNN` id（race-safe allocator，follow-up 027；`mkdir(exist_ok=False)` 原子）
+And 每张 sidecar 中的 prompt 长度 ≥ 1000 字符（follow-up 029 expanded variance）
+And sidecar prompt 不含 "photorealistic" / "sharp focus" / "8k" 单独 token（follow-up 031 移除）
+And sidecar prompt 含 "candid" / "natural skin texture" / "no waxy smoothness" / "RAW unedited" 等 anti-wax keywords（follow-up 031 永久注入）
+And sidecar prompt 含至少一项 `_VARIANCE_PHOTOREALISM` camera/film cue（follow-up 031 第 18 池）
+When POST body resolution = "2k"
+Then 保存的 jpg 文件解码后 size = (2048, 2048)（Pillow LANCZOS upscale；follow-up 029）
+And response.generated[i].resolution = "2k"
+When POST body resolution = "4k" → size = (4096, 4096)
+When POST body resolution = "normal"（default）→ jpg 尺寸为 Kling 原始输出（kling-v1 1:1 通常 1024×1024）
+When POST body resolution = "8k"（不在 enum）→ 400 invalid_attribute
+When POST /api/actors/preview-prompts with body {count: 3, attrs}（follow-up 032）→ 200 + response.prompts 长度 = 3，每项含 {seed, prompt}
+And response.prompts[i].prompt 即将发给 Kling 的 final prompt（含 variance + anti-wax + camera cue）
+When POST /api/actors/generate with body {count: 3, attrs, seeds: [s0, s1, s2]}（用 preview 返的 seeds）
+Then 生成的 sidecar prompts 与 preview.prompts[i].prompt 一一字节相等
+When POST /api/actors/generate body seeds 长度 != count → 400 invalid_attribute
+When POST /api/actors/generate body seeds 含非 int → 400 invalid_attribute
+When 非 POST 到 /api/actors/preview-prompts → 405
+And ActorGrid PAGE_SIZE = 50（follow-up 032）；25 actors 时不分页（25 ≤ 50）；51 actors 时分 2 页
+And 生成的 jpg 文件名匹配 `{ethnicity}__{gender}__{age_range}.jpg`（follow-up 033）
+And sidecar 文件名仍为 `actor_NNNN.md`（不变）
+When 启动时存在 legacy `actor_NNNN.jpg` 文件 + sidecar → `ActorPool.__init__` 自动调 `migrate_filenames` 重命名到新格式；二次启动 noop（idempotent）
+And ActorGrid 加民族/性别/年龄段三个 filter dropdown，默认 "全部"；filter 变化时 page 重置 0；header 显示 `filtered / total`
 ```
 
 #### Scenario U3.16 — casting.md upsert / delete + GET /api/casting + GET /api/actors（follow-up 014）
@@ -399,6 +425,73 @@ When GET /api/actors
 Then 响应 200 + actors 数组按 id 升序，每条含 ethnicity / gender / age_range / look / style / notes / image_path / mtime
 And 缺 sidecar md 或 jpg 的 actor folder 静默跳过（warning logged 但不进 response）
 When 非 POST/DELETE 到 /api/casting/assign → 405
+```
+
+#### Scenario U3.17 — `POST /api/actors/delete` 软删除 + cascade unassign（follow-up 026）
+# 来源 FR: FR-9i, FR-87
+[automated]
+
+```gherkin
+Given pool 内已生成 actor_0001 + actor_0002（fixture）
+And ai_videos/dramaA/casting.md 含 (c1_主角, actor_0001) + (c2_配角, actor_0002)
+And ai_videos/dramaB/casting.md 含 (c1_师傅, actor_0001)
+And ai_videos/_deleted/ 不存在
+When POST /api/actors/delete with body {actor_id: "actor_0001"}
+Then 响应 200 + from = "ai_videos/_actors/actor_0001" + to = "ai_videos/_deleted/_actors/actor_0001"
+And response.unassigned 含 2 项 [{drama: "dramaA", role: "c1_主角"}, {drama: "dramaB", role: "c1_师傅"}]
+And 磁盘上 ai_videos/_actors/actor_0001/ 不再存在
+And ai_videos/_deleted/_actors/actor_0001/actor_0001.jpg + .md 存在（folder 整体被搬迁）
+And dramaA/casting.md 仅剩 (c2_配角, actor_0002) — actor_0001 引用已清除
+And dramaB/casting.md 剩 empty table（仅 header） — 唯一 row 已清除
+When 再次 POST /api/actors/delete with body {actor_id: "actor_0001"} → 响应 404 actor_not_found（folder 已搬走）
+When POST body 中 actor_id = "actor_xx" → 响应 400 invalid_actor_id（shape mismatch）
+When POST body 中 actor_id = "actor_9999"（不存在）→ 响应 404 actor_not_found
+When 非 POST 到 /api/actors/delete → 405
+When 下一次 POST /api/actors/generate count=1 → 新 actor 分配 ID "actor_0001"（_deleted/_actors/ 不参与 _next_actor_id_num 扫描，slot 可复用）
+```
+
+#### Scenario U3.18 — `/actors` grid view + pagination（follow-up 028）
+# 来源 FR: FR-91, FR-87, FR-10b
+[automated]
+
+```gherkin
+Given pool 为空（ai_videos/_actors/ 无 actor_NNNN folders）
+When 用户在 sidebar `_actors/` 行点击 "🔲 网格" 按钮
+Then 浏览器跳到 `/actors`
+And ActorGrid 渲染 empty state 文案 "演员池为空 — ..."
+And 无分页控件
+When pool 有 5 个 actor（fixture 注入 actor_0001..actor_0005）
+And 用户进入 `/actors`
+Then header 显示 "🎭 演员池 (5)"
+And grid 渲染 5 个 tile，按 id 升序 actor_0001 在最前
+And 每个 tile 含 img (src 含 `/api/media?path=...&mtime=...`) + actor id + 4 个 chip (ethnicity / gender / age_range / look)
+And 无分页控件（5 ≤ PAGE_SIZE=12）
+When 用户点击 tile actor_0003
+Then 浏览器跳到 `/file/{image_path}`（encodeURIComponent），Reader 渲染单图详情
+When pool 有 13 个 actor
+Then header "🎭 演员池 (13)"
+And 第 1 页渲染 12 个 tile (actor_0001..actor_0012)
+And 分页控件显示 "第 1 / 2 页"，"上一页" / "首页" 按钮 disabled，"下一页" / "末页" enabled
+When 用户点 "下一页"
+Then 第 2 页渲染 1 个 tile (actor_0013)
+And "下一页" / "末页" 按钮 disabled，"上一页" / "首页" enabled
+When 用户点 "首页"
+Then 回到第 1 页
+When pool 有 25 个 actor → 总页数 ceil(25/12) = 3
+When `/api/actors` 返 500 / network error → 页面渲染 error banner + 重试按钮；点重试触发再次 fetch
+And 进入 select mode（点 "✅ 选择" 按钮）
+Then tile click 不再 navigate，而是 toggle selectedIds 成员资格；tile 显示 checkmark overlay + 蓝边
+And footer bar sticky 出现，显示 "已选 N / 总 M" + 全选 / 全清 / 🗑 批量删除 (N) / 🎬 分配角色 (N) 按钮
+When 用户跨页选择（page 1 选 2 个，去 page 2 再选 1 个，回 page 1）
+Then page 1 tile 仍保留 selected 状态（selection 跨页）
+When 用户点 "🗑 批量删除 (3)" → window.confirm 后，前端 loop POST /api/actors/delete × 3
+Then 每张 cascade unassign + 移到 _deleted/_actors/；toast 显示 "批量删除完成：3 个 actor，清理 N 个 casting 引用"；grid 重新加载，已选 actor 消失
+When 用户在 select mode 点 "🎬 分配角色 (N)"
+Then 模态打开，drama dropdown 列 `ai_videos/` 下所有 non-`_` 子目录（fixture：dramaA / dramaB）
+And character dropdown 列 selected drama 的 `characters/c*/` 子目录名（fixture：dramaA 有 c1_主角 / c2_配角）
+When 用户选 dramaA → c1_主角 → 确认
+Then loop POST /api/casting/assign × N（每个 actor 一次），写入 ai_videos/dramaA/casting.md；toast "已分配 N 个 actor 到 dramaA / c1_主角"
+When 同一 actor 被分到 dramaA/c1 后再分到 dramaB/c2 → 两个 casting.md 都含该 actor_id（多剧参演原生支持，无新 data store）
 ```
 
 ### U4 — frontend scaffolding
@@ -762,10 +855,12 @@ And 路径处理在 Windows 上无 \ / 混合错位（ImageRefView 与 ShotPairV
 | FR-9f | U3.15 (actors/generate，follow-up 014) |
 | FR-9g | U3.16 (casting/assign，follow-up 014) |
 | FR-9h | U3.16 (casting/assign DELETE，follow-up 014) |
+| FR-9i | U3.17 (actors/delete，follow-up 026) |
 | FR-10 | U3.8 |
 | FR-10b | U3.16 (GET /api/actors，follow-up 014) |
 | FR-10c | U3.16 (GET /api/casting，follow-up 014) |
 | FR-86 | U3.15 (attribute schema enums，follow-up 014) |
+| FR-91 | U3.18 (ActorGrid 分页，follow-up 028) |
 | FR-11 | U3.2, U3.3* |
 | FR-12 | U3.4 |
 | FR-13 | U3.5 |

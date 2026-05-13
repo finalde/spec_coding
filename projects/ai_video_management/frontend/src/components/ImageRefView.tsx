@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { fetchFile, imageUrl } from "../api";
+import { fetchFile, mediaUrl } from "../api";
 import { ApiError, type FileResult } from "../types";
 import { Renderer } from "../markdown/renderer";
 import { ParseFallback } from "./ParseFallback";
@@ -52,7 +52,7 @@ export function ImageRefView({ primaryFile, primaryPath, knownPaths }: ImageRefV
         <header><h2>{layout.filename}</h2></header>
         <div className="image-ref-img-wrapper">
           <img
-            src={imageUrl(primaryPath, primaryFile.mtime)}
+            src={mediaUrl(primaryPath, primaryFile.mtime)}
             alt={`${layout.filename} 立绘`}
             className="image-ref-img"
           />
@@ -83,7 +83,7 @@ export function ImageRefView({ primaryFile, primaryPath, knownPaths }: ImageRefV
             {companionImage ? (
               <div className="image-ref-img-wrapper">
                 <img
-                  src={imageUrl(layout.expectedPngPath.endsWith(".png") && !companionMissing
+                  src={mediaUrl(layout.expectedPngPath.endsWith(".png") && !companionMissing
                     ? layout.expectedPngPath : layout.expectedJpgPath, companionImage.mtime)}
                   alt={`${layout.stem} 立绘`}
                   className="image-ref-img"

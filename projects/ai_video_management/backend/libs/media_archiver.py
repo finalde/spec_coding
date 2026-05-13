@@ -1,9 +1,13 @@
-"""Per-file archive / unarchive for media files.
+"""Per-file archive / unarchive / delete for media files.
 
 Per follow-up 008: a per-tile button moves a single image / video into an
 `archive/` subfolder of its current directory (creating the folder on
 demand); the inverse moves it back and rmdirs an empty archive/. Atomic
 per-file rename — no temp two-pass needed because we only touch one file.
+
+Per follow-up 023: a per-file delete button moves a media file into
+`ai_videos/_deleted/{rest-of-relative-path}`, preserving sub-structure for
+mental traceability. Soft delete — no rmdir of the source's parent.
 """
 from __future__ import annotations
 
@@ -14,6 +18,8 @@ from libs.exposed_tree import MEDIA_EXTENSIONS, ExposedTree
 from libs.safe_resolve import SafeResolver
 
 ARCHIVE_DIR_NAME = "archive"
+DELETED_DIR_NAME = "_deleted"
+AI_VIDEOS_ROOT_NAME = "ai_videos"
 
 
 class InvalidPath(Exception):
@@ -33,6 +39,14 @@ class AlreadyArchived(Exception):
 
 
 class NotInArchive(Exception):
+    pass
+
+
+class AlreadyDeleted(Exception):
+    pass
+
+
+class NotInAiVideos(Exception):
     pass
 
 
@@ -99,6 +113,28 @@ class MediaArchiver:
         except OSError:
             pass
         return MoveResult(src_rel=self._rel(src), dst_rel=self._rel(dst))
+
+    def delete(self, rel: str) -> MoveResult:
+        src = self._validate_media_source(rel)
+        relative = src.relative_to(self._resolver.root)
+        parts = relative.parts
+        if not parts or parts[0] != AI_VIDEOS_ROOT_NAME:
+            raise NotInAiVideos("delete only supports ai_videos paths")
+        if len(parts) >= 2 and parts[1] == DELETED_DIR_NAME:
+            raise AlreadyDeleted("file is already inside _deleted/")
+        rest_parts = parts[1:]
+        target = self._resolver.root / AI_VIDEOS_ROOT_NAME / DELETED_DIR_NAME / Path(*rest_parts)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise MoveFailed(str(exc)) from exc
+        if target.exists():
+            raise TargetExists(self._rel(target))
+        try:
+            src.rename(target)
+        except OSError as exc:
+            raise MoveFailed(str(exc)) from exc
+        return MoveResult(src_rel=self._rel(src), dst_rel=self._rel(target))
 
     def _validate_media_source(self, rel: str) -> Path:
         if not isinstance(rel, str) or rel == "":

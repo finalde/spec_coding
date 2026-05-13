@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 import uvicorn
+
+from libs.env_loader import load_env_file
+
+load_env_file(Path(__file__).resolve().parent / ".env")
 
 from libs.api import create_app
 from libs.api_security import BoundOrigin

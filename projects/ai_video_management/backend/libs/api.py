@@ -1,9 +1,11 @@
 """API surface for ai_video_management.
 
-13 endpoints: `GET /api/tree`, `GET /api/file`, `PUT /api/file`,
+16 endpoints: `GET /api/tree`, `GET /api/file`, `PUT /api/file`,
 `GET /api/media`, `POST /api/rename-media`, `POST /api/archive-media`,
-`POST /api/unarchive-media`, `POST /api/import-from-downloads`,
-`POST /api/actors/generate`, `GET /api/actors`,
+`POST /api/unarchive-media`, `POST /api/delete-media`,
+`POST /api/import-from-downloads`,
+`POST /api/actors/generate`, `POST /api/actors/preview-prompts`,
+`GET /api/actors`, `POST /api/actors/delete`,
 `POST /api/casting/assign`, `DELETE /api/casting/assign`, `GET /api/casting`.
 """
 from __future__ import annotations
@@ -18,7 +20,15 @@ from pydantic import BaseModel
 
 from libs import file_reader as fr
 from libs import file_writer as fw
-from libs.actor_pool import ActorAttrs, ActorPool, GenerationDirMissing, InvalidAttribute
+from libs.actor_pool import (
+    ActorAttrs,
+    ActorDeleteFailed,
+    ActorDeleteTargetExists,
+    ActorNotFound,
+    ActorPool,
+    GenerationDirMissing,
+    InvalidAttribute,
+)
 from libs.api_security import BoundOrigin, OriginHostMiddleware, SecurityHeadersMiddleware
 from libs.casting import Casting, InvalidActorId, InvalidRole
 from libs.exposed_tree import MEDIA_EXTENSIONS, ExposedTree
@@ -27,10 +37,12 @@ from libs.file_writer import FileWriter
 from libs.downloads_importer import DownloadsDirMissing, DownloadsImporter
 from libs.media_archiver import (
     AlreadyArchived,
+    AlreadyDeleted,
     InvalidPath as ArchiveInvalidPath,
     MediaArchiver,
     MoveFailed,
     NotFound as ArchiveNotFound,
+    NotInAiVideos,
     NotInArchive,
     NotMedia,
     TargetExists,
@@ -81,6 +93,8 @@ class GenerateActorsBody(BaseModel):
     look: str
     style: str
     notes: str = ""
+    resolution: str = "normal"
+    seeds: list[int] | None = None
 
 
 class CastingAssignBody(BaseModel):
@@ -93,6 +107,10 @@ class CastingAssignBody(BaseModel):
 class CastingUnassignBody(BaseModel):
     path: str
     role: str
+
+
+class DeleteActorBody(BaseModel):
+    actor_id: str
 
 
 def create_app(
@@ -325,6 +343,40 @@ def create_app(
             headers={"Allow": "POST"},
         )
 
+    @app.post("/api/delete-media")
+    def delete_media(body: ArchiveMediaBody) -> Response:
+        try:
+            result = media_archiver.delete(body.path)
+        except ArchiveInvalidPath:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "invalid_path"}})
+        except NotMedia:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "extension_not_allowed"}})
+        except NotInAiVideos:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "not_in_ai_videos"}})
+        except AlreadyDeleted:
+            return JSONResponse(status_code=400, content={"detail": {"kind": "already_deleted"}})
+        except ArchiveNotFound:
+            return JSONResponse(status_code=404, content={"detail": {"kind": "not_found"}})
+        except TargetExists as exc:
+            return JSONResponse(
+                status_code=409,
+                content={"detail": {"kind": "target_exists", "target": str(exc)}},
+            )
+        except MoveFailed as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": {"kind": "move_failed", "message": str(exc)}},
+            )
+        return JSONResponse(status_code=200, content=result.to_payload())
+
+    @app.api_route("/api/delete-media", methods=["GET", "PUT", "PATCH", "DELETE"])
+    def delete_media_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "POST"},
+        )
+
     @app.post("/api/import-from-downloads")
     def import_from_downloads(body: ImportFromDownloadsBody) -> Response:
         try:
@@ -365,7 +417,7 @@ def create_app(
                 style=body.style,
                 notes=body.notes,
             )
-            result = actor_pool.generate_batch(attrs, body.count)
+            result = actor_pool.generate_batch(attrs, body.count, body.resolution, body.seeds)
         except InvalidAttribute as exc:
             return JSONResponse(
                 status_code=400,
@@ -386,6 +438,33 @@ def create_app(
             headers={"Allow": "POST"},
         )
 
+    @app.post("/api/actors/preview-prompts")
+    def actors_preview_prompts(body: GenerateActorsBody) -> Response:
+        try:
+            attrs = ActorAttrs(
+                ethnicity=body.ethnicity,
+                gender=body.gender,
+                age_range=body.age_range,
+                look=body.look,
+                style=body.style,
+                notes=body.notes,
+            )
+            result = actor_pool.preview_prompts(attrs, body.count, body.resolution)
+        except InvalidAttribute as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_attribute", "message": str(exc)}},
+            )
+        return JSONResponse(status_code=200, content=result)
+
+    @app.api_route("/api/actors/preview-prompts", methods=["GET", "PUT", "PATCH", "DELETE"])
+    def actors_preview_prompts_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "POST"},
+        )
+
     @app.get("/api/actors")
     def actors_list() -> Response:
         actors = [a.to_dict() for a in actor_pool.list_actors()]
@@ -397,6 +476,50 @@ def create_app(
             status_code=405,
             content={"detail": {"kind": "method_not_allowed"}},
             headers={"Allow": "GET"},
+        )
+
+    @app.post("/api/actors/delete")
+    def actors_delete(body: DeleteActorBody) -> Response:
+        try:
+            unassigned = casting.unassign_actor_everywhere(body.actor_id)
+        except OSError as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": {"kind": "cascade_failed", "message": str(exc)}},
+            )
+        try:
+            move = actor_pool.delete_actor(body.actor_id)
+        except InvalidAttribute as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"kind": "invalid_actor_id", "message": str(exc)}},
+            )
+        except ActorNotFound:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": {"kind": "actor_not_found"}},
+            )
+        except ActorDeleteTargetExists as exc:
+            return JSONResponse(
+                status_code=409,
+                content={"detail": {"kind": "target_exists", "target": str(exc)}},
+            )
+        except ActorDeleteFailed as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": {"kind": "move_failed", "message": str(exc)}},
+            )
+        return JSONResponse(
+            status_code=200,
+            content={"from": move["from"], "to": move["to"], "unassigned": unassigned},
+        )
+
+    @app.api_route("/api/actors/delete", methods=["GET", "PUT", "PATCH", "DELETE"])
+    def actors_delete_method_not_allowed() -> Response:
+        return JSONResponse(
+            status_code=405,
+            content={"detail": {"kind": "method_not_allowed"}},
+            headers={"Allow": "POST"},
         )
 
     @app.get("/api/casting")

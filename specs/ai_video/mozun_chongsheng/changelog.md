@@ -2,6 +2,35 @@
 
 Append-only follow-up audit log。每条记录该 follow-up 改了什么、哪些下游 artifact 被同步 surgical patch。
 
+## Follow-up 017 — 2026-05-13 10:30:00
+Source: user_input/follow_ups/017-20260513-103000-scene-ref-15s-walkthrough.md
+Summary: 场景 reference 视频 prompt 从 v2 的 **3.9s 五段极速 all-angle** 改为 v3 的 **15s walk-through 单视频**——沿一条几何连续的相机路径（连续 dolly + 平滑 yaw + 垂直俯仰 + 推进 zoom，无剪辑 / 跳切）依次悬停在 5 个 canonical 视角上，每个 dwell ≥ 0.8s 给出锐利静帧；**重要视角 frontload 在 t < 6s**（Hero / Reverse）抵御 Kling / Seedance 在 t > 12s 后的训练分布边缘漂移；新增"中间帧 buffet"概念（15s × 30fps = 450 帧，user 按需 ffmpeg 抽 3/4 角度参考，无需重新调 API）。规则层升级 `agent_refs/project/ai_video.md` rule #12.10 v2 → v3。scope 严格限于场景；角色 turntable rule #12.5 v4 / 2.9s 与 shot prompts rule #12.6 v2 未触及。
+
+Auto-updated:
+- `.claude/agent_refs/project/ai_video.md` — rule #12.10 v2 → v3：(a) intro 段 header `(3.9s all-angle 建模样片, per follow-up 010)` → `(15s walk-through 建模样片, per follow-up 017)`；prose 改写指明 Kling / Seedance reference 上传上限实测 ≥ 15s + walk-through 单视频 + 5 canonical dwell + frontload + 中间帧 buffet。(b) 12.10-A schema 段 header / 用法说明 / fenced code title 同步从 3.9s 五段改为 15s walk-through；新增"渲染完成后保留 source mp4 同 folder 作中间帧 buffet"说明。(c) 12.10-B body schema 完全重写：`镜头` 段从五段拼接改为一条 monotonic 平滑路径 + 5 canonical dwell + 焦距渐变 24→28→28→35→85mm；`动作` timed beats 从五段（0-0.8 / 0.8-1.7 / 1.7-2.5 / 2.5-3.3 / 3.3-3.9）重写为 9 段 dwell+transition 交替（5 个 ≥ 0.8s 悬停 + 4 段平滑过渡），每个 dwell 段标 **抽帧建议 t = X.Xs**；`节奏: 极快` → `节奏: 中等`；`时长: 3.9s` → `时长: 15s`；负向新增 5 项（不要剪辑 / 跳切 / 淡入淡出 / hard cut / 剧烈加速或瞬间反向运动），把 `不要 超过 3.9s` → `不要 超过 15s`，加 `不要 缩短至 < 15s（5 个 canonical dwell + 4 段 transition 信息密度塞不下）`。(d) 12.10-C 联动段加"中间帧 buffet 使用"小节，给出 ffmpeg 抽帧命令。(e) 锁定字段段时长锁值 `3.9s` → `15s`、节奏锁值 `极快` → `中等`，仍 8 个 byte-identical 字段。(f) originated note 加 follow-up 017 amend 项 + 显式 scope 声明（仅场景 ref，角色 turntable 与 shot prompts 未触及）。
+- `specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md` — `Last regenerated` 头从 2026-05-10 18:15:00 (follow-up 016) 改为 2026-05-13 10:30:00 (follow-up 017)；follow-up 016 降级为 Prior follow-up 016 行；follow-up 015 备注 amend 为 "rule #12.10 NEW 已被 follow-up 017 amend 为 v3 / 15s walk-through"。
+- `ai_videos/mozun_chongsheng/scenes/s1_长阶顶/s1_长阶顶.md` 至 `s8_云海/s8_云海.md`（8 个常规场景）— 第三段「# 场景 reference video prompt」整段重写：header `3.9s all-angle 建模样片, per rule #12.10 v2` → `15s walk-through 建模样片, per rule #12.10 v3`；用法说明段重写（≤ 15s 硬上限 + 中间帧 buffet 提示）；fenced code block 内 `场景:` 行保留 byte-identical 一句话锁定 + 时辰光源 + 配色 hex；`镜头` 段更新为 v3 单 monotonic 路径 + 5 canonical dwell 描述，并填入各场景特有的"主要建筑或自然元素" / "标志道具或装饰"；`动作` timed beats 重写为 v3 的 9 段 dwell+transition；`节奏: 极快` → `节奏: 中等`；`时长: 3.9s` → `时长: 15s`；负向同步 v3 update。各场景 bible（8 字段锁定描述符 / 关键变化态 / 出现镜头 / 项目级与场景专属负向）与第二段「# 场景 reference image prompt」（Seedream 立绘）完全保留，逐字不改。s8_云海 保留 "魂火虚影合成位留空待 shot 内合成" 与 "微俯摇" 风格的项目特有约束 — 通过把垂直视角段实例化为"高位俯瞰云顶起伏"传递。
+- `ai_videos/mozun_chongsheng/scenes/s9_识海/s9_识海.md`（蒙太奇过渡帧特殊变体）— 不套用 v3 walk-through 标准 schema（识海非物理空间，无几何可建，无相机路径可走）；仅做版本对齐与字段升级：header `3.9s 纯黑底过渡帧基底` → `15s 纯黑底过渡帧基底（蒙太奇场景特殊变体，rule #12.10 v3 walk-through 默认 schema 不适用）`；动作 beats 从 4 段（0-1 / 1-2 / 2-3 / 3-3.9）扩展为黑底持续无光 + 末段 0.5s 赤瞳点亮渐变的 v3 适配版本（仍声明"本场景蒙太奇特殊变体，不走 walk-through 5-dwell schema"）；`节奏: 静` 保留；`时长: 3.9s` → `时长: 15s`；负向同步把 `不要 超过 3.9s` → `不要 超过 15s`。
+- `specs/ai_video/mozun_chongsheng/changelog.md` — append 本条 entry。
+
+总计 patch 文件: **1 ref + 1 revised_prompt + 9 scenes + 1 changelog = 12 文件**。
+
+No conflicts found in:
+- `specs/ai_video/mozun_chongsheng/final_specs/spec.md` — FR / NFR 不涉及 reference 视频时长（grep 验证 0 处需 patch；reference 时长是输出层细节，spec 层 invariants 不变）
+- `specs/ai_video/mozun_chongsheng/validation/{strategy.md, acceptance_criteria.md, bdd_scenarios.md, ai_video_specific.md}` — 0 处提及 3.9s / 场景 reference 时长 / walk-through schema
+- `specs/ai_video/mozun_chongsheng/interview/qa.md`、`findings/{dossier.md, angle-*.md}` — 上游决策层，与 reference 视频时长正交
+- `ai_videos/mozun_chongsheng/characters/c{1..10}_*/c{N}_*.md`（角色 turntable）— rule #12.5 v4 / 2.9s 保留不动；用户明确要求"only update the scene, don't touch characters and shots"
+- `ai_videos/mozun_chongsheng/episodes/ep{NN}/prompts/shot{NN}/shot{NN}.md`（shot prompts）— rule #12.6 v2 schema 不变；scene reference 视频上传逻辑由 user 操作时识别，不引入新 prompt 字段；`{ref_s{N}_*}` placeholder 仍按文件名引用 mp4，path 不变
+- `ai_videos/mozun_chongsheng/{README.md, world.md, arc_outline.md, style_guide.md}` — 与 reference 视频时长正交
+- 已渲染的 mp4 资产（`scenes/s{1..6,9}_*/s{N}_*[1-4].mp4`）— 物理 mp4 不删除（保留作 v2 渲染历史）；user 应基于 v3 prompt 重新渲染获得新 15s walk-through reference，并替换下游 shot 上传时使用的 mp4 path
+
+User next steps:
+1. 用更新后的 9 份 `scenes/s{N}_*/s{N}_*.md` 第三段「场景 reference video prompt」code block 在 Kling 或 Seedance 重新渲染 15s walk-through reference mp4（替换或新增 `scenes/s{N}_*/s{N}_*.mp4`）。
+2. 抽帧（如需要额外 3/4 角度参考）：对 source mp4 跑 `ffmpeg -ss {time} -vframes 1 -q:v 1 frame.png`，canonical 5 个时间点已在 prompt body 中标 **抽帧建议**。
+3. 下游 shot prompt 上传时直接使用新 mp4（path 不变）；shot prompt 文件本身无需 patch。
+
+Severity: scene reference 视频时长从 3.9s 提到 15s 属于**中等 blast radius** 的输出层 update，已完成 12 文件 surgical patch。规则层 v3 update 后，未来场景 stage-6 regen 自动沿用 v3 walk-through schema，不会再漂回 v2。
+
 ## Cross-project data-op cascade — 2026-05-12
 Source: `specs/development/ai_video_management/user_input/follow_ups/013-20260511-125029-batch-trim-character-mp4-to-2.9s.md`（**跨项目 data-op，本项目无 own follow-up；本条仅作 cross-ref 审计**）。
 Summary: 把本项目 `characters/c*/c*.mp4` 19 个 character turntable mp4 in-place re-encode trim 到 ≤ 2.9s，对齐 `agent_refs/project/ai_video.md` rule #12.5 v4 的 Seedance reference ≤2.9s 上传约束。原时长 3-15s 不等（用户手工渲染），后时长 11 个精确 2.9s + 8 个 2.92s（mp4 packet-boundary ~20ms 过冲，远低于 3s 实际上限）。19/19 成功。详细 before/after 表见 `specs/development/ai_video_management/changelog.md` 同条 follow-up 013 entry。
