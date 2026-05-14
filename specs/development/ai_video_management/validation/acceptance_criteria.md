@@ -141,6 +141,33 @@ And 产物 inline 了 read-zero contract 与 audit-event 标签 (regen.delete.pl
 And 产物以 "# EXECUTION MODE: AUTONOMOUS" 或 "# EXECUTION MODE: INTERACTIVE" 起首
 ```
 
+#### Scenario U2.5 — dev reload 强制退出兜底（follow-up 042）
+# 来源 FR: FR-2
+[manual]
+
+```gherkin
+Given backend 启动于 reload 模式（`python main.py`，未传 --no-reload）
+And libs/uvicorn_force_exit.py 存在，`install()` 在 libs/asgi.py 与 main.py 各调用一次
+And uvicorn.Server._force_exit_installed === True（patch 已生效，可在 reload 子进程 REPL 验证）
+
+When 触发一个长时阻塞 sync endpoint（e.g. POST /api/extract-frames 对一段 mp4 启动 ffmpeg，~5s）
+And 在该请求未返回之前，编辑 libs/tree_walker.py 任一字节
+Then WatchFiles 打印 "WatchFiles detected changes in 'libs\\tree_walker.py'. Reloading..."
+And uvicorn 打印 "Shutting down" + "Waiting for connections to close. (CTRL+C to force quit)"
+And 在 ≤ 4 秒内子进程 PID 消失（os._exit(0) 触发，跳过 ffmpeg 等待）
+And WatchFiles 自动启动新子进程（uvicorn 的 reload 监督逻辑不被 patch 改变）
+And 新 PID 在 ≤ 6 秒内开始响应 /api/tree
+And 终端不再卡 "Waiting for connections to close (CTRL+C to force quit)" 行
+
+When 用户连按 2 次 CTRL+C 终止 reload 模式
+Then uvicorn 的 handle_exit 第二次调用复用同一 watchdog（idempotent — 不重复 schedule timer 也不崩）
+And 进程在 (timeout_graceful_shutdown + 2) 秒内死掉
+
+When backend 启动于 --no-reload 模式
+And user 发 SIGTERM（或 CTRL+C）
+Then 同样 ≤ 4 秒进程死掉；逻辑与 reload 子进程对称
+```
+
 ### U3 — backend api + main + security
 
 #### Scenario U3.1 — main.py ≤ 15 行且仅调用 api.create_app + uvicorn.run
@@ -494,6 +521,189 @@ Then loop POST /api/casting/assign × N（每个 actor 一次），写入 ai_vid
 When 同一 actor 被分到 dramaA/c1 后再分到 dramaB/c2 → 两个 casting.md 都含该 actor_id（多剧参演原生支持，无新 data store）
 ```
 
+#### Scenario U3.19 — actor sidecar md 走 `ActorView`（follow-up 034）
+# 来源 FR: FR-92
+[automated]
+
+```gherkin
+Given pool 内存在 actor_0013，folder 内含 actor_0013.md + asian__male__18-25.jpg
+When 用户导航到 `/file/ai_videos/_actors/actor_0013/actor_0013.md`
+Then Reader dispatch 命中 isActor 分支，渲染 <ActorView/>
+And 不渲染 <SiblingMedia/>（页面底部 NO "Select all" / "Clear" / "Archive Selected" toolbar、NO 每 tile checkbox）
+And ActorView header 显示 "actor_0013"
+And ActorView 显示大幅 face 图，src 含 `/api/media?path=ai_videos/_actors/actor_0013/asian__male__18-25.jpg`
+And ActorView 元数据块以 <dl> 形式列出 ethnicity / gender / age_range / look / style / notes / seed 七行
+And "生成 prompt" 卡片渲染 sidecar 第一段 fenced code block 的纯文本（<pre> 样式 + monospace 字体）
+And 卡片右上有 "📋 Copy" 按钮
+When 用户点击 "📋 Copy"
+Then 浏览器 clipboard 写入 prompt 字符串，按钮文字 1.5s 内显示 "✓ Copied"
+When 用户在 Reader 顶部 toolbar 点 "✎ Edit"
+Then ActorView 收起，Editor 渲染 actor_0013.md 原始 markdown（power-user 编辑路径仍存在）
+When sidecar md 不含 fenced code block（无 prompt 段）
+Then ActorView 不渲染 "生成 prompt" 卡片，仅显示 image + 元数据
+When actor folder 无 jpg / png / webp 图片
+Then ActorView image pane 显示 fallback 文案 "尚未生成 face 图片"，其他面板正常渲染
+```
+
+#### Scenario U3.21 — actor folder 在 sidebar 折叠成单 leaf + ActorView 内 delete（follow-up 036）
+# 来源 FR: FR-93
+[automated]
+
+```gherkin
+Given pool 内存在 actor_0013，folder 内含 actor_0013.md + asian__male__18-25.jpg
+When 调用 GET /api/tree
+Then ai_videos/_actors/ 节点的 children 中存在 type="actor", name="actor_0013", path="ai_videos/_actors/actor_0013/actor_0013.md" 的节点
+And 该节点的 children 为空 / 不存在
+And 该节点的 face_path 等于 "ai_videos/_actors/actor_0013/asian__male__18-25.jpg"（或 actor 内部首个匹配 _IMAGE_EXTENSIONS 的相对路径；actor 无图片时 face_path 为 null）
+And /api/tree 返回中不含 path="ai_videos/_actors/actor_0013/actor_0013.md" 之外的任何 actor_0013 子文件节点（即 jpg / md 不再作为独立 tree row）
+And linkResolver.collectFilePaths(tree) 的输出同时包含 actor_0013 的 md path 与 face_path（face_path 非 null 时）
+
+Given Sidebar 已渲染 actor_0013 leaf 行
+Then 行内显示 🎭 图标 + "actor_0013" label + 右侧 "🗑" 按钮
+And 行不渲染展开三角（disclosure triangle）
+When 用户点击行 body（非 🗑 按钮区域）
+Then URL 变为 /file/ai_videos/_actors/actor_0013/actor_0013.md
+And Reader 命中 isActor 分支，渲染 <ActorView/>
+
+Given ActorView 已渲染
+Then header 同时显示 "actor_0013" title 与 "🗑 删除" 按钮
+When 用户点击 "🗑 删除"
+Then window.confirm 弹窗（文案含 actor_0013 + "_deleted/_actors/" + casting unassign 提示）
+When 用户确认
+Then 前端发起 POST /api/actors/delete body {actor_id: "actor_0013"}
+And 200 成功后导航到 "/"（或 sidebar 重新渲染且 actor_0013 leaf 行消失）
+And onSaved 回调被触发以触发 tree refresh
+
+Given /api/actors/delete 返回 4xx / 5xx
+Then ActorView 内显示红色 inline alert 包含 detail.kind 或 error.message
+And 不发生导航
+
+Given pool 内含 _deleted/_actors/actor_0099/ （已软删除）
+When 调用 GET /api/tree
+Then _deleted/_actors/actor_0099/ 仍按递归 directory 渲染（含 jpg + md 子节点）— 折叠规则不适用于 _deleted 子树
+```
+
+#### Scenario U3.22 — DeletedView bulk hard-delete with typed-DELETE confirm（follow-up 038）
+# 来源 FR: FR-94
+[automated]
+
+```gherkin
+Given ai_videos/_deleted/ 下存在 mozun/shot01.mp4 + dramaA/c1/photo.jpg + _actors/actor_0099/asian__male__18-25.jpg（fixture）
+And sidebar 渲染 ai_videos/_deleted/ 节点
+Then 该节点行渲染 "🧹 永久清理" 按钮（className="drama-rename-btn"）
+And button 点击 e.stopPropagation() 且不触发 tree row 展开
+When 用户点击 "🧹 永久清理"
+Then 浏览器路由 navigate 到 "/deleted"
+And DeletedView 渲染 header "🗑 回收站 (3 个文件)"
+And grid 渲染 3 个 tile，按 path 升序：_actors/actor_0099/asian__male__18-25.jpg → dramaA/c1/photo.jpg → mozun/shot01.mp4
+And 每个 tile 渲染 <img> (image) 或 <video preload="metadata" muted> (video) + filename + 子路径（去 "ai_videos/_deleted/" 前缀）
+
+When DeletedView 默认（非 select mode）下用户点 mozun/shot01.mp4 tile
+Then navigate 到 `/file/ai_videos/_deleted/mozun/shot01.mp4`
+When 用户点 header "✅ 选择" 按钮
+Then DeletedView 进入 select mode，"✅ 选择" 文字替换为 "✕ 退出选择"
+When select mode 下点 photo.jpg tile
+Then tile 加 .deleted-tile-selected 蓝边、checkbox 显示 ✓；不再导航
+When 跨页选择（pool 内 60+ tile 时 page 1 选 2 + page 2 选 1 + 回 page 1）
+Then page 1 已选 tile 仍显示 selected（selectedPaths Set 跨页持久）
+
+When 用户在 select mode 点 "🗑 永久删除 (1)"
+Then 模态打开，标题 "永久删除 1 个文件？"
+And red banner role="alert"：包含 "此操作不可撤销" 与 "没有 in-app restore"
+And <ul> 列出第一条 path 全字符串（"ai_videos/_deleted/dramaA/c1/photo.jpg"）
+And 超过 10 个时 ul 末尾追加 "+ N 个其他文件…" muted item
+And input <input> 占位 "DELETE"，主按钮 "永久删除 1 个文件" disabled
+When 用户输入 "del"
+Then 主按钮仍 disabled（不 case-insensitive）
+When 用户输入 "DELETE"
+Then 主按钮 enabled
+When 用户点主按钮
+Then 前端 loop 调用 POST /api/hard-delete-media body {path: "ai_videos/_deleted/dramaA/c1/photo.jpg"}
+And 后端 200 响应 {deleted: "ai_videos/_deleted/dramaA/c1/photo.jpg"}
+And 磁盘上 photo.jpg 不再存在；其父 c1/ 文件夹仍存在（无 rmdir）
+And toast 显示 "已永久删除 1 个文件"
+And 模态关闭，select mode 退出，onChange 触发 tree 重新拉取
+And DeletedView 重新渲染时 photo.jpg tile 消失
+
+When POST /api/hard-delete-media body {path: "ai_videos/_actors/actor_0001/asian__male__18-25.jpg"}（路径不在 _deleted/ 下）
+Then 后端 400 not_in_deleted
+When POST body {path: "ai_videos/_deleted/dramaA/notes.md"}（非 media 扩展）
+Then 后端 400 extension_not_allowed
+When POST body {path: "ai_videos/_deleted/missing.mp4"}（文件不存在）
+Then 后端 404 not_found
+When POST body {path: "/etc/passwd"} 或 "../../etc/passwd"
+Then 后端 400 invalid_path（_validate_media_source 内 sandbox 校验）
+When 非 POST 方法到 /api/hard-delete-media → 405 method_not_allowed
+
+When 用户批量选择 3 个文件，1 个被外部进程已删，确认 typed DELETE 主按钮
+Then 前端 loop 3 次 hardDeleteMedia；2 个 200 + 1 个 404
+And toast 显示 "永久删除：成功 2 / 失败 1（详见 console）"
+And 不 abort batch；模态正常关闭
+
+When ai_videos/_deleted/ 不存在 / 内无 media 文件
+When 用户从 sidebar 点 "🧹 永久清理"
+Then DeletedView empty state 渲染 "回收站为空 — 软删除的文件（来自 mp4 / 图片 Reader 的 🗑 Delete 按钮）会出现在此处"
+```
+
+#### Scenario U3.23 — ActorView assignments + assign / unassign + delete refusal（follow-up 043）
+# 来源 FR: FR-9g, FR-9h, FR-9i, FR-9s, FR-95
+[automated]
+
+```gherkin
+Given pool 内存在 actor_0013，drama mozun_chongsheng 下 characters/c1_沧冥/ 是 directory
+And casting.md 不存在 / 不含 actor_0013 的任何 row
+
+When GET /api/actors/assignments?actor_id=actor_0013
+Then 200 + {actor_id:"actor_0013", assignments: []}
+
+Given ActorView 加载 actor_0013 页面
+Then "🎬 角色分配 (0)" 区块渲染，文案 "尚未分配到任何角色" 与 "＋ 添加分配" 按钮
+And header 的 "🗑 删除" 按钮 enabled
+
+When 用户点击 "＋ 添加分配" → 表单展开
+Then 第一个 dropdown 选项 = tree 内 ai_videos/ 直接非 `_` 前缀子目录（drama 列表）
+And 第二个 dropdown 选项 = 当前 drama 的 characters/c*/ 子目录名（regex ^c\d+(_.*)?$）
+When 用户选 drama=mozun_chongsheng, role=c1_沧冥, notes="主角 v1"
+And 点击 "确认分配"
+Then 前端 POST /api/casting/assign body {path:"ai_videos/mozun_chongsheng", role:"c1_沧冥", actor_id:"actor_0013", notes:"主角 v1"}
+And 后端 200 + casting.md 含一行 c1_沧冥 | actor_0013 | 主角 v1
+And 后端同步写 ai_videos/mozun_chongsheng/characters/c1_沧冥/_cast.md，内容含 actor_0013 + face filename + 中文 metadata table + `[查看演员档案]` 链接
+And ActorView 重新拉 assignments → "🎬 角色分配 (1)" 区块渲染一行 `mozun_chongsheng / c1_沧冥` + notes "— 主角 v1" + "✕ 取消" 按钮
+
+Given actor_0013 已分配到 c1_沧冥
+When ActorView header "🗑 删除" 按钮状态
+Then disabled = true
+And tooltip = "actor 当前已分配到 1 个角色，无法删除（请先取消所有分配）"
+
+When 用户在 sidebar 行点 🗑 / 或 ActorView 点 disabled-bypass POST /api/actors/delete body {actor_id:"actor_0013"}
+Then 后端 409 + {detail:{kind:"actor_is_assigned", assignments:[{drama:"mozun_chongsheng", role:"c1_沧冥", notes:"主角 v1", character_folder:"ai_videos/mozun_chongsheng/characters/c1_沧冥", character_folder_exists: true}]}}
+And ai_videos/_actors/actor_0013/ 文件夹未被移动到 _deleted/_actors/
+
+When POST /api/archive-media body {path: "ai_videos/_actors/actor_0013/asian__male__18-25.jpg"}
+Then 后端 409 + {detail:{kind:"actor_is_assigned", actor_id:"actor_0013", assignments:[...]}}
+And jpg 未被移到 archive/
+
+When POST /api/delete-media body {path: "ai_videos/_actors/actor_0013/asian__male__18-25.jpg"}
+Then 后端 409 + 同上 kind
+And jpg 未被移到 _deleted/
+
+When 用户点 assignments 列表行的 "✕ 取消"
+Then 前端 DELETE /api/casting/assign body {path:"ai_videos/mozun_chongsheng", role:"c1_沧冥"}
+And 后端 200 + casting.md 该 row 移除（剩 header + 空 table）
+And 后端同步删 ai_videos/mozun_chongsheng/characters/c1_沧冥/_cast.md（unlink(missing_ok=True)）
+And ActorView 重新拉 assignments → 区块回到 "🎬 角色分配 (0)" 状态
+And "🗑 删除" 按钮 enabled
+
+When 用户随后点 "🗑 删除"，window.confirm 通过
+Then POST /api/actors/delete body {actor_id:"actor_0013"} → 200 + {from:"ai_videos/_actors/actor_0013", to:"ai_videos/_deleted/_actors/actor_0013", unassigned: []}
+And folder 已移到 _deleted/
+
+Given character folder ai_videos/mozun_chongsheng/characters/c999_未存在/ 不存在
+When POST /api/casting/assign role="c999_未存在"
+Then 后端 200（casting.md 仍写入 row）
+And `_cast.md` 不被创建（character folder 不存在 → 静默跳过）— 无文件出现在该路径
+```
+
 ### U4 — frontend scaffolding
 
 #### Scenario U4.1 — 前端骨架文件就位 + 依赖固定
@@ -840,7 +1050,7 @@ And 路径处理在 Windows 上无 \ / 混合错位（ImageRefView 与 ShotPairV
 | FR | 场景 |
 |---|---|
 | FR-1 | U1.1 |
-| FR-2 | U3.1 |
+| FR-2 | U3.1, U2.5 (follow-up 042 force-exit watchdog) |
 | FR-3 | U3.1 |
 | FR-4 | U3.1 |
 | FR-5 | M.3, U7.1 |
@@ -861,6 +1071,11 @@ And 路径处理在 Windows 上无 \ / 混合错位（ImageRefView 与 ShotPairV
 | FR-10c | U3.16 (GET /api/casting，follow-up 014) |
 | FR-86 | U3.15 (attribute schema enums，follow-up 014) |
 | FR-91 | U3.18 (ActorGrid 分页，follow-up 028) |
+| FR-92 | U3.19 (ActorView 读视图，follow-up 034) |
+| FR-93 | U3.21 (actor folder 折叠成单 leaf + ActorView delete，follow-up 036) |
+| FR-94 | U3.22 (DeletedView bulk hard-delete + typed-DELETE 模态，follow-up 038) |
+| FR-9s | U3.23 (GET /api/actors/assignments + ActorView assign / unassign / delete refusal，follow-up 043) |
+| FR-95 | U3.23 (ActorView assignments section + cascading dropdown + delete gating，follow-up 043) |
 | FR-11 | U3.2, U3.3* |
 | FR-12 | U3.4 |
 | FR-13 | U3.5 |

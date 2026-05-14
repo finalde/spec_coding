@@ -2,6 +2,8 @@
 
 Run: spec_driven-20260503-145859 (autonomous full-pipeline regen, stage 4 parent-direct from `user_input/revised_prompt.md` + `interview/qa.md` + `findings/dossier.md`)
 
+> **Follow-up 014 amendment (2026-05-13):** wherever this spec says `backend/`, read `apps/api/`. Wherever it says `frontend/`, read `apps/ui/`. Wherever it says `backend/libs/`, read `libs/{infrastructure,domain,application,common}/` per the DDD+CQRS layering in `.claude/agent_refs/project/development.md` §1–6. Wherever it says `backend/static/`, read `apps/api/static/`. HTTP routes, JSON request/response shapes, and externally observable behavior are unchanged.
+
 ## Goal
 
 Build `spec_driven`, an interactive viewer/editor SPA for the artifacts produced by the spec-driven workflow (`specs/{task_type}/{task_name}/`) plus the cross-cutting context the workflow reads (`CLAUDE.md`, `.claude/skills/**/*.md`, `.claude/agent_refs/**/*.md`). The webapp lets the user browse, edit, pin atomic items, and emit copy-paste regeneration prompts that drive any subset of the six stages back through Claude Code, in either INTERACTIVE or AUTONOMOUS mode.

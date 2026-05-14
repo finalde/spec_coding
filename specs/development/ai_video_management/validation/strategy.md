@@ -4,6 +4,8 @@ Run: ai_video_management-20260505-002710
 Stage: 5 (validation strategy)
 Inputs consumed: `final_specs/spec.md` + 6 parallel level-specialist outputs.
 
+> **Follow-up 039 amendment (2026-05-13):** path references to `backend/`, `frontend/`, `backend/libs/` in this strategy + sibling validation modules (`acceptance_criteria.md`, `bdd_scenarios.md`, `backend_tests.md`, `e2e.md`, `security.md`, `accessibility_and_manual.md`) are remapped to `apps/api/`, `apps/ui/`, `libs/{infrastructure,domain,application,common}/`. Validation acceptance is otherwise unchanged. New blocker: cross-layer imports violating dependency arrows in `.claude/agent_refs/project/development.md` §1.
+
 ## Levels chosen
 
 | Level | File | Why |

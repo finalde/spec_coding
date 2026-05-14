@@ -1,5 +1,16 @@
 # Changelog — spec_driven
 
+## Follow-up 014 — 2026-05-13 12:00:00
+Source: user_input/follow_ups/014-20260513-120000-apps-libs-ddd-cqrs-layout.md
+Summary: Project adopts the `apps/+libs/` solution layout with DDD inside `libs/domain/`, CQRS inside `libs/infrastructure/` + `libs/application/`, `__suffix` filename/classname convention, and `dependency_injector` wiring — per `.claude/agent_refs/project/development.md` §1–6. HTTP routes + JSON shapes unchanged; only internal organization changes. Existing `backend/` becomes `apps/api/`; `frontend/` becomes `apps/ui/`; `backend/libs/*.py` is split across `libs/{infrastructure,domain,application,common}/` with `__reader/__writer/__query/__command/__dao/__valueobject/__entity/__qdto/__cdto/__mapper` naming.
+
+Auto-updated:
+- specs/development/spec_driven/user_input/revised_prompt.md — `Last regenerated` header bumped to 2026-05-13; "Layout" + "Dev workflow" bullets in the Stack section amended to the new layout.
+- specs/development/spec_driven/final_specs/spec.md — header amendment block added remapping `backend/`/`frontend/`/`backend/libs/`/`backend/static/` to the new paths; behavior unchanged.
+- specs/development/spec_driven/validation/strategy.md — header amendment block added applying the same remap to every validation module and adding a new blocker (cross-layer import violations).
+
+No conflicts found in: interview/qa.md, findings/dossier.md, validation/{acceptance_criteria,bdd_scenarios,system_tests,unit_tests,security,performance,accessibility}.md (covered by the strategy.md umbrella amendment), final_specs/promoted.md, validation/promoted.md, historical follow-ups 001–013 (immutable history; preserved).
+
 ## Follow-up 013 — 2026-05-09 12:01:57
 Source: user_input/follow_ups/013-20260509-120157-collapsible-top-sections.md
 Summary: Sidebar's top-level sections (**Claude Settings & Shared Context** and **Specs**) are now collapsible. Disclosure caret + Enter/Space + ArrowLeft/ArrowRight all toggle them; default first-render state is expanded; collapse state is component-local React state, NOT persisted to `localStorage` (per-tab convenience, not a setting). Backend `tree_walker.py` is unchanged — both top-level sections still emit `path: ""`; the collision is handled in the frontend by a new `nodeKey(node)` helper that returns `node.path || \`section:${node.name}\`` and is used everywhere the sidebar keys expansion or DOM-targets a node (`expanded` map, `data-path`, `toggle()` arg, `focusByPath` arg). Real file/dir paths still resolve to `node.path` exactly as before.

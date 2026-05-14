@@ -1,5 +1,27 @@
 # ai_video_management
 
+## Layout (follow-up 039 — 2026-05-13)
+
+Follows the `apps/+libs/` layout from `.claude/agent_refs/project/development.md` §1–6:
+
+```
+ai_video_management/
+├── apps/
+│   ├── api/        # FastAPI executable (main.py, container.py, routes.py, asgi.py, static/)
+│   └── ui/         # React SPA (was frontend/)
+├── libs/
+│   ├── common/     # env_loader, repo_root, safe_resolve, exposed_tree, sub_type_lookup
+│   ├── domain/     # (v1 empty; populated incrementally as splits refine)
+│   ├── infrastructure/  # __reader/__writer/__middleware/__importer/__extractor/__archiver/__renamer files
+│   └── application/     # (v1 empty; per-endpoint Query/Command split is a planned follow-up)
+├── tests/
+├── Makefile
+├── pyproject.toml  # canonical deps (includes dependency-injector)
+└── requirements.txt
+```
+
+DI wiring: `apps/api/container.py` declares the `Container` with singletons for ExposedTree, SafeResolver, FileReader/Writer, TreeReader, MediaRenamer, MediaArchiver, FrameExtractor, DownloadsImporter, ActorPool, Casting. Route handlers are module-level in `apps/api/routes.py`, decorated with `@inject` + `Depends(Provide[Container.x])`. `main.py` overrides `repo_root_path`/`bound_origin` and wires the routes module.
+
 Focused viewer / editor SPA for the artifacts under `ai_videos/{name}/` — character bibles, Seedream立绘 prompts, style guides, scripts, shotlists, dual Kling+Seedance shot prompts, publish metadata, README. Three custom view modes make the ai_video output structure navigable: **ShotPairView** (Kling + Seedance side-by-side), **ShotlistTableView** (clickable shot rows), and **ImageRefView** (Seedream prompt + companion `.png` preview).
 
 The webapp's only concern is `ai_videos/`. It does not read, reference, or anchor on any other directory in the workspace.
@@ -10,7 +32,7 @@ The webapp supports three runtime modes. All bind IPv4 loopback only (`127.0.0.1
 
 ### Production single-process — `make run-prod`
 
-Builds the frontend bundle into `backend/static/` and serves SPA + API from one FastAPI process.
+Builds the frontend bundle into `apps/api/static/` and serves SPA + API from one FastAPI process.
 
 ```
 make build-frontend
@@ -21,7 +43,7 @@ Open `http://127.0.0.1:8766/`.
 
 ### Backend-only alias — `make run`
 
-Alias for `make run-backend`. Expects a previously built bundle in `backend/static/` (or treat as API-only).
+Alias for `make run-backend`. Expects a previously built bundle in `apps/api/static/` (or treat as API-only).
 
 ### Backend + frontend separately (dev) — two terminals
 
@@ -58,7 +80,7 @@ Open `http://127.0.0.1:5174/`. The Vite proxy forwards `/api/*` to the backend w
 
 ## Architecture
 
-- **Backend.** FastAPI on `127.0.0.1:8766` (IPv4 loopback). Strongly typed Python in `backend/libs/` (`@dataclass(frozen=True)` containers, `str | None` syntax). Single-process mode also serves `backend/static/`.
+- **Backend.** FastAPI on `127.0.0.1:8766` (IPv4 loopback). Strongly typed Python in `backend/libs/` (`@dataclass(frozen=True)` containers, `str | None` syntax). Single-process mode also serves `apps/api/static/`.
 - **Frontend.** React + Vite (TypeScript). Recursive sidebar walks `node.children` uniformly; render-mode dispatch in `Reader.tsx` chooses `MarkdownView` / `ShotPairView` / `ShotlistTableView` / `ImageRefView` / `JsonlView` / `CodeView` / `ImagePlaceholder`; every parse-on-render component is wrapped in `<ParseFallback>` (real React Error Boundary class).
 - **API surface (3 endpoints).** `GET /api/tree`, `GET /api/file?path=…`, `PUT /api/file`.
 - **Sandbox (single root).** `ai_videos/**/*.{md,json,jsonl,yaml,yml,txt,png,jpg}`. No other workspace path is reachable.

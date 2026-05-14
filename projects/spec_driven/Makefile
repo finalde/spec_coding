@@ -1,4 +1,4 @@
-# Makefile for spec_driven (FR-39).
+# Makefile for spec_driven (FR-39 + follow-up 014 layout).
 # Every target binds 127.0.0.1 — NEVER 0.0.0.0 (SEC-13 audit / NFR-7).
 # pip-only — no `uv` invocation (validation/development.md move 6).
 
@@ -14,39 +14,39 @@ NPM  := npm
 install: install-backend install-frontend
 
 install-backend:
-	cd backend && $(PY) -m $(PIP) install -r requirements.txt
+	$(PY) -m $(PIP) install -r requirements.txt
 
 install-frontend:
-	cd frontend && $(NPM) install
+	cd apps/ui && $(NPM) install
 
 run: run-backend
 
 run-backend:
-	cd backend && $(PY) main.py
+	$(PY) -m apps.api.main
 
 run-frontend:
-	cd frontend && $(NPM) run dev
+	cd apps/ui && $(NPM) run dev
 
 build-frontend:
-	cd frontend && $(NPM) run build
+	cd apps/ui && $(NPM) run build
 
 run-prod: build-frontend
-	cd backend && $(PY) main.py
+	$(PY) -m apps.api.main
 
 test-backend:
-	cd backend && $(PY) -m pytest tests/ -v
+	$(PY) -m pytest tests/ -v
 
 test-frontend:
-	cd frontend && $(NPM) test
+	cd apps/ui && $(NPM) test
 
 e2e:
-	cd frontend && $(NPM) run test:e2e
+	cd apps/ui && $(NPM) run test:e2e
 
 boot-smoke:
-	cd backend && $(PY) -m pytest tests/unit/test_boot_smoke.py -v
+	$(PY) -m pytest tests/unit/test_boot_smoke.py -v
 
 clean:
-	rm -rf frontend/node_modules frontend/dist frontend/.vite
-	rm -rf backend/static/assets backend/static/index.html
-	find backend -type d -name __pycache__ -exec rm -rf {} +
-	find backend -type d -name .pytest_cache -exec rm -rf {} +
+	rm -rf apps/ui/node_modules apps/ui/dist apps/ui/.vite
+	rm -rf apps/api/static/assets apps/api/static/index.html
+	find apps libs tests -type d -name __pycache__ -exec rm -rf {} +
+	find . -type d -name .pytest_cache -exec rm -rf {} +

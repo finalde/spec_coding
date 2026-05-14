@@ -1,41 +1,48 @@
+# Makefile for ai_video_management (post follow-up 039: apps/+libs/ layout).
+# Bind 127.0.0.1 only. pip-only (no `uv`).
+
+PY  := python
+PIP := pip
+NPM := npm
+
 .PHONY: install install-backend install-frontend run run-prod run-backend run-frontend build-frontend test test-backend test-frontend e2e boot-smoke clean
 
 install: install-backend install-frontend
 
 install-backend:
-	pip install -r backend/requirements.txt
+	$(PIP) install -r requirements.txt
 
 install-frontend:
-	cd frontend && npm install
+	cd apps/ui && $(NPM) install
 
 run: run-backend
 
 run-prod: build-frontend run-backend
 
 run-backend:
-	cd backend && PYTHONPATH=. python main.py
+	$(PY) -m apps.api.main
 
 run-frontend:
-	cd frontend && npm run dev
+	cd apps/ui && $(NPM) run dev
 
 build-frontend:
-	cd frontend && npm run build
+	cd apps/ui && $(NPM) run build
 
 test: test-backend test-frontend
 
 test-backend:
-	cd backend && PYTHONPATH=. python -m pytest tests/ -v
+	$(PY) -m pytest tests/ -v
 
 test-frontend:
-	cd frontend && npm test
+	cd apps/ui && $(NPM) test
 
 e2e:
-	cd frontend && npm run test:e2e
+	cd apps/ui && $(NPM) run test:e2e
 
 boot-smoke:
-	cd backend && PYTHONPATH=. python -m pytest tests/test_boot_smoke.py -v
+	$(PY) -m pytest tests/test_boot_smoke.py -v
 
 clean:
-	rm -rf frontend/node_modules frontend/dist frontend/.vite backend/static/assets backend/static/index.html
-	find backend -type d -name __pycache__ -exec rm -rf {} + || true
-	find backend -type d -name .pytest_cache -exec rm -rf {} + || true
+	rm -rf apps/ui/node_modules apps/ui/dist apps/ui/.vite apps/api/static/assets apps/api/static/index.html
+	find apps libs tests -type d -name __pycache__ -exec rm -rf {} + || true
+	find . -type d -name .pytest_cache -exec rm -rf {} + || true

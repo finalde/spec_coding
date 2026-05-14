@@ -2,6 +2,396 @@
 
 Append-only follow-up audit log. Each entry records what the follow-up changed and which downstream artifacts were patched in the same turn.
 
+## Follow-up 045 — 2026-05-14
+Source: user_input/follow_ups/045-20260513-231500-env-file-location-and-asgi-mismatch.md
+Summary: Backend boot 失败 `RuntimeError: kling env keys missing` 的两层修复：(1) `apps/api/asgi.py` 的 env-path bug — 残留 `Path(__file__).resolve().parent.parent / ".env"` 来自原 `backend/libs/asgi.py`，在新路径 `apps/api/asgi.py` 下解析到 `apps/.env`（高了一层），与 `main.py` 的 `apps/api/.env` 不一致；改为 `parent / ".env"` 对齐。(2) 创建 `apps/api/.env` 包含 `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`（用户私下提供，已通过 `git check-ignore` 确认被 repo root `.gitignore` line 138 catches；密钥值本身**不**写入任何 spec / changelog / 提交文件）。
+
+Auto-updated:
+- projects/ai_video_management/apps/api/asgi.py — `Path(__file__).resolve().parent.parent / ".env"` → `Path(__file__).resolve().parent / ".env"`，与 `main.py` 一致。
+- projects/ai_video_management/apps/api/.env — 新建（**untracked**, gitignored），包含 KLING_ACCESS_KEY + KLING_SECRET_KEY 用户私下提供的值。
+- specs/development/ai_video_management/user_input/revised_prompt.md — `Last regenerated` header bumped；`Composed from` 列表更新到 001–044 + 045。
+
+Smoke verification: `python -c "from apps.api.asgi import app; ..."` 报告 `asgi build OK, routes: 36`，`KLING_ACCESS_KEY loaded: True`，`KLING_SECRET_KEY loaded: True`，并且 `git ls-files apps/api/.env` 返回空（未追踪）。
+
+No conflicts found in: final_specs/spec.md, validation/*, libs/common/env_loader.py（已正确容忍 FileNotFoundError）, apps/api/main.py（路径表达式已正确）. Spec acceptance unchanged — 045 is an implementation gap fix, not a behavior change.
+
+## Follow-up 044 — 2026-05-13 23:05:00
+Source: user_input/follow_ups/044-20260513-230500-missing-lib-dramas-ts.md
+Summary: 修 Vite import-analysis 错误 `Failed to resolve import "../lib/dramas" from "src/components/ActorView.tsx"`. follow-up 043 item #9 把 `extractDramas` / `findChild` / `DramaChoice` 从 `ActorGrid.tsx` 抽取到 `apps/ui/src/lib/dramas.ts`，但抽取目标文件从未被写入；ActorGrid.tsx + ActorView.tsx 的 `../lib/dramas` import 因此解析失败。新建 `apps/ui/src/lib/dramas.ts` 含 043 之前 commit (5abfd1a) 的原始 inline 实现——byte-for-byte 等价，零行为变化。
+
+Auto-updated:
+- projects/ai_video_management/apps/ui/src/lib/dramas.ts — 新建，包含 `DramaChoice` interface + `extractDramas(tree)` + `findChild(node, name)`。
+- specs/development/ai_video_management/user_input/revised_prompt.md — `Last regenerated` header bumped to 2026-05-13 23:05:00；`Composed from` 列表归并到 001–043 + 044。
+
+No conflicts found in: final_specs/spec.md, validation/*, projects/ai_video_management/apps/ui/src/components/{ActorView,ActorGrid}.tsx（imports 已是 `../lib/dramas`，无需修改）. Spec/AC unchanged — 044 fixes an implementation gap, not a behavior change; 043's spec walk and acceptance still apply.
+
+## Follow-up 043 — 2026-05-13 22:47:37
+Source: user_input/follow_ups/043-20260513-224737-assign-from-actor-page-character-link.md
+Summary: ActorView 新增"🎬 角色分配 (N)"区块 + 级联 drama→role dropdown + assign/unassign 行内按钮；后端 `Casting.assign` / `unassign` 同步维护 `ai_videos/{drama}/characters/{role}/_cast.md`（含 face 图 markdown 链接 + 演员档案链接）；`POST /api/actors/delete` 从 cascade-unassign 改为 refuse-if-assigned；`POST /api/archive-media` / `POST /api/delete-media` 对 `_actors/{id}/` 下路径同样 409 if assigned；新 endpoint `GET /api/actors/assignments`。一个 actor 可分配到多个 drama+role，同一 (drama, role) 上仅一个 actor（casting.md upsert 已保证）。
+
+Backend:
+- `libs/casting.py`:
+  - 新常量 `CAST_LINK_FILE_NAME = "_cast.md"`、`_ACTOR_ID_SHAPE_RE`。
+  - `Casting.assign()` 末尾追加 `_write_character_link(drama_dir, role, actor_id, notes)` — character folder 不存在则静默跳过，否则原子写 `_cast.md`（temp+os.replace），内容 Chinese metadata 表 + 内嵌 `![face]` + 演员档案链接 + 维护注释。
+  - `Casting.unassign()` 末尾追加 `_remove_character_link(drama_dir, role)` — best-effort `unlink(missing_ok=True)`。
+  - `Casting.unassign_actor_everywhere()` 内循环增加 `_remove_character_link` 调用（保留方法供 admin 工具用，endpoint 不再调）。
+  - 新方法 `find_assignments_for_actor(actor_id)`：扫所有 drama 的 casting.md，返回 `[{drama, role, notes, character_folder, character_folder_exists}, ...]` 按 (drama, role) 排序；shape-validation 失败抛 `InvalidActorId`。
+  - 新静态方法 `_build_character_link_body(drama, role, actor_id, notes, face_filename)`：返回完整 markdown body。
+  - `__all__` 加 `CAST_LINK_FILE_NAME`。
+- `libs/actor_pool.py`:
+  - 新公开方法 `actor_face_filename(actor_id) -> str | None`：wraps `_find_actor_jpg`，返回 jpg 的 bare filename；用于 `_cast.md` 内嵌图相对路径计算。
+- `libs/api.py`:
+  - `POST /api/actors/delete` 重写：先调 `casting.find_assignments_for_actor`；非空 → 409 `{kind:"actor_is_assigned", assignments:[...]}` 不动文件夹；空 → 原 `actor_pool.delete_actor` 路径，响应 `unassigned: []`（保留字段空数组兼容 v1 client）。`casting.unassign_actor_everywhere` 不再调用。
+  - 新 endpoint `GET /api/actors/assignments?actor_id=...`：调 `find_assignments_for_actor` → 200 / 400 invalid_actor_id / 405 method_not_allowed。
+  - 新 inner helper `_refuse_if_actor_assigned(path)`：若 path 形如 `ai_videos/_actors/actor_NNNN/...`，extract actor_id 并查 `find_assignments_for_actor`；非空返 `JSONResponse(409, ...)` 否则 None。
+  - `POST /api/archive-media` 与 `POST /api/delete-media` 在入口处调 `_refuse_if_actor_assigned(body.path)`；非 None 直接返回。
+
+Frontend:
+- `src/lib/dramas.ts` (NEW)：抽出 `extractDramas` + `findChild` + `DramaChoice` 类型；ActorGrid + ActorView 共享。
+- `src/components/ActorGrid.tsx`：移除本地 `extractDramas` / `findChild` 与 `DramaChoice` interface；import 共享版本；行为完全相同。
+- `src/api.ts`：新增 `ActorAssignment` / `ActorAssignmentsResult` interface + `fetchActorAssignments(actorId)` 函数。
+- `src/App.tsx`：`<Reader>` 调用追加 `tree={tree}` prop。
+- `src/components/Reader.tsx`：`ReaderProps` 加 `tree: TreeNode | null`；`<ActorView>` 调用追加 `tree={tree}`。
+- `src/components/ActorView.tsx`:
+  - 新 import `useCallback`/`useEffect` + `castingAssign`/`castingUnassign`/`fetchActorAssignments`/`ActorAssignment` + `extractDramas`/`DramaChoice` + `TreeNode`。
+  - Props 加 `tree: TreeNode | null`。
+  - 新 state：`assignments` / `assignLoading` / `assignError` / `unassigning` / `formOpen`。
+  - 新 `loadAssignments` callback；`useEffect` mount 时拉。
+  - 新 `onUnassign(a)` handler：调 `castingUnassign` + 刷新；失败 inline alert。
+  - 新 `onAssigned()` callback：关表单 + `onSaved()` + 重拉。
+  - delete 按钮 `disabled` 增 `deleteDisabledReason !== null` 条件 + tooltip 文案 "actor 当前已分配到 N 个角色，无法删除"。
+  - 新 JSX 区块 `actor-view-assignments`：header + 错误 alert + assignment 列表 + "＋ 添加分配" 按钮 / 行内 `<AssignForm>`。
+  - 新内部组件 `AssignForm`：drama / role 级联 `<select>` + notes textarea + 已分配预警 + 确认按钮；调 `castingAssign(path=ai_videos/{drama}, role, actorId, notes)`。
+  - 新 helper `formatError(err)`：识别 `actor_is_assigned` kind 并把 assignments 摘要拼进文案。
+- `src/styles.css`：新增 `.actor-view-assignments` 容器 + `.actor-view-assignment-list` / `-row` / `-drama` / `-sep` / `-role` / `-warn` / `-notes` / `-unassign-btn` + `.actor-view-assign-btn` + `.actor-view-cancel-btn` + `.actor-view-assign-form` + form-row + form-actions 规则。复用既有 token `--bg-panel` / `--border` / `--text-muted` / `--error-border` / `--error-text` / `--bg-hover`。
+
+Spec / validation:
+- `final_specs/spec.md` FR-9g：追加 follow-up 043 amendment 段描述 `_cast.md` 同步写入（路径、内容、character folder 不存在时静默跳过）。
+- `final_specs/spec.md` FR-9h：追加 follow-up 043 amendment 段描述 `_cast.md` 同步删除（unlink missing_ok）。
+- `final_specs/spec.md` FR-9i：完整改写 — 从 cascade-unassign 改为 refuse-on-assignment，加 `actor_is_assigned` 409 状态码；保留 `unassigned: []` 字段向后兼容；`Casting.unassign_actor_everywhere` 保留但 endpoint 不再调用。
+- `final_specs/spec.md` FR-9s 新增：`GET /api/actors/assignments` 端点契约。
+- `final_specs/spec.md` FR-9c / FR-9k extension 新增：archive-media / delete-media 对 `_actors/{id}/` 下路径的 409 enforcement。
+- `final_specs/spec.md` FR-95 新增：ActorView assignments section 完整契约（区块、级联 dropdown、`_cast.md` 副作用链、delete 按钮 gating、`lib/dramas.ts` 共享）。
+- `validation/acceptance_criteria.md` U3.23 新增：8 段 Gherkin 覆盖加载 / 表单提交 / `_cast.md` 写入 / delete 按钮 disabled / 三种 409 拒绝路径 / 取消分配 / `_cast.md` 删除 / character folder 不存在时静默跳过。
+- 覆盖矩阵：FR-9s + FR-95 两行 → U3.23。
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 043；Last regenerated narrative 重写为 043 内容；原 042 narrative 降为 "Prior regen 4"。
+- `user_input/follow_ups/043-20260513-224737-assign-from-actor-page-character-link.md` (NEW；最初以 038→041 命名，因 user 在同 turn 抢占 041 号被重命名为 043)。
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/casting.py` — assign/unassign/sweep 同步维护 `_cast.md` + 新 `find_assignments_for_actor` + `_build_character_link_body`。
+- `projects/ai_video_management/backend/libs/actor_pool.py` — `actor_face_filename` 公开方法。
+- `projects/ai_video_management/backend/libs/api.py` — `actors_delete` 改 refuse-on-assigned；新 `GET /api/actors/assignments`；`_refuse_if_actor_assigned` 内置 helper 接入 archive-media + delete-media。
+- `projects/ai_video_management/frontend/src/lib/dramas.ts` (NEW) — 共享 drama/character 抽取。
+- `projects/ai_video_management/frontend/src/components/ActorGrid.tsx` — import 改共享 `dramas.ts`；本地复制删除。
+- `projects/ai_video_management/frontend/src/api.ts` — `fetchActorAssignments` + interfaces。
+- `projects/ai_video_management/frontend/src/App.tsx` — `<Reader tree={tree} ...>` 透传。
+- `projects/ai_video_management/frontend/src/components/Reader.tsx` — `tree` prop + `<ActorView>` 透传。
+- `projects/ai_video_management/frontend/src/components/ActorView.tsx` — 主要扩展：assignments state / handlers / AssignForm 内部组件 / delete 按钮 gating。
+- `projects/ai_video_management/frontend/src/styles.css` — `.actor-view-assignments` 区块与级联 form 样式。
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-9g / FR-9h / FR-9i / FR-9s / FR-9c-9k extension / FR-95 改写或新增。
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.23 + 覆盖矩阵补 FR-9s / FR-95。
+
+No conflicts found in:
+- follow-up 014 (CastingView)：CastingView 仍走同一 `castingAssign`/`castingUnassign` API，因此 `_cast.md` 也会随 CastingView 操作同步写/删；零代码改动。
+- follow-up 030 (ActorGrid bulk assign)：`AssignCharacterModal` 走相同 `castingAssign` → `_cast.md` 自动同步；本 follow-up 把 `extractDramas` 抽到共享 module，AssignCharacterModal 仍直接 import 它，行为零变化。
+- follow-up 034 (ActorView read view)：ActorView dispatch / 三面板 / SiblingMedia skip 不变；assignments section 是第四个区块。
+- follow-up 036 (actor folder 折叠)：sidebar 行 🗑 按钮仍调 `deleteActor` (FR-9i)；新增 server-side 409 通过 toast `archiveErrorKind` 显示 — Sidebar 已有 ApiError detail.kind 解析，无前端改动需要。
+- follow-up 041 (frame extraction v2)：frame_extractor.py / MediaRenamer / FR-9r 全部不动；本 follow-up 仅改 casting + actor 相关路径。
+- follow-up 042 (uvicorn force-exit)：纯进程退出兜底，不动任何 endpoint 实现。
+
+Verification:
+- `curl GET /api/actors/assignments?actor_id=actor_0013` → 200 `{actor_id, assignments: []}` ✓
+- `curl POST /api/casting/assign actor_0013 → c1_沧冥` → 200 + 磁盘上 `ai_videos/mozun_chongsheng/characters/c1_沧冥/_cast.md` 出现，内容含 `actor_0013` + face filename + 中文 metadata + `![face]` + `[查看演员档案]` ✓
+- `curl POST /api/actors/delete {actor_id:"actor_0013"}` while assigned → 409 `{kind:"actor_is_assigned", assignments:[{drama:"mozun_chongsheng", role:"c1_沧冥", notes:"test 041", character_folder, character_folder_exists:true}]}` ✓
+- `curl POST /api/archive-media path="ai_videos/_actors/actor_0013/<jpg>"` while assigned → 409 `actor_is_assigned` ✓
+- `curl DELETE /api/casting/assign role="c1_沧冥"` → 200 + `_cast.md` 文件消失 ✓
+- 测试 fixture 清理：casting.md 恢复 header-only 状态，文件树未污染 ✓
+
+## Follow-up 042 — 2026-05-13 22:50:19
+Source: user_input/follow_ups/042-20260513-225019-uvicorn-force-exit-watchdog.md
+Summary: 修 follow-up 037 没修干净的 dev-reload 卡死。`timeout_graceful_shutdown=2` 让 uvicorn asyncio task 在 2s 后 cancel，但 FastAPI sync `def` endpoint 在 anyio threadpool 里跑，cancel asyncio wrapper 不 kill 底层 OS 线程；Kling 30-120s HTTP / `/api/media` range stream / ffmpeg / pollinations 这些 blocking sync 调用让非-daemon 线程占住 Python 进程使 `sys.exit` 永久 join。新 `libs/uvicorn_force_exit.py::install()` monkey-patch `uvicorn.Server.handle_exit` 在 signal handler 后启动 daemon `threading.Timer((config.timeout_graceful_shutdown or 0) + 2.0, lambda: os._exit(0))`，~4s 内进程必死。`main.py` 与 `libs/asgi.py` 顶部各调一次（覆盖 reload 子进程 + --no-reload 两条启动路径）。
+
+Backend:
+- `libs/uvicorn_force_exit.py` (NEW):
+  - 常量 `FORCE_EXIT_GRACE = 2.0`。
+  - `install()`：检测 `uvicorn.Server._force_exit_installed` 幂等；wrap `Server.handle_exit(sig, frame)` — 先调原方法（保持 uvicorn 自己的 `should_exit` / `force_exit` 流程）再起 daemon `threading.Timer` deadline=`(config.timeout_graceful_shutdown or 0) + FORCE_EXIT_GRACE` → `os._exit(0)`。
+  - 设 `Server._force_exit_installed = True` 防重复 wrap。
+- `main.py`：import `from libs.uvicorn_force_exit import install as _install_force_exit_watchdog`；`args = parser.parse_args()` 之后立即调 `_install_force_exit_watchdog()`，覆盖 `--reload` / `--no-reload` 两分支。
+- `libs/asgi.py`：顶部 import `_install_force_exit_watchdog` 并立即调用（reload 模式子进程通过 `uvicorn.run("libs.asgi:app", reload=True)` 启动时 import asgi → patch 生效）。
+
+Spec / validation:
+- `final_specs/spec.md` FR-2：追加 follow-up 042 amendment 段，描述 `install()` 调用点、wrap 行为、deadline 公式、~4s 总窗口、不动 `Server.config` / `Server.run` / endpoints 的边界。
+- `validation/acceptance_criteria.md`：新增 manual **U2.5** scenario — reload 模式 + 长任务 in-flight 时改 libs/ 文件 → 进程 ≤ 4s 死 + 新 PID ≤ 6s 响应；2× CTRL+C 幂等；`--no-reload` SIGTERM 对称。
+- `validation/acceptance_criteria.md`：覆盖矩阵 FR-2 行补 `, U2.5 (follow-up 042 force-exit watchdog)`。
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 042；Last regenerated narrative 重写为 042 内容；原 041 narrative 降为 "Prior regen 3"；原 040 / 039 narrative 各下移一格。
+- `user_input/follow_ups/042-20260513-225019-uvicorn-force-exit-watchdog.md` (NEW)。
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/uvicorn_force_exit.py` (NEW) — `install()` patch.
+- `projects/ai_video_management/backend/main.py` — import + 调用点。
+- `projects/ai_video_management/backend/libs/asgi.py` — import + 调用点。
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-2 amendment。
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U2.5 manual scenario + 覆盖矩阵 FR-2 行扩展。
+
+No conflicts found in:
+- follow-up 037 (`timeout_graceful_shutdown=2`)：watchdog 的 deadline 公式直接读 `config.timeout_graceful_shutdown`；037 配置是本 follow-up 的前置依赖，不动其值。
+- follow-up 040 (`_deleted/` 置底)：纯 `tree_walker._ai_videos_section` 改动，与 uvicorn lifecycle 正交。
+- follow-up 041 (frame extraction v2)：`/api/extract-frames` 是 sync def + 调 ffmpeg 子进程；ffmpeg 进程在 watchdog 触发时不会被 cleanup（属于"interpreter dies → OS reaps subprocess" 范畴），与 follow-up 041 的 idempotent sweep 设计无冲突 — 下次启动 `frames/*.png` 重新清扫。
+- follow-up 039 (`apps/+libs/` DDD+CQRS layout)：未应用到代码；当迁移时 `libs/uvicorn_force_exit.py` 搬到 `libs/infrastructure/` 或 `libs/common/`，patch 语义不变。
+- follow-up 038 (hard-delete media)：`Path.unlink` 是单 syscall，watchdog 触发不会留半完成的 hard-delete。
+- follow-up 026 (actor folder delete) / 023 (soft delete)：rename 是单 syscall atomic，同样无 watchdog 触发风险。
+- Kling generation (follow-up 014/025/027/029)：actor jpg + sidecar md 是两个独立 atomic write；若 watchdog 在两者之间触发，下次启动 `_reap_incomplete_folders()` (follow-up 027) 扫掉残缺 folder。
+
+## Follow-up 041 — 2026-05-13 22:58:00
+Source: user_input/follow_ups/041-20260513-225800-frame-naming-v2-8-frames-priority-rank.md
+Summary: 重做 scene 视频抽帧约定 — 5 帧 → 8 帧（5 dwell + 3 战略 transition），命名从 `_f{N}_{role}.png` → `_r{rank}_{role}_{shot_size}.png`（rank 1-8 = 上传优先级，字典序 = 优先级序）；`MediaRenamer` 两条 caller 加 `"frames"` 排除避免命名丢失实测 bug；extract 起点新增 `frames/*.png` sweep idempotent 清理。
+
+Auto-updated:
+- projects/ai_video_management/backend/libs/frame_extractor.py — `CANONICAL_FRAMES` 改 4 元组 shape `(timestamp, role, shot_size, rank)` 8 条；`FrameResult` 加 `rank: int` + `shot_size: str` 字段及 `to_payload`；`extract()` 头部新增 `_sweep_pngs(frames_dir)` 步骤；filename 模板 `{prefix}_r{rank}_{role}_{shot_size}.png`；module docstring 全面重写（8 帧 + rank + shot_size + sweep + idempotent 覆盖语义）。
+- projects/ai_video_management/backend/libs/api.py — `POST /api/rename-media` handler 的 `media_renamer.rename_drama(body.path)` 调用增 `excluded_folder_names=frozenset({"frames"})` kwarg。
+- projects/ai_video_management/backend/libs/downloads_importer.py — `self._renamer.rename_drama(rel_drama_path, ...)` 的 `excluded_folder_names` 从 `frozenset({NOT_MATCHED_DIR_NAME})` 扩到 `frozenset({NOT_MATCHED_DIR_NAME, "frames"})`。
+- projects/ai_video_management/frontend/src/api.ts — `ExtractedFrame` interface 新增 `shot_size: string` 与 `rank: number` 字段。
+- specs/development/ai_video_management/user_input/revised_prompt.md — 文件列表追加 041 + Last regenerated header bump（含 8 帧 schema 摘要 + renamer bug 修复说明 + FR-9r 新增说明）；040 历史段下移为 "Prior regen 2"。
+- specs/development/ai_video_management/final_specs/spec.md — 在 FR-9j 与 FR-9i 之间插入新 FR-9r（`POST /api/extract-frames` 端点契约 v2：8 帧 CANONICAL_FRAMES 表 + rank rationale + sweep 语义 + `MediaRenamer` companion contract）。
+
+No conflicts found in: interview/qa.md, findings/dossier.md, findings/angle-*.md, validation/strategy.md, validation/acceptance_criteria.md, validation/backend_tests.md, validation/security.md, validation/bdd_scenarios.md, frontend/components/SiblingMedia.tsx（仅消费 frames 数组，不解析 path 形状）, frontend/components/Reader.tsx（同上）, frontend/components/ActorView.tsx, backend/libs/media_archiver.py, backend/libs/actor_pool.py, backend/tests/test_boot_smoke.py（POST 路由矩阵已含 `/api/extract-frames`）, README, Makefile, `.claude/agent_refs/project/ai_video.md` rule #12.10-C（保留作为手动覆盖退路，不动）。
+
+Severity: 中。Backend `FrameExtractor` 改动 + 数据模型变更（5→8 fields，frame dataclass +2 字段），但 HTTP route shape / request body / status code 全部保留。Frontend ExtractedFrame interface 新增字段是非破坏性扩展（SiblingMedia 与 Reader 仅消费 frames 数组本身，不读 role/rank/shot_size，未来若要展示这些字段是 follow-up 工作）。实测验证待 user 在 webapp 内点 "🎞 Extract Frames" 按钮触发并核对 frames/ 输出。
+
+## Follow-up 040 — 2026-05-13 22:46:35
+Source: user_input/follow_ups/040-20260513-224635-deleted-folder-bottom-of-nav.md
+Summary: sidebar `AI Videos` section 内把 `_deleted/` directory 节点 sort 到列表底部；其它顶层目录（含 `_actors/`）保持 alphabetical。
+
+Auto-updated:
+- projects/ai_video_management/backend/libs/tree_walker.py — `_ai_videos_section` 分离 `_deleted` 节点 + 循环末尾 append（其余 sort 与 walk 逻辑不变）。
+- specs/development/ai_video_management/user_input/revised_prompt.md — 顶部文件列表追加 040 + header bump，037/039 历史段下移为 Prior regen。
+- specs/development/ai_video_management/final_specs/spec.md — FR-20 增加 follow-up 040 amendment 行说明 `_deleted` hoist 规则与仅限顶层 slot 的范围。
+
+No conflicts found in: interview/qa.md, findings/*, validation/strategy.md, validation/acceptance_criteria.md, validation/backend_tests.md, validation/security.md, validation/bdd_scenarios.md, frontend/Sidebar.tsx（消费 backend 顺序，零改动）, frontend/* 其它组件, backend/libs/* 其它模块, backend/tests/*, README, Makefile。
+
+## Follow-up 038 — 2026-05-13 22:23:41
+Source: user_input/follow_ups/038-20260513-222341-bulk-hard-delete-deleted-folder.md
+Summary: `ai_videos/_deleted/` 内 bulk hard-delete — 新 `POST /api/hard-delete-media` (第 18 个 endpoint，`Path.unlink()` 仅接受 `_deleted/` 前缀)；sidebar `_deleted/` 行加 "🧹 永久清理" 按钮 → 新 `/deleted` route 渲染 `DeletedView`（递归 tree walk + media tile grid + select mode 跨页多选 + PAGE_SIZE=50 分页 + typed-DELETE 模态确认 + per-file loop 删除 + tree refresh）。
+
+Backend:
+- `libs/media_archiver.py`:
+  - 加 `class NotInDeleted(Exception)`。
+  - 加 `MediaArchiver.hard_delete(rel) -> str`：`_validate_media_source` 复用 + 强校验 `parts[0]=="ai_videos" && parts[1]=="_deleted"`（否则 `NotInDeleted`）+ `src.unlink()`（`OSError` → `MoveFailed`）+ 返回相对 root 字符串。
+  - 模块 docstring 顶部加 follow-up 038 段落。
+- `libs/api.py`:
+  - import 加 `NotInDeleted`。
+  - 顶部 docstring：endpoint count 17 → 18 + endpoint 列表加 `POST /api/hard-delete-media`。
+  - 新 endpoint `POST /api/hard-delete-media`（body `ArchiveMediaBody` 复用）：错误映射 `InvalidPath→400 invalid_path` / `NotMedia→400 extension_not_allowed` / `NotInDeleted→400 not_in_deleted` / `NotFound→404 not_found` / `MoveFailed→500 delete_failed`；成功 200 `{deleted: <rel>}`。405 handler 覆盖 GET/PUT/PATCH/DELETE。
+
+Frontend:
+- `src/api.ts`：加 `interface HardDeleteMediaResult { deleted: string }` + `hardDeleteMedia(path)` POST 到 `/api/hard-delete-media`。
+- `src/App.tsx`：import `DeletedView`；新 route `/deleted` → `<DeletedView tree={tree} onChange={...}/>`。
+- `src/components/Sidebar.tsx`：加 `isDeletedRoot` 派生 (`dramaPathParts[1] === "_deleted"`)；在该行渲染 "🧹 永久清理" 按钮（`className="drama-rename-btn"` 复用样式），点击 `e.stopPropagation()` + `navigate("/deleted")`。
+- `src/components/DeletedView.tsx` (NEW)：
+  - Props `{tree, onChange}`。
+  - `collectDeletedMedia(tree)` 递归 walk + path-prefix filter + image/video 类型 + 按 path 升序。
+  - State：`selectMode` / `selectedPaths: Set<string>` (跨页) / `page` / `modalOpen` / `typedConfirm` / `busy`。
+  - Tile：image `<img>` / video `<video preload="metadata" muted playsInline>` via `mediaUrl(path)` + filename + 去前缀 subPath；select mode 加蓝边 + checkmark；非 select 点击 navigate `/file/{path}`。
+  - Header 按钮：✅ 选择 / ✕ 退出选择 + （>50 时）分页 5 控件。
+  - 底部 sticky bar (select mode)：已选 N / 总 M + 全选 + 全清 + 红色 "🗑 永久删除 (N)" 主按钮。
+  - 确认模态：红 banner role=alert "此操作不可撤销 — ..." + 前 10 path 列 + 超额 "+ X 个其他文件…" + typed-DELETE input（严格 `=== "DELETE"`）+ disabled 主按钮 → enable 后 loop `hardDeleteMedia` per file + 累计 toast + `onChange()` refresh tree。
+  - Empty state：`回收站为空 — 软删除的文件（来自 mp4 / 图片 Reader 的 🗑 Delete 按钮）会出现在此处`。
+- `src/styles.css`：新增 `.deleted-view-page` / `.deleted-view-header` / `.deleted-view-header-actions` / `.deleted-view-empty` / `.deleted-view-grid` / `.deleted-tile` / `.deleted-tile-selected` (蓝边) / `.deleted-tile-thumb` (16:9 black bg cover) / `.deleted-tile-meta` / `.deleted-tile-name` / `.deleted-tile-path` / `.deleted-view-confirm-warning` (red banner) / `.deleted-view-confirm-list` (scroll 220px) / `.deleted-view-confirm-input` (monospace) / `.deleted-bulk-purge` (red primary)；复用现有 `.actor-grid-pagination` / `.actor-grid-page-indicator` / `.actor-grid-select-bar` / `.actor-grid-checkbox` / `.modal-backdrop` / `.modal-panel` / `.form-field` / `.modal-primary` 不重定义。
+
+Spec / validation:
+- `final_specs/spec.md` 新增 **FR-94** (五段)：endpoint 契约 + DeletedView grid 行为 + typed-DELETE 模态 + sidebar 入口 + 与 FR-9i (actor soft-delete 的 `_deleted/_actors/` sidecar `.md` 无法 hard-delete) 的 coverage 关系。
+- `validation/acceptance_criteria.md` 新增 **U3.22** Gherkin：sidebar 按钮 → DeletedView grid → tile click 默认 navigate / select mode toggle → 跨页 selection → typed-DELETE 模态严格大小写 → per-file loop 含失败 continue → empty state → 后端 4 个错误码（`not_in_deleted` / `extension_not_allowed` / `not_found` / `invalid_path`）+ 405。
+- `validation/acceptance_criteria.md` 覆盖矩阵补 `FR-94 → U3.22`。
+
+User-input:
+- `user_input/revised_prompt.md`：插入 "Prior follow-up 038" 段（不动用户为 039 写的 `Last regenerated` 头）。Composed-from 经用户重写为 "every follow_ups/*.md in numerical order" 形式，无需再列举。
+- `user_input/follow_ups/038-20260513-222341-bulk-hard-delete-deleted-folder.md` (NEW)。
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/media_archiver.py` — `NotInDeleted` exception + `hard_delete()` method + docstring 段落。
+- `projects/ai_video_management/backend/libs/api.py` — `NotInDeleted` import + endpoint count 17→18 + `POST /api/hard-delete-media` handler + 405 handler。
+- `projects/ai_video_management/frontend/src/api.ts` — `HardDeleteMediaResult` 类型 + `hardDeleteMedia()` function。
+- `projects/ai_video_management/frontend/src/App.tsx` — `DeletedView` import + `/deleted` route。
+- `projects/ai_video_management/frontend/src/components/Sidebar.tsx` — `isDeletedRoot` 派生 + "🧹 永久清理" 按钮。
+- `projects/ai_video_management/frontend/src/components/DeletedView.tsx` (NEW) — recycle bin 多选页面 + typed-DELETE 模态。
+- `projects/ai_video_management/frontend/src/styles.css` — `.deleted-*` 一组 CSS 类。
+- `specs/development/ai_video_management/final_specs/spec.md` — 新 FR-94 五段。
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — 新 U3.22 + 覆盖矩阵 FR-94 行。
+
+No conflicts found in:
+- follow-up 023 (`/api/delete-media` 软删除)：hard-delete 是其镜像 + 真删；soft-delete 流不动；`_deleted/` 内文件 reader 隐藏 archive / delete 按钮的规则保持有效（follow-up 023 决策）。
+- follow-up 026 (`/api/actors/delete` cascade unassign)：actor folder 整体被 rename 进 `_deleted/_actors/actor_NNNN/`，其内 jpg 可被 hard-delete 但 `.md` 受 `MEDIA_EXTENSIONS` 限制无法 — v1 接受（FR-94 末尾段说明）。
+- follow-up 030 (ActorGrid bulk delete + assign)：`DeletedView` 复刻 `selectMode` / `selectedPaths` / 跨页 / 分页 / sticky footer / per-file loop pattern；CSS class 部分复用（`.actor-grid-pagination` / `.actor-grid-checkbox` / `.actor-grid-select-bar`），主按钮换为红色 `.deleted-bulk-purge`。
+- follow-up 036 (actor folder 折叠成单 leaf)：`_deleted/_actors/` 子树仍按递归 directory 渲染（folded 规则不适用），所以 hard-delete `_deleted/_actors/actor_NNNN/<>.jpg` 走的是普通 image leaf 路径，与 DeletedView walker 兼容。
+- follow-up 037 (uvicorn `timeout_graceful_shutdown=2`)：hard-delete 是 single `unlink` syscall ~ms 级，不会延长 graceful shutdown 窗口；shutdown 行为不变。
+- follow-up 039 (apps/+libs/ DDD+CQRS 布局)：FR-94 的内部实现位置在 039 执行后将从 `backend/libs/media_archiver.py` 迁移到 `apps/api/libs/infrastructure/...`（具体目标位置由 039 spec 决定），HTTP route `POST /api/hard-delete-media` shape 不变，DeletedView 组件路径从 `frontend/src/components/` → `apps/ui/src/components/`。039 应在迁移时保留 `hard_delete` method + `NotInDeleted` exception + `_deleted/` 前缀校验。
+
+## Follow-up 039 — 2026-05-13 12:00:00
+Source: user_input/follow_ups/039-20260513-120000-apps-libs-ddd-cqrs-layout.md
+Summary: 项目采纳 `.claude/agent_refs/project/development.md` §1–6 的 `apps/+libs/` 解决方案布局：`backend/` → `apps/api/`，`frontend/` → `apps/ui/`，`backend/libs/*.py` 拆分到 `libs/{infrastructure,domain,application,common}/`，文件名/类名采用 `__` 后缀约定，加 `dependency_injector`。HTTP 路由 + JSON 形状不变，仅内部组织调整。
+
+Auto-updated:
+- specs/development/ai_video_management/user_input/revised_prompt.md — `Last regenerated` header bumped; "Composed from" 列表归并；layout 改述。
+- specs/development/ai_video_management/final_specs/spec.md — header amendment block 加入，统一映射 `backend/`/`frontend/`/`backend/libs/`/`backend/static/` 到新路径。
+- specs/development/ai_video_management/validation/strategy.md — header amendment 同款 remap + 新 blocker（跨层导入违反 §1 依赖方向）。
+
+No conflicts found in: interview/qa.md, findings/{dossier,angle-*}.md, validation/{acceptance_criteria,bdd_scenarios,backend_tests,e2e,security,accessibility_and_manual}.md（被 strategy.md umbrella amendment 覆盖）, 历史 follow-ups 001–038 (immutable history; preserved).
+
+## Follow-up 036 — 2026-05-13 22:23:53
+Source: user_input/follow_ups/036-20260513-222353-actor-folder-collapsed-single-leaf.md
+Summary: 把 `ai_videos/_actors/actor_NNNN/` 在 sidebar 树里折叠成单 leaf（`type: "actor"`），点击进入 ActorView；ActorView header 新增 🗑 delete 按钮复用 `POST /api/actors/delete` (FR-9i)。
+
+Backend:
+- `libs/tree_walker.py`:
+  - 加 `_ACTOR_FOLDER_RE = re.compile(r"^actor_\d{4,}$")`
+  - `_walk_filtered`：在递归进 directory 前，先调 `_collapsed_actor_leaf(entry)`，命中则发射单 leaf 跳过递归。
+  - 新方法 `_collapsed_actor_leaf(entry)`：要求 (1) 名匹配 `_ACTOR_FOLDER_RE`，(2) 相对 root 恰好是 `ai_videos/_actors/<actor_id>` 三段（`_deleted/_actors/*` 因 `rel_parts[1] != "_actors"` 自动排除），(3) 内部存在 `<actor_id>.md` sidecar；满足时返回 `{type:"actor", name, path:<md>, face_path:<first jpg/png/webp>, children:[]}`，否则 None 走原递归路径。
+  - 新方法 `_first_face_image(folder)`：扫 folder 内文件，返回首个匹配 `_IMAGE_EXTENSIONS` 的相对路径；None 表示 actor folder 尚未生成 face 图。
+- 零 API 改动 — `POST /api/actors/delete` (FR-9i) 复用既有 endpoint。
+
+Frontend:
+- `src/types.ts`：`TreeNodeType` 新增 `"actor"`；`TreeNode` 加可选 `face_path?: string | null`。
+- `src/lib/linkResolver.ts` `collectFilePaths`：遇到 `type==="actor"` 时把 `node.path`（md）+ `node.face_path`（jpg/png/webp，若有）都 push 到 `knownPaths`，确保 `ActorView.findFaceImage` 在折叠后仍能定位 face 图。
+- `src/components/Sidebar.tsx`:
+  - `isLeaf` 把 `"actor"` 纳入 leaf 集合。
+  - 自动展开 effect 跳过 `"actor"` 节点（不再写入 `expanded` 字典）。
+  - `isActorEntry` 改判 `item.node.type === "actor"` + path 4 段（含 md 文件名）+ 排除 `_deleted` 路径。
+  - 行 icon：`type==="actor"` 渲染 🎭。
+  - 点击 leaf 行调 `onSelect(path)` → 触发 Reader 加载 md → 命中 `isActor` → 渲染 ActorView。
+- `src/components/ActorView.tsx`:
+  - 新 import：`useNavigate` / `deleteActor` / `ApiError`。
+  - Props 加可选 `onSaved?: () => void`。
+  - 新 state：`deleting` / `deleteError`。
+  - 新 `onDelete()` handler：`window.confirm` → `POST /api/actors/delete` (FR-9i) → 成功 `onSaved()` + `navigate("/")`；失败设 `deleteError`。
+  - Header 改成 flex 容器，title 旁追加 "🗑 删除" 按钮；error 时下方 inline `role="alert"` 红色 banner。
+- `src/components/Reader.tsx`：`<ActorView>` 调用新增传 `onSaved={onSaved}`。
+- `src/styles.css`：`.actor-view-header` 改 flex；新增 `.actor-view-delete-btn` / `.actor-view-delete-btn:hover` / `:disabled` + `.actor-view-delete-error` 规则；色彩复用已有 token + 与 `.actor-delete-btn` (follow-up 026) 同 palette。
+
+Spec / validation:
+- `final_specs/spec.md` FR-87：actor sub-row 描述改为"单 leaf"（不再 directory），追加 click → ActorView 导航路径 + `_deleted/_actors/` 不适用规则。
+- `final_specs/spec.md` FR-93 新增：完整契约（tree shape + frontend type + sidebar 行为 + ActorView delete 按钮 + 失败 alert）。
+- `validation/acceptance_criteria.md` U3.21 新增：tree shape / leaf 渲染 / ActorView delete / 失败路径 / `_deleted/` 豁免 5 段 Gherkin。
+- 覆盖矩阵加 `FR-93 → U3.21`。
+
+User-input:
+- `user_input/revised_prompt.md`：composed-from 加 036；header summary 重写为 036 内容；Last regenerated 2026-05-13 22:23:53。
+- `user_input/follow_ups/036-20260513-222353-actor-folder-collapsed-single-leaf.md` (NEW)。
+
+Auto-updated:
+- `projects/ai_video_management/backend/libs/tree_walker.py` — `_ACTOR_FOLDER_RE` + `_walk_filtered` 加折叠分支 + `_collapsed_actor_leaf` + `_first_face_image` 两个新方法。
+- `projects/ai_video_management/frontend/src/types.ts` — `TreeNodeType` 加 `"actor"` + `TreeNode.face_path?`。
+- `projects/ai_video_management/frontend/src/lib/linkResolver.ts` — `collectFilePaths` 处理 `type==="actor"` 时把 path + face_path 都收进 knownPaths。
+- `projects/ai_video_management/frontend/src/components/Sidebar.tsx` — `isLeaf` / 自动展开 / `isActorEntry` / 行 icon 4 处更新。
+- `projects/ai_video_management/frontend/src/components/ActorView.tsx` — delete 按钮 + handler + state + Props.onSaved + import 新增。
+- `projects/ai_video_management/frontend/src/components/Reader.tsx` — `<ActorView ... onSaved={onSaved}/>` 传参。
+- `projects/ai_video_management/frontend/src/styles.css` — `.actor-view-header` flex + `.actor-view-delete-btn*` + `.actor-view-delete-error` 规则。
+- `specs/development/ai_video_management/final_specs/spec.md` — FR-87 更新 + FR-93 新增。
+- `specs/development/ai_video_management/validation/acceptance_criteria.md` — U3.21 新增 + 覆盖矩阵补 FR-93。
+
+No conflicts found in:
+- follow-up 034 (ActorView read view)：`isActor` dispatch / SiblingMedia skip 全部保留；036 仅在 header 加按钮 + 在 props 加 `onSaved`；face image 通过 `face_path` 字段经 `knownPaths` 流回 `findFaceImage()`，渲染路径完全等价。
+- follow-up 026 (actor folder delete)：sidebar 行内 🗑 按钮逻辑不变；036 把检测条件从 `type==="directory"` 改为 `type==="actor"`，但 `actorId` 提取规则等价。
+- follow-up 033 (filename convention)：jpg 文件名 `{eth}__{g}__{age}.jpg` 仍由 backend 直接探测并填到 `face_path`，扩展名匹配 `_IMAGE_EXTENSIONS`；legacy `actor_NNNN.jpg` 也命中（按 lexicographic first），向后兼容。
+- follow-up 030 (grid bulk delete)：`/actors` route 与 sidebar leaf 各自独立；grid 仍按 `/api/actors` 列表渲染，与 tree shape 无关。
+- backend tests：boot-smoke 不查 _actors/ 内部 — `/api/tree` 仍返回 200 + section shape；tree_walker 单元测试若存在需手验（test_tree_walker_consumer_walk.py）。
+
+Verification:
+- `curl /api/tree` 返回 `_actors/` children 全为 `{type:"actor", name:"actor_NNNN", path:"ai_videos/_actors/actor_NNNN/actor_NNNN.md", face_path:"ai_videos/_actors/actor_NNNN/<jpg>", children:[]}` ✓
+- 不再出现 `actor_NNNN.md` / `*.jpg` 独立 file/image 节点 ✓
+- `_deleted/_actors/` 路径仍按原递归 directory 渲染（未触发折叠分支）— 由 `rel_parts[1] != "_actors"` 保证 ✓
+- `face_path` 实测样本 `actor_0013` → `ai_videos/_actors/actor_0013/asian__male__18-25.jpg` ✓
+
+## Follow-up 037 — 2026-05-13 22:25:21
+Source: user_input/follow_ups/037-20260513-222521-uvicorn-graceful-shutdown-timeout.md
+Summary: dev `--reload` backend reload 卡死修复——`uvicorn.run(...)` 加 `timeout_graceful_shutdown=2`，根因是同步 def endpoint 在 graceful-shutdown 默认 wait-forever 中持续占线程。
+
+Auto-updated:
+- projects/ai_video_management/backend/main.py — 两条 `uvicorn.run(...)` 各加 `timeout_graceful_shutdown=2` kwarg。
+- specs/development/ai_video_management/user_input/revised_prompt.md — 文件列表追加 037 + header bump + Prior 036 行收纳。
+- specs/development/ai_video_management/final_specs/spec.md — FR-2 行更新 `uvicorn.run` 调用 shape 描述（含 reload 分支 + timeout_graceful_shutdown=2 + 根因 sync def long-tail 说明）。
+
+No conflicts found in: interview/qa.md, findings/dossier.md, findings/angle-*.md, validation/strategy.md, validation/acceptance_criteria.md, validation/backend_tests.md, validation/security.md, validation/bdd_scenarios.md, frontend/*, libs/*（除 main.py）, README, Makefile, tests/*.
+
+## Follow-up 035 amendment — 2026-05-13 11:30:00
+Source: 同 follow-up 035；用户在初次实现后追加细化要求："I need a button I can manually click to do it, and after generation it should put generated pictures in a local folder, regeneration of images under the same scene will always overwrite, so the prefix of the image is not the mp4 file name but instead the scene folder name"。
+
+变更:
+- **Backend `libs/frame_extractor.py`**：
+  - 新增 `FRAMES_SUBDIR = "frames"` 常量。
+  - `FrameExtractor.extract()` 改写：输出目录从 `src.parent` → `src.parent / "frames"`（在抽帧前 `mkdir(parents=True, exist_ok=True)`，失败则 `ExtractFailed`）；文件名前缀从 `src.stem`（mp4 文件名）→ `src.parent.name`（场景文件夹名）。所以 `s1_长阶顶/s1_长阶顶3.mp4` 与 `s1_长阶顶/s1_长阶顶1.mp4` 都会输出到 `s1_长阶顶/frames/s1_长阶顶_f{N}_{role}.png` 同一组 5 文件 — 任一 mp4 take 重抽帧都覆盖同一组 PNG，user 不会被多 take 多份 PNG 噪声困扰。
+  - Docstring 顶部新增 "Output convention" 段说明 `{src.parent}/frames/{src.parent.name}_f{N}_{role}.png` 路径模板。
+- **Frontend `src/components/Reader.tsx`**（NEW — 直接打开 mp4 时也能抽帧）：
+  - import 新增 `extractFrames` 到既有 archive/delete imports 行。
+  - 新增 `const [extracting, setExtracting] = useState<boolean>(false)`。
+  - 新增 `onExtractFramesClick` async callback（mirror `onArchiveToggle` 结构）。
+  - `mediaActionsBusy` 三项联动 `archiving || deleting || extracting`。
+  - 新增 `extractLabel` 计算（`"⏳ Extracting…"` / `"🎞 Extract Frames"`）。
+  - mp4 view 的 `.reader-media-actions` 内在 Archive / Delete 按钮前插入 `.reader-media-extract-btn`，仅在非 archived 时显示（archived 视频不抽帧）。
+- **Frontend `src/components/SiblingMedia.tsx`**：
+  - 按钮 tooltip 更新为 `"...into ./frames/ — overwrites previous extraction from this scene folder"`。
+  - announce toast 更新为 `"Extracted N frames from {basename} → frames/"`，明确告知 user 输出目录。
+- **Frontend `src/styles.css`**：
+  - `.reader-media-archive-btn` 选择器扩展 `.reader-media-archive-btn, .reader-media-extract-btn`（共享 inline-block / padding 6px 14px / border-radius 4px / 13px 字号样式）。
+  - `.reader-media-actions` flex-row 不变；子按钮 margin-top 12px 同时 apply 给 extract-btn。
+
+实测（HTTP TestClient via `/api/extract-frames`）:
+- 输入：`ai_videos/mozun_chongsheng/scenes/s1_长阶顶/s1_长阶顶3.mp4`（15.07s real mp4）
+- 输出：
+  - `ai_videos/mozun_chongsheng/scenes/s1_长阶顶/frames/s1_长阶顶_f1_hero.png`
+  - `ai_videos/mozun_chongsheng/scenes/s1_长阶顶/frames/s1_长阶顶_f2_reverse.png`
+  - `ai_videos/mozun_chongsheng/scenes/s1_长阶顶/frames/s1_长阶顶_f3_vert.png`
+  - `ai_videos/mozun_chongsheng/scenes/s1_长阶顶/frames/s1_长阶顶_f4_mid.png`
+  - `ai_videos/mozun_chongsheng/scenes/s1_长阶顶/frames/s1_长阶顶_f5_detail.png`
+- HTTP 200，0 failures，`frames/` 子目录在第一次调用时自动创建。
+- 验证幂等覆盖：再次 POST 相同 path → 5 PNG 被 ffmpeg `-y` 覆盖（mtime 更新，filename 不变）。
+
+清理：
+- 删除 v1 残留的 `s1_长阶顶3_f{1..5}_*.png`（旧 per-mp4-stem 命名）— 实查时已不存在（疑是 user 手动清理或 hook 清理），无 cruft 残留。
+
+不影响:
+- `final_specs/spec.md` FR-9r 已记，本 amendment 仅刷新 FR-9r 描述的"输出路径"项（`{src.parent}/frames/`）+"命名前缀"项（`{src.parent.name}`）+"幂等覆盖"语义；不增删 FR。
+- `validation/strategy.md` 与 8 个 level files：现有 levels 全部适用；security level 已纳入 imageio-ffmpeg supply chain。
+- 其它端点 / 组件行为不变。
+- mozun_chongsheng 9 个 scene .md / 9 个 scene .mp4 不动。
+
+Severity: 低 blast radius — 仅修改 frame_extractor 输出路径与命名 + 新增 Reader.tsx mp4 直视图的按钮 + 共享样式。后端 API 契约不变（请求 body 与响应 schema 不变；仅 `frames[*].path` 值的 path 形状从 `{folder}/{stem}_fN_role.png` 变为 `{folder}/frames/{parent_name}_fN_role.png`，frontend 不做 path 解析，仅原样显示，不破坏既有调用方）。
+
+## Follow-up 035 — 2026-05-13 11:00:00
+Source: user_input/follow_ups/035-20260513-110000-scene-frame-extract-button.md
+Summary: 用户："now I can generate a 15s scene video we disucssed about about the scene, now lets add a new button for the scene, when click, you take pictures from those scene, where the pictures will be used as a reference about the scene to generate shot videos"。新增 SiblingMedia 每个 .mp4 tile 的 "🎞 Extract Frames" 按钮 + 后端 `POST /api/extract-frames` 端点，使用 `imageio-ffmpeg` 抽取 5 个 canonical 参考帧（对齐 `agent_refs/project/ai_video.md` rule #12.10 v3 抽帧建议 t=0.5/4.4/7.9/11.4/14.6s），命名 `{stem}_f{N}_{role}.png` 落同 folder。
+
+Backend:
+- `libs/frame_extractor.py` 新建（150 行）— 镜像 `media_archiver.py` 风格：`FrameExtractor` class + `CANONICAL_FRAMES` 常量 `((0.5,'hero'),(4.4,'reverse'),(7.9,'vert'),(11.4,'mid'),(14.6,'detail'))` + `VIDEO_EXTENSIONS` frozenset (.mp4/.mov/.webm/.mkv/.avi/.m4v) + `_FFMPEG_TIMEOUT_S=30` + 异常类 `InvalidPath` / `NotFound` / `NotVideo` / `FfmpegMissing` / `ExtractFailed` + frozen dataclass `FrameResult` / `ExtractResult` 带 `to_payload()` + `_validate_video_source` 复用 `ExposedTree.is_inside` + `SafeResolver.resolve` + 拒 symlink。每帧用 `subprocess.run([ffmpeg, '-y', '-ss', str(t), '-i', src, '-frames:v', '1', '-q:v', '1', '-loglevel', 'error', out])` 30s timeout。Partial-failure 容忍（部分帧失败 200 + failures 字段；全失败 500）。
+- `libs/api.py`：(a) docstring 端点计数 16→17；(b) 新增 `ExtractFramesBody(BaseModel) { path: str }`；(c) import `frame_extractor` 各 symbol（`ExtractFailed` / `FfmpegMissing` / `FrameExtractor` / `InvalidPath as FrameInvalidPath` / `NotFound as FrameNotFound` / `NotVideo`）；(d) `create_app` 内 `frame_extractor = FrameExtractor(exposed, resolver)`；(e) `@app.post("/api/extract-frames")` handler — 异常映射：`FrameInvalidPath`→400 invalid_path / `NotVideo`→400 not_a_video / `FrameNotFound`→404 not_found / `FfmpegMissing`→500 ffmpeg_missing / `ExtractFailed`→500 extract_failed；(f) 405 method-not-allowed 兜底。
+- `requirements.txt`：新增 `imageio-ffmpeg>=0.5`。
+
+Frontend:
+- `src/api.ts`：新增 `ExtractedFrame { timestamp: number; role: string; path: string }` + `ExtractFramesResult { src: string; frames: ExtractedFrame[]; failures: {timestamp,role,error}[] }` + `extractFrames(path): Promise<ExtractFramesResult>` 函数。
+- `src/components/SiblingMedia.tsx`：(a) import `extractFrames`；(b) `MediaTileProps` 增加 `extracting: boolean` + `onExtractFrames: (path) => void`；(c) tile 内引入 `<div className="sibling-media-actions">` 容器包裹两个按钮（垂直 stack）；(d) `🎞 Extract Frames` 按钮仅在 `isVideo && !archived` 显示，busy 时显示 `⏳ Extracting…`，aria-label 含完整说明，title 述 5 个 canonical 角色；(e) `SiblingMedia` 增加 `extractingPath: string | null` state + `handleExtractFrames(path)` async handler（aria-live announce: "Extracted N frames from {basename} (M failed)"，成功后 `onChange?.()` 触发 tree refresh，新 PNG 立即作为新 tiles 出现）；(f) 两处 `<MediaTile>` 实例（active + archived sections）传入新 props。
+- `src/styles.css`：`.sibling-media-archive-btn` 选择器扩展 `.sibling-media-archive-btn, .sibling-media-extract-btn` 共享样式；新增 `.sibling-media-actions { display: flex; flex-direction: column; gap: 4px; align-items: stretch; margin-top: 6px; }` + 子按钮 `align-self: stretch; margin-top: 0; text-align: center;`。
+
+实测:
+- `s1_长阶顶3.mp4` (15.07s) 抽 5 帧成功：`s1_长阶顶3_f1_hero.png` ~1.31 MB / `f2_reverse.png` ~1.29 MB / `f3_vert.png` ~1.21 MB / `f4_mid.png` ~1.22 MB / `f5_detail.png` ~1.30 MB，5 个 MD5 全异（非 duplicate）。失败 0 项。
+- TypeScript 类型检查通过（仅 pre-existing `vite.config.ts` node 类型告警，与本 follow-up 无关）。
+- 后端 import smoke test 通过。
+
+No conflicts found in:
+- `final_specs/spec.md` — FR 列表新增 FR-9r 端点契约即可（spec walk 待 user 触发 stage-4 regen）
+- `validation/strategy.md` 与 8 个 level files — 现有 levels 8 维度全部适用（FR-9r 自然纳入 functional level；imageio-ffmpeg 是新增依赖纳入 security level 的 supply chain 审计；非破坏性 frontend-only 改动）
+- 现有 endpoints / lib 模块行为不变（archive/unarchive/delete/rename/casting/actor_pool）
+- mozun_chongsheng 9 个 scene .md 文件 / 9 个 scene .mp4 文件 — 内容不动，本 follow-up 仅在 webapp 层增加抽帧功能
+- `agent_refs/project/ai_video.md` rule #12.10 v3 — 不动，抽帧时间点和 role 命名严格对齐既有规则
+
+User next steps:
+1. 用更新后的 9 份 scene .md 第三段 `场景 reference video prompt` 在 Kling / Seedance 重新渲染 15s walk-through mp4，替换或新增 `scenes/s{N}_*/s{N}_*.mp4`。
+2. 在 webapp Sidebar 打开 scene .md（例如 `s1_长阶顶.md`）→ 在底部 SiblingMedia 视图里看到 mp4 tile → 点击 "🎞 Extract Frames" → 5 张 PNG 立即出现在同视图中 → 单击 PNG 即可下载 / 在 shot prompt 中作为 reference image 上传给 Kling / Seedance。
+
+Severity: 中等 blast radius — 新增 1 个端点 + 1 个 frontend 按钮 + 1 个 pip 依赖。所有现有 endpoints / 组件不动。
+
 ## Follow-up 033 — 2026-05-13 00:25:47
 Source: user_input/follow_ups/033-20260513-002547-filename-convention-and-filters.md
 Summary: 用户："lets introduce some convention for the actor file names, it should be always {民族}__{性别}__{年龄段}.jpg, and then in the main 演员池page, lets add filters, like filter by race, filter by gendor, filter by age etc. and make your best guess to update existing actors to follow this new rule"。三个相关改动：jpg 文件名约定 + grid filter UI + 自动 migration。
@@ -1316,3 +1706,17 @@ Backend test verification: 22/22 pytest pass.
 Verification grep for `spec_driven|specs/|CLAUDE|.claude|FR-\d+|follow-up` across `projects/ai_video_management/` (case-insensitive): **zero matches**.
 
 Note: The `specs/development/ai_video_management/` directory itself (this audit trail) continues to use those terms — it's the agent_team workflow's persistence surface, not webapp source. The webapp reads none of it.
+
+## Follow-up 034 — 2026-05-13 00:38:00
+Source: user_input/follow_ups/034-20260513-003800-actor-md-styled-read-view.md
+Summary: actor sidecar md (`ai_videos/_actors/actor_NNNN/actor_NNNN.md`) gets a dedicated `ActorView` — large face image + key/value attrs + read-mode prompt card with Copy button; Reader dispatch skips `SiblingMedia` so the bulk-selection toolbar disappears on actor pages.
+
+Auto-updated:
+- `user_input/revised_prompt.md` — header bumped; `Composed from` extended with follow-up 034; prior-033 note appended.
+- `final_specs/spec.md` — added `FR-92` (ActorView read view + Reader dispatch + skip-SiblingMedia rule) above FR-91.
+- `validation/acceptance_criteria.md` — added Scenario U3.19 (actor md → ActorView dispatch, no bulk toolbar, image + dl + prompt-card + Copy button + Edit-toggle escape hatch + empty-prompt + missing-image edge cases); FR↔scenario map row `FR-92 | U3.19` appended.
+- `projects/ai_video_management/frontend/src/components/ActorView.tsx` — new component (image resolve, attribute-table parse, fenced-block prompt extract, copy-to-clipboard).
+- `projects/ai_video_management/frontend/src/components/Reader.tsx` — `isActor` regex (`^ai_videos/_actors/actor_[^/]+/actor_[^/]+\.md$`) added to dispatch; ActorView branch inserted before generic markdown branch; SiblingMedia not mounted on actor branch; Edit toggle exempted for actor (matches imageRef / casting / shotPair exemption pattern).
+- `projects/ai_video_management/frontend/src/styles.css` — new `/* ActorView */` block (responsive 2-col grid → 1-col under 820px; image pane on `#fafafa`; meta pane with section titles; prompt card on `--pre-bg/--pre-fg` tokens; copy button absolutely positioned).
+
+No conflicts found in: backend libs (FR-9f / FR-9i / FR-9j unchanged), ActorPoolGenerator, ActorGrid, CastingView, ImageRefView, ShotPairView, ShotlistTableView, casting / archive / delete endpoints, env / Kling provider stack.

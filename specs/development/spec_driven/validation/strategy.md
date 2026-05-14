@@ -2,6 +2,8 @@
 
 Run: spec_driven-20260503-145859 (autonomous full-pipeline regen, parent-direct synthesis from 7 parallel level-specialist subagent outputs)
 
+> **Follow-up 014 amendment (2026-05-13):** path references to `backend/`, `frontend/`, `backend/libs/` in this strategy + sibling validation modules (`acceptance_criteria.md`, `bdd_scenarios.md`, `system_tests.md`, `unit_tests.md`, `security.md`, `performance.md`, `accessibility.md`) are remapped to `apps/api/`, `apps/ui/`, `libs/{infrastructure,domain,application,common}/` respectively. Validation acceptance is otherwise unchanged. New blocker added at stage 5: cross-layer imports violating the dependency arrows in `.claude/agent_refs/project/development.md` §1.
+
 ## Levels chosen
 
 All seven canonical levels apply. Spec is UI-heavy with HTTP API + filesystem sandbox + CSRF gate + copy-paste prompt assembly + accessibility surface.

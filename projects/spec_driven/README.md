@@ -2,13 +2,35 @@
 
 `spec_driven` is an interactive viewer/editor SPA for the artifacts produced by the spec-driven workflow (`specs/{task_type}/{task_name}/`) plus the cross-cutting context the workflow reads (`CLAUDE.md`, `.claude/skills/**/*.md`, `.claude/agent_refs/**/*.md`). Browse the recursive sidebar, edit whole files or per-Q/A blocks, pin atomic items so they survive regeneration, and emit copy-paste regen prompts (INTERACTIVE or AUTONOMOUS) that drive any subset of the six pipeline stages back through Claude Code.
 
+## Layout (follow-up 014 — 2026-05-13)
+
+This solution follows the `apps/+libs/` layout from `.claude/agent_refs/project/development.md` §1–6:
+
+```
+spec_driven/
+├── apps/
+│   ├── api/        # FastAPI executable (main.py, container.py, routes.py, static/)
+│   └── ui/         # React SPA
+├── libs/
+│   ├── common/     # constants, enums, primitive utilities (RepoRoot, SafeResolver, ExposedTree, Stages)
+│   ├── domain/     # rich entities, value objects, domain errors (Promotion, PromotionError, ProjectError, PromptTooLarge)
+│   ├── infrastructure/  # readers/writers/middleware (FileReader, FileWriter, TreeReader, PromotionReader/Writer, ProjectDirectoryWriter, AuditWriter, OriginHostMiddleware)
+│   └── application/     # CQRS queries + commands + DTOs + mappers
+├── tests/          # mirrors apps/ + libs/
+├── Makefile        # solution-level targets
+├── pyproject.toml  # canonical deps (includes dependency-injector)
+└── requirements.txt
+```
+
+DI wiring: `apps/api/container.py` declares the `Container` (singletons for infrastructure, factories for application Queries/Commands). `apps/api/main.py` overrides `repo_root_path` + `bound_origin`, wires `apps.api.routes`, and starts uvicorn. Route handlers use `@inject + Depends(Provide[Container.x])` and return DTOs.
+
 ## Run
 
 The webapp supports three runtime modes. All three bind IPv4 loopback only (`127.0.0.1`) — never `0.0.0.0`.
 
 ### Production single-process — `make run-prod`
 
-Builds the frontend bundle into `backend/static/` and serves SPA + API from one FastAPI process.
+Builds the frontend bundle into `apps/api/static/` and serves SPA + API from one FastAPI process.
 
 ```
 make build-frontend
@@ -19,7 +41,7 @@ Open `http://127.0.0.1:8765/`.
 
 ### Backend-only alias — `make run`
 
-Alias for `make run-backend`. Expects a previously built bundle in `backend/static/` (or treat as API-only).
+Alias for `make run-backend`. Expects a previously built bundle in `apps/api/static/` (or treat as API-only).
 
 ```
 make run
@@ -60,11 +82,11 @@ Open `http://127.0.0.1:5173/`. The Vite proxy forwards `/api/*` to the backend; 
 
 ## Clean
 
-`make clean` removes `node_modules/`, `dist/`, `.vite/`, generated `backend/static/` artifacts, `__pycache__/`, and `.pytest_cache/`.
+`make clean` removes `node_modules/`, `dist/`, `.vite/`, generated `apps/api/static/` artifacts, `__pycache__/`, and `.pytest_cache/`.
 
 ## Architecture
 
-- **Backend.** FastAPI on `127.0.0.1:8765` (IPv4 loopback). Strongly typed Python in `backend/libs/` (`@dataclass(frozen=True)` containers, `str | None` syntax). Single-process mode also serves `backend/static/`.
+- **Backend.** FastAPI on `127.0.0.1:8765` (IPv4 loopback). Strongly typed Python in `backend/libs/` (`@dataclass(frozen=True)` containers, `str | None` syntax). Single-process mode also serves `apps/api/static/`.
 - **Frontend.** React + Vite (TypeScript). Recursive sidebar walks `node.children` uniformly; render-mode dispatch chooses `MarkdownView` / `QaView` / `JsonlView` / `CodeView` / `ImagePlaceholder`; every parse-on-render component is wrapped in a real React Error Boundary class.
 - **Mutation surface.** Exactly four endpoints: `PUT /api/file`, `POST /api/regen-prompt`, `POST /api/promote`, `DELETE /api/promote`. No file create / delete / upload.
 - **Regen prompts.** Assembled server-side (`backend/libs/regen_prompt.py`); inline `revised_prompt.md` + every `user_input/follow_ups/*.md` + per-stage pinned items + the read-zero contract verbatim from `CLAUDE.md`. Copy-paste into Claude Code CLI.
