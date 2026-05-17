@@ -3,6 +3,17 @@
 Run: spec_driven-20260503-145859 (autonomous full-pipeline regen, stage 4 parent-direct from `user_input/revised_prompt.md` + `interview/qa.md` + `findings/dossier.md`)
 
 > **Follow-up 014 amendment (2026-05-13):** wherever this spec says `backend/`, read `apps/api/`. Wherever it says `frontend/`, read `apps/ui/`. Wherever it says `backend/libs/`, read `libs/{infrastructure,domain,application,common}/` per the DDD+CQRS layering in `.claude/agent_refs/project/development.md` §1–6. Wherever it says `backend/static/`, read `apps/api/static/`. HTTP routes, JSON request/response shapes, and externally observable behavior are unchanged.
+>
+> **Follow-up 015 amendment (2026-05-17):** the standard the project follows is the **evolved** form of §1–6 — the one `.claude/agent_refs/project/development.md` currently encodes after ai_video_management follow-ups 056 / 060 / 061 / 065 / 068. Concretely, on top of the 014 layout:
+> 1. **Per-role sub-bucketing.** Each non-`common/` layer is broken out by role: `libs/infrastructure/{readers,writers,clients,daos,middleware,errors}/`, `libs/domain/{entities,value_objects,errors,repositories}/`, `libs/application/{queries,commands,dtos,mappers}/`. Files live in their role sub-folder, never flat at the layer root. Empty role folders are allowed and document the convention.
+> 2. **One file per aggregate per role: `{aggregate}__{role}.py`.** All operations of an aggregate's role live in one file (`libs/application/commands/promotion__command.py` with methods `add(...)` + `remove(...)` — not separate `add_promotion__command.py` + `remove_promotion__command.py` files).
+> 3. **ONE class per file in `commands/` + `queries/`, method-per-operation.** The class name is `{Aggregate}Command` / `{Aggregate}Query`; the operation name lives on the method, not on the class or filename. The legacy `class XxxCommand: def execute(...)` shape is retired.
+> 4. **DTOs consolidated.** A single `libs/application/dtos/{aggregate}__dto.py` holds both Qdtos and Cdtos for that aggregate (the class-name `Qdto`/`Cdto` suffix disambiguates). The split-by-side `*__qdto.py` + `*__cdto.py` files collapse into one per aggregate.
+> 5. **Routes split per aggregate.** `apps/api/routes/{aggregate}__route.py` — each with its own `APIRouter()`. `apps/api/routes/__init__.py` combines them into a single `router` that `app_factory.py` mounts. The single-file `apps/api/routes.py` shape is retired.
+> 6. **SRP — one concern per file.** Exception classes don't live in writer/reader files (extract to `libs/infrastructure/errors/{aggregate}__error.py`); DAO dataclasses go in `libs/infrastructure/daos/{aggregate}__dao.py`; DTOs go in `libs/application/dtos/{aggregate}__dto.py`; Pydantic request bodies stay with the route handler (`apps/api/routes/{aggregate}__route.py`).
+> 7. **File-size guideline.** Prefer `< 100` lines. Past that, split by sub-concern using the layer's role taxonomy. `> 1000` lines without a clear sub-concern boundary is a stage-5 `warning`.
+>
+> HTTP routes, JSON request/response shapes, and externally observable behavior remain byte-identical to v1. Only internal organization changes. NFR-4's `backend/libs/` reference is read as `libs/{infrastructure,domain,application,common}/`.
 
 ## Goal
 

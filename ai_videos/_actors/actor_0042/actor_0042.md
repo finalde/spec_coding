@@ -12,6 +12,7 @@ AI-generated actor face (Kling text-to-image, follow-up 025 + 029).
 | notes | — |
 | seed | 1778603602236 |
 | resolution | normal |
+| archetype | everyman |
 
 ## 生成 prompt
 

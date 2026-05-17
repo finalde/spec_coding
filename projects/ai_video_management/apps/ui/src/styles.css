@@ -56,8 +56,34 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 .skip-link:focus { left: 8px; top: 8px; }
 
+/* Live region doubles as a visible toast. aria-live attribute is retained on
+ * the element in App.tsx so screen readers still announce. Visibility is
+ * driven purely by whether textContent is empty — existing helpers across
+ * components (which all call `region.textContent = msg`) get a visible toast
+ * for free, without needing to import any shared module. */
 .a11y-live-region {
-  position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  max-width: 480px;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.94);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  transition: opacity 180ms ease-out;
+}
+.a11y-live-region:empty {
+  opacity: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .visually-hidden {
@@ -247,11 +273,15 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   padding: 4px 10px; text-decoration: none; font-size: 13px;
 }
 .cross-tree-link:hover { background: var(--bg-hover); text-decoration: none; }
-.reader-edit-toggle {
+.reader-edit-toggle,
+.reader-shot-concat-btn {
   background: var(--bg-toolbar); color: var(--text);
   border: 1px solid var(--border); border-radius: 4px; padding: 4px 12px;
+  cursor: pointer; font-family: inherit;
 }
 .reader-edit-toggle[aria-pressed="true"] { background: var(--bg-active); border-color: var(--border-strong); }
+.reader-shot-concat-btn:hover:not(:disabled) { background: var(--bg-hover); }
+.reader-shot-concat-btn:disabled { cursor: progress; opacity: 0.55; }
 .reader-body { padding: 8px 0; }
 
 .text-view {
@@ -280,9 +310,18 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .markdown-view pre {
   background: var(--pre-bg); color: var(--pre-fg);
   border: 1px solid var(--pre-border); border-radius: 6px;
-  padding: 14px 16px; overflow-x: auto;
+  padding: 14px 16px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 13px; line-height: 1.6;
+  font-size: 13px; line-height: 1.65;
+  /* Per follow-up 070: wrap long lines instead of horizontal scrolling.
+   * Fenced ``` text ``` blocks in shotXX.md / character refs contain
+   * 1500-2000 char comma-separated prompts; horizontal scroll there is
+   * UX-hostile. `white-space: pre-wrap` preserves newlines AND wraps;
+   * `overflow-wrap: anywhere` lets even unbroken tokens break to fit. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
 }
 .markdown-view pre code { background: transparent; padding: 0; color: inherit; }
 
@@ -881,9 +920,14 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .code-view pre {
   background: var(--pre-bg); color: var(--pre-fg);
   border: 1px solid var(--pre-border); border-radius: 4px;
-  padding: 12px 14px; overflow-x: auto;
+  padding: 12px 14px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 13px; line-height: 1.55;
+  /* Per follow-up 070: wrap long lines (same rationale as .markdown-view pre). */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
 }
 .code-view pre code { background: transparent; color: inherit; }
 
@@ -905,7 +949,12 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .jsonl-line pre {
   background: var(--pre-bg); color: var(--pre-fg);
   margin: 4px 0 0; padding: 8px;
-  border-radius: 4px; white-space: pre; overflow-x: auto;
+  border-radius: 4px;
+  /* Per follow-up 070: wrap pretty-printed JSON instead of horizontal scroll. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
 }
 .jsonl-badge { background: var(--error-text); color: #fff; padding: 1px 6px; font-size: 11px; border-radius: 3px; margin-right: 8px; }
 
@@ -1482,62 +1531,121 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 
 /* === Prompt preview modal (per follow-up 032) === */
+/* === Prompt preview cards (per follow-up 068 polish + overflow lock) ===
+ * Hard rules:
+ *   - No horizontal scrollbar regardless of prompt length — every
+ *     text-bearing element uses `overflow-wrap: anywhere` + `word-break`
+ *     so unbroken comma-separated variance strings still wrap.
+ *   - The body has a max-height with internal vertical scroll only —
+ *     never resize the modal to fit a 2000-char prompt.
+ */
 .prompt-preview-panel {
-  max-width: 900px;
-  width: 90vw;
+  max-width: 980px;
+  width: 92vw;
 }
 .prompt-preview-hint {
-  margin: 0 0 12px;
+  margin: 0 0 14px;
   font-size: 13px;
+  line-height: 1.55;
   color: var(--text-muted);
 }
 .prompt-preview-list {
-  list-style: decimal inside;
+  list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 .prompt-preview-card {
   list-style: none;
-  padding: 8px 10px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-toolbar);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.prompt-preview-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 .prompt-preview-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .prompt-preview-meta strong {
   color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
 }
 .prompt-preview-seed {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 1px 7px;
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.prompt-preview-attrs {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text);
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 9px;
+  margin: 4px 0 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
 }
 .prompt-preview-toggle {
   cursor: pointer;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--text);
+  padding: 4px 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.prompt-preview-toggle::marker,
+.prompt-preview-toggle::-webkit-details-marker {
+  display: none;
+}
+.prompt-preview-toggle::before {
+  content: "▸ ";
+  color: var(--text-muted);
+  display: inline-block;
+  width: 14px;
+}
+details[open] > .prompt-preview-toggle::before {
+  content: "▾ ";
 }
 .prompt-preview-body {
-  margin: 6px 0 0;
-  padding: 8px;
+  margin: 10px 0 0;
+  padding: 12px 14px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 360px;
 }
 
 /* === DeletedView (per follow-up 038) === */

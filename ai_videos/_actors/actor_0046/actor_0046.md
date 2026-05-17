@@ -12,6 +12,7 @@ AI-generated actor face (Kling text-to-image, follow-up 025 + 029).
 | notes | — |
 | seed | 1778679974959 |
 | resolution | normal |
+| archetype | ingenue_kind |
 
 ## 生成 prompt
 

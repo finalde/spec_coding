@@ -432,6 +432,34 @@ input_image_urls = [`shot{N-1}_lastframe.png`, `shot{N}_lastframe.png`]
 
 *(Originated from follow-up "导演 + prompt master 模板化" — 2026-05-10；rev — follow-up "model-agnostic templates" — 2026-05-10：把 Kling/Seedance 三件套抽象为视频/静帧二件套；新增 12.4-A 角色字段展开规则；shot prompt 文件命名统一为 `shotNN_{model}.md`。)*
 
+#### 12.4-B Consolidated chars-reel reference + budget-shifted schema (per follow-up "concat + reorganize shot prompts")
+
+When the user clicks "🎬 生成角色合辑" in the webapp, `ShotConcatBuilder` builds a per-shot **chars reel** — every involved character's first 2-second clip concatenated (with audio normalised) into `<shot_folder>/shotNN_chars.mp4` — AND patches the shot md's `## 视频 prompt` ```text``` block to follow the new schema:
+
+| Field | New rule |
+|---|---|
+| `参考:` (new, top of block) | `参考: 请参考视频 {ref_chars_reel}，1~2s 为 {char1}, 3~4s 为 {char2}, ... ` — one line, byte-identical re-write on every concat, derived from `used` characters in table order. The `{ref_chars_reel}` token is what the user replaces with the actual `shotNN_chars.mp4` upload in Seedance. |
+| `角色:` (was: long block per character) | **Deleted entirely.** Visual identity comes from the chars reel; descriptions are redundant. The 参考 line above already names every character with timing. |
+| `场景: {ref_sN_xxx}` | **Token-only.** Any prose after the placeholder is stripped. The actual scene image / video is uploaded to Seedance separately. |
+| `镜头:` (景别) | List EACH camera framing change with its time window. Format: `0–3s 全景仰拍 / 3–6s 推近中景沧冥 / 6–9s 切环绕中景白月清桃花玉佩 / 9–12s 拉远全景五人围拢 / 12–15s 推至沧冥脸部特写赤瞳`. Default is **at least 3 camera cuts per 15s shot** — single-take static is the failure mode. |
+| `运镜:` | The mechanics of each transition: `平移`, `推`, `拉`, `环绕`, `升降`, `跟随`, `切换`, `Match cut`, `Whip pan`. Each entry tied to a 镜头 segment time. Example: `0–3s 升降镜自下缓升 / 3–6s 推镜由全景至中景 / 6–9s 环绕镜顺时针 90° / 9–12s 拉远 / 12–15s 推近特写`. |
+| `动作:` (timed beats — every character every beat) | Timed beats covering all 15s. For EVERY beat, describe what EACH character on screen is doing — not just the speaker. Standing or sitting still is forbidden unless explicitly called out as a dramatic stillness. **Plus explicit gaze / body-orientation**: every character must have a named referent at every beat — `沧冥 正脸朝方鼎元`, `白月清 侧身 45° 望沧冥右肩`, `韩夺心 余光斜睨白月清`. Default failure mode of Seedance is "speakers staring into empty space while everyone else faces forward like a school photo" — fix it by naming the target of each character's gaze and the angle of their body to the addressee. Example: `9–12s: 方鼎元拂尘下垂半寸右手微颤，身体正对沧冥目光直锁沧冥眉心；韩夺心剑出鞘三分寒光乍现，侧身 30° 朝沧冥剑尖指向沧冥心口；赵焚天双拳暗握指节作响，正面立沧冥右后方目光从下颌扫向沧冥赤瞳；白月清桃花玉佩静止悬于半空气流凝滞，斜立沧冥左前方含笑斜睨沧冥；司空玄面具下嘴角微挑，半侧身白瓷面具缝隙锁定沧冥；沧冥赤瞳骤亮金赤双瞳浮现，左手负后纹丝不动，赤瞳缓扫五人面孔最后定于方鼎元`. |
+| `台词 / 字幕:` | **MUST include per-line timing + speaker tone + speaker gaze + non-speaker reactions with gaze.** Format: `- 0–3s 方鼎元 (语气凌厉带怒，正脸朝沧冥，目光直锁沧冥眉心): "魔尊沧冥，今日便是你的劫数。" — 后期软字幕 方正粗黑 白底黑边 / 反应: 沧冥赤瞳冷睨方鼎元嘴角毫无动作；白月清侧首望沧冥玉佩轻颤；赵焚天双拳暗握目光自方鼎元转向沧冥；韩夺心余光从沧冥扫至方鼎元右手按剑；司空玄面具下半张脸朝沧冥不动`. Every dialogue line carries (a) `[start–end s]` time, (b) `{speaker} (语气..., 朝/望/视谁)`, (c) the line itself, (d) subtitle style, (e) `反应:` per non-speaker INCLUDING each one's gaze target. Seedance default failure modes this fixes: (i) wrong-speaker attribution, (ii) "everyone stands still" idle non-speakers, (iii) **"speaker stares into empty space" — A 念台词时眼睛根本不看 B**. Every speaker's gaze target MUST be named. Visual-only contract from §12.4 still applies (lines render as subtitles, never as audio prompts). |
+| `时长:` | **Always `10s`.** Per-shot Kling cap (Kling generates 10 s at a time; Seedance accepts longer but we standardise to Kling for safety). Replaces the earlier `≤15s` upper bound with an exact 10 s target so every shot fills the most-restrictive model's output budget in one shot. Authors fit cameras/movement/action/dialogue beats into the 10 s window; longer scenes split across multiple shots. |
+| `比例:` / `分辨率:` / `清晰度:` | **Removed entirely.** Aspect ratio and resolution are Seedance UI knobs, not prompt content. |
+| `渲染样式:` | Keep, but **strip resolution / quality tokens** (`4K HDR`, `8K`, `1080p`, `HDR`, …). Keep the artistic-style anchors (`cinematic`, `真实毛孔细节`, `三庭五眼东方面孔`, etc.). |
+| `负向:` | Unchanged. Re-paste `style_guide.md § 负向锁定` verbatim. |
+
+**Why per-character `{ref_cN_xxx}` tokens are stripped from the same code block:** the consolidated `{ref_chars_reel}` covers every character. Leaving the per-character refs in the body would have the user upload a separate reference per character AND the chars reel — redundant. Per-character refs remain in the "Reference placeholders" table above the code block (documentation), but not in the prompt body.
+
+**Idempotency contract:** the patch is a pure function of `(shot_md_content, used_characters_ordered)`. Re-running concat on an already-patched md produces byte-identical output. The implementation lives in `libs/infrastructure/writers/character_video__writer.py::ShotConcatBuilder._patch_chars_ref_line`.
+
+**Length cap: ≤ 2000 characters** for the entire ```text``` prompt body (measured as raw character count of the code block contents, fence lines excluded). Seedance's prompt window has a soft limit around this size; overflow truncates silently and tail fields (`时长` / `负向`) get dropped first. Authors should trim 动作 / 台词 reaction lines first when over budget — never drop the 参考 line, the 镜头 cut list, the 时长 line, or the 负向 list (Seedance loses character likeness without negatives).
+
+**Scope:** transforms apply to existing shot mds when concat runs. Future shot generation should follow this schema directly (skip the `角色:` block, omit `比例:`, set `时长: 15s`).
+
+*(Originated from follow-up "concat + reorganize shot prompts" — 2026-05-17.)*
+
 #### 12.5 角色 reference 单 prompt 文件（character video-reference template）
 
 每个角色一份「视频 reference」文件，**同文件内一段 copy-paste-ready 文字生视频 reference prompt** + 一张 3 句数字计数台词（"1, 2, 3"）配音对照表。该文件 supersedes 旧的「立绘单 prompt」格式（rule #12.2 完全），把 character pipeline 从「PNG 单参考」升级为「360° turntable 视频 + 标准声线 reference 一站到位」。

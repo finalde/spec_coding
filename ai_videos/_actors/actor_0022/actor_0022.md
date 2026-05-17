@@ -11,6 +11,7 @@ AI-generated actor face (Kling text-to-image, follow-up 025).
 | style | modern-casual |
 | notes | — |
 | seed | 1778601094471 |
+| archetype | youth_fresh |
 
 ## 生成 prompt
 

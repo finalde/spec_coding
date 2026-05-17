@@ -2,6 +2,465 @@
 
 Append-only follow-up audit log. Each entry records what the follow-up changed and which downstream artifacts were patched in the same turn.
 
+## Follow-up 075 — 2026-05-17 17:51:00
+Source: user_input/follow_ups/075-20260517-175100-chinese-structured-prompt.md
+Summary: 把发给 Kling 的所有 actor-generation prompt 全部改为 **结构化中文**，按用户指定格式：眼睛/鼻子/嘴巴/眉毛/轮廓/皮肤/体型 + 综合描述 (妖艳/正值/...) + 服装/摄影/避免。Kling 是快手中文模型，对中文 prompt 支持优于英文；follow-up 072 之前的 `(中文)` 失败仅因 English 主体内 parens-CJK 切换破 tokenizer，纯中文 prompt 无此问题。
+
+New file (per SRP): `libs/infrastructure/writers/actor__chinese_prompt.py`:
+- 7 个中文 variance pools (每池 ≥ 20 条覆盖大小/形状/颜色多维度):
+  - `_EYES_ZH` (22): 含 桃花/丹凤/鹿/狐/卧蚕/凤/杏 全套 Chinese 眼型
+  - `_NOSE_ZH` (22): 含 高挺/驼峰/蒜头/挺直/小巧/塌/鹰钩/K-beauty 标准
+  - `_LIPS_ZH` (22): 樱桃小嘴/薄/厚/丰满嘟嘴/咬唇/古典樱唇 + 唇形 + 厚度
+  - `_BROW_ZH` (22): 剑/柳叶/远山/卧蚕/上挑/平直/古典蛾眉 + 粗细 + 弧度
+  - `_CONTOUR_ZH` (22): 方/V字/鹅蛋/圆/瓜子/国字/心形/婴儿肥/骨感/刀削 + 颧骨
+  - `_SKIN_ZH` (22): 颜色 (白皙→乌黑) + 质地 (玻璃/水光/哑光/婴儿肌/雀斑/沧桑)
+  - `_BODY_ZH` (22): **新增体型池** — 高矮 + 胖瘦 + 整体姿态 (用户要求 "形体的描述, 高矮胖瘦之类的")
+- `_PHOTOGRAPHY_ZH` (10) 中文相机 cue (佳能 EOS R5 / 索尼 / 富士 / 哈苏 / 柯达 Portra / iPhone …)
+- `_SYNTHESIS_BY_ARCHETYPE` 10 entries: archetype slug → 中文 综合描述 (e.g., `femme_fatale` → "一位妖媚妩媚的女配, 风情万种, 美艳动人, 致命诱惑")
+- `_BODY_BIAS_BY_ARCHETYPE` 10 entries: 体型 bias per archetype (leading_hero → 高挑/魁梧/健硕; femme_fatale → 高挑/纤瘦/丰满/曲线/娇媚; etc.) + 25% wild-card fallthrough preserved from 074
+- `build_face_prompt(attrs_dict, seed, archetype) -> str`: emits 13-line structured Chinese
+- `build_body_prompt(attrs_dict, seed, archetype) -> str`: same structure + 灰色 T 恤 + 黑色运动短裤 industry comp-card uniform (preserved from 052) + 9:16 full-figure framing
+- 中英文映射 dicts (`_AGE_ZH`/`_ETHNICITY_ZH`/`_GENDER_ZH`/`_STYLE_ZH`) for the 角色描述 + 服装 lines
+- `_NEGATIVES_ZH`: 中文 negative 段 (避免 塑料感/蜡像感/卡通比例/过度磨皮/对称完美脸/AI 同质化/影楼美化/网红脸)
+
+`actor__writer.py` changes:
+- `_build_face_prompt(attrs, variance)` → `_build_face_prompt(attrs, seed, archetype)`; delegates `build_face_prompt(attrs.to_dict(), seed, archetype)`
+- `_build_body_prompt(attrs, variance)` → `_build_body_prompt(attrs, seed, archetype)`; delegates `build_body_prompt(attrs.to_dict(), seed, archetype)`
+- 4 call sites (preview_prompts / preview_diverse_prompts / generate_batch / generate_diverse_batch) 丢 `variance = _variance_for(...)` 直接 `self._build_face_prompt(attrs, seed, archetype)` (or `spec.slug` for diverse 路径) — Python 脚本一次性 replace 完成 (2+2 = 4 sites)
+- English `Variance` machinery (`_VARIANCE_*` pools / `_variance_for` / `_ARCHETYPE_FEATURE_BIAS` / `_pick_biased` / `_LOOK_ENRICHED`) 现为 dead code 对 wire prompt 内容；留在 source 不删 (deferred cleanup — follow-up 075 out of scope)
+- `_CJK_PARENS_RE` strip 留在 `_variance_for` 内但 no longer load-bearing — 071 的 English pool 已不上 wire
+
+Smoke (sample face prompt for femme_fatale, seed=42):
+```
+角色描述：东亚 女性，30 岁左右
+眼睛：端庄秀眼, 双眼皮, 杏眼, 温柔贤淑
+鼻子：小巧鼻型, 精致玲珑, 鼻头微翘
+嘴巴：樱桃小嘴, 薄唇, 唇形精致
+眉毛：平直眉, 韩式眉, 温柔大气
+轮廓：长脸型, 五官立体, 高级感
+皮肤：深棕色, 巧克力质感, 性感浑厚
+体型：高大魁梧, 健壮型男, 肌肉发达
+综合描述：一位妖媚妩媚的女配, 风情万种, 美艳动人, 致命诱惑
+服装：中国古装, 仙侠武侠风
+摄影：尼康 Z9 105mm f/1.4, 超自然渲染, 不平滑皮肤
+要求：人像写真, 自然光, 真实质感, 8K 高清, 抓拍随意感, 真实毛孔, 自然不对称
+避免：塑料感皮肤, 蜡像感, 卡通比例, 过度磨皮, 对称完美脸, AI 生成同质化脸, 影楼美化, 千篇一律的网红脸
+```
+
+Pytest: 18 pass / 5 pre-existing wukong fixture failures (=074 baseline, 0 regressions); `import apps.api.main` + `import apps.api.asgi` boot clean.
+
+Out of scope (deferred):
+- Removing dead English variance machinery (`_VARIANCE_*` pools 27 个 + `_variance_for` + bias maps + helpers) — would shrink `actor__writer.py` 2300 → ~600 行；SRP/file-size flag 持续标记。
+- Per-五官 archetype bias on the Chinese side (currently 5 of 7 sections uniform random; only 体型 has bias). 综合描述 carries archetype direction; tightening 五官 bias is future follow-up if 妖艳/英俊 不够 consistent.
+- Frontend prompt-preview UI 自动更新 — `PromptPreviewModal` 会显示新的中文结构 prompt (069+070 已让 modal 支持 multi-line/wrap 显示 long text)。
+
+Auto-updated:
+- `projects/ai_video_management/libs/infrastructure/writers/actor__chinese_prompt.py` (NEW, ~250 行)
+- `projects/ai_video_management/libs/infrastructure/writers/actor__writer.py`:
+  - `_build_face_prompt` 签名 + 函数体重写 (delegate to ZH builder)
+  - `_build_body_prompt` 签名 + 函数体重写 (delegate to ZH builder)
+  - 4 个 call sites 改 `_variance_for` + 旧 builder → 新 builder 直接 invocation
+- `specs/development/ai_video_management/user_input/follow_ups/075-20260517-175100-chinese-structured-prompt.md` (NEW)
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header bumped (next)
+- `specs/development/ai_video_management/final_specs/spec.md` / `validation/*` — 不需 surgical patch；纯 wire-content 语言切换 + 内部结构化，HTTP shapes byte-identical (frontend 收到的 preview prompt 现是中文)。
+
+No conflicts found in:
+- follow-up 074 (within-archetype diversity)：本 follow-up 把 074 的 wild-card + skin 扩展从 English path 搬到了 Chinese path (_BODY_BIAS_BY_ARCHETYPE 中 25% wild-card 保留；skin 不在 bias 保 uniform random — 跨 archetype skin variety 最大化)。
+- follow-up 073 (reap mtime threshold)：并发 race fix 与 prompt 内容正交。
+- follow-up 072 (CJK strip)：strip 仍存活 (legacy guard) 但不再 load-bearing — 新 Chinese 直接上 wire 不经 strip。
+- follow-up 052 (face+body dual generation)：face + body 共享 seed → 共享身份锚 (五官+体型) 仍 preserved；body comp-card 灰色 T 恤 + 黑色短裤 wardrobe lock 保留 (Chinese 表达)。
+- follow-up 053 (10-archetype taxonomy)：`_SYNTHESIS_BY_ARCHETYPE` + `_BODY_BIAS_BY_ARCHETYPE` 用 archetype slug 与 053 完全一致；archetype 行为不变。
+- follow-up 064/051 (unified mode + DDD)：command/route 层不动；wire format 改变对上层透明。
+- follow-ups 001-068：HTTP routes + JSON shapes byte-identical。
+
+## Follow-up 074 — 2026-05-17 17:28:56
+Source: user_input/follow_ups/074-20260517-172856-within-archetype-diversity-skin-eyeshape.md
+Summary: 用户反馈 within-archetype 演员差异性还是不够 (e.g. 妩媚 women 都长一样)。三步走解决：(1) 扩 skin_tone (10→22, 全色谱 alabaster→ebony) + skin_texture (8→21, 全 tactile spectrum)，覆盖用户提的 皮肤白/皮肤黑。(2) 加 5 个 Chinese 眼型 到 EYES pool (22→27): 桃花眼/杏眼/鹿眼/狐眼/卧蚕。(3) `_pick_biased` 加 `_BIAS_WILD_PROB = 0.25` wild-card fallthrough — 25% 概率 archetype bias 被忽略走全 pool uniform。6 个 biased 五官 全 archetype-biased 概率 = 0.75^6 ≈ 18% → 大多数演员有至少一个 wild 五官 break sameness。Skin pool 不进 bias map (保留 uniform random) → 跨 archetype skin variety 最大化，正是用户想要的。
+
+Pool expansions:
+- `_VARIANCE_SKIN_TONE`: 10 → 22 (+ alabaster, translucent moonlight, cream rice, peachy rose-flushed, golden-honey, caramel, chestnut, umber, cocoa, ebony, deep mahogany, neutral-medium)
+- `_VARIANCE_SKIN_TEXTURE`: 8 → 21 (+ freckled constellation, glass K-beauty, porous realistic, chok-chok dewy, scarred lived-in, ruddy windburn, matte velvet, silken satin, doll-flawless, sun-aged crinkled, pearlescent moonlit, olive-velvet matte, vellum parchment)
+- `_VARIANCE_EYES`: 22 → 27 (+ 桃花眼/杏眼/鹿眼/狐眼/卧蚕，中文标在 parens 内做 in-source docs；072 strip 在 wire 上去掉 parens)
+
+Wild-card mechanic:
+- 新 module-level `_BIAS_WILD_PROB: float = 0.25`
+- `_pick_biased(rng, pool, biased)` 改为 `if biased and rng.random() >= _BIAS_WILD_PROB: ... else: return rng.choice(pool)` — 25% 概率全 pool uniform random，否则 archetype biased
+- Pure deterministic — same seed reproduces same choice
+- 6 biased facial picks → P(all archetype-biased) = 0.75^6 ≈ 18% → 82% 演员有至少一个 wild 五官
+
+Archetype eye-shape bias 扩展 (5 archetype 加新眼型 indices):
+- `leading_warm`: + 22 (桃花眼) / 23 (杏眼) / 24 (鹿眼) / 26 (卧蚕) — 温润如玉 scholar
+- `ingenue_kind`: + 23 (杏眼) / 24 (鹿眼) / 26 (卧蚕) — kind doe-eyed
+- `ingenue_lively`: + 22 (桃花眼) / 25 (狐眼) / 26 (卧蚕) — lively flirty
+- `femme_fatale`: + 22 (桃花眼) / 23 (杏眼) / 25 (狐眼) — 妩媚 textbook eye vocabulary
+- `youth_fresh`: + 23 (杏眼) / 24 (鹿眼) / 26 (卧蚕) — fresh innocent
+- 其它 5 archetype (leading_hero / villain_cold / sage_elder / martial_drifter / everyman) 不显式加新眼型 — 通过 wild-card fallthrough 仍能命中 ~25%
+
+Smoke (30 femme_fatale gens):
+- unique skin-tones seen: 17/22 (palette 横扫 alabaster→ebony) ✓
+- unique eye-shapes seen: 8 (含 桃花眼 9× / 狐眼 8× / 杏眼 11× / catlike 12× / phoenix 6× / dark intense 7×) ✓
+- CJK leaks in wire: 0/30 (072 strip 保留) ✓
+- 18 pass / 5 pre-existing wukong fixture failures (=073 baseline, 0 regressions) ✓
+- main+asgi boot clean ✓
+
+Pre-074 同样 30 gens 大约只会出现 ~4 unique skin tones (small pool) + ~4 unique eyes (narrow bias)。差异化 step-change 明显。
+
+Auto-updated:
+- `projects/ai_video_management/libs/infrastructure/writers/actor__writer.py`:
+  - `_VARIANCE_SKIN_TONE` 加 12 新条目 (10→22)
+  - `_VARIANCE_SKIN_TEXTURE` 加 13 新条目 (8→21)
+  - `_VARIANCE_EYES` 加 5 新中文眼型条目 (22→27)
+  - 新 `_BIAS_WILD_PROB: float = 0.25` 常量
+  - `_pick_biased` 函数体重写 (加 wild-card fallthrough)
+  - `_ARCHETYPE_FEATURE_BIAS` 5 archetype 的 "eyes" 子集扩展加新眼型 indices
+- `specs/development/ai_video_management/user_input/follow_ups/074-20260517-172856-within-archetype-diversity-skin-eyeshape.md` (NEW)
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header bumped (next)
+- `specs/development/ai_video_management/final_specs/spec.md` / `validation/*` — 不需要 surgical patch；纯 prompt 内容多样性扩展，HTTP shapes byte-identical。
+
+No conflicts found in:
+- follow-up 073 (reap mtime threshold)：并发 race fix；与本 follow-up 的 prompt 多样性扩展正交。
+- follow-up 072 (CJK strip)：本 follow-up 新加的中文眼型 (桃花眼 etc.) 仍依赖 072 的 strip — 已 smoke-tested 0 leak。
+- follow-up 071 (feature pools + bias)：本 follow-up 在 071 的 bias 框架上加 wild-card + 加新眼型 + 扩 skin。
+- follow-ups 052-053-064 (face+body / diverse mode / unified mode)：所有上层不变。
+- follow-ups 001-068：HTTP routes + JSON shapes byte-identical。
+
+## Follow-up 073 — 2026-05-17 17:21:07
+Source: user_input/follow_ups/073-20260517-172107-reap-mtime-threshold-concurrent-race.md
+Summary: 并发 race-condition bugfix。用户 6 张里 2 张失败 `[Errno 2] No such file or directory` 写 jpg 时。根因：前端 (per follow-up 064 + 059 worker-pool) 并行发 N 个 `count=1` 请求；每个请求进 `generate_batch` 顶部都 run `_reap_incomplete_folders`，该 reaper 无 mtime 判断 — 删除任何无 jpg 的 actor 文件夹，包括 sibling 并发请求刚 allocate 但还在等 Kling HTTP (30-120s) 的文件夹。修法：reaper 加 mtime threshold (5 分钟，安全覆盖 Kling face 120s + body 120s worst-case)。
+
+Fix:
+- 新加 `_REAP_MIN_AGE_SECONDS: float = 300.0` 模块常量
+- `_reap_incomplete_folders` 每个 candidate 加 guard: `if entry.stat().st_mtime > cutoff: continue` 其中 `cutoff = time.time() - _REAP_MIN_AGE_SECONDS`；OSError on stat 也 skip
+- 既有 keep-if-has-jpg 规则 (follow-ups 018/027/033) 完整保留
+
+Smoke (临时目录三场景):
+- 刚 mkdir 的 fresh folder → 不再被 reap ✓ (修复 race)
+- mtime 回拨过 300s 的 stale folder → 仍被 reap ✓ (genuine orphan cleanup 保留)
+- 含 jpg 的 folder 无论 age → 不被 reap ✓ (keep-if-has-jpg 保留)
+- 18 pass / 5 pre-existing wukong fixture failures (=072 baseline, 0 regressions)
+
+Auto-updated:
+- `projects/ai_video_management/libs/infrastructure/writers/actor__writer.py`:
+  - 新加 `_REAP_MIN_AGE_SECONDS: float = 300.0` 在 JPEG_QUALITY 后
+  - `_reap_incomplete_folders` 加 mtime guard 与解释 docstring
+- `specs/development/ai_video_management/user_input/follow_ups/073-20260517-172107-reap-mtime-threshold-concurrent-race.md` (NEW)
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header bumped (next)
+- `specs/development/ai_video_management/final_specs/spec.md` / `validation/*` — 不需要 surgical patch；纯并发 race 修复，HTTP shapes / endpoint contract / actor-folder schema 全部 byte-identical。
+
+Class-of-bug note: 任何 "scan-then-act" pattern 跨并发调用都要么用 lock (这里 over-engineering) 要么靠 mtime/sentinel 防误删 sibling 工作。如果未来 reap 想做更强 (e.g., 检测整个 batch 失败后立即 cleanup 而非等 300s)，可加 explicit per-folder sentinel file (`.in_progress` marker) + 删除在 write_bytes 成功后 — 本 follow-up 选 mtime 简化方案。
+
+No conflicts found in:
+- follow-up 072 (CJK-in-prompt strip) / 071 (feature pools + bias)：纯 prompt 内容改动 / archetype 抽样改动，与 reaper/race 正交。
+- follow-up 059 (diverse mode worker pool) / 064 (unified mode 并行 preview→confirm)：本 follow-up 修的就是这两 follow-up 引入的并发 pattern 暴露出的 reaper race；workflow / UX 不变。
+- follow-up 052 (face+body dual gen 30-120s 各)：300s threshold 已覆盖最坏 worst-case (face 120 + body 120 + assembly buffer)。
+- follow-up 027 (race-safe id 分配 via mkdir(exist_ok=False) + reap moved into generate_batch)：本 follow-up 是 027 reaper 设计的 follow-on bugfix — 027 假设 reap 仅 cleanup 已-orphaned；并发 worker pool 引入后该假设不成立。
+- follow-ups 001-058：HTTP routes + JSON shapes byte-identical；行为变化仅是 reap 更保守 (从不立删，等 5 分钟)。
+
+## Follow-up 072 — 2026-05-17 17:12:15
+Source: user_input/follow_ups/072-20260517-171215-strip-cjk-annotations-from-kling-prompt.md
+Summary: Bugfix to follow-up 071。UI 报 "失败 6 张 / #1: 500 HTTP 500 ..." — 全是 Kling API 拒绝 prompt (per-slot HTTP 500，surfaced through `result.errors` 的 `http_failed: …` 条目，不是 Python 异常)。根因：071 给新 pool 条目埋了 CJK-in-parens 注释作为 in-source docs (e.g. ` (高挺鼻梁)`, ` (小眼睛)`, ` (蒜头鼻)` 等 9 处)，但这些条目直接 join 进 `features_text` 上 wire 到 Kling，Kling-v1 silently 拒绝 → 500 per slot。修法：assembly 时一次性 strip。源 docs 保留。
+
+Fix:
+- 新加 module-level `_CJK_PARENS_RE = re.compile(r"\s*\([^)]*[一-鿿][^)]*\)")` (matches CJK Unified Ideograph U+4E00–U+9FFF in parens with optional leading space)
+- `_variance_for` 末尾改 `features_text = _CJK_PARENS_RE.sub("", ", ".join(parts))`
+- 源条目不动 — `(高挺鼻梁)` 等仍在 pool 定义里供 devs 看映射关系
+
+Smoke:
+- `_CJK_PARENS_RE.sub('', '...nose... (高挺鼻梁), ...eyes (小眼睛)')` → `'...nose..., ...eyes'` ✓
+- 6 seeds × 4 archetype-branches (含 None) = 24 combos，每个 `features_text` CJK 字符数 = 0 ✓
+- 18 pass / 5 pre-existing wukong fixture failures (=071 baseline, 0 regressions)
+- main+asgi boot clean
+
+Auto-updated:
+- `projects/ai_video_management/libs/infrastructure/writers/actor__writer.py`:
+  - 加 `_CJK_PARENS_RE` 模块常量 (放在 `_VARIANCE_NEGATIVE_ROTATION` 后)
+  - `_variance_for` 中 `features_text = ", ".join(parts)` → `features_text = _CJK_PARENS_RE.sub("", ", ".join(parts))`
+- `specs/development/ai_video_management/user_input/follow_ups/072-20260517-171215-strip-cjk-annotations-from-kling-prompt.md` (NEW)
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header bumped (next)
+- `specs/development/ai_video_management/final_specs/spec.md` / `validation/*` — 不需要 surgical patch；纯 wire-content sanitization fix，HTTP shape 不变。
+
+Class-of-bug note: 任何 bake 非-ASCII 字符进 LLM/text-to-image prompt 都要 sanitize。Kling 静默拒绝 (无明确 error code 解释)；下次类似集成应该 (a) ASCII-only by convention 或 (b) sanitize at prompt-build (本 follow-up 选 b — 保留 in-source 多语言 docs)。如果未来 Kling-v2/3 支持 CJK，移除 strip 即可。
+
+No conflicts found in:
+- follow-up 071 (feature pools + archetype bias)：本 follow-up 是 071 的 bugfix；071 的 pool expansion + bias map 全部保留并正常工作 — 只是 wire content 现在干净 ASCII。
+- follow-up 069 (prompt preview card polish) / 070 (markdown pre overflow)：纯前端，与 backend prompt sanitization 正交。
+- follow-ups 052-053-064 (actor body / diverse mode / unified mode + 5 new look enriched)：`_LOOK_ENRICHED` 不含 CJK，不受 strip 影响。
+- follow-ups 001-068：HTTP routes + JSON shapes byte-identical；fix 仅影响 prompt 字符串内容。
+
+## Follow-up 071 — 2026-05-17 17:02:53
+Source: user_input/follow_ups/071-20260517-170253-feature-pools-expand-archetype-bias.md
+Summary: 演员生成 prompt 更深的多样性 + archetype 连贯性。两个 coupled changes 到 `libs/infrastructure/writers/actor__writer.py`:
+(1) 6 个面部五官 variance pools 全部扩到 ≥20 条 — eyes 14→22 (含大眼/小眼/圆眼/泪眼); nose 10→21 (含蒜头鼻/驼峰鼻/高挺鼻梁); jawline 10→22; cheekbones 9→20; brow 10→21; lips 10→20。新条目用 inline parentheses 标中文 (e.g. `(蒜头鼻)`)。原有条目全保留。
+(2) 新增 `_ARCHETYPE_FEATURE_BIAS: dict[str, dict[str, tuple[int, ...]]]` 10 archetype → pool_name → preferred indices map。`_variance_for(seed, gender, archetype=None)` 签名加 `archetype` 参数；给定时面部五官 picks 走 `_pick_biased(rng, pool, biased_indices)` helper (filter to subset then random.choice)；不给或 unknown 时回退到 uniform random。
+
+Bias 设计示例：
+- `leading_hero` (英俊男主气场冷峻): jawline 5 indices (square / chiseled / Roman / catlike / K-beauty), eyes (1, 2, 4, 10, 15 = 丹凤眼 + deep-set + piercing + dark intense + 小眼), nose (aquiline / Roman / 高挺鼻梁 / chiseled / K-beauty), lips thin/balanced/tight.
+- `femme_fatale` (妖艳女配): jawline (V-shaped / heart / swan-neck / catlike), eyes heavy-lidded + 丹凤眼 + catlike, lips Bardot / bee-stung / pouty.
+- `ingenue_kind` (清纯善良女主): jawline soft/oval/apple-cheek/fawn-curve, eyes 大眼 + 圆眼 + wide innocent + double-eyelid, nose petite/snub/button/ski-jump.
+- 7 more archetypes (leading_warm, ingenue_lively, villain_cold, sage_elder, martial_drifter, everyman, youth_fresh) 同样 dict shape; 全 10 个都有 bias 条目。
+
+Implementation: 一次性 Python script `_apply_069.py` (本 turn 后删除) 用 regex 替换 6 个 pool 定义 + insert bias map after `_ARCHETYPE_BY_SLUG` + 修改 `_variance_for` 签名和函数体。然后 4 处 `_variance_for(...)` 调用点 (`preview_prompts`, `preview_diverse_prompts`, `generate_batch`, `generate_diverse_batch`) 用 Edit 修改 forward `archetype`：preview/generate 路径用 `archetype=archetype` (from kwarg) — diverse 路径用 `archetype=spec.slug` (per-slot ArchetypeSpec)。`preview_prompts` 签名加 optional `archetype: str | None = None` kwarg。
+
+Out-of-scope (deferred — SRP/file-size 已 flag):
+- 把 variance pools 抽到独立文件 (`libs/infrastructure/writers/actor__variance_pools.py` 或 `libs/domain/value_objects/actor__variance.py` — 它们是 business knowledge 应在 domain): `actor__writer.py` 现 ~2200 行，未来 stage-5 抓。
+- 非面部 pools (hair, skin, expression, lighting, mood) 的 archetype bias — 用户只问 五官，其它保持 uniform random。
+- Frontend dropdown 不需改 — diverse mode 已通过 `_distribute_archetypes` 驱动 archetype。
+
+Smoke test:
+- 6 pool sizes verified: jawline 22, cheekbones 20, brow 21, nose 21, lips 20, eyes 22。
+- `_ARCHETYPE_FEATURE_BIAS` 10 archetype keys ✓。
+- `_variance_for(seed=42, gender='male')` (no archetype) → uniform output (soft oval jaw + porcelain cheeks 等)。
+- `_variance_for(seed=42, gender='male', archetype='leading_hero')` → "powerful Roman-bust jawline" + "sharply angled cheekbones" (bias indices 7 + 3 命中) ✓。
+- `_variance_for(seed=42, gender='female', archetype='femme_fatale')` → "elongated swan-neck jawline" + "sharply angled cheekbones" (bias indices 12 + 3 命中) ✓。
+- `python -m pytest tests/` — 18 pass / 5 pre-existing wukong fixture failures (= 070 baseline, 0 regressions)。
+
+Auto-updated:
+- `projects/ai_video_management/libs/infrastructure/writers/actor__writer.py`:
+  - 6 个 _VARIANCE_{JAWLINE,CHEEKBONES,BROW,NOSE,LIPS,EYES} pool definitions 扩展 (旧 entries 保留 + 新 entries 追加)。
+  - 新 _ARCHETYPE_FEATURE_BIAS dict (10 archetype × 6 pool × ~5-8 indices each) 插在 _ARCHETYPE_BY_SLUG 后。
+  - 新 _pick_biased helper function。
+  - _variance_for 签名 + body 重写以 forward archetype + 用 bias。
+  - 4 个 _variance_for(...) call sites + preview_prompts 签名 forward archetype。
+- `specs/development/ai_video_management/user_input/follow_ups/071-20260517-170253-feature-pools-expand-archetype-bias.md` (NEW)。
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — header bumped (next)。
+- `specs/development/ai_video_management/final_specs/spec.md` / `validation/*` — 不需要 surgical patch；纯 prompt 内容扩展 + 内部 archetype bias 实现，HTTP shapes byte-identical，0 endpoint 改动。
+
+No conflicts found in:
+- follow-up 070 (markdown pre no horizontal scroll) / 069 (prompt preview card polish)：纯前端，与 backend variance 扩展正交。
+- follow-up 068 (SRP infra exceptions extracted)：本 follow-up 不动 exception classes，新增的 _pick_biased helper 是 pure function 不需要 errors 文件。
+- follow-up 067 (look enum sync) + 064 (unified mode + 5 新 look 值)：bias map 用 archetype slug 而非 look slug — 与 look 扩展正交；新 look 值会通过 `_LOOK_ENRICHED` 在 prompt 中展开，与 facial-feature bias 互补。
+- follow-up 053 (diverse mode + 10 archetype): 本 follow-up 在 053 已有的 10 archetype 基础上加深 bias 到 facial 层；`_ARCHETYPES` tuple 不动 — 只是为每个 slug 加额外的 `_ARCHETYPE_FEATURE_BIAS` entry。
+- follow-up 052 (actor body image + diversity strategy)：variance dataclass + 17-pool 微特征不动 — 本 follow-up 给其中 6 pool 加深度 + 加 bias，其它 11 pool 保持 uniform。
+- follow-ups 001-051：所有 HTTP routes + JSON shapes byte-identical；prompt 内容更丰富 (用户感知就是图更多样 + archetype 更连贯)。
+
+## Follow-up 070 — 2026-05-17 17:00:51
+Source: user_input/follow_ups/070-20260517-170051-markdown-pre-no-horizontal-scroll.md
+Summary: Reader 内 markdown-rendered shotXX.md / 角色 ref / 等 fenced ``` ```text ``` ``` 代码块仍有横向滚动条 — follow-up 069 仅修了 `PromptPreviewModal` 内 prompt 卡片，没动 Reader 渲染 markdown 时的 `<pre>` 元素。三处 `<pre>` 容器 `.markdown-view pre` / `.code-view pre` / `.jsonl-line pre` 都改 `white-space: pre-wrap` + `overflow-wrap: anywhere` + `word-break: break-word` + `overflow-x: hidden`（替代旧的 `overflow-x: auto`）— 长 prompt 自然换行无横条；换行符仍由 pre-wrap 保留不破多行 prompt 结构。
+
+Frontend only:
+- `apps/ui/src/styles.css`:
+  - `.markdown-view pre`: 删 `overflow-x: auto`；加 wrap 三件套 + `overflow-x: hidden`；line-height 1.6→1.65。
+  - `.code-view pre`: 同上 wrap 策略。
+  - `.jsonl-line pre`: `white-space: pre` → `pre-wrap`；删 `overflow-x: auto`；加 wrap 三件套。
+- 零 JSX / 后端 / endpoint / spec FR 改动。
+
+Safety:
+- pre-wrap 保留 `\n`：multi-line YAML / JSON / shot prompt 结构（每个 `字段: 值` 一行）不被破坏。
+- 复制粘贴行为不变 — wrap 仅视觉；剪贴板内容是 raw text。
+- `overflow-wrap: anywhere` 在 long URL 中间也会 break；本场景 shot prompt 不放 URL，可接受。
+
+## Follow-up 069 — 2026-05-17 16:49:15
+Source: user_input/follow_ups/069-20260517-164915-prompt-preview-card-polish-no-overflow.md
+Summary: `PromptPreviewModal` 每张 prompt card 视觉优化 + 强制无横向滚动条。三层 overflow 防御保证 2000+ 字 prompt 不出横条：(a) `.prompt-preview-card` outer `overflow: hidden`；(b) `.prompt-preview-body` `overflow-x: hidden + overflow-y: auto + max-height: 360px` 内滚；(c) `.prompt-preview-toggle` / `.prompt-preview-attrs` / `.prompt-preview-body` 三处都加 `overflow-wrap: anywhere + word-break: break-word`。同步美化：圆角 4→6、padding 8/10→12/14、background `bg-toolbar`→`bg-panel`、hover 加 `border-strong + 阴影`、`<ol decimal inside>` → `list-style: none`（与 meta 行 "第 N 张" 重复 marker 删）、seed pill (圆角 10 + 1px border)、attrs 加底色 + 边框 + padding 5/9、details 原生 marker 隐藏自定义 ▸/▾ 箭头、body line-height 1.5→1.7 + font-size 12→12.5、panel max-width 900→980 / width 90vw→92vw。
+
+Frontend only:
+- `apps/ui/src/styles.css` `.prompt-preview-*` 9 个 class block 重写（panel / hint / list / card / meta / seed / attrs / toggle / body）。
+- 零 JSX / 后端 / endpoint / spec FR 改动。
+- 跨浏览器: `::marker` + `::-webkit-details-marker` 双写覆盖 Safari + Chromium + Firefox。
+
+User-input:
+- `user_input/revised_prompt.md`: composed-from + Last regenerated narrative for 069。
+- `user_input/follow_ups/069-20260517-164915-prompt-preview-card-polish-no-overflow.md` (NEW; originally 068 — 与用户 parallel 068 (SRP-extract-infra-exceptions) 撞号，本 follow-up renumber 到 069)。
+
+## Follow-up 068 — 2026-05-17 16:44:19
+Source: user_input/follow_ups/068-20260517-164419-srp-extract-infra-exceptions.md
+Summary: 应用 SRP 到 infrastructure：exception class 不再混在 writer/reader 文件里，全部抽到 `libs/infrastructure/errors/{aggregate}__error.py`（与 `libs/domain/errors/` 镜像）。43 个 exception class 从 8 个 writer/reader 文件抽出到 7 个 errors 文件。Writer/reader 用 `from libs.infrastructure.errors.X import (...)` 重新 import 以保持向后兼容（commands 仍可 `from libs.infrastructure.writers.X import SomeException`）。
+
+Common-level rule 加 (`agent_refs/project/development.md` §1 + `CLAUDE.md` § Project rules):
+- **Single Responsibility Principle — one concern per file**：exception 不在 writer；DAO dataclass 不在 writer (`libs/infrastructure/daos/`)；DTO 不在 command/query (`libs/application/dtos/`)；Pydantic request body 不在 command/query (route handler)。
+
+Exception extractions (43 总数):
+- `writers/actor__writer.py`: 6 (InvalidAttribute, GenerationDirMissing, ActorNotFound, ActorAlreadyDeleted, ActorDeleteTargetExists, ActorDeleteFailed) → `errors/actor__error.py`
+- `writers/casting__writer.py`: 2 (InvalidActorId, InvalidRole) → `errors/casting__error.py`
+- `writers/character_video__writer.py`: 8 (InvalidPath, NotFound, FfmpegMissing 共享 + NotCharacterVideo, TruncateFailed, NotShotMd, NoCharacterTable, ConcatFailed) → `errors/character_video__error.py`
+- `writers/downloads__writer.py`: 1 (DownloadsDirMissing) → `errors/downloads__error.py`
+- `writers/file__writer.py` + `readers/file__reader.py`: 9 (UnsupportedExtension, FileTooLarge, InvalidBodyEncoding, OutsideSandbox, MissingIfUnmodifiedSince, StaleWrite from writer; FileTooLarge, OutsideSandbox, UnsupportedExtension from reader — dedup) → `errors/file__error.py`
+- `writers/frame__writer.py`: 5 (InvalidPath, NotFound, NotVideo, FfmpegMissing, ExtractFailed) → `errors/frame__error.py`
+- `writers/media__writer.py`: 12 (InvalidPath, NotFound, NotMedia, AlreadyArchived, NotInArchive, AlreadyDeleted, NotInAiVideos, NotInDeleted, TargetExists, MoveFailed, InvalidDramaPath, DramaNotFound) → `errors/media__error.py`
+
+Implementation: one-shot Python script `_extract_errors.py` (deleted after this turn) scanned each writer/reader, regex-extracted `^class Xxx(Exception):` blocks (including multi-line bodies like `StaleWrite.__init__`), built per-aggregate errors files with proper docstrings, and inserted `from libs.infrastructure.errors.X__error import (...)` at top of each rewritten writer. `# noqa: F401` on re-imports because external callers (commands) still resolve `from libs.infrastructure.writers.X import SomeException` via the writer's re-export.
+
+Domain side unchanged: `libs/domain/errors/{aggregate}__error.py` already exists per follow-up 056. Naming distinction preserved — domain errors are `*Error` (semantic, raised by commands for app-layer concerns), infra exceptions are bare names (raised by infra primitives for filesystem/HTTP/subprocess failures); commands catch infra → re-raise as domain.
+
+Out of scope (deferred):
+- DAO dataclass extractions to `libs/infrastructure/daos/{aggregate}__dao.py` (e.g., TruncateResult, ConcatResult, MoveResult, RenameResult, GenerateResult, ActorInfo, …). Rule is in place to flag at next stage-5 review.
+- Command rewrites to import from errors files directly (currently they import from writer; that still works via re-export). Mechanical cleanup, orthogonal.
+
+Smoke test:
+- `python -c "import every libs/* module"` — 0 errors
+- `python -c "import apps.api.main; import apps.api.asgi"` — boot clean (still relevant after follow-up 066 fix)
+- `python -m pytest tests/` — 18 pass / 5 pre-existing wukong fixture failures (=066/067 baseline, 0 regressions)
+- `grep -E "^class \w+\(Exception\):" libs/infrastructure/writers/*.py libs/infrastructure/readers/*.py` — 0 matches (acceptance gate passes)
+- `find libs/infrastructure/errors -name "*.py" -not -name "__init__.py" | wc -l` = 7
+
+Auto-updated:
+- `.claude/agent_refs/project/development.md` §1 — 新增 SRP paragraph (4 concrete extractions listed) 放在 dependency-arrow 段后、file-size guideline 前。
+- `CLAUDE.md` § Project rules — 新增 SRP bullet 引用 development.md §1。
+- `projects/ai_video_management/libs/infrastructure/errors/{actor,casting,character_video,downloads,file,frame,media}__error.py` (7 NEW files, 43 class definitions).
+- `projects/ai_video_management/libs/infrastructure/writers/*.py` 7 files + `readers/file__reader.py` — 各加 `from libs.infrastructure.errors.X__error import (...)` re-export，原 inline exception class definitions 删除。
+
+No conflicts found in:
+- follow-up 067 (look enum domain/infra sync)：纯 enum extension，与 SRP exception extraction 正交。
+- follow-up 066 (main/asgi create_app import fix)：纯 import path bugfix，本 follow-up 不动 main/asgi。
+- follow-up 065 (routes split + file-size rule)：本 follow-up 是 65/66 系列的姊妹 — SRP 是 "one concern per file" 的更深刻表达，file-size 是其表象之一。
+- follow-ups 052/053/054 (actor body image / diverse mode / character_video)：新 exception class（如果有）会自动落入正确的 errors 文件，无 conflict。
+- follow-ups 001-064：所有 commands 仍按旧路径 import exceptions from writers (re-export 保留 back-compat)，HTTP routes + JSON shapes byte-identical。
+
+## Follow-up 067 — 2026-05-17 16:35:05
+Source: user_input/follow_ups/067-20260517-163505-look-enum-domain-infra-sync.md
+Summary: 修 follow-up 064 漏的第二份 `LOOK_OPTIONS`。064 把 5 个新 look 值（righteous / sinister / seductive / cunning / innocent）只加到 infrastructure 层 `actor__writer.py::LOOK_OPTIONS`，但 domain 层 `actor__valueobject.py::LOOK_OPTIONS` 仍是原 8 项；application layer 的 `ActorQuery.preview_prompts` / `ActorCommand.generate` 先调 `ActorAttrs.validate()`（domain）→ `InvalidActorAttributeError` → routes 映射 400 invalid_attribute → 用户看到 "预览失败: 400 invalid_attribute"。
+
+Fix:
+- `libs/domain/value_objects/actor__valueobject.py::LOOK_OPTIONS` frozenset 加 5 个 slug `righteous` / `sinister` / `seductive` / `cunning` / `innocent`；inline 注释提醒 MUST stay in sync with infrastructure 层 LOOK_OPTIONS。
+
+Smoke test:
+- `ActorAttrs(look="righteous"|...).validate()` 5 个新值全部 pass ✓
+- `ActorAttrs(look="unknown_xyz").validate()` 仍正确 raise InvalidActorAttributeError ✓
+
+Class-of-bug note: DDD enum-duplication anti-pattern — 6 个 closed enums (ETHNICITY / GENDER / AGE_RANGE / LOOK / STYLE / RESOLUTION) 每个都在 domain + infra 各定义一份；任何扩展 must touch both。Long-term cleanup: infra 应 `from libs.domain.value_objects.actor__valueobject import LOOK_OPTIONS` 而非自定义。本 follow-up 不做结构 refactor，仅修 064 漏的具体 mismatch。
+
+No frontend / spec FR / endpoint changes.
+
+## Follow-up 066 — 2026-05-17 16:29:55
+Source: user_input/follow_ups/066-20260517-162955-fix-main-asgi-create-app-import.md
+Summary: Bugfix to follow-up 065. `apps/api/main.py:13` + `apps/api/asgi.py:16` 还在 `from apps.api.routes import create_app` 旧位置 — 但 `apps/api/routes` 现在是 per-aggregate routes 包，`create_app` 实际在 `apps/api/app_factory.py` (since follow-up 051)。一行修：两处 import 改 `from apps.api.app_factory import create_app`。Pytest 漏抓因为 `tests/conftest.py:make_app` 已在 065 中修过；`make run-backend` (走 main.py) 才触发 ImportError。
+
+Auto-updated:
+- `projects/ai_video_management/apps/api/main.py` — line 13 import path fix。
+- `projects/ai_video_management/apps/api/asgi.py` — line 16 import path fix。
+- `projects/ai_video_management/specs/development/ai_video_management/user_input/follow_ups/066-...md` (NEW)
+- `projects/ai_video_management/specs/development/ai_video_management/user_input/revised_prompt.md` — header bumped (next).
+- `specs/development/ai_video_management/final_specs/spec.md` / `validation/*` — 不需要 surgical patch；纯 import-path fix，行为零变化。
+
+Smoke test:
+- `python -c "import apps.api.main"` — 0 errors。
+- `python -c "import apps.api.asgi"` — app constructs OK, title='ai_video_management'。
+- `python -m pytest tests/` — 18 pass / 5 pre-existing wukong fixture failures (与 065 baseline 完全一致，0 regressions)。
+
+Class-of-bug note: 这是 follow-up 065 的回滚-recovery 步骤里未跑遍的 import site。065 用 Python regex sweep 改了 `from libs.infrastructure.X` 路径但 `from apps.api.routes import create_app` 是 `apps.*` 不在那个 sweep 范围；conftest.py 后来手动修了，main.py + asgi.py 漏。未来可加 stage-5 smoke: `python -m apps.api.main --no-reload` 跑 1 秒收 SIGINT — 现在的 boot_smoke 测试用 `make_app()` 路径，跳过了 main.py / asgi.py 入口。
+
+No conflicts found in:
+- follow-up 065 (routes split + file-size rule)：本 follow-up 是 065 routes-split 工作的 import-site-完整性 bugfix；065 的所有 contracts/layout 全部保留。
+- follow-ups 062/063/064 (前端 UI changes / unified mode / shot concat tweaks)：纯前端 / 内容契约，与 backend boot fix 正交。
+- follow-up 051 (create_app moved to app_factory)：本 follow-up 终于把 main.py + asgi.py 也对齐到 app_factory 位置（051 时移过 routes.py 但忘了同步 main/asgi import — 该 import 一直 broken 但未被 pytest 抓到，因为 conftest 单独 import path）。
+
+## Follow-up 065 — 2026-05-17 16:22:02
+Source: user_input/follow_ups/065-20260517-162202-split-routes-by-aggregate-file-size-rule.md
+Summary: 双重改动：(1) 加文件大小规则 (`< 100 行 preferable, split by sub-concern when bigger`) 到 `agent_refs/project/development.md` §1。(2) 拆分 `apps/api/routes.py` (847 行) 到 `apps/api/routes/{aggregate}__route.py` 8 个 per-aggregate 文件 + `_helpers.py` + `__init__.py` (combined router)。同时清理本 turn 开局发现的 OLD/NEW 路径混乱状态 (5 flat infra 文件 / 11 OLD-path imports / container.py + agent_refs §1 + CLAUDE.md 都被回滚到 pre-051 状态)。
+
+Routes split (apps/api/routes/):
+- tree__route.py: 18 行 (GET /api/tree)
+- file__route.py: 81 行 (GET/PUT /api/file)
+- media__route.py: 204 行 (serve / archive / unarchive / delete / hard_delete / rename + 6 method_not_allowed)
+- frame__route.py: 54 行 (POST /api/extract-frames)
+- downloads__route.py: 44 行 (POST /api/import-from-downloads)
+- actor__route.py: 238 行 (generate / generate-diverse / preview-prompts / preview-diverse / list / delete / assignments + 7 method_not_allowed + helpers)
+- casting__route.py: 105 行 (read / assign / unassign)
+- character_video__route.py: 84 行 (truncate / concat-shot)
+- _helpers.py: 55 行 (file_security_headers, method_not_allowed, actor_assigned_409, map_move_failure)
+- __init__.py: 30 行 (combines 8 sub-routers)
+
+File-size rule (common-level, in `agent_refs/project/development.md` §1):
+- Guideline: `< 100 行 preferable`, split direction matches layer's existing role taxonomy
+- Hard cap `~1000 行` 无清晰 sub-concern boundary = stage-5 `warning` (not blocker)
+- Aggregates with legitimately complex business logic (variance pools / prompt assembly) may exceed
+- Examples: routes.py → routes/{aggregate}__route.py; bulky *__writer.py 按 operation 切分 if no shared state
+
+Pre-turn recovery work (codebase was in inconsistent OLD/NEW state):
+- Detected: `apps/api/{container,asgi,main,routes}.py`, `apps/api/routes.py`, `libs/infrastructure/{actor_pool,casting,downloads__importer,...}.py`, `agent_refs/project/development.md` §1, `CLAUDE.md` § Project rules — 全被回滚到 pre-051 状态
+- BUT `libs/{application,domain,infrastructure}/` 子目录 + apps/api/app_factory.py + 我这 turn 写的 apps/api/routes/ 都还在 (NEW layout exists alongside OLD)
+- Forward-fix per user 选择：
+  - Moved 5 flat infra files into sub-folders (casting__writer, file__writer, file__reader, tree__reader, origin_host__middleware)
+  - Deleted 5 superseded flat infra files (actor_pool, downloads__importer, frame__extractor, media__archiver, media__renamer) — writers/ 子目录已有 newer versions (含 follow-up 052/053/054 work)
+  - Deleted apps/api/routes.py (新 routes/ folder takes over)
+  - Bulk import rewrite: 17 subs across 7 files (apps/api/asgi.py + main.py + container.py + tests + libs/infrastructure/writers/casting__writer.py)
+  - Rewrote apps/api/container.py: 12 Factory providers (post-061 aggregate Q/C wiring with `wiring_config = packages=["apps.api.routes"]` per 062)
+  - Restored agent_refs/project/development.md §1 sub-bucketing tree + file-per-aggregate + one-class-per-Q/C + routes-mirror rules
+  - Restored CLAUDE.md § Project rules bullets (solution-layout mandate + commands-via-domain + file-size guideline)
+
+Note on NOT restored: follow-ups 051/056/060/061 had broader common-ref work (§6b empty-application-layer blocker, §11b validation grep checks, §3 application-layer rewrite, §4 file-pattern table) — those were ALSO rolled back this turn but NOT re-restored. The codebase enforces the rules; the documentation just doesn't currently cite them. Future cleanup can re-add if desired.
+
+Smoke test:
+- `python -c "import every module under libs/"` — 0 errors
+- App constructs OK (41 routes via 12 Q/C aggregate classes wired via Container)
+- `python -m pytest tests/` — 18 pass / 5 pre-existing wukong fixture failures (identical to baseline; 0 regressions)
+- `wc -l apps/api/routes/*.py` — every per-aggregate file ≤ 238 lines (vs old 847-line single file)
+- `wiring_config = packages=["apps.api.routes"]` — all per-aggregate route modules auto-wired
+
+Common refs:
+- `.claude/agent_refs/project/development.md` §1 — restored sub-bucketing tree (4 layers × role sub-folders) + file-per-aggregate / one-class-per-Q/C / routes-mirror rules + NEW file-size guideline.
+- `CLAUDE.md` § Project rules — restored solution-layout / commands-via-domain bullets + NEW file-size guideline bullet.
+
+Project-scoped (specs/development/ai_video_management/):
+- `user_input/follow_ups/065-20260517-162202-split-routes-by-aggregate-file-size-rule.md` (NEW)
+- `user_input/revised_prompt.md` — header bumped (after this commit)
+- `final_specs/spec.md` / `validation/*` — 不需要 surgical patch；routes/ 拆分是内部结构，HTTP 行为零变化。
+
+Auto-updated:
+- `.claude/agent_refs/project/development.md` — §1 sub-bucketing 恢复 + file-size 规则。
+- `CLAUDE.md` — § Project rules bullets 恢复 + file-size guideline。
+- `projects/ai_video_management/apps/api/routes/` (NEW dir + 10 files)
+- `projects/ai_video_management/apps/api/routes.py` (DELETED)
+- `projects/ai_video_management/apps/api/container.py` (rewritten — 12 aggregate Q/C Factory providers + `packages=` wiring)
+- `projects/ai_video_management/apps/api/{asgi,main}.py` (import path fix + `packages=` wiring)
+- `projects/ai_video_management/libs/infrastructure/{actor_pool,downloads__importer,frame__extractor,media__archiver,media__renamer}.py` (DELETED — superseded by sub-folder versions)
+- `projects/ai_video_management/libs/infrastructure/{casting__writer,file__writer,file__reader,tree__reader,origin_host__middleware}.py` → moved to sub-folders
+- `projects/ai_video_management/libs/infrastructure/writers/casting__writer.py` — internal imports fixed (actor_pool / media_renamer → writers/ paths)
+- `projects/ai_video_management/tests/{conftest,test_*}.py` — import path updates (create_app from app_factory, BoundOrigin from common.origin, infra paths to sub-folders)
+
+No conflicts found in:
+- follow-up 062 (confirm-send modal) / 063 (dropdown labels) / 064 (shot concat + unified mode)：纯前端 / 内容契约，与 routes split 正交。
+- follow-up 061 (one-class-per-Q/C)：本 follow-up 在 061 的 aggregate Q/C 单类基础上对 routes 做同样的 per-aggregate 拆分 — pattern 一致。
+- follow-up 060 (libs file-per-aggregate)：routes/ 现在 mirror application/{queries,commands}/ 的 per-aggregate file 命名。
+- follow-up 056 (sub-bucketing)：routes/ 是同样的 per-role sub-folder 模式，apps/api/ 内的应用。
+- follow-up 051 (DDD layering)：routes/ 内每 handler 仍 inject aggregate Q/C 并 call method (per 061 convention)；零 infra import。
+- follow-ups 001-050 + 052-058：所有 HTTP routes + JSON shapes byte-identical；routes 拆分 + file-size 规则仅文档/结构变化。
+
+## Follow-up 064 — 2026-05-17 15:34:14
+Source: user_input/follow_ups/064-20260517-153414-unified-mode-random-defaults-look-extension.md
+Summary: 合并 standard / diverse mode 为一；每个属性下拉加 🎲 随机 sentinel 作 default；扩 look 枚举加 5 个角色性格值（正义 / 阴邪 / 妩媚 / 狡诈 / 天真）；删除 mode toggle radio。Backend `preview_prompts` 加 optional `seeds` 参数（previously N 并行 count=1 调用因毫秒精度 `time.time()` 撞同 base_seed → 同 prompt → 同图）。前端 onPreview 给每个 slot 滚 random（仅对 `__random__` 字段） + 显式 `seeds: [Date.now()+i]` + `Promise.all` 并行 N 个 `previewPrompts({count: 1, ...})`，聚合成 `PromptPreviewResult`。Confirm 路径从 preview entries 取 per-slot resolved attrs。
+
+Backend:
+- `libs/infrastructure/writers/actor__writer.py`:
+  - `LOOK_OPTIONS` 加 5 slug: righteous / sinister / seductive / cunning / innocent。
+  - 新 `_LOOK_ENRICHED: dict[str, str]` 映射 5 新 slug 到 enriched English prompt fragment（旧 8 slug 保留 bare adjective behavior 经 `.get(slug, slug)` fallback）。
+  - `_build_face_prompt` + `_build_body_prompt` 用 `_LOOK_ENRICHED.get(attrs.look, attrs.look)` 替代 raw `attrs.look`。
+  - `preview_prompts` 签名加 `seeds: list[int] | None = None`，validate `len(seeds) == count` + 全 int；providing → per-slot seed = seeds[i]；omitted → fallback base_seed + i.
+- `libs/domain/repositories/actor__repository.py`: `preview_prompts` Protocol 同步 seeds 参数。
+- `libs/application/queries/actor__query.py` `ActorQuery.preview_prompts`: plumb `input_cdto.seeds` 到 `pool.preview_prompts`。
+
+Frontend:
+- `apps/ui/src/api.ts`:
+  - `ATTR_OPTIONS.look` append 5 new slug。
+  - 新 `ATTR_LABELS_ZH: { [K in keyof typeof ATTR_OPTIONS]: Record<string, string> }` 6 字段全中文映射（含 5 新 look slug：正义 / 阴邪 / 妩媚 / 狡诈 / 天真）。
+  - 新 export `RANDOM_SENTINEL = "__random__"` + `rollRandomAttr<K>(field)` helper。
+  - 新 interface `PromptPreviewSlot { seed, prompt, body_prompt?, attrs? }`；`PromptPreviewResult.prompts` 类型从 `{seed, prompt}[]` → `PromptPreviewSlot[]`。
+  - `GenerateActorsRequest` 加 optional `archetype?: string | null` (forward-compat with future archetype-tagging via per-slot generate)。
+- `apps/ui/src/components/ActorPoolGenerator.tsx`:
+  - 删除 mode state + radio toggle (`mode === "standard"` / `mode === "diverse"`)。
+  - 5 个 attr state 默认值 `useState<string>(RANDOM_SENTINEL)`（resolution 仍默认 normal — 混合 1024/2K/4K 输出 rarely 是用户想要的）。
+  - 每个 `<select>` 第一个 `<option value={RANDOM_SENTINEL}>🎲 随机</option>` + 后续具体 options 用 `ATTR_LABELS_ZH[field][o]` 显示中文。
+  - `onPreview` 重写：roll random per-slot per-field，N parallel `previewPrompts(count=1, seeds=[base+i])`，聚合 `PromptPreviewResult` 含每 slot 的 resolved attrs。
+  - `onConfirmGenerate` worker：从 `previewSnapshot.prompts[slot-1].attrs` 取 per-slot resolved attrs 传给 `generateActors`。
+  - `setPreview(null)` 在 onConfirmGenerate 启动 worker pool 前（follow-up 062 carry-over）。
+  - 移除 backdrop `onClick={onCloseRequest}` + footer "关闭" button（follow-up 058 carry-over）。
+  - Count input switch to `type="text" inputMode="numeric"` + countText string state + derived count + 三重 event guard（follow-up 055 + 057 carry-over）。
+- `apps/ui/src/styles.css`: 加 `.prompt-preview-attrs` (monospace muted)。
+
+Spec / validation: deferred batch.
+
+User-input:
+- `user_input/revised_prompt.md`: composed-from + Last regenerated 重写为 064。
+- `user_input/follow_ups/064-20260517-153414-unified-mode-random-defaults-look-extension.md` (NEW)。
+
+## Follow-up 063 — 2026-05-17 15:31:00
+Source: user_input/follow_ups/063-20260517-153100-generator-dropdown-chinese-labels.md
+Summary: ActorPoolGenerator 6 个下拉菜单 option 文本汉化（民族 / 性别 / 年龄段 / 外貌气质 / 风格 / 画质）。`<option value>` 保留 slug；仅显示中文。已 bundled 入 follow-up 064 落地。
+
+## Follow-up 062 — 2026-05-17 15:22:34
+Source: user_input/follow_ups/062-20260517-152234-confirm-send-close-preview-show-progress.md
+Summary: 修 "点击确认发送后 UI 没反应" 的 bug。`onConfirmGenerate` 启动 9-worker pool 但从不调 `setPreview(null)`，预览模态遮住 ProgressPanel。`apps/ui/src/components/ActorPoolGenerator.tsx::onConfirmGenerate`：在 busy guard 之后立刻 `setPreview(null)` —— 关闭预览模态让 ProgressPanel 浮上来。已 bundled 入 follow-up 064 落地（previewSnapshot 局部变量保留 plan，setPreview(null) 触发 unmount）。
+
 ## Follow-up 045 — 2026-05-14
 Source: user_input/follow_ups/045-20260513-231500-env-file-location-and-asgi-mismatch.md
 Summary: Backend boot 失败 `RuntimeError: kling env keys missing` 的两层修复：(1) `apps/api/asgi.py` 的 env-path bug — 残留 `Path(__file__).resolve().parent.parent / ".env"` 来自原 `backend/libs/asgi.py`，在新路径 `apps/api/asgi.py` 下解析到 `apps/.env`（高了一层），与 `main.py` 的 `apps/api/.env` 不一致；改为 `parent / ".env"` 对齐。(2) 创建 `apps/api/.env` 包含 `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`（用户私下提供，已通过 `git check-ignore` 确认被 repo root `.gitignore` line 138 catches；密钥值本身**不**写入任何 spec / changelog / 提交文件）。

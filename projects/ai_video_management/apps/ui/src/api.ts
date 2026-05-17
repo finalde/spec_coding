@@ -183,10 +183,24 @@ export interface GenerateActorsRequest extends ActorAttrs {
   count: number;
   resolution?: string;
   seeds?: number[];
+  /** Per follow-up 064: optional archetype slug forwarded by per-slot
+   * confirm calls so each actor's sidecar carries the slug from first
+   * write. Standard callers pass null/omitted. */
+  archetype?: string | null;
+}
+
+/** Per follow-up 059 / 064: per-slot preview entry. `body_prompt` is the
+ * follow-up 052 dual-shot companion; `attrs` is the rolled per-slot attrs
+ * that the confirm step forwards to `generateActors`. */
+export interface PromptPreviewSlot {
+  seed: number;
+  prompt: string;
+  body_prompt?: string;
+  attrs?: ActorAttrs;
 }
 
 export interface PromptPreviewResult {
-  prompts: { seed: number; prompt: string }[];
+  prompts: PromptPreviewSlot[];
   resolution: string;
 }
 
@@ -298,10 +312,49 @@ export const ATTR_OPTIONS = {
   ethnicity: ["asian", "east-asian", "south-asian", "caucasian", "african", "latino", "middle-eastern", "mixed"] as const,
   gender: ["male", "female"] as const,
   age_range: ["18-25", "26-35", "36-50", "51-65", "65+"] as const,
-  look: ["handsome", "beautiful", "cute", "mature", "rugged", "soft", "aristocratic", "fierce"] as const,
+  // Per follow-up 064: 5 character-archetype-flavored values appended after the original 8 physical-appearance values.
+  look: ["handsome", "beautiful", "cute", "mature", "rugged", "soft", "aristocratic", "fierce", "righteous", "sinister", "seductive", "cunning", "innocent"] as const,
   style: ["modern-casual", "period-ancient-china", "period-western", "business", "streetwear", "sci-fi", "fantasy"] as const,
   resolution: ["normal", "2k", "4k"] as const,
 };
+
+/** Per follow-up 063: Chinese display labels for ATTR_OPTIONS slugs. */
+export const ATTR_LABELS_ZH: { [K in keyof typeof ATTR_OPTIONS]: Record<string, string> } = {
+  ethnicity: {
+    "asian": "亚洲", "east-asian": "东亚", "south-asian": "南亚",
+    "caucasian": "白人", "african": "非洲裔", "latino": "拉丁裔",
+    "middle-eastern": "中东", "mixed": "混血",
+  },
+  gender: { "male": "男", "female": "女" },
+  age_range: {
+    "18-25": "18-25 岁", "26-35": "26-35 岁", "36-50": "36-50 岁",
+    "51-65": "51-65 岁", "65+": "65 岁以上",
+  },
+  look: {
+    "handsome": "俊朗", "beautiful": "美丽", "cute": "可爱", "mature": "成熟",
+    "rugged": "粗犷", "soft": "温柔", "aristocratic": "贵族气质", "fierce": "凌厉",
+    "righteous": "正义", "sinister": "阴邪", "seductive": "妩媚",
+    "cunning": "狡诈", "innocent": "天真",
+  },
+  style: {
+    "modern-casual": "现代休闲", "period-ancient-china": "古装仙侠",
+    "period-western": "西方古装", "business": "商务",
+    "streetwear": "街头潮流", "sci-fi": "科幻", "fantasy": "奇幻",
+  },
+  resolution: {
+    "normal": "普通 (~1024px Kling 原始)", "2k": "2K (2048px)", "4k": "4K (4096px)",
+  },
+};
+
+/** Per follow-up 064: random sentinel value for dropdowns. Frontend
+ * resolves this to a random pick from `ATTR_OPTIONS[field]` per slot
+ * before any preview / generate call — backend never sees the sentinel. */
+export const RANDOM_SENTINEL = "__random__";
+
+export function rollRandomAttr<K extends keyof typeof ATTR_OPTIONS>(field: K): typeof ATTR_OPTIONS[K][number] {
+  const opts = ATTR_OPTIONS[field];
+  return opts[Math.floor(Math.random() * opts.length)];
+}
 
 /** Build a same-origin URL for image preview, with mtime cache-buster. */
 export function imageUrl(path: string, mtime: number): string {
@@ -314,4 +367,47 @@ export function imageUrl(path: string, mtime: number): string {
 export function mediaUrl(path: string, mtime?: number): string {
   const cb = mtime !== undefined ? `&mtime=${encodeURIComponent(String(mtime))}` : "";
   return `/api/media?path=${encodeURIComponent(path)}${cb}`;
+}
+
+export interface TruncateCharacterVideoResult {
+  src: string;
+  out: string;
+  duration_seconds: number;
+}
+
+export async function truncateCharacterVideo(path: string): Promise<TruncateCharacterVideoResult> {
+  const response = await fetch("/api/truncate-character-video", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<TruncateCharacterVideoResult>(response);
+}
+
+export interface ShotConcatCharacterUsed {
+  role: string;
+  character_folder: string;
+  rel_path: string;
+}
+
+export interface ShotConcatCharacterSkipped {
+  role: string;
+  character_folder: string;
+  reason: string;
+}
+
+export interface ConcatShotCharactersResult {
+  shot_path: string;
+  out: string | null;
+  used: ShotConcatCharacterUsed[];
+  skipped: ShotConcatCharacterSkipped[];
+}
+
+export async function concatShotCharacters(path: string): Promise<ConcatShotCharactersResult> {
+  const response = await fetch("/api/concat-shot-characters", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ConcatShotCharactersResult>(response);
 }

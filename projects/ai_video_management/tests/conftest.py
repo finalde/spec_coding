@@ -27,10 +27,10 @@ def make_app(rr, bound, serve_static: bool = False):
     Mirrors apps.api.main._build_container without uvicorn/argparse.
     """
     from apps.api.container import Container
-    from apps.api.routes import create_app
+    from apps.api.app_factory import create_app
 
     container = Container()
     container.repo_root_path.override(rr.path)
     container.bound_origin.override(bound)
-    container.wire(modules=["apps.api.routes"])
+    container.wire(packages=["apps.api.routes"])
     return create_app(container, serve_static=serve_static)

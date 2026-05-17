@@ -5,8 +5,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from apps.api.routes import create_app
-from libs.infrastructure.origin_host__middleware import BoundOrigin
+from apps.api.app_factory import create_app
+from libs.common.origin import BoundOrigin
 from libs.common.repo_root import RepoRoot
 from tests.conftest import make_app, repo_root
 

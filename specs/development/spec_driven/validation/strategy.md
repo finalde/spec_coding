@@ -3,6 +3,13 @@
 Run: spec_driven-20260503-145859 (autonomous full-pipeline regen, parent-direct synthesis from 7 parallel level-specialist subagent outputs)
 
 > **Follow-up 014 amendment (2026-05-13):** path references to `backend/`, `frontend/`, `backend/libs/` in this strategy + sibling validation modules (`acceptance_criteria.md`, `bdd_scenarios.md`, `system_tests.md`, `unit_tests.md`, `security.md`, `performance.md`, `accessibility.md`) are remapped to `apps/api/`, `apps/ui/`, `libs/{infrastructure,domain,application,common}/` respectively. Validation acceptance is otherwise unchanged. New blocker added at stage 5: cross-layer imports violating the dependency arrows in `.claude/agent_refs/project/development.md` §1.
+>
+> **Follow-up 015 amendment (2026-05-17):** the layout standard tightened to the evolved form encoded in `.claude/agent_refs/project/development.md` after ai_video_management follow-ups 056 / 060 / 061 / 065 / 068. Three new stage-5 checks land here:
+> 1. **Sub-bucket presence (`blocker`).** Each non-`common/` layer MUST hold its files inside the canonical role sub-folders for its layer — `libs/infrastructure/{readers,writers,clients,daos,middleware,errors}/`, `libs/domain/{entities,value_objects,errors,repositories}/`, `libs/application/{queries,commands,dtos,mappers}/`. A file directly at the layer root (e.g., `libs/application/build_regen_prompt__query.py` instead of `libs/application/queries/regen_prompt__query.py`) is a `blocker`. Empty role folders for canonical roles are allowed and document the convention.
+> 2. **SRP infra-exception grep (`blocker`).** `^class \w+\(Exception\):` anywhere under `libs/infrastructure/{readers,writers,clients,middleware}/` is a `blocker`. The fix is to move the class to `libs/infrastructure/errors/{aggregate}__error.py` and re-export it from the writer/reader for back-compat.
+> 3. **Routes-split presence (`blocker`).** `apps/api/routes/` MUST be a package — `apps/api/routes/__init__.py` exposing a combined `router` plus `apps/api/routes/{aggregate}__route.py` files each with their own `APIRouter()`. A single-file `apps/api/routes.py` (or `routes/api.py`) holding all endpoints is a `blocker`; the fix is to split per aggregate.
+>
+> A new stage-5 `warning` lands alongside: a `.py` file under `libs/` or `apps/api/` exceeding ~1000 lines without a clear sub-concern boundary fires the file-size warning per `agent_refs/project/development.md` §1.
 
 ## Levels chosen
 

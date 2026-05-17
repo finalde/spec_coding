@@ -11,6 +11,7 @@ AI-generated actor face (Kling text-to-image, follow-up 025).
 | style | modern-casual |
 | notes | — |
 | seed | 1778598311179 |
+| archetype | leading_hero |
 
 ## 生成 prompt
 

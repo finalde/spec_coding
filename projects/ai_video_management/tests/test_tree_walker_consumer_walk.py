@@ -6,7 +6,7 @@ the class of bug where backend emits a different field than the frontend reads.
 from __future__ import annotations
 
 from libs.common.exposed_tree import ExposedTree
-from libs.infrastructure.tree__reader import TreeReader
+from libs.infrastructure.readers.tree__reader import TreeReader
 from tests.conftest import make_app, repo_root
 
 

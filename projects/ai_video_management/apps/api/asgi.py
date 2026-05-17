@@ -13,10 +13,10 @@ from libs.common.env_loader import load_env_file
 load_env_file(Path(__file__).resolve().parent / ".env")
 
 from apps.api.container import Container
-from apps.api.routes import create_app
+from apps.api.app_factory import create_app
 from apps.api.uvicorn_force_exit import install as _install_force_exit_watchdog
 from libs.common.repo_root import RepoRoot
-from libs.infrastructure.origin_host__middleware import BoundOrigin
+from libs.common.origin import BoundOrigin
 
 _install_force_exit_watchdog()
 
@@ -28,7 +28,7 @@ def _build_app():
     container = Container()
     container.repo_root_path.override(RepoRoot.find().path)
     container.bound_origin.override(BoundOrigin(host=HOST, port=PORT))
-    container.wire(modules=["apps.api.routes"])
+    container.wire(packages=["apps.api.routes"])
     return create_app(container, serve_static=True)
 
 

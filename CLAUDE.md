@@ -119,13 +119,17 @@ The spec_driven webapp's `EXPOSED_TREE` recursive globs (`.claude/skills/agent_t
 
 ## Project rules (under `projects/`)
 
-- One folder per project; no cross-project imports. `backend/` + `frontend/` subfolders when both are needed.
-- Python: own `requirements.txt` (direct deps only); mirrored into root `pyproject.toml`; root `requirements.txt` is the pip fallback.
-- Backend entry: `main.py` (~15 lines: parse args, hand off to `libs/`). All app logic in `libs/<module>.py`. Domain concepts as classes; `@dataclass(frozen=True)` for immutable containers; avoid free-standing module functions except pure utilities.
-- Strong typing on every parameter, return, and attribute. Use `str | None`, not `Optional[str]`.
-- Frontend: standard React; `node_modules/` in `.gitignore`.
+- One folder per project; no cross-project imports.
+- **Solution layout is mandatory** — `apps/{api,ui,…}/` for executables, `libs/{infrastructure,domain,application,common}/` for shared code, each layer sub-bucketed by role (`application/{queries,commands,dtos,mappers}`, `domain/{entities,value_objects,errors,repositories}`, `infrastructure/{readers,writers,clients,daos,middleware}`; `common/` stays flat). Within each role sub-folder, one file per aggregate: `{aggregate}__{role}.py`. For `commands/` + `queries/` the file holds EXACTLY ONE class (`{Aggregate}Command` / `{Aggregate}Query`) with one method per operation — e.g., `ActorCommand.generate(...)`, `.generate_diverse(...)`, `.delete(...)`. For `dtos/` the file holds both Qdtos and Cdtos for that aggregate (the suffix on the class name disambiguates). Routes follow the same pattern: `apps/api/routes/{aggregate}__route.py`, each with its own `APIRouter()`; `routes/__init__.py` combines them into a single `router` that `app_factory.py` mounts. Authoritative spec: `.claude/agent_refs/project/development.md` §1. The old `backend/` + `frontend/` shape is retired.
+- **Routes / job entries / CLIs do NOT import infrastructure directly.** Every endpoint maps to exactly one application-layer Query or Command method. Empty `libs/application/` while `apps/*` has executables is a stage-5 `blocker` — see `agent_refs/project/development.md` §6b and `agent_refs/validation/development.md` §11b.
+- **Commands go through `libs/domain/`** (entities + value objects + repository protocols). Read-side queries may skip the domain layer per development.md §3 carve-out; state changes may not.
+- **Single Responsibility Principle** — one concern per file. Exception classes don't live in writer/reader files (extract to `libs/infrastructure/errors/{aggregate}__error.py`); DAO dataclasses go in `libs/infrastructure/daos/{aggregate}__dao.py`; DTOs go in `libs/application/dtos/{aggregate}__dto.py`; Pydantic request bodies stay with the route handler. See `agent_refs/project/development.md` §1.
+- **File size guideline** — prefer `< 100 lines`, split by sub-concern (mirroring the layer's role taxonomy) when bigger. Hard cap is around `~1000` lines with no clear sub-concern boundary (stage-5 `warning`). See `agent_refs/project/development.md` §1.
+- Python: own `requirements.txt` (direct deps only); mirrored into root `pyproject.toml`; root `requirements.txt` is the pip fallback. `apps/*` Python uses `dependency_injector` per development.md §5.
+- Strong typing on every parameter, return, and attribute. Use `str | None`, not `Optional[str]`. `@dataclass(frozen=True)` for value objects and DTOs; mutable `@dataclass` only for entities with invariant-guarded mutation methods.
+- Frontend (`apps/ui/`): standard React; `node_modules/` in `.gitignore`. DDD layering does NOT apply to UI code.
 - README required and updated alongside any feature change.
-- **Cross-cutting project-output rules** (themes, visual defaults, structural conventions) live in `.claude/agent_refs/project/` per § Stage playbooks and reference docs — NOT in this section.
+- **Cross-cutting project-output rules** (themes, visual defaults, structural conventions, DDD+CQRS layering details) live in `.claude/agent_refs/project/` per § Stage playbooks and reference docs — NOT in this section.
 
 ## AI video rules (under `ai_videos/`)
 

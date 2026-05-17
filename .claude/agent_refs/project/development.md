@@ -18,13 +18,34 @@ projects/{name}/
 │   ├── api/               # webapi (FastAPI) — main.py + container.py + routes/
 │   ├── ui/                # React frontend (was `frontend/`)
 │   └── {name}_job/        # any batch job exe lives here too
-├── libs/                  # the shared backend code — exactly 4 subfolders
+├── libs/                  # the shared backend code — 4 layers, each sub-bucketed by role
 │   ├── infrastructure/    # pure engineering: file I/O, DB, HTTP clients, message brokers
+│   │   ├── readers/       # *__reader.py
+│   │   ├── writers/       # *__writer.py + mutator-suffix legacy names (importer/extractor/archiver/renamer/truncator/builder)
+│   │   ├── clients/       # *__client.py (3rd-party HTTP / SDK wrappers)
+│   │   ├── daos/          # *__dao.py (frozen dataclasses mirroring external schema)
+│   │   └── middleware/    # *__middleware.py (framework adapters at the transport edge)
 │   ├── domain/            # pure business logic — no I/O, no frameworks
+│   │   ├── entities/      # *__entity.py
+│   │   ├── value_objects/ # *__valueobject.py
+│   │   ├── errors/        # *__error.py
+│   │   └── repositories/  # *__repository.py (Protocols)
 │   ├── application/       # orchestration: load via infra, run domain, map results
-│   └── common/            # constants, enums, primitive types shared by all three
-└── tests/                 # mirrors apps/ + libs/ tree: tests/api/, tests/libs/domain/, ...
+│   │   ├── queries/       # *__query.py — ONE class per file with method-per-operation
+│   │   ├── commands/      # *__command.py — ONE class per file with method-per-operation
+│   │   ├── dtos/          # *__dto.py — Qdtos + Cdtos for the aggregate (multi-class OK; pure data)
+│   │   └── mappers/       # *__mapper.py
+│   └── common/            # constants, enums, primitive types shared by all three (FLAT — no sub-bucketing)
+└── tests/                 # mirrors apps/ + libs/ tree (including type sub-folders)
 ```
+
+**Per-role sub-bucketing within each layer.** Files of the same role live in a folder named for the role (plural). Each role gets its own folder; empty folders for canonical roles are allowed (they document the convention). `common/` is the lone exception.
+
+**One file per aggregate per role.** `{aggregate}__{role}.py` holds all operations of that role for that aggregate. Example: `application/commands/actor__command.py` contains a single `ActorCommand` class with methods `generate(...)`, `generate_diverse(...)`, `delete(...)`. The operation name lives on the method, not on the class or filename. The legacy patterns (per-operation FILE, per-operation CLASS in same file, `execute()` method name) are retired.
+
+**DTOs are exempt from one-class-per-file** because they're pure data with no behavior — `{aggregate}__dto.py` may hold many Qdtos and Cdtos; the class-name `Qdto`/`Cdto` suffix already disambiguates.
+
+**Routes follow the same shape** as application: `apps/api/routes/{aggregate}__route.py`, each with its own `APIRouter()`. `apps/api/routes/__init__.py` exposes a combined `router` that `apps/api/app_factory.py` mounts on the FastAPI app.
 
 **Roles under `apps/`:**
 - `apps/api/` is the FastAPI executable. It does **only** wiring: build the DI container, mount routes, start uvicorn. All HTTP handler bodies call one application-layer Query or Command and return its DTO.
@@ -39,6 +60,23 @@ projects/{name}/
 - `apps/*` → may import from `application` and `common`. **Never** imports `infrastructure` or `domain` directly.
 
 A cross-layer import that violates the arrows is a `blocker` at stage 5 validation.
+
+**Single Responsibility Principle — one concern per file.** A `.py` file does ONE thing well. If you find a file mixing two unrelated concerns (e.g., a writer that also defines its own exception classes; a reader that also defines DAO dataclasses; a command that also defines its input/output DTOs), extract the second concern to its proper file. Concrete extractions:
+
+- **Exception classes never live in writer/reader files.** They go in `libs/infrastructure/errors/{aggregate}__error.py` (mirroring `libs/domain/errors/{aggregate}__error.py` on the domain side). The writer/reader imports its own exceptions via `from libs.infrastructure.errors.{aggregate}__error import (...)`. Anti-pattern: `class InvalidPath(Exception): ...` defined at the top of `{aggregate}__writer.py`.
+- **DAO dataclasses don't live in writer/reader files.** They go in `libs/infrastructure/daos/{aggregate}__dao.py`. The writer/reader imports the DAO.
+- **DTOs don't live in command/query files.** They go in `libs/application/dtos/{aggregate}__dto.py` (already enforced — see DTO consolidation rule above).
+- **Pydantic request bodies don't live in command/query files** either. They live with the route handler (`apps/api/routes/{aggregate}__route.py`) since they're a transport-layer shape, not application-layer.
+
+The rule's purpose: when you grep for "where does class X live" you find one place. When you `git log` a file, the history is about one concern, not interleaved unrelated changes. When the file grows, the split direction is dictated by the concern boundary, not invented case-by-case.
+
+**File size — prefer < 100 lines, split by sub-concern when bigger.** A file that grows past ~100 lines is a signal: the aggregate or module is doing too much. Split it the same way layers split — pick the sub-concern axis that matches the layer's existing taxonomy:
+
+- A `routes.py` with all endpoints (e.g., 800+ lines) splits into `apps/api/routes/{aggregate}__route.py` (one file per aggregate, mirroring `libs/application/{queries,commands}/`). The package's `__init__.py` exposes a single combined `router` that `app_factory.py` mounts.
+- An `{aggregate}__writer.py` that grows past ~500 lines (e.g., one with multiple distinct operations like generate + delete + migrate + reap) is a candidate for splitting along the operation boundary IF the operations don't share much private state; otherwise the size is justified by the aggregate's complexity.
+- A `{aggregate}__dto.py` past ~200 lines means too many DTOs share a file — split by query-side vs command-side (`{aggregate}__qdto.py` + `{aggregate}__cdto.py`) ONLY if the split materially helps readability; otherwise accept the size (DTOs are flat data, low cognitive cost).
+
+The < 100 line target is a **guideline**, not a hard cap. Aggregates with genuinely complex business logic (e.g., the actor pool's variance pools + prompt assembly + Kling client wrapper) may legitimately exceed it. The rule's purpose: when a file feels uncomfortable to navigate, the split direction is already implied by the layer's role taxonomy. A `*.py` file passing 1000 lines without a clear sub-concern boundary IS a stage-5 reviewer flag (`warning`, not `blocker`).
 
 ### 2. `libs/domain/` follows Domain-Driven Design
 

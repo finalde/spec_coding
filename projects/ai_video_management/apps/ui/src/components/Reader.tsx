@@ -14,11 +14,21 @@ import { CodeView } from "../markdown/CodeView";
 import { JsonlView } from "../markdown/JsonlView";
 import { SiblingMedia } from "./SiblingMedia";
 import { detectShotPair } from "../lib/shotPairing";
-import { archiveMedia, deleteMedia, extractFrames, fetchFile, mediaUrl, putFile, unarchiveMedia } from "../api";
+import {
+  archiveMedia,
+  concatShotCharacters,
+  deleteMedia,
+  extractFrames,
+  fetchFile,
+  mediaUrl,
+  putFile,
+  unarchiveMedia,
+} from "../api";
 import { ApiError, type FileResult, type TreeNode } from "../types";
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const VIDEO_EXTS = new Set([".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"]);
+const SHOT_MD_RE = /^ai_videos\/[^_][^/]*\/(?:episodes\/ep\d+\/)?prompts\/shot\d+\/shot\d+\.md$/;
 
 export interface ReaderProps {
   tree: TreeNode | null;
@@ -43,6 +53,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [archiving, setArchiving] = useState<boolean>(false);
   const [deleting, setDeleting] = useState<boolean>(false);
   const [extracting, setExtracting] = useState<boolean>(false);
+  const [concatBusy, setConcatBusy] = useState<boolean>(false);
 
   const ext = path ? extOf(path) : "";
   const isMediaImage = IMAGE_EXTS.has(ext);
@@ -130,6 +141,31 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     }
   }, [path, onSaved, navigate]);
 
+  const onConcatShotCharactersClick = useCallback(async () => {
+    if (!path) return;
+    setConcatBusy(true);
+    try {
+      const result = await concatShotCharacters(path);
+      const usedNames = result.used.map((u) => u.role || u.character_folder).join(", ");
+      const skippedNames = result.skipped.map((s) => `${s.role || s.character_folder} (${s.reason})`).join(", ");
+      let summary: string;
+      if (result.out) {
+        summary = `已合成 ${result.out.split("/").pop()} — 使用 ${result.used.length} 个角色`;
+        if (usedNames) summary += ` [${usedNames}]`;
+        if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
+      } else {
+        summary = `未生成 — 没有角色文件夹包含 mp4`;
+        if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
+      }
+      announceToast(summary);
+      onSaved();
+    } catch (err) {
+      announceToast(`生成角色合辑失败: ${archiveErrorKind(err)}`);
+    } finally {
+      setConcatBusy(false);
+    }
+  }, [path, onSaved]);
+
   const onExtractFramesClick = useCallback(async () => {
     if (!path) return;
     const name = path.split("/").pop() ?? path;
@@ -177,6 +213,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const isImageRef = (isMarkdown && /\/ref_images\/[^/]+_seedream\.md$/.test(path));
   const isCasting = isMarkdown && /^ai_videos\/[^/]+\/casting\.md$/.test(path);
   const isActor = isMarkdown && /^ai_videos\/_actors\/actor_[^/]+\/actor_[^/]+\.md$/.test(path);
+  const isShotMd = isMarkdown && SHOT_MD_RE.test(path);
 
   const filename = path.split("/").pop() ?? path;
   const pathParts = path.split("/");
@@ -193,6 +230,14 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     <div className="reader">
       <div className="reader-toolbar" role="toolbar" aria-label="File toolbar">
         <Breadcrumb path={path} />
+        {isShotMd ? (
+          <button type="button" className="reader-shot-concat-btn"
+            onClick={onConcatShotCharactersClick} disabled={concatBusy}
+            aria-label="Build a character reel by concatenating the first mp4 found in each involved character's folder"
+            title="Parse the 出场角色 table, take the alphabetically-first mp4 inside each character folder (skipping only folders that have no mp4), trim each to 2s, and ffmpeg-concat them into <shotNN>_chars.mp4 next to this shot md.">
+            {concatBusy ? "⏳ 生成中…" : "🎬 生成角色合辑"}
+          </button>
+        ) : null}
         {!isImage && !isVideo ? (
           <button type="button" className="reader-edit-toggle"
             onClick={() => setEditing((e) => !e)}
