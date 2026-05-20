@@ -80,19 +80,22 @@ _LOOK_ENRICHED: dict[str, str] = {
     "cunning": "cunning sharp-eyed expression, slight knowing smirk, calculating raised brow",
     "innocent": "innocent unspoiled expression, soft wide-eyed gaze, gentle natural smile",
 }
-STYLE_OPTIONS: frozenset[str] = frozenset(
-    {"modern-casual", "period-ancient-china", "period-western", "business", "streetwear", "sci-fi", "fantasy"}
-)
-
 ACTORS_DIR_NAME: str = "_actors"
 DEFAULT_TIMEOUT_SECONDS: float = 30.0
 MAX_RESPONSE_BYTES: int = 5 * 1024 * 1024
 MAX_BATCH_COUNT: int = 50
 MIN_BATCH_COUNT: int = 1
-IMAGE_WIDTH: int = 512
-IMAGE_HEIGHT: int = 512
-IMAGE_WIDTH_BODY: int = 576
-IMAGE_HEIGHT_BODY: int = 1024
+# Per follow-up 084: face shot canvas was 512×512 (1:1). A square frame
+# cannot physically hold a head-to-toe body — Kling's compositional sampler
+# resolves "human subject + 1:1 canvas" toward chest-up framing regardless
+# of any prompt-text full-body markers. Both face + body now render at
+# 720×1280 (9:16 portrait), the short-form-vertical-video native res. The
+# face vs body distinction stays at the prompt-prose level (face emphasizes
+# face within the full body, body emphasizes proportions).
+IMAGE_WIDTH: int = 720
+IMAGE_HEIGHT: int = 1280
+IMAGE_WIDTH_BODY: int = 720
+IMAGE_HEIGHT_BODY: int = 1280
 BODY_FILENAME_SUFFIX: str = "__body"
 _MAX_ID_ALLOC_SCAN: int = 1000
 JPEG_QUALITY: int = 95
@@ -103,8 +106,9 @@ JPEG_QUALITY: int = 95
 _REAP_MIN_AGE_SECONDS: float = 300.0
 
 # Per follow-up 029: resolution presets pick a target pixel size for the
-# saved JPEG. `None` means use Kling's native output (~1024px for kling-v1
-# 1:1) without resampling. Other values trigger a Pillow LANCZOS resize.
+# saved JPEG. `None` means use Kling's native output (varies by model —
+# kling-v1 emits ~1024px on 1:1; v2 family is higher) without resampling.
+# Other values trigger a Pillow LANCZOS resize.
 _RESOLUTION_PRESETS: dict[str, int | None] = {
     "normal": None,
     "2k": 2048,
@@ -132,6 +136,16 @@ def _attrs_to_body_filename(attrs: "ActorAttrs") -> str:
     by `_find_actor_jpg` and `_find_actor_body_jpg` to keep face / body lookup
     disjoint."""
     return f"{attrs.ethnicity}__{attrs.gender}__{attrs.age_range}{BODY_FILENAME_SUFFIX}.jpg"
+
+
+def _shared_negative_prompt() -> str:
+    """Per follow-up 087: thin module-level shim around
+    `actor__chinese_prompt.build_negatives()`. Imported lazily here so the
+    chinese-prompt module's heavy pool constants don't load at actor__writer
+    import time (large module, hot-imported by many callers).
+    """
+    from libs.infrastructure.writers.actor__chinese_prompt import build_negatives
+    return build_negatives()
 
 
 def _find_actor_jpg(actor_folder: Path) -> Path | None:
@@ -796,7 +810,6 @@ class ActorAttrs:
     gender: str
     age_range: str
     look: str
-    style: str
     notes: str = ""
 
     def to_dict(self) -> dict[str, str]:
@@ -805,7 +818,6 @@ class ActorAttrs:
             "gender": self.gender,
             "age_range": self.age_range,
             "look": self.look,
-            "style": self.style,
             "notes": self.notes,
         }
 
@@ -831,80 +843,69 @@ class ActorInfo:
 @dataclass(frozen=True)
 class ArchetypeSpec:
     """Per follow-up 053: a single cinematic archetype with its allowed
-    `(age_range, look, style)` bias ranges. `gender_filter` is `male` /
-    `female` / `both` — `both` archetypes apply to whichever gender the
-    batch requests. The 10 archetypes mix Western film casting categories
-    (leading_hero, femme_fatale, villain_cold, ...) with Chinese drama
-    conventions (温润如玉, 妖媚, 江湖侠客)."""
+    `(age_range, look)` bias ranges. `gender_filter` is `male` / `female` /
+    `both` — `both` archetypes apply to whichever gender the batch requests.
+    The 10 archetypes mix Western film casting categories (leading_hero,
+    femme_fatale, villain_cold, ...) with Chinese drama conventions
+    (温润如玉, 妖媚, 江湖侠客)."""
 
     slug: str
     name_zh: str
     gender_filter: str
     age_ranges: tuple[str, ...]
     looks: tuple[str, ...]
-    styles: tuple[str, ...]
 
 
 _ARCHETYPES: tuple[ArchetypeSpec, ...] = (
     ArchetypeSpec(
         slug="leading_hero", name_zh="男主气场冷峻", gender_filter="male",
         age_ranges=("18-25", "26-35"),
-        looks=("handsome", "rugged", "aristocratic"),
-        styles=("period-ancient-china", "modern-casual", "business"),
+        looks=("handsome", "rugged", "aristocratic", "righteous"),
     ),
     ArchetypeSpec(
         slug="leading_warm", name_zh="男主温润如玉", gender_filter="male",
         age_ranges=("18-25", "26-35"),
-        looks=("handsome", "soft", "aristocratic"),
-        styles=("period-ancient-china", "business"),
+        looks=("handsome", "soft", "aristocratic", "righteous", "seductive"),
     ),
     ArchetypeSpec(
         slug="ingenue_kind", name_zh="女主清纯善良", gender_filter="female",
         age_ranges=("18-25",),
-        looks=("beautiful", "cute", "soft"),
-        styles=("period-ancient-china", "modern-casual"),
+        looks=("beautiful", "cute", "soft", "innocent", "righteous"),
     ),
     ArchetypeSpec(
         slug="ingenue_lively", name_zh="女主娇俏灵动", gender_filter="female",
         age_ranges=("18-25",),
-        looks=("cute", "soft"),
-        styles=("modern-casual", "streetwear", "period-ancient-china"),
+        looks=("cute", "soft", "innocent"),
     ),
     ArchetypeSpec(
         slug="femme_fatale", name_zh="女配妖媚", gender_filter="female",
         age_ranges=("26-35",),
-        looks=("beautiful", "fierce", "mature"),
-        styles=("period-ancient-china", "business", "fantasy"),
+        looks=("beautiful", "fierce", "mature", "seductive", "sinister", "cunning"),
     ),
     ArchetypeSpec(
         slug="villain_cold", name_zh="男配反派阴鸷", gender_filter="male",
         age_ranges=("26-35", "36-50"),
-        looks=("rugged", "aristocratic", "fierce"),
-        styles=("period-ancient-china", "business", "sci-fi", "fantasy"),
+        looks=("rugged", "aristocratic", "fierce", "sinister", "cunning"),
     ),
     ArchetypeSpec(
         slug="sage_elder", name_zh="长辈宗师", gender_filter="both",
         age_ranges=("51-65", "65+"),
         looks=("mature", "aristocratic", "soft"),
-        styles=("period-ancient-china", "business"),
     ),
     ArchetypeSpec(
         slug="martial_drifter", name_zh="江湖侠客", gender_filter="both",
         age_ranges=("26-35", "36-50"),
         looks=("rugged", "mature", "fierce"),
-        styles=("period-ancient-china", "period-western"),
     ),
     ArchetypeSpec(
         slug="everyman", name_zh="市井百姓", gender_filter="both",
         age_ranges=("26-35", "36-50"),
         looks=("soft", "mature", "cute"),
-        styles=("modern-casual", "streetwear"),
     ),
     ArchetypeSpec(
         slug="youth_fresh", name_zh="少年清俊", gender_filter="both",
         age_ranges=("18-25",),
-        looks=("handsome", "cute", "soft"),
-        styles=("modern-casual", "streetwear", "period-ancient-china"),
+        looks=("handsome", "cute", "soft", "innocent"),
     ),
 )
 _ARCHETYPE_BY_SLUG: dict[str, ArchetypeSpec] = {a.slug: a for a in _ARCHETYPES}
@@ -1039,21 +1040,39 @@ def _eligible_archetypes(gender: str) -> tuple[ArchetypeSpec, ...]:
 
 
 def _classify_actor_attrs(attrs: "ActorAttrs") -> str:
-    """Per follow-up 053: best-effort reverse-lookup from `(gender, age_range,
-    look, style)` → archetype slug for the startup migration of pre-053
-    actors. Walks `_ARCHETYPES` in order; first match wins; falls through to
-    `_ARCHETYPE_FALLBACK_SLUG` ("everyman") so EVERY existing actor gets an
-    archetype tag without surfacing None."""
+    """Reverse-lookup `(gender, age_range, look)` → archetype slug.
+
+    Per follow-up 078: classification is **look-led with progressive
+    relaxation**. The user's chosen `look` is the dominant axis — it
+    determines the archetype identity even when `age_range` doesn't
+    strictly fit any single archetype's tuple. This fixes the regression
+    where e.g. `look=sinister + gender=female` fell through to `everyman`
+    (because the only sinister-tagged archetype was the male-only
+    `villain_cold`), producing a 综合描述 line that contradicted what the
+    user selected.
+
+    Priority order (post-style-removal):
+      1. gender + age + look match — full match on remaining axes.
+      2. gender + look match — look dominates archetype identity.
+      3. look match alone (cross-gender fallback for non-gendered looks).
+      4. Final fallback to `_ARCHETYPE_FALLBACK_SLUG` ("everyman").
+    """
+    # Priority 1: gender + age + look.
     for spec in _ARCHETYPES:
-        if spec.gender_filter not in ("both", attrs.gender):
-            continue
-        if attrs.age_range not in spec.age_ranges:
-            continue
-        if attrs.look not in spec.looks:
-            continue
-        if attrs.style not in spec.styles:
-            continue
-        return spec.slug
+        if (spec.gender_filter in ("both", attrs.gender)
+                and attrs.age_range in spec.age_ranges
+                and attrs.look in spec.looks):
+            return spec.slug
+    # Priority 2: gender + look — look dominates.
+    for spec in _ARCHETYPES:
+        if (spec.gender_filter in ("both", attrs.gender)
+                and attrs.look in spec.looks):
+            return spec.slug
+    # Priority 3: look match alone (lift gender constraint as last resort).
+    for spec in _ARCHETYPES:
+        if attrs.look in spec.looks:
+            return spec.slug
+    # Priority 4: final fallback.
     return _ARCHETYPE_FALLBACK_SLUG
 
 
@@ -1069,7 +1088,17 @@ class GenerateResult:
 KLING_BASE_URL: str = "https://api.klingai.com/v1"
 KLING_ACCESS_KEY_ENV: str = "KLING_ACCESS_KEY"
 KLING_SECRET_KEY_ENV: str = "KLING_SECRET_KEY"
-KLING_DEFAULT_MODEL: str = "kling-v1"
+KLING_MODEL_ENV: str = "KLING_MODEL"
+KLING_CFG_SCALE_ENV: str = "KLING_CFG_SCALE"
+# Default to the newest image model. `kling-v1` (the original release) follows
+# long structured Chinese prompts noticeably worse than v2 — the web UI uses
+# the newest model by default, so the API client matches. Override via
+# `KLING_MODEL` env without code edits when newer models ship.
+KLING_DEFAULT_MODEL: str = "kling-v2-1"
+# Kling's image API exposes `cfg_scale` ∈ [0, 1]; higher = stricter adherence
+# to the positive prompt. Server default is ~0.5; 0.7 matches the
+# prompt-following behaviour users typically expect from the web UI.
+KLING_DEFAULT_CFG_SCALE: float = 0.7
 KLING_JWT_EXP_SECONDS: int = 1800
 KLING_POLL_INTERVAL_SECONDS: float = 2.0
 KLING_MAX_WAIT_SECONDS: float = 120.0
@@ -1162,6 +1191,7 @@ class KlingProvider:
         base_url: str = KLING_BASE_URL,
         poll_interval: float = KLING_POLL_INTERVAL_SECONDS,
         max_wait: float = KLING_MAX_WAIT_SECONDS,
+        cfg_scale: float = KLING_DEFAULT_CFG_SCALE,
     ) -> None:
         if not access_key or not secret_key:
             raise ValueError("KlingProvider requires both access_key and secret_key")
@@ -1171,6 +1201,7 @@ class KlingProvider:
         self._base = base_url.rstrip("/")
         self._poll_interval = poll_interval
         self._max_wait = max_wait
+        self._cfg_scale = cfg_scale
 
     @classmethod
     def from_env(cls) -> "KlingProvider | None":
@@ -1178,12 +1209,40 @@ class KlingProvider:
         sk = os.environ.get(KLING_SECRET_KEY_ENV, "").strip()
         if not ak or not sk:
             return None
-        return cls(ak, sk)
+        model = os.environ.get(KLING_MODEL_ENV, "").strip() or KLING_DEFAULT_MODEL
+        cfg_raw = os.environ.get(KLING_CFG_SCALE_ENV, "").strip()
+        if cfg_raw:
+            try:
+                cfg_scale = float(cfg_raw)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{KLING_CFG_SCALE_ENV}={cfg_raw!r} is not a valid float"
+                ) from exc
+            if not 0.0 <= cfg_scale <= 1.0:
+                raise ValueError(
+                    f"{KLING_CFG_SCALE_ENV}={cfg_scale} must be in [0.0, 1.0]"
+                )
+        else:
+            cfg_scale = KLING_DEFAULT_CFG_SCALE
+        return cls(ak, sk, model=model, cfg_scale=cfg_scale)
 
-    def generate(self, prompt: str, seed: int, width: int, height: int) -> bytes:
+    def generate(
+        self,
+        prompt: str,
+        seed: int,
+        width: int,
+        height: int,
+        negative_prompt: str | None = None,
+    ) -> bytes:
+        """Per follow-up 087: `negative_prompt` is now a dedicated field
+        consumed by Kling v1's image API — previously every 严禁/不要/portrait
+        token was stuffed into the positive prompt, which is a diffusion-model
+        anti-pattern (negative tokens in positive prompt inject the very
+        concept they try to forbid into the model's attention).
+        """
         token = _make_kling_jwt(self._ak, self._sk)
         with httpx.Client(timeout=DEFAULT_TIMEOUT_SECONDS, follow_redirects=False) as client:
-            task_id = self._submit(client, token, prompt, seed, width, height)
+            task_id = self._submit(client, token, prompt, seed, width, height, negative_prompt=negative_prompt)
             img_url = self._poll(client, token, task_id)
         if not _is_safe_download_host(img_url):
             raise RuntimeError(f"kling: rejected unsafe download URL: {img_url}")
@@ -1207,13 +1266,17 @@ class KlingProvider:
         seed: int,
         width: int,
         height: int,
+        negative_prompt: str | None = None,
     ) -> str:
         body: dict[str, object] = {
             "model_name": self._model,
             "prompt": prompt,
             "aspect_ratio": _kling_aspect_ratio(width, height),
             "n": 1,
+            "cfg_scale": self._cfg_scale,
         }
+        if negative_prompt:
+            body["negative_prompt"] = negative_prompt
         resp = client.post(
             f"{self._base}/images/generations",
             json=body,
@@ -1322,6 +1385,9 @@ class ActorPool:
         resolution: str = DEFAULT_RESOLUTION,
         seeds: list[int] | None = None,
         archetype: str | None = None,
+        batch_seed: int | None = None,
+        batch_size: int | None = None,
+        slot_index: int | None = None,
     ) -> dict[str, object]:
         """Dry-run prompt preview (follow-up 032; follow-up 064 added seeds).
 
@@ -1355,16 +1421,34 @@ class ActorPool:
             for s in seeds:
                 if not isinstance(s, int):
                     raise InvalidAttribute(f"seeds must be all int, got {seeds!r}")
+        # Per follow-up 076: when archetype not supplied, derive it from
+        # attrs via _classify_actor_attrs so a selected look like "seductive"
+        # (妩媚) auto-maps to femme_fatale and the variance pools bias the
+        # facial features toward that archetype. Without this fall-through
+        # the prompt was unconstrained ("everything random") even when the
+        # user explicitly picked a non-default look.
+        effective_archetype = archetype or _classify_actor_attrs(attrs)
         base_seed = int(time.time() * 1000)
         prompts: list[dict[str, object]] = []
         for i in range(count):
             seed = seeds[i] if seeds is not None else base_seed + i
-            face_prompt = self._build_face_prompt(attrs, seed, archetype)
-            body_prompt = self._build_body_prompt(attrs, seed, archetype)
+            # Per follow-up 082: when called as one of N parallel count=1
+            # batch members (frontend passes batch_seed/batch_size/slot_index),
+            # the per-pool draws are batch-coordinated. For count > 1 in a
+            # single call, derive slot_index from i so a future single-call
+            # path also gets diversity.
+            effective_slot = slot_index if (slot_index is not None and count == 1) else (i if batch_size is not None else None)
+            face_prompt, body_prompt, neg_prompt = self._build_prompts_for_slot(
+                attrs, seed, effective_archetype,
+                batch_seed=batch_seed,
+                batch_size=batch_size,
+                slot_index=effective_slot,
+            )
             prompts.append({
                 "seed": seed,
                 "prompt": face_prompt,
                 "body_prompt": body_prompt,
+                "negative_prompt": neg_prompt,
             })
         return {"prompts": prompts, "resolution": resolution}
 
@@ -1377,7 +1461,7 @@ class ActorPool:
     ) -> dict[str, object]:
         """Per follow-up 059: dry-run prompt preview for diverse mode.
 
-        Rolls the SAME archetype plan + per-slot `(age_range, look, style)` +
+        Rolls the SAME archetype plan + per-slot `(age_range, look)` +
         seeds that `generate_diverse_batch` would, but builds prompts and
         returns them WITHOUT Kling calls / folder allocation / file writes.
         Each entry includes `archetype` slug + `archetype_label` (Chinese
@@ -1408,7 +1492,6 @@ class ActorPool:
                 gender=gender,
                 age_range=slot_rng.choice(spec.age_ranges),
                 look=slot_rng.choice(spec.looks),
-                style=slot_rng.choice(spec.styles),
                 notes=spec.name_zh,
             )
             face_prompt = self._build_face_prompt(attrs, seed, spec.slug)
@@ -1420,6 +1503,8 @@ class ActorPool:
                 "attrs": attrs.to_dict(),
                 "prompt": face_prompt,
                 "body_prompt": body_prompt,
+                # Per follow-up 087: same shared negative_prompt sent to Kling.
+                "negative_prompt": _shared_negative_prompt(),
             })
         return {"prompts": prompts, "resolution": resolution}
 
@@ -1430,6 +1515,9 @@ class ActorPool:
         resolution: str = DEFAULT_RESOLUTION,
         seeds: list[int] | None = None,
         archetype: str | None = None,
+        batch_seed: int | None = None,
+        batch_size: int | None = None,
+        slot_index: int | None = None,
     ) -> GenerateResult:
         """Per follow-up 059: `archetype` slug (when provided) is written
         to the sidecar `archetype` row for each generated actor in this
@@ -1461,6 +1549,10 @@ class ActorPool:
         except OSError as exc:
             raise GenerationDirMissing(str(exc))
 
+        # Per follow-up 076: same fall-through as preview_prompts — derive
+        # archetype from attrs when caller didn't supply one. Keeps preview
+        # and generate byte-equal for the same (attrs, seed) pair.
+        effective_archetype = archetype or _classify_actor_attrs(attrs)
         result = GenerateResult()
         base_seed = int(time.time() * 1000)
         target_px = _RESOLUTION_PRESETS[resolution]
@@ -1472,11 +1564,20 @@ class ActorPool:
             except GenerationDirMissing as exc:
                 result.errors.append({"requested_id": f"slot_{i}", "message": f"alloc_failed: {exc}"})
                 continue
-            face_prompt = self._build_face_prompt(attrs, seed, archetype)
-            body_prompt = self._build_body_prompt(attrs, seed, archetype)
+            # Per follow-up 082: batch-coordinated prompts when frontend
+            # passes batch_seed/batch_size/slot_index (worker-pool fires N
+            # parallel count=1 calls; each call's slot_index pins its row
+            # in the deterministic per-pool sample list).
+            effective_slot = slot_index if (slot_index is not None and count == 1) else (i if batch_size is not None else None)
+            face_prompt, body_prompt, neg_prompt = self._build_prompts_for_slot(
+                attrs, seed, effective_archetype,
+                batch_seed=batch_seed,
+                batch_size=batch_size,
+                slot_index=effective_slot,
+            )
             # --- Face shot (1:1) — primary identity image ---
             try:
-                face_bytes = self._provider.generate(face_prompt, seed, IMAGE_WIDTH, IMAGE_HEIGHT)
+                face_bytes = self._provider.generate(face_prompt, seed, IMAGE_WIDTH, IMAGE_HEIGHT, negative_prompt=neg_prompt)
             except Exception as exc:
                 result.errors.append({"requested_id": actor_id, "message": f"http_failed: {exc}"})
                 self._cleanup_empty_folder(actor_folder)
@@ -1500,7 +1601,7 @@ class ActorPool:
             body_error: str | None = None
             try:
                 body_bytes = self._provider.generate(
-                    body_prompt, seed, IMAGE_WIDTH_BODY, IMAGE_HEIGHT_BODY
+                    body_prompt, seed, IMAGE_WIDTH_BODY, IMAGE_HEIGHT_BODY, negative_prompt=neg_prompt,
                 )
             except Exception as exc:
                 body_bytes = b""
@@ -1524,7 +1625,7 @@ class ActorPool:
                     self._build_sidecar(
                         actor_id, attrs, face_prompt, body_prompt, seed, resolution,
                         body_filename=body_path.name if body_path is not None else None,
-                        archetype=archetype,
+                        archetype=effective_archetype,
                     ),
                     encoding="utf-8",
                 )
@@ -1550,16 +1651,29 @@ class ActorPool:
 
     @staticmethod
     def _resize_jpeg(jpeg_bytes: bytes, target_px: int) -> bytes:
-        """Resize a JPEG to target_px × target_px using Lanczos resampling.
+        """Resize a JPEG so its **longest edge** is `target_px`, preserving
+        the source aspect ratio.
 
-        Per follow-up 029: Kling returns ~1024×1024 natively for 1:1 aspect;
-        the user-pickable resolution dropdown ("2k"/"4k") forces an explicit
-        upscale via Pillow's high-quality LANCZOS filter so the saved file
-        matches the requested pixel count. Upscaling does not add true
-        detail — it is interpolation; recorded in the sidecar.
+        Per follow-up 029: Kling returns the requested width × height; the
+        user-pickable resolution dropdown ("2k"/"4k") forces an explicit
+        upscale via Pillow's high-quality LANCZOS filter. Per follow-up 084:
+        face + body shots both render at 720×1280 (9:16), so the previous
+        forced-square resize (`(target_px, target_px)`) would squash 9:16
+        sources into squares — broken. The new math scales the longest edge
+        to `target_px` and derives the shorter edge from the source aspect,
+        so 720×1280 + "2k" → 1152×2048, 720×1280 + "4k" → 2304×4096.
+        Upscaling is still interpolation (no new detail), recorded in the
+        sidecar.
         """
         img = Image.open(BytesIO(jpeg_bytes)).convert("RGB")
-        img = img.resize((target_px, target_px), Image.LANCZOS)
+        src_w, src_h = img.size
+        if src_w >= src_h:
+            new_w = target_px
+            new_h = round(target_px * src_h / src_w)
+        else:
+            new_h = target_px
+            new_w = round(target_px * src_w / src_h)
+        img = img.resize((new_w, new_h), Image.LANCZOS)
         buf = BytesIO()
         img.save(buf, format="JPEG", quality=JPEG_QUALITY)
         return buf.getvalue()
@@ -1573,7 +1687,7 @@ class ActorPool:
     ) -> GenerateResult:
         """Per follow-up 053: diverse mode — user picks ONLY gender +
         ethnicity. Backend rolls archetypes with even-distribution and rolls
-        `(age_range, look, style)` per slot from each archetype's allowed
+        `(age_range, look)` per slot from each archetype's allowed
         ranges. Notes auto-populates with the archetype's Chinese display
         name so users see the role-type at a glance in ActorGrid.
 
@@ -1612,7 +1726,6 @@ class ActorPool:
                 gender=gender,
                 age_range=slot_rng.choice(spec.age_ranges),
                 look=slot_rng.choice(spec.looks),
-                style=slot_rng.choice(spec.styles),
                 notes=spec.name_zh,
             )
             try:
@@ -1622,8 +1735,9 @@ class ActorPool:
                 continue
             face_prompt = self._build_face_prompt(attrs, seed, spec.slug)
             body_prompt = self._build_body_prompt(attrs, seed, spec.slug)
+            neg_prompt = _shared_negative_prompt()
             try:
-                face_bytes = self._provider.generate(face_prompt, seed, IMAGE_WIDTH, IMAGE_HEIGHT)
+                face_bytes = self._provider.generate(face_prompt, seed, IMAGE_WIDTH, IMAGE_HEIGHT, negative_prompt=neg_prompt)
             except Exception as exc:
                 result.errors.append({"requested_id": actor_id, "message": f"http_failed: {exc}"})
                 self._cleanup_empty_folder(actor_folder)
@@ -1645,7 +1759,7 @@ class ActorPool:
             body_error: str | None = None
             try:
                 body_bytes = self._provider.generate(
-                    body_prompt, seed, IMAGE_WIDTH_BODY, IMAGE_HEIGHT_BODY
+                    body_prompt, seed, IMAGE_WIDTH_BODY, IMAGE_HEIGHT_BODY, negative_prompt=neg_prompt,
                 )
             except Exception as exc:
                 body_bytes = b""
@@ -1934,10 +2048,53 @@ class ActorPool:
             raise InvalidAttribute(f"age_range={attrs.age_range!r} not in schema")
         if attrs.look not in LOOK_OPTIONS:
             raise InvalidAttribute(f"look={attrs.look!r} not in schema")
-        if attrs.style not in STYLE_OPTIONS:
-            raise InvalidAttribute(f"style={attrs.style!r} not in schema")
         if len(attrs.notes) > 500:
             raise InvalidAttribute("notes must be ≤ 500 characters")
+
+    @staticmethod
+    def _build_prompts_for_slot(
+        attrs: ActorAttrs,
+        seed: int,
+        archetype: str | None,
+        batch_seed: int | None,
+        batch_size: int | None,
+        slot_index: int | None,
+    ) -> tuple[str, str, str]:
+        """Per follow-ups 082 + 087: dispatch to batch-coordinated builders
+        when all three batch fields are supplied, else fall back to the
+        per-slot independent builders. Returns
+        `(face_prompt, body_prompt, negative_prompt)` — the negative is
+        shared between face + body (same composition / photorealism /
+        wardrobe-fallback bans apply to both shots) and sent via Kling's
+        dedicated `negative_prompt` API field.
+        """
+        from libs.infrastructure.writers.actor__chinese_prompt import build_negatives
+        negative_prompt = build_negatives()
+        if batch_seed is not None and batch_size is not None and slot_index is not None:
+            from libs.infrastructure.writers.actor__chinese_prompt import (
+                _resolve_batch_picks,
+                build_face_prompt_with_picks,
+                build_body_prompt_with_picks,
+            )
+            picks = _resolve_batch_picks(
+                batch_seed=batch_seed,
+                batch_size=batch_size,
+                slot_index=slot_index,
+                look=attrs.look,
+                archetype=archetype,
+                gender_slug=attrs.gender,
+            )
+            attrs_dict = attrs.to_dict()
+            return (
+                build_face_prompt_with_picks(attrs_dict, seed, archetype, picks),
+                build_body_prompt_with_picks(attrs_dict, seed, archetype, picks),
+                negative_prompt,
+            )
+        return (
+            ActorPool._build_face_prompt(attrs, seed, archetype),
+            ActorPool._build_body_prompt(attrs, seed, archetype),
+            negative_prompt,
+        )
 
     @staticmethod
     def _build_face_prompt(attrs: ActorAttrs, seed: int, archetype: str | None) -> str:
@@ -2097,7 +2254,6 @@ class ActorPool:
             f"| gender | {attrs.gender} |\n"
             f"| age_range | {attrs.age_range} |\n"
             f"| look | {attrs.look} |\n"
-            f"| style | {attrs.style} |\n"
             f"| notes | {notes_display} |\n"
             f"| seed | {seed} |\n"
             f"| resolution | {resolution} |\n"
@@ -2142,6 +2298,9 @@ class ActorPool:
             if len(cells) != 2:
                 continue
             key, value = cells[0], cells[1]
+            # `style` is silently consumed but not propagated — legacy sidecars
+            # (pre-style-removal) still carry `| style | ... |` rows; reading
+            # them must not crash, but the value is dropped on the floor.
             if key in {"ethnicity", "gender", "age_range", "look", "style", "notes", "archetype"}:
                 fields[key] = value if value != "—" else ""
         try:
@@ -2150,7 +2309,6 @@ class ActorPool:
                 gender=fields["gender"],
                 age_range=fields["age_range"],
                 look=fields["look"],
-                style=fields["style"],
                 notes=fields.get("notes", ""),
             )
         except KeyError:
@@ -2193,12 +2351,14 @@ __all__ = [
     "InvalidAttribute",
     "KLING_ACCESS_KEY_ENV",
     "KLING_BASE_URL",
+    "KLING_CFG_SCALE_ENV",
+    "KLING_DEFAULT_CFG_SCALE",
     "KLING_DEFAULT_MODEL",
+    "KLING_MODEL_ENV",
     "KLING_SECRET_KEY_ENV",
     "KlingProvider",
     "LOOK_OPTIONS",
     "MAX_BATCH_COUNT",
     "MIN_BATCH_COUNT",
     "RESOLUTION_OPTIONS",
-    "STYLE_OPTIONS",
 ]

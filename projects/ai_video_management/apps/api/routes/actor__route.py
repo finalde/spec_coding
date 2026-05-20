@@ -35,7 +35,6 @@ class GenerateActorsBody(BaseModel):
     gender: str
     age_range: str
     look: str
-    style: str
     notes: str = ""
     resolution: str = "normal"
     seeds: list[int] | None = None
@@ -43,6 +42,24 @@ class GenerateActorsBody(BaseModel):
     # archetype slug per slot so each actor's sidecar carries the archetype
     # row from first write. Standard-mode UI omits this field.
     archetype: str | None = None
+    # Per follow-up 082: optional within-batch pool-diversity coordination.
+    # Frontend sets batch_seed once per click + passes slot_index = i + the
+    # batch_size on each of N parallel count=1 calls; backend resolves the
+    # 7 face/body pool draws so no two slots in the batch share the same
+    # eye / nose / lips / brow / contour / skin / body descriptor.
+    batch_seed: int | None = None
+    batch_size: int | None = None
+    slot_index: int | None = None
+    # Per follow-up 100: optional user-locked dropdown values. Empty string
+    # or "__random__" leaves the corresponding feature line as a deterministic
+    # pool sample; a curated Chinese descriptor (see EYES_OPTIONS / SKIN_OPTIONS
+    # / BODY_OPTIONS in actor__valueobject.py) substitutes verbatim.
+    eyes: str = ""
+    nose: str = ""
+    lips: str = ""
+    face: str = ""
+    skin: str = ""
+    body: str = ""
 
 
 class GenerateDiverseActorsBody(BaseModel):
@@ -63,10 +80,19 @@ def _generate_input(body: GenerateActorsBody) -> GenerateActorsInputCdto:
         gender=body.gender,
         age_range=body.age_range,
         look=body.look,
-        style=body.style,
         notes=body.notes,
         resolution=body.resolution,
         seeds=body.seeds,
+        archetype=body.archetype,
+        batch_seed=body.batch_seed,
+        batch_size=body.batch_size,
+        slot_index=body.slot_index,
+        eyes=body.eyes,
+        nose=body.nose,
+        lips=body.lips,
+        face=body.face,
+        skin=body.skin,
+        body=body.body,
     )
 
 

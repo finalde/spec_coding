@@ -12,12 +12,14 @@ import { ActorView } from "./ActorView";
 import { Renderer } from "../markdown/renderer";
 import { CodeView } from "../markdown/CodeView";
 import { JsonlView } from "../markdown/JsonlView";
-import { SiblingMedia } from "./SiblingMedia";
+import { SiblingMedia, isCharacterVideoPath } from "./SiblingMedia";
 import { detectShotPair } from "../lib/shotPairing";
+import { announceToast } from "../lib/announce";
 import {
   archiveMedia,
   concatShotCharacters,
   deleteMedia,
+  extractCharacterViews,
   extractFrames,
   fetchFile,
   mediaUrl,
@@ -28,6 +30,7 @@ import { ApiError, type FileResult, type TreeNode } from "../types";
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const VIDEO_EXTS = new Set([".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"]);
+const AUDIO_EXTS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
 const SHOT_MD_RE = /^ai_videos\/[^_][^/]*\/(?:episodes\/ep\d+\/)?prompts\/shot\d+\/shot\d+\.md$/;
 
 export interface ReaderProps {
@@ -53,12 +56,14 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [archiving, setArchiving] = useState<boolean>(false);
   const [deleting, setDeleting] = useState<boolean>(false);
   const [extracting, setExtracting] = useState<boolean>(false);
+  const [extractingViews, setExtractingViews] = useState<boolean>(false);
   const [concatBusy, setConcatBusy] = useState<boolean>(false);
 
   const ext = path ? extOf(path) : "";
   const isMediaImage = IMAGE_EXTS.has(ext);
   const isMediaVideo = VIDEO_EXTS.has(ext);
-  const isMediaOnly = isMediaVideo || isMediaImage;
+  const isMediaAudio = AUDIO_EXTS.has(ext);
+  const isMediaOnly = isMediaVideo || isMediaImage || isMediaAudio;
 
   const load = useCallback(async () => {
     if (!path) return;
@@ -188,6 +193,27 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     }
   }, [path, onSaved]);
 
+  const onExtractCharacterViewsClick = useCallback(async () => {
+    if (!path) return;
+    const name = path.split("/").pop() ?? path;
+    setExtractingViews(true);
+    try {
+      const result = await extractCharacterViews(path);
+      const okCount = result.views.length + (result.audio ? 1 : 0);
+      const failCount = result.failures.length;
+      const summary =
+        failCount === 0
+          ? `Extracted ${okCount} views + audio from ${name} → views/`
+          : `Extracted ${okCount} from ${name} (${failCount} failed)`;
+      announceToast(summary);
+      onSaved();
+    } catch (err) {
+      announceToast(`Extract views failed: ${archiveErrorKind(err)}`);
+    } finally {
+      setExtractingViews(false);
+    }
+  }, [path, onSaved]);
+
   if (!path) return <div className="muted">No file selected.</div>;
   if (error) {
     return (
@@ -202,6 +228,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
 
   const isImage = isMediaImage;
   const isVideo = isMediaVideo;
+  const isAudio = isMediaAudio;
   const isMarkdown = ext === ".md";
   const isJsonl = ext === ".jsonl";
   const isCode = ext === ".json" || ext === ".yaml" || ext === ".yml";
@@ -219,17 +246,23 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const pathParts = path.split("/");
   const isArchivedFile = pathParts.length >= 2 && pathParts[pathParts.length - 2] === "archive";
   const isDeletedFile = path.startsWith("ai_videos/_deleted/");
-  const mediaActionsBusy = archiving || deleting || extracting;
+  const mediaActionsBusy = archiving || deleting || extracting || extractingViews;
   const archiveLabel = isArchivedFile
     ? (archiving ? "Unarchiving…" : "↺ Unarchive")
     : (archiving ? "Archiving…" : "📦 Archive");
   const deleteLabel = deleting ? "Deleting…" : "🗑 Delete";
   const extractLabel = extracting ? "⏳ Extracting…" : "🎞 Extract Frames";
+  const viewsExtractLabel = extractingViews ? "⏳ 提取中…" : "🖼 提取三视图+音频";
+  const showViewsBtn = isVideo && !isArchivedFile && !isDeletedFile && isCharacterVideoPath(path);
 
   return (
     <div className="reader">
       <div className="reader-toolbar" role="toolbar" aria-label="File toolbar">
-        <Breadcrumb path={path} />
+        <Breadcrumb
+          path={path}
+          knownPaths={knownPaths}
+          onNavigate={(target) => navigate(`/file/${encodeURIComponent(target)}`)}
+        />
         {isShotMd ? (
           <button type="button" className="reader-shot-concat-btn"
             onClick={onConcatShotCharactersClick} disabled={concatBusy}
@@ -238,7 +271,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             {concatBusy ? "⏳ 生成中…" : "🎬 生成角色合辑"}
           </button>
         ) : null}
-        {!isImage && !isVideo ? (
+        {!isImage && !isVideo && !isAudio ? (
           <button type="button" className="reader-edit-toggle"
             onClick={() => setEditing((e) => !e)}
             aria-label={editing ? "Stop editing" : "Edit file"} aria-pressed={editing}>
@@ -246,7 +279,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
           </button>
         ) : null}
       </div>
-      {editing && !isImage && !isVideo && !isShotPair && !isImageRef && !isCasting && !isActor ? (
+      {editing && !isImage && !isVideo && !isAudio && !isShotPair && !isImageRef && !isCasting && !isActor ? (
         <Editor
           initialContent={file.content} filename={filename}
           onSave={onSave} onClose={() => setEditing(false)}
@@ -270,6 +303,14 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
                       {extractLabel}
                     </button>
                   ) : null}
+                  {showViewsBtn ? (
+                    <button type="button" className="reader-media-views-btn"
+                      onClick={onExtractCharacterViewsClick} disabled={mediaActionsBusy}
+                      aria-label={`Extract 3 views and audio from ${filename}`}
+                      title="提取三视图 (front / side / back) + 音频 (.mp3) 到 ./views/ — 适用于 v10 character turntable (7s locked-framing + 180° slow orbit)">
+                      {viewsExtractLabel}
+                    </button>
+                  ) : null}
                   <button type="button" className="reader-media-archive-btn"
                     onClick={onArchiveToggle} disabled={mediaActionsBusy}
                     aria-label={isArchivedFile ? `Unarchive ${filename}` : `Archive ${filename}`}>
@@ -286,6 +327,24 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
           ) : isMediaImage ? (
             <div className="media-view">
               <img src={mediaUrl(path)} alt={filename} />
+              {!isDeletedFile ? (
+                <div className="reader-media-actions">
+                  <button type="button" className="reader-media-archive-btn"
+                    onClick={onArchiveToggle} disabled={mediaActionsBusy}
+                    aria-label={isArchivedFile ? `Unarchive ${filename}` : `Archive ${filename}`}>
+                    {archiveLabel}
+                  </button>
+                  <button type="button" className="reader-media-delete-btn"
+                    onClick={onDeleteClick} disabled={mediaActionsBusy}
+                    aria-label={`Delete ${filename}`}>
+                    {deleteLabel}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : isAudio ? (
+            <div className="media-view">
+              <audio controls preload="metadata" src={mediaUrl(path)} />
               {!isDeletedFile ? (
                 <div className="reader-media-actions">
                   <button type="button" className="reader-media-archive-btn"
@@ -356,13 +415,6 @@ function extOf(path: string): string {
   const dot = path.lastIndexOf(".");
   if (dot < 0) return "";
   return path.slice(dot).toLowerCase();
-}
-
-function announceToast(message: string): void {
-  const region = document.getElementById("aria-live-toast");
-  if (!region) return;
-  region.textContent = "";
-  window.setTimeout(() => { region.textContent = message; }, 30);
 }
 
 function archiveErrorKind(err: unknown): string {

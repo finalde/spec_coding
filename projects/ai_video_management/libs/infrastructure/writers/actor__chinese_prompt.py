@@ -204,20 +204,6 @@ _BODY_ZH: tuple[str, ...] = (
 )
 
 
-_PHOTOGRAPHY_ZH: tuple[str, ...] = (
-    "佳能 EOS R5 85mm f/1.4 人像镜头, 真实皮肤微纹理",
-    "索尼 A7 IV 50mm 自然色彩, 抓拍构图",
-    "富士 X-T5 经典反转片, 自然胶片颗粒感",
-    "哈苏中画幅人像, 油画般层次, 真实毛孔",
-    "柯达 Portra 400 胶片, 温暖肤色, 轻微光晕",
-    "Cinestill 800T 电影胶片, 高光晕染, 写实电影感",
-    "徕卡 M11 旁轴抓拍, 自然环境光, 真实质感",
-    "iPhone 15 Pro 街拍, 略微失焦, 真实生活感",
-    "尼康 Z9 105mm f/1.4, 超自然渲染, 不平滑皮肤",
-    "宝丽来 SX-70 拍立得, 化学色偏, 真诚记录",
-)
-
-
 # ============================================================================
 # Archetype → 综合描述 + 形体倾向
 # ============================================================================
@@ -255,7 +241,76 @@ _BODY_BIAS_BY_ARCHETYPE: dict[str, tuple[int, ...]] = {
 
 _BIAS_WILD_PROB: float = 0.25
 """Per follow-up 074 carried into 075: 25% 概率 ignore body bias 走 uniform —
-within-archetype 形体 variety 保持。"""
+within-archetype 形体 variety 保持。Follow-up 077 把同 wild-prob 复用到
+look bias（眼睛 / 鼻子 / 嘴巴 / 眉毛 / 轮廓） — 用户接受"细节自由发挥"，
+6 个 feature 全命中 bias 的概率 = 0.75^6 ≈ 18%，绝大多数 actor 至少有
+1-2 个 wild-card feature，但整体气质仍由 bias 主导。"""
+
+
+# ============================================================================
+# Look → 五官 / 轮廓 / 体型 bias + overlay  (follow-up 077)
+# ============================================================================
+#
+# Per follow-up 077: 用户报 look=sinister 时 10 个 preview prompt 跟所选
+# look 不太相关。根因是 075 后 face/body builder 仅 body 一行按 archetype
+# bias，其余 五官 全部 uniform 随机抽 — 即使 archetype 命中 villain_cold，
+# 综合描述一行也压不住 7 行 uniform 随机的 face descriptor。
+#
+# 5 个 character-archetype look 各自有 6 个 pool 的 bias index 子集；非这
+# 5 个 look 时 bias dict 为空 — `_pick_biased` 退化为 uniform，与 pre-077
+# byte-identical。
+
+_LOOK_FEATURE_BIAS_ZH: dict[str, dict[str, tuple[int, ...]]] = {
+    "sinister": {
+        "eyes":    (1, 4, 7, 10, 14, 21),
+        "nose":    (0, 1, 7, 9, 18),
+        "lips":    (3, 14, 20),
+        "brow":    (7, 18, 20),
+        "contour": (5, 7, 9, 10, 15, 17, 19),
+        "body":    (0, 3, 7, 9, 17, 20),
+    },
+    "seductive": {
+        "eyes":    (0, 4, 8, 13, 16, 19),
+        "nose":    (10, 12, 14, 16, 20),
+        "lips":    (1, 5, 6, 9, 11, 12, 16),
+        "brow":    (1, 7, 11, 13, 14, 15),
+        "contour": (1, 4, 6, 10, 12, 13, 17, 20),
+        "body":    (0, 4, 5, 12, 15, 19, 20),
+    },
+    "righteous": {
+        "eyes":    (5, 9, 14, 17, 20),
+        "nose":    (0, 4, 6, 10, 11, 19, 21),
+        "lips":    (2, 4, 14, 17, 19),
+        "brow":    (0, 3, 5, 8, 10, 12, 16, 18),
+        "contour": (0, 2, 5, 9, 14),
+        "body":    (0, 1, 3, 7, 9, 15, 18),
+    },
+    "cunning": {
+        "eyes":    (1, 4, 19, 21),
+        "nose":    (1, 7, 9, 16),
+        "lips":    (3, 20),
+        "brow":    (7, 11, 20),
+        "contour": (4, 7, 10, 13, 15, 17),
+        "body":    (0, 11, 14, 15, 17, 20),
+    },
+    "innocent": {
+        "eyes":    (0, 2, 3, 5, 6, 11, 12, 13, 15, 18, 19, 20),
+        "nose":    (2, 3, 5, 6, 8, 11, 13, 14, 15, 17),
+        "lips":    (0, 5, 7, 8, 10, 13, 15, 18, 21),
+        "brow":    (2, 4, 6, 9, 17, 19, 21),
+        "contour": (1, 3, 8, 11, 16, 18, 21),
+        "body":    (1, 2, 4, 10, 14, 16, 19, 21),
+    },
+}
+
+
+_LOOK_OVERLAY_ZH: dict[str, str] = {
+    "righteous": "正气凛然, 浩然正气, 不怒自威, 一身正派之气",
+    "sinister":  "阴邪冷峻, 似笑非笑, 隐含杀机, 城府难测, 阴险毒辣之气",
+    "seductive": "妩媚妖艳, 风情万种, 眼波流转, 含情脉脉, 致命诱惑之气",
+    "cunning":   "狡诈精明, 算计深沉, 嘴角邪魅, 眼神精明, 城府深算之气",
+    "innocent":  "天真烂漫, 纯真无邪, 清澈如水, 不谙世事, 邻家亲切之气",
+}
 
 
 # ============================================================================
@@ -279,10 +334,135 @@ def _pick_biased(
     return rng.choice(pool)
 
 
+# Per follow-up 095: strip pool entries whose descriptor carries a marker that
+# unambiguously implies the opposite gender. The original 22-entry pools mix
+# neutral and gendered descriptors uniformly; without filtering, a male batch
+# pulls a feminine descriptor in ~30-45% of slots per pool, and 7 such pulls
+# cumulate to >95% chance of at least one cross-gender leak — enough to push
+# Kling toward female rendering even when 性别：男性 is in the prompt header.
+_FEMALE_ONLY_MARKERS: tuple[str, ...] = (
+    "少女", "女孩", "美人", "闺秀", "佳人", "妩媚", "妖艳", "妖媚",
+    "娇憨", "楚楚动人", "致命诱惑", "贤淑", "仕女", "邻家姐姐",
+    "萌妹", "娇媚柔弱", "弱不禁风", "婴儿肥",
+)
+
+_MALE_ONLY_MARKERS: tuple[str, ...] = (
+    "男性化", "男性硬朗", "邻家男孩", "阳光男孩", "健壮型男",
+    "长腿欧巴", "偶像身材", "腹肌分明", "魁梧", "强壮有力",
+)
+
+
+def _filter_pool_by_gender(
+    pool: tuple[str, ...],
+    bias_indices: tuple[int, ...] | None,
+    gender_slug: str,
+) -> tuple[tuple[str, ...], tuple[int, ...] | None]:
+    """Return `(filtered_pool, translated_bias_indices)`. Strip entries whose
+    descriptor contains a cross-gender marker; translate `bias_indices` to
+    point into the filtered pool (dropping entries that were stripped). If
+    every biased entry is stripped, the translated bias is None — caller
+    falls through to uniform pick.
+    """
+    forbidden = _FEMALE_ONLY_MARKERS if gender_slug == "male" else _MALE_ONLY_MARKERS
+    new_pool: list[str] = []
+    old_to_new: dict[int, int] = {}
+    for old_i, descriptor in enumerate(pool):
+        if any(m in descriptor for m in forbidden):
+            continue
+        old_to_new[old_i] = len(new_pool)
+        new_pool.append(descriptor)
+    if bias_indices is None:
+        return tuple(new_pool), None
+    translated = tuple(old_to_new[i] for i in bias_indices if i in old_to_new)
+    return tuple(new_pool), (translated if translated else None)
+
+
 def _synthesis_for(archetype: str | None) -> str:
     if archetype and archetype in _SYNTHESIS_BY_ARCHETYPE:
         return _SYNTHESIS_BY_ARCHETYPE[archetype]
     return "一位演员, 真实自然, 富有个性"
+
+
+def _batch_sample_pool(
+    batch_rng: random.Random,
+    pool_len: int,
+    bias_indices: tuple[int, ...] | None,
+    count: int,
+    wild_prob: float = _BIAS_WILD_PROB,
+) -> list[int]:
+    """Per follow-up 082: deterministic batch-coordinated sampler that returns
+    `count` POOL INDICES with no within-batch repeats unless the pool is
+    genuinely exhausted (count > pool_len).
+
+    Algorithm: bias-preferred + exhaust-then-fall-through + 074 wild-card
+    retained at the batch level (~`wild_prob` of slots free-roam the full
+    pool for within-archetype variance). Deterministic in
+    `(batch_rng state, pool_len, bias_indices, count)` so every parallel
+    `count=1` call seeded with the same `batch_seed` recomputes the same
+    list and picks its own `slot_index`.
+    """
+    wild_count = sum(1 for _ in range(count) if batch_rng.random() < wild_prob)
+    bias_count = count - wild_count
+    bias_pool = [i for i in (bias_indices or ()) if 0 <= i < pool_len]
+    batch_rng.shuffle(bias_pool)
+    full_pool = list(range(pool_len))
+    batch_rng.shuffle(full_pool)
+    biased_taken = bias_pool[:bias_count]
+    used: set[int] = set(biased_taken)
+    fallthrough_needed = bias_count - len(biased_taken)
+    fallthrough_pool = [i for i in full_pool if i not in used]
+    fallthrough_taken = fallthrough_pool[:fallthrough_needed]
+    used.update(fallthrough_taken)
+    wild_pool = [i for i in full_pool if i not in used]
+    wild_taken = wild_pool[:wild_count]
+    used.update(wild_taken)
+    picks = biased_taken + fallthrough_taken + wild_taken
+    batch_rng.shuffle(picks)
+    while len(picks) < count:
+        picks.append(batch_rng.choice(range(pool_len)))
+    return picks[:count]
+
+
+def _resolve_batch_picks(
+    batch_seed: int,
+    batch_size: int,
+    slot_index: int,
+    look: str,
+    archetype: str | None,
+    gender_slug: str,
+) -> dict[str, str]:
+    """Per follow-up 082: return this slot's pre-resolved descriptors for the
+    7 face/body pools, coordinated across the batch via `batch_seed`.
+
+    Same `(batch_seed, batch_size)` across all N parallel `count=1` calls
+    produces the same per-pool index list — each call independently picks
+    `slot_index`'s position. Look bias (077) routes per pool; body falls
+    through to archetype bias when look bias absent. Per follow-up 095, each
+    pool is gender-filtered via `_filter_pool_by_gender` before sampling so
+    a male batch never pulls feminine descriptors (and vice versa).
+    """
+    if slot_index < 0 or slot_index >= batch_size:
+        raise ValueError(
+            f"slot_index={slot_index} must be in [0, {batch_size})"
+        )
+    batch_rng = random.Random(batch_seed)
+    look_bias = _LOOK_FEATURE_BIAS_ZH.get(look, {})
+    body_bias = look_bias.get("body") or _BODY_BIAS_BY_ARCHETYPE.get(archetype or "")
+    plan: list[tuple[str, tuple[str, ...], tuple[int, ...] | None]] = [
+        ("eyes",    _EYES_ZH,    look_bias.get("eyes")),
+        ("nose",    _NOSE_ZH,    look_bias.get("nose")),
+        ("lips",    _LIPS_ZH,    look_bias.get("lips")),
+        ("brow",    _BROW_ZH,    look_bias.get("brow")),
+        ("contour", _CONTOUR_ZH, look_bias.get("contour")),
+        ("skin",    _SKIN_ZH,    None),  # skin stays unbiased (074 decision)
+        ("body",    _BODY_ZH,    body_bias),
+    ]
+    picks: dict[str, str] = {}
+    for key, pool, bias in plan:
+        filtered_pool, filtered_bias = _filter_pool_by_gender(pool, bias, gender_slug)
+        indices = _batch_sample_pool(batch_rng, len(filtered_pool), filtered_bias, batch_size)
+        picks[key] = filtered_pool[indices[slot_index]]
+    return picks
 
 
 # ============================================================================
@@ -311,94 +491,257 @@ _ETHNICITY_ZH: dict[str, str] = {
 
 _GENDER_ZH: dict[str, str] = {"male": "男性", "female": "女性"}
 
-_STYLE_ZH: dict[str, str] = {
-    "modern-casual":         "现代休闲装, 都市背景",
-    "period-ancient-china":  "中国古装, 仙侠武侠风",
-    "period-western":        "维多利亚时代古装",
-    "business":              "正装西装, 商务场景",
-    "streetwear":            "街头潮流, 都市街拍",
-    "sci-fi":                "未来科幻装, 中性背景",
-    "fantasy":               "高奇幻服装, 中性背景",
-}
+
+# Per follow-up 087: _NEGATIVES_ZH is gone. Every negative token now lives
+# in `_NEGATIVE_PROMPT_ZH` below and is sent via Kling's dedicated
+# `negative_prompt` API field — not stuffed inside the positive prompt
+# (which is a diffusion-model anti-pattern: negative tokens in positive
+# prompt inject the concept they try to forbid into the model's attention).
 
 
-_NEGATIVES_ZH: str = (
-    "避免：塑料感皮肤, 蜡像感, 卡通比例, 过度磨皮, "
-    "对称完美脸, AI 生成同质化脸, 影楼美化, 千篇一律的网红脸"
+_NEGATIVE_PROMPT_ZH: str = (
+    # composition negatives (the main half-body fix)
+    "portrait, half body, headshot, close-up, head and shoulders, "
+    "head-shoulder crop, upper body only, chest up, waist up, "
+    "cropped feet, cropped legs, cropped hands, cropped head, "
+    "head too large, body too small, "
+    # photorealism / anti-AI-face (was in old _NEGATIVES_ZH leading list)
+    "塑料感皮肤, 蜡像感, 卡通比例, 过度磨皮, 对称完美脸, "
+    "AI 生成同质化脸, 影楼美化, 千篇一律的网红脸, "
+    # explicit anti-anime / anti-illustration (paired with the positive
+    # 风格 realism cue — belt-and-suspenders against Kling drifting toward
+    # stylised aesthetics)
+    "动漫, 动漫风格, anime, anime style, cartoon, cartoon style, "
+    "插画风格, illustration, 二次元, 三维动画, 3D render, "
+    # wardrobe-fallback bans (was in old _NEGATIVES_ZH 080 addition)
+    "宽松衣物, T 恤, 长裤, 长裙, 大衣, 厚外套, 多层服装, "
+    # glamour drift (was in old _NEGATIVES_ZH 080 addition)
+    "故意性感姿势, 媚态, 内衣广告, glamour pose, "
+    # generic image quality fallbacks
+    "blurry, low quality, deformed, extra limbs, wrong proportions"
 )
 
 
-def build_face_prompt(attrs: dict[str, str], seed: int, archetype: str | None) -> str:
-    """构造结构化中文 face-shot prompt.
+def build_negatives() -> str:
+    """Returns the negative-prompt string sent to Kling's `negative_prompt`
+    API field. Per follow-up 087 — separate inversion pass keeps these tokens
+    out of the positive prompt's attention. Same negatives apply to both
+    face + body shots (composition + photorealism + wardrobe-fallback bans
+    don't differ between the two shots).
+    """
+    return _NEGATIVE_PROMPT_ZH
 
-    Pure deterministic — same `(seed, archetype)` reproduces the same draw.
-    Structure:
-        角色描述：{ethnicity} {gender}，{age}
-        眼睛：{...}
-        鼻子：{...}
-        嘴巴：{...}
-        眉毛：{...}
-        轮廓：{...}
-        皮肤：{...}
-        体型：{...}
-        综合描述：{archetype 风韵}
-        服装：{style 风格}
-        摄影：{photography 风格}
-        要求：人像写真, 自然光, 真实质感, 8K 高清
-        {negatives}
+
+# Per follow-up 100: the closing requirement block (`_CASTING_REQUIREMENTS_ZH`)
+# and the positive composition tag (`_POSITIVE_COMPOSITION_TAG`) were the third
+# and fourth "全身" repetitions inside the same prompt; combined with the
+# header line + the _PHOTOGRAPHY_ZH entries' "全身" word, Kling saw the cue
+# four times. Removed — the framing now lives only in the header line at the
+# top of each build function. The 9:16 cue is also gone (user sets aspect
+# ratio at the Kling-app level, not the prompt level).
+
+
+def _qi_zhi_for(look: str, archetype: str | None) -> str:
+    """气质 = look overlay (richer character flavor) when the look slug carries
+    one (`_LOOK_OVERLAY_ZH`); otherwise falls back to the archetype synthesis
+    so character-archetype-flavored looks like `righteous` still imprint."""
+    if look and look in _LOOK_OVERLAY_ZH:
+        return _LOOK_OVERLAY_ZH[look]
+    return _synthesis_for(archetype)
+
+
+# Per follow-up 100: optional "feature-locked" inputs. When set to a concrete
+# Chinese string (e.g. "大眼") in attrs, the prompt line shows that exact
+# value instead of a pool sample. RANDOM / empty / missing → pool sample.
+_RANDOM_TOKENS: frozenset[str] = frozenset({"", "__random__", "random", "随机"})
+
+
+def _is_random(value: str | None) -> bool:
+    return value is None or value in _RANDOM_TOKENS
+
+
+_HEADER_FACE: str = "全身定妆照（试镜照）, 正脸面向镜头, 头顶到脚趾完整入画"
+_HEADER_BODY: str = "全身定妆照（试镜照, 形体对焦）, 双腿略分开半肩宽, 头顶到脚趾完整入画"
+
+# Realism cue — pushes Kling toward live-action photography and away from
+# anime / illustrated / "AI face" aesthetics. Sits on its own line so the cue
+# carries weight equal to the other structured aspects.
+_STYLE_REALISM_ZH: str = "风格：真实人像摄影, 写实风格, 真人模样"
+
+# Wardrobe cue — outcome-framed (what must be visible) rather than dictating a
+# specific outfit, so the same line works across genders. Kling adapts the
+# anatomy based on the gender descriptor line above.
+_WARDROBE_REVEALING_ZH: str = (
+    "同意穿著内衣試鏡, 充分展示身材轮廓, "
+    "能清晰看出腿型（直腿 / 弯腿 / O型腿 / X型腿）, "
+    "大腿内外侧线条, 胸型大小, 腰臀比例, 肩宽"
+)
+
+
+def _structured_lines(
+    rng: random.Random,
+    attrs: dict[str, str],
+    archetype: str | None,
+) -> list[str]:
+    """The shared body of every prompt, in the order the user spec'd:
+    {header line + dropdown selections}
+    风格 (写实, 真人) / 眼睛 / 鼻子 / 嘴巴 / 眉毛 / 体型 / 皮肤 / 气质 / 服装
+    Each aspect appears exactly once; "全身" appears only via the caller's
+    header line (face vs body variant). 风格 sits right after the ethnicity/
+    gender descriptor to anchor the photorealism cue early; 服装 closes the
+    prompt with body-visibility outcome cues (leg shape, 胸型大小, 腰臀比).
+    """
+    ethn = _ETHNICITY_ZH.get(attrs["ethnicity"], attrs["ethnicity"])
+    gender_slug = attrs["gender"]
+    gender = _GENDER_ZH.get(gender_slug, gender_slug)
+    age = _AGE_ZH.get(attrs["age_range"], attrs["age_range"])
+    look = attrs.get("look", "")
+    look_bias = _LOOK_FEATURE_BIAS_ZH.get(look, {})
+    body_bias = look_bias.get("body") or _BODY_BIAS_BY_ARCHETYPE.get(archetype or "")
+    eyes_pool, eyes_bias = _filter_pool_by_gender(_EYES_ZH, look_bias.get("eyes"), gender_slug)
+    nose_pool, nose_bias = _filter_pool_by_gender(_NOSE_ZH, look_bias.get("nose"), gender_slug)
+    lips_pool, lips_bias = _filter_pool_by_gender(_LIPS_ZH, look_bias.get("lips"), gender_slug)
+    brow_pool, brow_bias = _filter_pool_by_gender(_BROW_ZH, look_bias.get("brow"), gender_slug)
+    skin_pool, _ = _filter_pool_by_gender(_SKIN_ZH, None, gender_slug)
+    body_pool, body_bias_f = _filter_pool_by_gender(_BODY_ZH, body_bias, gender_slug)
+    eyes_locked = attrs.get("eyes", "")
+    nose_locked = attrs.get("nose", "")
+    lips_locked = attrs.get("lips", "")
+    skin_locked = attrs.get("skin", "")
+    body_locked = attrs.get("body", "")
+    eyes_value = eyes_locked if not _is_random(eyes_locked) else _pick_biased(rng, eyes_pool, eyes_bias)
+    nose_value = nose_locked if not _is_random(nose_locked) else _pick_biased(rng, nose_pool, nose_bias)
+    lips_value = lips_locked if not _is_random(lips_locked) else _pick_biased(rng, lips_pool, lips_bias)
+    skin_value = skin_locked if not _is_random(skin_locked) else _pick(rng, skin_pool)
+    body_value = body_locked if not _is_random(body_locked) else _pick_biased(rng, body_pool, body_bias_f)
+    # `look` is intentionally NOT included here — its richer Chinese overlay
+    # surfaces once via the 气质 line below (per user's "each aspect mentioned
+    # once" rule).
+    desc_parts = [f"{ethn} {gender}", age]
+    return [
+        "，".join(desc_parts),
+        _STYLE_REALISM_ZH,
+        f"眼睛：{eyes_value}",
+        f"鼻子：{nose_value}",
+        f"嘴巴：{lips_value}",
+        f"眉毛：{_pick_biased(rng, brow_pool, brow_bias)}",
+        f"体型：{body_value}",
+        f"皮肤：{skin_value}",
+        f"气质：{_qi_zhi_for(look, archetype)}",
+        _WARDROBE_REVEALING_ZH,
+    ]
+
+
+def build_face_prompt(attrs: dict[str, str], seed: int, archetype: str | None) -> str:
+    """构造结构化中文 试镜装定妆照 prompt — face emphasis 变体（follow-up 100）.
+
+    Per follow-up 100: collapsed to a single 全身 cue in the header, dropped
+    9:16 / 画面 / _CASTING_REQUIREMENTS_ZH / 轮廓 / 综合描述 lines per user
+    spec ("only mention each aspect once"). 服装 is universal 试镜装.
+
+    Pure deterministic — same `(seed, archetype, attrs)` reproduces the same
+    draw. eyes/skin/body in attrs may carry a user-locked Chinese string;
+    otherwise pool sampling fires deterministically off `seed`.
     """
     rng = random.Random(seed)
-    ethn = _ETHNICITY_ZH.get(attrs["ethnicity"], attrs["ethnicity"])
-    gender = _GENDER_ZH.get(attrs["gender"], attrs["gender"])
-    age = _AGE_ZH.get(attrs["age_range"], attrs["age_range"])
-    style = _STYLE_ZH.get(attrs["style"], attrs["style"])
-    body_bias = _BODY_BIAS_BY_ARCHETYPE.get(archetype or "")
-    lines = [
-        f"角色描述：{ethn} {gender}，{age}",
-        f"眼睛：{_pick(rng, _EYES_ZH)}",
-        f"鼻子：{_pick(rng, _NOSE_ZH)}",
-        f"嘴巴：{_pick(rng, _LIPS_ZH)}",
-        f"眉毛：{_pick(rng, _BROW_ZH)}",
-        f"轮廓：{_pick(rng, _CONTOUR_ZH)}",
-        f"皮肤：{_pick(rng, _SKIN_ZH)}",
-        f"体型：{_pick_biased(rng, _BODY_ZH, body_bias)}",
-        f"综合描述：{_synthesis_for(archetype)}",
-        f"服装：{style}",
-        f"摄影：{_pick(rng, _PHOTOGRAPHY_ZH)}",
-        "要求：人像写真, 自然光, 真实质感, 8K 高清, 抓拍随意感, 真实毛孔, 自然不对称",
-        _NEGATIVES_ZH,
-    ]
-    return "\n".join(lines)
+    body_lines = _structured_lines(rng, attrs, archetype)
+    return "\n".join([f"{_HEADER_FACE}，{body_lines[0]}", *body_lines[1:]])
 
 
 def build_body_prompt(attrs: dict[str, str], seed: int, archetype: str | None) -> str:
-    """构造结构化中文 body-shot prompt.
+    """构造结构化中文 试镜装定妆照 prompt — body emphasis 变体（follow-up 100）.
 
-    Per follow-up 052: body wardrobe LOCKED to casting-standard 灰色修身 T 恤 +
-    黑色运动短裤，不受 attrs.style 影响（行业 comp-card 惯例 — 形体判断不被
-    戏服干扰）。Same `(seed, archetype)` → 与 face 共享身份锚 (相同的五官 +
-    体型抽样)。
+    与 `build_face_prompt` 共享 `(seed, archetype, attrs)` 抽样以保证身份一致；
+    唯一区别是 header 行 (`_HEADER_BODY` 加 "双腿略分开半肩宽 / 形体对焦")。
+    """
+    rng = random.Random(seed)
+    body_lines = _structured_lines(rng, attrs, archetype)
+    return "\n".join([f"{_HEADER_BODY}，{body_lines[0]}", *body_lines[1:]])
+
+
+# ============================================================================
+# Batch-coordinated builder variants (follow-up 082)
+# ============================================================================
+#
+# These accept a pre-resolved `picks` dict (see `_resolve_batch_picks`) that
+# fixes the 7 face/body pool descriptors so the caller can guarantee no
+# within-batch repeats. Photo cue stays per-slot via the existing per-slot
+# `seed` (so 10 actors don't all get the same camera/lens — that's batch
+# variance noise we want, not pool variance noise we want to suppress).
+#
+# Pure deterministic in `(seed, archetype, picks)`. Backward-compat:
+# `build_face_prompt` / `build_body_prompt` are unchanged and still drive
+# legacy `count=1` paths + any caller that doesn't pass batch fields.
+
+
+def _build_with_picks_lines(
+    attrs: dict[str, str],
+    seed: int,
+    archetype: str | None,
+    picks: dict[str, str],
+) -> tuple[random.Random, list[str], str]:
+    """Shared body lines for batch-coordinated face/body variants.
+
+    Returns `(rng, body_lines, gender_zh)`. The 7 pool draws are sourced from
+    `picks` (deterministic across the batch via `_resolve_batch_picks`);
+    user-locked eyes/skin/body in `attrs` override the corresponding `picks`
+    entry so the dropdown selection always wins. Only the camera cue stays
+    per-slot via `rng` (kept that way intentionally — per-slot photo variance
+    is what we want).
     """
     rng = random.Random(seed)
     ethn = _ETHNICITY_ZH.get(attrs["ethnicity"], attrs["ethnicity"])
     gender = _GENDER_ZH.get(attrs["gender"], attrs["gender"])
     age = _AGE_ZH.get(attrs["age_range"], attrs["age_range"])
-    body_bias = _BODY_BIAS_BY_ARCHETYPE.get(archetype or "")
-    lines = [
-        f"全身定妆照：{ethn} {gender}，{age}",
-        f"眼睛：{_pick(rng, _EYES_ZH)}",
-        f"鼻子：{_pick(rng, _NOSE_ZH)}",
-        f"嘴巴：{_pick(rng, _LIPS_ZH)}",
-        f"眉毛：{_pick(rng, _BROW_ZH)}",
-        f"轮廓：{_pick(rng, _CONTOUR_ZH)}",
-        f"皮肤：{_pick(rng, _SKIN_ZH)}",
-        f"体型：{_pick_biased(rng, _BODY_ZH, body_bias)}",
-        f"综合描述：{_synthesis_for(archetype)}",
-        "姿态：自然站立, 双臂自然下垂, 正面面向镜头, 重心均匀",
-        "服装：灰色修身 T 恤, 黑色运动短裤, 朴素运动鞋（业内 comp-card 标准）",
-        "画面：从头到脚全身可见, 中性纯色背景",
-        f"摄影：{_pick(rng, _PHOTOGRAPHY_ZH)}",
-        "要求：定妆照, 自然光, 真实质感, 8K 高清, 不带戏服干扰形体判断",
-        _NEGATIVES_ZH,
+    look = attrs.get("look", "")
+    eyes_locked = attrs.get("eyes", "")
+    nose_locked = attrs.get("nose", "")
+    lips_locked = attrs.get("lips", "")
+    skin_locked = attrs.get("skin", "")
+    body_locked = attrs.get("body", "")
+    eyes_value = eyes_locked if not _is_random(eyes_locked) else picks["eyes"]
+    nose_value = nose_locked if not _is_random(nose_locked) else picks["nose"]
+    lips_value = lips_locked if not _is_random(lips_locked) else picks["lips"]
+    skin_value = skin_locked if not _is_random(skin_locked) else picks["skin"]
+    body_value = body_locked if not _is_random(body_locked) else picks["body"]
+    # `look` surfaces only via the 气质 line below (per user spec).
+    desc_parts = [f"{ethn} {gender}", age]
+    body_lines = [
+        "，".join(desc_parts),
+        _STYLE_REALISM_ZH,
+        f"眼睛：{eyes_value}",
+        f"鼻子：{nose_value}",
+        f"嘴巴：{lips_value}",
+        f"眉毛：{picks['brow']}",
+        f"体型：{body_value}",
+        f"皮肤：{skin_value}",
+        f"气质：{_qi_zhi_for(look, archetype)}",
+        _WARDROBE_REVEALING_ZH,
     ]
-    return "\n".join(lines)
+    return rng, body_lines, gender
+
+
+def build_face_prompt_with_picks(
+    attrs: dict[str, str],
+    seed: int,
+    archetype: str | None,
+    picks: dict[str, str],
+) -> str:
+    """Face-emphasis prompt with caller-supplied pool picks. See
+    `_resolve_batch_picks`. Format mirrors `build_face_prompt` line-for-line
+    so the preview pane + Kling input are byte-comparable.
+    """
+    _rng, body_lines, _gender = _build_with_picks_lines(attrs, seed, archetype, picks)
+    return "\n".join([f"{_HEADER_FACE}，{body_lines[0]}", *body_lines[1:]])
+
+
+def build_body_prompt_with_picks(
+    attrs: dict[str, str],
+    seed: int,
+    archetype: str | None,
+    picks: dict[str, str],
+) -> str:
+    """Body-emphasis prompt with caller-supplied pool picks. Mirrors
+    `build_body_prompt`."""
+    _rng, body_lines, _gender = _build_with_picks_lines(attrs, seed, archetype, picks)
+    return "\n".join([f"{_HEADER_BODY}，{body_lines[0]}", *body_lines[1:]])

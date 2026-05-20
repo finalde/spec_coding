@@ -8,16 +8,13 @@ name). One file per aggregate per role, per follow-up 059.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import time
+import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from libs.common.exposed_tree import MEDIA_EXTENSIONS, ExposedTree
 from libs.common.safe_resolve import SafeResolver
-
-import uuid
-from dataclasses import dataclass, field
-
-from libs.common.exposed_tree import ExposedTree, MEDIA_EXTENSIONS
 
 
 
@@ -38,6 +35,20 @@ from libs.infrastructure.errors.media__error import (  # noqa: F401
 ARCHIVE_DIR_NAME = "archive"
 DELETED_DIR_NAME = "_deleted"
 AI_VIDEOS_ROOT_NAME = "ai_videos"
+
+
+def _uniquify(target: Path) -> Path:
+    if not target.exists():
+        return target
+    stem = target.stem
+    suffix = target.suffix
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    candidate = target.with_name(f"{stem}.{ts}{suffix}")
+    n = 1
+    while candidate.exists():
+        candidate = target.with_name(f"{stem}.{ts}-{n}{suffix}")
+        n += 1
+    return candidate
 
 
 @dataclass(frozen=True)
@@ -65,9 +76,7 @@ class MediaArchiver:
             archive_dir.mkdir(exist_ok=True)
         except OSError as exc:
             raise MoveFailed(str(exc)) from exc
-        dst = archive_dir / src.name
-        if dst.exists():
-            raise TargetExists(self._rel(dst))
+        dst = _uniquify(archive_dir / src.name)
         try:
             src.rename(dst)
         except OSError as exc:
@@ -110,8 +119,7 @@ class MediaArchiver:
             target.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             raise MoveFailed(str(exc)) from exc
-        if target.exists():
-            raise TargetExists(self._rel(target))
+        target = _uniquify(target)
         try:
             src.rename(target)
         except OSError as exc:

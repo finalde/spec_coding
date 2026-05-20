@@ -25,15 +25,23 @@ from libs.common.safe_resolve import SafeResolver
 
 
 
+from libs.domain.value_objects.character_video__valueobject import (
+    CANONICAL_VIEWS,
+    CharacterViewSpec,
+    audio_output_filename,
+    view_output_filename,
+)
 from libs.infrastructure.errors.character_video__error import (  # noqa: F401
-    InvalidPath,
-    NotFound,
-    FfmpegMissing,
-    NotCharacterVideo,
-    TruncateFailed,
-    NotShotMd,
-    NoCharacterTable,
+    AudioExtractFailed,
     ConcatFailed,
+    FfmpegMissing,
+    InvalidPath,
+    NoCharacterTable,
+    NotCharacterVideo,
+    NotFound,
+    NotShotMd,
+    TruncateFailed,
+    ViewExtractFailed,
 )
 # --- Shared exceptions ------------------------------------------------------
 
@@ -714,3 +722,214 @@ def _unwrap_inline_code(cell: str) -> str:
     if len(s) >= 2 and s.startswith("`") and s.endswith("`"):
         return s[1:-1]
     return s
+
+
+# --- View + audio extraction (Feature 3, per follow-up 093) -----------------
+
+
+_VIEW_FFMPEG_TIMEOUT_S: int = 30
+_AUDIO_FFMPEG_TIMEOUT_S: int = 60
+_VIEWS_SUBDIR: str = "views"
+_AUDIO_MP3_QUALITY: str = "4"  # libmp3lame VBR ~165 kbps — small, transparent for speech
+
+
+@dataclass(frozen=True)
+class ViewResult:
+    timestamp: float
+    role: str
+    out_rel: str
+
+    def to_payload(self) -> dict[str, object]:
+        return {"timestamp": self.timestamp, "role": self.role, "path": self.out_rel}
+
+
+@dataclass(frozen=True)
+class AudioResult:
+    out_rel: str
+
+    def to_payload(self) -> dict[str, object]:
+        return {"path": self.out_rel}
+
+
+@dataclass(frozen=True)
+class ViewExtractResult:
+    src_rel: str
+    views: tuple[ViewResult, ...]
+    audio: AudioResult | None
+    failures: tuple[tuple[str, str], ...]  # (target, error_msg) where target is "front"/"side"/"back"/"audio"
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "src": self.src_rel,
+            "views": [v.to_payload() for v in self.views],
+            "audio": self.audio.to_payload() if self.audio is not None else None,
+            "failures": [{"target": t, "error": e} for (t, e) in self.failures],
+        }
+
+
+class CharacterViewExtractor:
+    """Extracts 3 angle PNGs (front/side/back) + the full audio (mp3) from a
+    v9 character turntable mp4. Outputs land in `{src.parent}/views/` with
+    `{src.parent.name}_{role}.png` + `{src.parent.name}_audio.mp3` naming so
+    re-extraction in the same character folder overwrites the same outputs
+    regardless of mp4 stem (the latest extraction is the single source of
+    truth in `views/`).
+
+    Per follow-up 093. The 3 timestamps live in
+    `libs/domain/value_objects/character_video__valueobject.py` and are
+    pinned to rule #12.5 v9's camera path.
+    """
+
+    def __init__(self, exposed: ExposedTree, resolver: SafeResolver) -> None:
+        self._exposed = exposed
+        self._resolver = resolver
+
+    def extract(self, rel: str) -> ViewExtractResult:
+        src = self._validate_character_video_source(rel)
+        try:
+            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception as exc:
+            raise FfmpegMissing(str(exc)) from exc
+        prefix = src.parent.name
+        out_dir = src.parent / _VIEWS_SUBDIR
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ViewExtractFailed(f"could not create views dir: {exc}") from exc
+        self._sweep_outputs(out_dir)
+        views: list[ViewResult] = []
+        failures: list[tuple[str, str]] = []
+        for spec in CANONICAL_VIEWS:
+            out_path = out_dir / view_output_filename(prefix, spec)
+            ok, err = self._run_view(ffmpeg, src, spec.timestamp, out_path)
+            if ok:
+                views.append(
+                    ViewResult(
+                        timestamp=spec.timestamp,
+                        role=spec.role,
+                        out_rel=self._rel(out_path),
+                    )
+                )
+            else:
+                failures.append((spec.role, err))
+        audio_path = out_dir / audio_output_filename(prefix)
+        audio: AudioResult | None
+        ok, err = self._run_audio(ffmpeg, src, audio_path)
+        if ok:
+            audio = AudioResult(out_rel=self._rel(audio_path))
+        else:
+            audio = None
+            failures.append(("audio", err))
+        if not views and audio is None:
+            joined = "; ".join(f"{tgt}: {e}" for (tgt, e) in failures)
+            raise ViewExtractFailed(joined or "no outputs produced")
+        return ViewExtractResult(
+            src_rel=self._rel(src),
+            views=tuple(views),
+            audio=audio,
+            failures=tuple(failures),
+        )
+
+    def _run_view(
+        self,
+        ffmpeg: str,
+        src: Path,
+        timestamp: float,
+        out_path: Path,
+    ) -> tuple[bool, str]:
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-ss", f"{timestamp}",
+            "-i", str(src),
+            "-frames:v", "1",
+            "-q:v", "1",
+            "-loglevel", "error",
+            str(out_path),
+        ]
+        try:
+            completed = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=_VIEW_FFMPEG_TIMEOUT_S,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "ffmpeg_timeout"
+        if completed.returncode != 0 or not out_path.is_file():
+            err = completed.stderr.decode("utf-8", errors="replace").strip()[:200]
+            return False, err or "ffmpeg_failed"
+        return True, ""
+
+    def _run_audio(
+        self,
+        ffmpeg: str,
+        src: Path,
+        out_path: Path,
+    ) -> tuple[bool, str]:
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-i", str(src),
+            "-vn",
+            "-c:a", "libmp3lame",
+            "-q:a", _AUDIO_MP3_QUALITY,
+            "-loglevel", "error",
+            str(out_path),
+        ]
+        try:
+            completed = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=_AUDIO_FFMPEG_TIMEOUT_S,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "ffmpeg_timeout"
+        if completed.returncode != 0 or not out_path.is_file():
+            err = completed.stderr.decode("utf-8", errors="replace").strip()[:200]
+            return False, err or "ffmpeg_failed"
+        return True, ""
+
+    def _sweep_outputs(self, views_dir: Path) -> None:
+        try:
+            entries = list(views_dir.iterdir())
+        except OSError:
+            return
+        for entry in entries:
+            if entry.is_symlink() or not entry.is_file():
+                continue
+            suffix = entry.suffix.lower()
+            if suffix not in (".png", ".mp3"):
+                continue
+            try:
+                entry.unlink()
+            except OSError:
+                continue
+
+    def _validate_character_video_source(self, rel: str) -> Path:
+        if not isinstance(rel, str) or rel == "":
+            raise InvalidPath("path is empty")
+        if not self._exposed.is_inside(rel):
+            raise InvalidPath("path outside sandbox")
+        ext = Path(rel).suffix.lower()
+        if ext not in VIDEO_EXTENSIONS:
+            raise NotCharacterVideo("extension is not a video type")
+        if not CharacterVideoTruncator._is_under_character_folder(rel):
+            raise NotCharacterVideo(
+                "path must be under ai_videos/{drama}/characters/{cN_xxx}/"
+            )
+        resolved = self._resolver.resolve(rel)
+        if resolved is None:
+            raise InvalidPath("path failed sandbox resolution")
+        if resolved.is_symlink():
+            raise InvalidPath("symlink is not allowed")
+        if not resolved.is_file():
+            raise NotFound("file does not exist")
+        return resolved
+
+    def _rel(self, p: Path) -> str:
+        try:
+            return p.resolve().relative_to(self._resolver.root).as_posix()
+        except (OSError, ValueError):
+            return p.as_posix()

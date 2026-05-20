@@ -13,7 +13,7 @@ from libs.infrastructure.writers.actor__writer import ActorInfo, GenerateResult
 
 class ActorMapper:
     @staticmethod
-    def info_to_qdto(info: ActorInfo) -> ActorListRowQdto:
+    def info_to_qdto(info: ActorInfo, is_assigned: bool = False) -> ActorListRowQdto:
         return ActorListRowQdto(
             actor_id=info.id,
             image_path=info.image_path,
@@ -22,13 +22,23 @@ class ActorMapper:
             gender=info.attrs.gender,
             age_range=info.attrs.age_range,
             look=info.attrs.look,
-            style=info.attrs.style,
             notes=info.attrs.notes,
+            is_assigned=is_assigned,
         )
 
     @staticmethod
-    def list_to_qdto(infos: list[ActorInfo]) -> ActorListQdto:
-        return ActorListQdto(actors=tuple(ActorMapper.info_to_qdto(i) for i in infos))
+    def list_to_qdto(
+        infos: list[ActorInfo], assigned_ids: set[str] | None = None,
+    ) -> ActorListQdto:
+        """Per follow-up 086: optional `assigned_ids` set is the union of
+        actor_ids appearing in any drama's casting.md (produced by
+        `CastingRepository.assigned_actor_ids()`). When provided, each row's
+        `is_assigned` reflects membership; when omitted (legacy callers),
+        all rows get `is_assigned=False`."""
+        ids = assigned_ids or set()
+        return ActorListQdto(
+            actors=tuple(ActorMapper.info_to_qdto(i, is_assigned=i.id in ids) for i in infos)
+        )
 
     @staticmethod
     def generate_to_cdto(r: GenerateResult) -> GenerateActorsResultCdto:

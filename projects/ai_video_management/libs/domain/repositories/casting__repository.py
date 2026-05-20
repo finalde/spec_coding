@@ -18,3 +18,10 @@ class CastingRepository(Protocol):
     def find_assignments_for_actor(self, actor_id: str) -> list[dict[str, object]]: ...
 
     def unassign_actor_everywhere(self, actor_id: str) -> list[dict[str, str]]: ...
+
+    def assigned_actor_ids(self) -> set[str]:
+        """Per follow-up 086: single-pass scan of every drama's casting.md
+        returning the set of actor_ids appearing in any row. Used by
+        `ActorQuery.list()` to tag each actor's `is_assigned` flag in the
+        grid listing without N × `find_assignments_for_actor` round-trips."""
+        ...

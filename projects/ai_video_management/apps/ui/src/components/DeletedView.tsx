@@ -7,6 +7,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { hardDeleteMedia, mediaUrl } from "../api";
+import { announceToast } from "../lib/announce";
 import { ApiError, type TreeNode } from "../types";
 
 const PAGE_SIZE = 50;
@@ -17,7 +18,7 @@ interface DeletedEntry {
   path: string;
   name: string;
   subPath: string;
-  isVideo: boolean;
+  kind: "video" | "audio" | "image";
 }
 
 export interface DeletedViewProps {
@@ -172,8 +173,10 @@ export function DeletedView({ tree, onChange }: DeletedViewProps): JSX.Element {
                 <span className="actor-grid-checkbox" aria-hidden="true">{selected ? "✓" : "○"}</span>
               ) : null}
               <div className="deleted-tile-thumb">
-                {entry.isVideo ? (
+                {entry.kind === "video" ? (
                   <video src={mediaUrl(entry.path)} preload="metadata" muted playsInline />
+                ) : entry.kind === "audio" ? (
+                  <audio src={mediaUrl(entry.path)} preload="metadata" controls />
                 ) : (
                   <img src={mediaUrl(entry.path)} alt={entry.name} loading="lazy" />
                 )}
@@ -277,13 +280,13 @@ function collectDeletedMedia(tree: TreeNode | null): DeletedEntry[] {
   if (!tree) return [];
   const out: DeletedEntry[] = [];
   const walk = (node: TreeNode): void => {
-    if (node.type === "image" || node.type === "video") {
+    if (node.type === "image" || node.type === "video" || node.type === "audio") {
       if (node.path.startsWith("ai_videos/_deleted/")) {
         out.push({
           path: node.path,
           name: node.name,
           subPath: node.path.slice("ai_videos/_deleted/".length),
-          isVideo: node.type === "video",
+          kind: node.type,
         });
       }
       return;
@@ -295,9 +298,3 @@ function collectDeletedMedia(tree: TreeNode | null): DeletedEntry[] {
   return out;
 }
 
-function announceToast(message: string): void {
-  const region = document.getElementById("aria-live-toast");
-  if (!region) return;
-  region.textContent = "";
-  window.setTimeout(() => { region.textContent = message; }, 30);
-}

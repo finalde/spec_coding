@@ -2,13 +2,20 @@
 from __future__ import annotations
 
 from libs.application.dtos.character_video__dto import (
+    CharacterAudioCdto,
+    CharacterViewCdto,
+    CharacterViewFailureCdto,
     ConcatShotCharactersResultCdto,
+    ExtractCharacterViewsResultCdto,
     ShotConcatSkippedCdto,
     ShotConcatUsedCdto,
     TruncateCharacterVideoResultCdto,
 )
-from libs.infrastructure.writers.character_video__writer import TruncateResult
-from libs.infrastructure.writers.character_video__writer import ConcatResult
+from libs.infrastructure.writers.character_video__writer import (
+    ConcatResult,
+    TruncateResult,
+    ViewExtractResult,
+)
 
 
 class CharacterVideoMapper:
@@ -43,4 +50,21 @@ class CharacterVideoMapper:
             out_rel=r.out_rel,
             used=used,
             skipped=skipped,
+        )
+
+    @staticmethod
+    def views_to_cdto(r: ViewExtractResult) -> ExtractCharacterViewsResultCdto:
+        views = tuple(
+            CharacterViewCdto(timestamp=v.timestamp, role=v.role, path=v.out_rel)
+            for v in r.views
+        )
+        audio = CharacterAudioCdto(path=r.audio.out_rel) if r.audio is not None else None
+        failures = tuple(
+            CharacterViewFailureCdto(target=t, error=e) for (t, e) in r.failures
+        )
+        return ExtractCharacterViewsResultCdto(
+            src_rel=r.src_rel,
+            views=views,
+            audio=audio,
+            failures=failures,
         )

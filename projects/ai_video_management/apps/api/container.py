@@ -24,10 +24,12 @@ from libs.application.commands.downloads__command import DownloadsCommand
 from libs.application.commands.file__command import FileCommand
 from libs.application.commands.frame__command import FrameCommand
 from libs.application.commands.media__command import MediaCommand
+from libs.application.commands.novel__command import NovelCommand
 from libs.application.queries.actor__query import ActorQuery
 from libs.application.queries.casting__query import CastingQuery
 from libs.application.queries.file__query import FileQuery
 from libs.application.queries.media__query import MediaQuery
+from libs.application.queries.novel__query import NovelQuery
 from libs.application.queries.tree__query import TreeQuery
 from libs.common.exposed_tree import ExposedTree
 from libs.common.origin import BoundOrigin
@@ -38,12 +40,14 @@ from libs.infrastructure.writers.actor__writer import ActorPool
 from libs.infrastructure.writers.casting__writer import Casting
 from libs.infrastructure.writers.character_video__writer import (
     CharacterVideoTruncator,
+    CharacterViewExtractor,
     ShotConcatBuilder,
 )
 from libs.infrastructure.writers.downloads__writer import DownloadsImporter
 from libs.infrastructure.writers.file__writer import FileWriter
 from libs.infrastructure.writers.frame__writer import FrameExtractor
 from libs.infrastructure.writers.media__writer import MediaArchiver, MediaRenamer
+from libs.infrastructure.writers.novel__writer import NovelDownloader
 
 
 class Container(containers.DeclarativeContainer):
@@ -100,6 +104,15 @@ class Container(containers.DeclarativeContainer):
     shot_concat_builder: providers.Singleton[ShotConcatBuilder] = providers.Singleton(
         ShotConcatBuilder, exposed=exposed_tree, resolver=safe_resolver
     )
+    character_view_extractor: providers.Singleton[CharacterViewExtractor] = providers.Singleton(
+        CharacterViewExtractor, exposed=exposed_tree, resolver=safe_resolver
+    )
+    novels_root: providers.Singleton[Path] = providers.Singleton(
+        lambda root: root / "novels", repo_root_path
+    )
+    novel_downloader: providers.Singleton[NovelDownloader] = providers.Singleton(
+        NovelDownloader, novels_root=novels_root
+    )
 
     # --- Application-layer factories: one per aggregate Q/C -----------------
     actor_command: providers.Factory[ActorCommand] = providers.Factory(
@@ -124,6 +137,7 @@ class Container(containers.DeclarativeContainer):
         CharacterVideoCommand,
         truncator=character_video_truncator,
         builder=shot_concat_builder,
+        extractor=character_view_extractor,
     )
 
     actor_query: providers.Factory[ActorQuery] = providers.Factory(
@@ -140,4 +154,10 @@ class Container(containers.DeclarativeContainer):
     )
     tree_query: providers.Factory[TreeQuery] = providers.Factory(
         TreeQuery, reader=tree_reader
+    )
+    novel_command: providers.Factory[NovelCommand] = providers.Factory(
+        NovelCommand, downloader=novel_downloader
+    )
+    novel_query: providers.Factory[NovelQuery] = providers.Factory(
+        NovelQuery, novels_root=novels_root
     )

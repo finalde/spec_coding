@@ -20,7 +20,8 @@ def test_boot_creates_app_without_error() -> None:
 
 
 def test_get_tree_returns_expected_sections() -> None:
-    """FR-18 / FR-43 (post follow-up 003): AI Videos + Research live, in order."""
+    """Post follow-up 096: AI Videos + Novels live, in order (replaces the
+    earlier AI Videos + Research pairing from follow-up 003)."""
     rr = RepoRoot(path=repo_root())
     bound = BoundOrigin(host="127.0.0.1", port=8766)
     client = TestClient(make_app(rr, bound, serve_static=False))
@@ -29,7 +30,7 @@ def test_get_tree_returns_expected_sections() -> None:
     payload = r.json()
     assert payload["type"] == "section"
     sections = payload["children"]
-    assert [s["name"] for s in sections] == ["AI Videos", "Research"], sections
+    assert [s["name"] for s in sections] == ["AI Videos", "Novels"], sections
 
 
 def test_stages_endpoint_dropped() -> None:

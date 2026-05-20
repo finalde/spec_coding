@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +26,8 @@ from libs.infrastructure.errors.casting__error import (  # noqa: F401
 )
 CASTING_FILE_NAME: str = "casting.md"
 CAST_LINK_FILE_NAME: str = "_cast.md"
+CAST_DIR_NAME: str = "cast"
+CAST_IMAGE_NAME: str = "cast.jpg"
 _ROLE_INVALID_RE = re.compile(r"[\x00-\x1f|]")
 _ACTOR_ID_SHAPE_RE = re.compile(r"^actor_\d{4,}$")
 
@@ -135,6 +138,29 @@ class Casting:
         out.sort(key=lambda r: (str(r["drama"]), str(r["role"])))
         return out
 
+    def assigned_actor_ids(self) -> set[str]:
+        """Per follow-up 086: single-pass scan over every drama's casting.md
+        returning the union of actor_ids appearing in any row. Used by
+        `ActorQuery.list()` to compute each actor's `is_assigned` flag for
+        the grid filter without N × `find_assignments_for_actor` round
+        trips. O(drama_count × rows_per_casting) total."""
+        ai_videos = self._resolver.root / "ai_videos"
+        if not ai_videos.is_dir():
+            return set()
+        ids: set[str] = set()
+        for drama_dir in ai_videos.iterdir():
+            if not drama_dir.is_dir() or drama_dir.is_symlink():
+                continue
+            if drama_dir.name.startswith("_"):
+                continue
+            casting_path = drama_dir / CASTING_FILE_NAME
+            if not casting_path.is_file():
+                continue
+            for entry in self._parse(casting_path):
+                if entry.actor_id:
+                    ids.add(entry.actor_id)
+        return ids
+
     def unassign_actor_everywhere(self, actor_id: str) -> list[dict[str, str]]:
         """Sweep every drama's casting.md, remove rows where actor_id matches.
 
@@ -177,6 +203,9 @@ class Casting:
         role might be free-text not corresponding to a folder; the casting.md
         row is still authoritative. Atomic temp+replace; OSError swallowed
         with a stderr warning (the casting.md row is the truth source).
+
+        Also refreshes the `cast/cast.jpg` mirror so the picture in the
+        character cast folder always reflects the currently-assigned actor.
         """
         character_folder = drama_dir / "characters" / role
         if not character_folder.is_dir() or character_folder.is_symlink():
@@ -199,14 +228,73 @@ class Casting:
                 tmp.unlink(missing_ok=True)  # type: ignore[possibly-unbound]
             except (OSError, NameError):
                 pass
+        self._mirror_cast_image(character_folder, actor_id, face_filename)
 
     def _remove_character_link(self, drama_dir: Path, role: str) -> None:
         """Per follow-up 043: best-effort delete the `_cast.md` sibling of the
         character folder. Missing file / OSError silently ignored — the
-        casting.md row removal is the authoritative state change."""
-        cast_path = drama_dir / "characters" / role / CAST_LINK_FILE_NAME
+        casting.md row removal is the authoritative state change.
+
+        Also clears the `cast/cast.jpg` mirror (and the `cast/` dir if empty)
+        so a stale picture doesn't linger after unassign.
+        """
+        character_folder = drama_dir / "characters" / role
+        cast_path = character_folder / CAST_LINK_FILE_NAME
         try:
             cast_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        self._clear_cast_image(character_folder)
+
+    def _mirror_cast_image(
+        self, character_folder: Path, actor_id: str, face_filename: str | None
+    ) -> None:
+        """Copy the actor's face jpg into `cast/cast.jpg` so the image inside
+        the character cast folder always reflects the currently-assigned actor.
+
+        Best-effort: missing source or OSError silently ignored — `_cast.md`
+        still carries the canonical relative link to the actor folder.
+        """
+        if face_filename is None:
+            self._clear_cast_image(character_folder)
+            return
+        src = self._actor_pool.actors_dir() / actor_id / face_filename
+        if not src.is_file() or src.is_symlink():
+            return
+        cast_dir = character_folder / CAST_DIR_NAME
+        try:
+            cast_dir.mkdir(exist_ok=True)
+        except OSError:
+            return
+        if not cast_dir.is_dir() or cast_dir.is_symlink():
+            return
+        dst = cast_dir / CAST_IMAGE_NAME
+        try:
+            fd, tmp_str = tempfile.mkstemp(
+                prefix=".cast_img_", suffix=".jpg.tmp", dir=str(cast_dir)
+            )
+            os.close(fd)
+            tmp = Path(tmp_str)
+            shutil.copyfile(str(src), str(tmp))
+            os.replace(str(tmp), str(dst))
+        except OSError:
+            try:
+                tmp.unlink(missing_ok=True)  # type: ignore[possibly-unbound]
+            except (OSError, NameError):
+                pass
+
+    def _clear_cast_image(self, character_folder: Path) -> None:
+        cast_dir = character_folder / CAST_DIR_NAME
+        if not cast_dir.is_dir() or cast_dir.is_symlink():
+            return
+        cast_image = cast_dir / CAST_IMAGE_NAME
+        try:
+            cast_image.unlink(missing_ok=True)
+        except OSError:
+            pass
+        try:
+            if not any(cast_dir.iterdir()):
+                cast_dir.rmdir()
         except OSError:
             pass
 
@@ -314,6 +402,8 @@ class Casting:
 __all__ = [
     "CASTING_FILE_NAME",
     "CAST_LINK_FILE_NAME",
+    "CAST_DIR_NAME",
+    "CAST_IMAGE_NAME",
     "CastEntry",
     "Casting",
     "CastingResult",

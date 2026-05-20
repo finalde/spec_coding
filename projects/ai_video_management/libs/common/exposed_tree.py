@@ -10,7 +10,8 @@ ALLOWED_EXTENSIONS: frozenset[str] = frozenset(
 # ref png / shot output video etc. — gitignored, but webapp displays inline.
 MEDIA_EXTENSIONS: frozenset[str] = frozenset(
     {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
-     ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
+     ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v",
+     ".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 )
 TREE_VISIBLE_EXTENSIONS: frozenset[str] = ALLOWED_EXTENSIONS | MEDIA_EXTENSIONS
 MAX_FILE_BYTES: int = 1_048_576
@@ -20,16 +21,16 @@ _EXCLUDED_DIRS: frozenset[str] = frozenset(
 )
 
 
-_ALLOWED_TOP_LEVEL: frozenset[str] = frozenset({"ai_videos", "research"})
+_ALLOWED_TOP_LEVEL: frozenset[str] = frozenset({"ai_videos", "novels"})
 
 
 class ExposedTree:
-    """The webapp's read/write tree exposes two roots: ai_videos/** and research/**.
+    """The webapp's read/write tree exposes two roots: ai_videos/** and novels/**.
 
-    `research/` was added by follow-up 003 for free-form reference dumps. It
-    reuses every existing security control (extension allowlist, _EXCLUDED_DIRS
-    filter, traversal hardening) — only the admitted-first-segment set is
-    widened.
+    `novels/` replaced `research/` in follow-up 096: the user consolidated the
+    free-form reference dump into a downloaded-novels surface. Same security
+    controls (extension allowlist, _EXCLUDED_DIRS filter, traversal hardening);
+    only the admitted-first-segment set was updated.
     """
 
     def __init__(self, repo_root: Path) -> None:
@@ -45,11 +46,11 @@ class ExposedTree:
             return []
         return sorted(p for p in ai_videos_root.iterdir() if p.is_dir())
 
-    def research_dirs(self) -> list[Path]:
-        research_root = self._root / "research"
-        if not research_root.is_dir():
+    def novel_dirs(self) -> list[Path]:
+        novels_root = self._root / "novels"
+        if not novels_root.is_dir():
             return []
-        return sorted(p for p in research_root.iterdir() if p.is_dir())
+        return sorted(p for p in novels_root.iterdir() if p.is_dir())
 
     def is_inside(self, rel: str) -> bool:
         if not rel or rel.startswith("/") or "\\" in rel or "\x00" in rel:

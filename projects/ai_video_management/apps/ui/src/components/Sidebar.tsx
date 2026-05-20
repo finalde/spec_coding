@@ -87,7 +87,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
     if (!tree) return;
     const accum: Record<string, boolean> = {};
     const walk = (node: TreeNode): void => {
-      if (node.type === "file" || node.type === "image" || node.type === "video" || node.type === "actor") return;
+      if (node.type === "file" || node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "actor") return;
       if (node.path) accum[node.path] = true;
       for (const c of node.children ?? []) walk(c);
     };
@@ -151,7 +151,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
     if (!tree) return;
     const accum: Record<string, boolean> = {};
     const walk = (node: TreeNode): void => {
-      if (node.type === "file" || node.type === "image" || node.type === "video" || node.type === "actor") return;
+      if (node.type === "file" || node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "actor") return;
       if (node.path) accum[node.path] = false;
       for (const c of node.children ?? []) walk(c);
     };
@@ -162,7 +162,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
   const onItemKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, item: FlatNode): void => {
     const items = flat;
     const index = items.findIndex((i) => i.node.path === item.node.path);
-    const isLeaf = item.node.type === "file" || item.node.type === "image" || item.node.type === "video" || (item.node.children ?? []).length === 0;
+    const isLeaf = item.node.type === "file" || item.node.type === "image" || item.node.type === "video" || item.node.type === "audio" || (item.node.children ?? []).length === 0;
     const isOpen = expanded[item.node.path] === true;
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -181,7 +181,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
       else if (item.parentPath) focusByPath(treeRef.current, item.parentPath, setFocusedPath);
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      if (item.node.type === "file" || item.node.type === "image" || item.node.type === "video") onSelect(item.node.path);
+      if (item.node.type === "file" || item.node.type === "image" || item.node.type === "video" || item.node.type === "audio") onSelect(item.node.path);
       else toggle(item.node.path);
     }
   };
@@ -233,7 +233,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
       ) : null}
       <div ref={treeRef} role="tree" aria-label="File tree" className="tree">
         {flat.map((item) => {
-          const isLeaf = item.node.type === "file" || item.node.type === "image" || item.node.type === "video" || item.node.type === "actor";
+          const isLeaf = item.node.type === "file" || item.node.type === "image" || item.node.type === "video" || item.node.type === "audio" || item.node.type === "actor";
           const hasChildren = (item.node.children ?? []).length > 0;
           const isOpen = expanded[item.node.path] === true || item.depth === 0;
           const isActive = currentPath === item.node.path;
@@ -282,9 +282,10 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
               ) : null}
               {item.node.type === "image" ? <span aria-hidden="true" className="tree-icon">🖼</span> : null}
               {item.node.type === "video" ? <span aria-hidden="true" className="tree-icon">🎬</span> : null}
+              {item.node.type === "audio" ? <span aria-hidden="true" className="tree-icon">🎵</span> : null}
               {item.node.type === "actor" ? <span aria-hidden="true" className="tree-icon">🎭</span> : null}
               {isActorsRoot ? <span aria-hidden="true" className="tree-icon">🎭</span> : null}
-              <span className="tree-label">{item.node.name}</span>
+              <span className="tree-label">{item.node.display_name || item.node.name}</span>
               {subType ? (
                 <span className={`subtype-badge subtype-${subType}`}
                   aria-label={`项目类型: ${subType === "novel" ? "剧" : "短"}`}>

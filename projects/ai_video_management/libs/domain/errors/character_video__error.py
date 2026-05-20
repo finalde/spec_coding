@@ -56,3 +56,18 @@ class NoCharacterTableError(CharacterVideoDomainError):
 
 class ConcatFailedError(CharacterVideoDomainError):
     """ffmpeg concat invocation failed; no output produced."""
+
+
+# --- View + audio extraction (Feature 3, per follow-up 093) -----------------
+
+
+class ViewExtractFailedError(CharacterVideoDomainError):
+    """ffmpeg ran but at least one of the 3 angle PNGs (front/side/back) could
+    not be produced. Raised only when ALL 4 outputs fail (3 views + audio) —
+    partial-failure runs return a 200 with a non-empty `failures` list."""
+
+
+class AudioExtractFailedError(CharacterVideoDomainError):
+    """ffmpeg ran but the .mp3 audio track could not be produced. Raised only
+    when ALL 4 outputs fail (3 views + audio) — partial-failure runs return a
+    200 with a non-empty `failures` list."""

@@ -29,14 +29,64 @@ LOOK_OPTIONS: frozenset[str] = frozenset(
         "righteous", "sinister", "seductive", "cunning", "innocent",
     }
 )
-STYLE_OPTIONS: frozenset[str] = frozenset(
-    {"modern-casual", "period-ancient-china", "period-western", "business", "streetwear", "sci-fi", "fantasy"}
-)
 RESOLUTION_OPTIONS: frozenset[str] = frozenset({"normal", "2k", "4k"})
 DEFAULT_RESOLUTION: str = "normal"
 NOTES_MAX_LEN: int = 500
 MIN_BATCH_COUNT: int = 1
 MAX_BATCH_COUNT: int = 50
+
+# Per follow-up 100: optional dropdown locks for the 3 feature lines users
+# care about most. Each accepts either RANDOM_SENTINEL_VALUES (= use pool) or
+# one of the curated Chinese descriptors below. The prompt builder
+# (`actor__chinese_prompt.py`) substitutes the locked value verbatim and
+# falls back to deterministic pool sampling otherwise.
+RANDOM_SENTINEL_VALUES: frozenset[str] = frozenset({"", "__random__", "random", "随机"})
+EYES_OPTIONS: frozenset[str] = frozenset(
+    {
+        "大眼", "细长眼", "圆眼", "杏眼", "桃花眼", "凤眼", "鹿眼",
+        "小眼", "丹凤眼", "狐眼", "单眼皮", "双眼皮", "内双", "深邃眼",
+    }
+)
+NOSE_OPTIONS: frozenset[str] = frozenset(
+    {
+        "高挺", "挺直", "小巧", "翘鼻", "鹰钩", "蒜头", "塌鼻",
+        "驼峰鼻", "朝天鼻", "宽鼻", "窄鼻", "圆鼻头", "尖鼻",
+    }
+)
+LIPS_OPTIONS: frozenset[str] = frozenset(
+    {
+        "樱桃小嘴", "丰唇", "薄唇", "厚唇", "嘟嘟嘴", "上翘嘴角",
+        "大嘴", "小嘴", "性感唇", "苹果唇", "嘴角下垂", "棱角分明唇",
+    }
+)
+FACE_OPTIONS: frozenset[str] = frozenset(
+    {
+        "鹅蛋脸", "瓜子脸", "圆脸", "方脸", "长脸",
+        "心形脸", "国字脸", "菱形脸", "倒三角脸",
+    }
+)
+SKIN_OPTIONS: frozenset[str] = frozenset(
+    {
+        "白皙", "小麦色", "古铜色", "瓷白", "象牙白", "蜜糖色",
+        "黝黑", "苍白", "红润", "雪白", "焦糖色", "深棕色", "橄榄色", "麦色",
+    }
+)
+BODY_OPTIONS: frozenset[str] = frozenset(
+    {
+        "高挑修长", "中等匀称", "娇小玲珑", "纤瘦", "丰满", "健硕",
+        "高大", "矮小", "魁梧",
+        "骨感", "偏瘦", "微胖", "胖", "肥胖", "过度肥胖",
+    }
+)
+
+
+def _validate_optional_feature(value: str, options: frozenset[str], name: str) -> None:
+    if value in RANDOM_SENTINEL_VALUES:
+        return
+    if value not in options:
+        raise InvalidActorAttributeError(
+            f"{name}={value!r} not in {sorted(options)} (or one of {sorted(RANDOM_SENTINEL_VALUES)})"
+        )
 
 
 @dataclass(frozen=True)
@@ -45,8 +95,15 @@ class ActorAttrs:
     gender: str
     age_range: str
     look: str
-    style: str
     notes: str = ""
+    # Per follow-up 100: optional user-locked feature descriptors. Each
+    # defaults to "" (treated as random pool sample by the prompt builder).
+    eyes: str = ""
+    nose: str = ""
+    lips: str = ""
+    face: str = ""
+    skin: str = ""
+    body: str = ""
 
     def validate(self) -> None:
         if self.ethnicity not in ETHNICITY_OPTIONS:
@@ -57,10 +114,14 @@ class ActorAttrs:
             raise InvalidActorAttributeError(f"age_range={self.age_range!r} not in schema")
         if self.look not in LOOK_OPTIONS:
             raise InvalidActorAttributeError(f"look={self.look!r} not in schema")
-        if self.style not in STYLE_OPTIONS:
-            raise InvalidActorAttributeError(f"style={self.style!r} not in schema")
         if len(self.notes) > NOTES_MAX_LEN:
             raise InvalidActorAttributeError(f"notes must be ≤ {NOTES_MAX_LEN} characters")
+        _validate_optional_feature(self.eyes, EYES_OPTIONS, "eyes")
+        _validate_optional_feature(self.nose, NOSE_OPTIONS, "nose")
+        _validate_optional_feature(self.lips, LIPS_OPTIONS, "lips")
+        _validate_optional_feature(self.face, FACE_OPTIONS, "face")
+        _validate_optional_feature(self.skin, SKIN_OPTIONS, "skin")
+        _validate_optional_feature(self.body, BODY_OPTIONS, "body")
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -68,8 +129,13 @@ class ActorAttrs:
             "gender": self.gender,
             "age_range": self.age_range,
             "look": self.look,
-            "style": self.style,
             "notes": self.notes,
+            "eyes": self.eyes,
+            "nose": self.nose,
+            "lips": self.lips,
+            "face": self.face,
+            "skin": self.skin,
+            "body": self.body,
         }
 
 

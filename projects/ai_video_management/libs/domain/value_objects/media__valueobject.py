@@ -22,7 +22,8 @@ ACTORS_DIR_NAME: str = "_actors"
 
 MEDIA_EXTENSIONS_SET: frozenset[str] = frozenset(
     {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
-     ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
+     ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v",
+     ".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 )
 
 

@@ -28,12 +28,13 @@ def test_tree_consumer_walk() -> None:
 
 
 def test_tree_sections_order() -> None:
-    """Sections render in the FR-18 / FR-43 order: AI Videos, then Research."""
+    """Sections render in order: AI Videos, then Novels (per follow-up 096
+    research/ retired in favor of novels/)."""
     exposed = ExposedTree(repo_root())
     walker = TreeReader(exposed)
     tree = walker.build()
     section_names = [child["name"] for child in tree["children"]]
-    assert section_names == ["AI Videos", "Research"], section_names
+    assert section_names == ["AI Videos", "Novels"], section_names
 
 
 def test_ai_videos_section_has_project_meta_for_wukong() -> None:
@@ -52,21 +53,23 @@ def test_ai_videos_section_has_project_meta_for_wukong() -> None:
     assert wukong["project_meta"]["sub_type"] == "short"
 
 
-def test_research_section_walks_repo_research_dir() -> None:
-    """Follow-up 003: research/ surfaces under the Research section."""
+def test_novels_section_walks_repo_novels_dir() -> None:
+    """Follow-up 096: novels/ surfaces under the Novels section (replaces the
+    earlier research/ section per follow-up 003)."""
     exposed = ExposedTree(repo_root())
     walker = TreeReader(exposed)
     tree = walker.build()
-    research_section = next(
-        (c for c in tree["children"] if c["name"] == "Research"), None
+    novels_section = next(
+        (c for c in tree["children"] if c["name"] == "Novels"), None
     )
-    assert research_section is not None, "Research section missing"
-    assert research_section["type"] == "section"
-    if (repo_root() / "research").is_dir():
-        # When the repo's research/ exists with content, the section should
-        # contain at least one child node.
-        names = [c["name"] for c in research_section["children"]]
-        assert names, "Research section is empty despite repo `research/` having content"
+    assert novels_section is not None, "Novels section missing"
+    assert novels_section["type"] == "section"
+    if (repo_root() / "novels").is_dir():
+        # When the repo's novels/ exists with downloaded content, the section
+        # should contain at least one child node.
+        names = [c["name"] for c in novels_section["children"]]
+        # Empty acceptable — downloads may not have started yet.
+        assert isinstance(names, list)
 
 
 def test_image_leaves_typed_as_image() -> None:

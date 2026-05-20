@@ -49,7 +49,14 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
   const [gender, setGender] = useState<string>(RANDOM_SENTINEL);
   const [ageRange, setAgeRange] = useState<string>(RANDOM_SENTINEL);
   const [look, setLook] = useState<string>(RANDOM_SENTINEL);
-  const [style, setStyle] = useState<string>(RANDOM_SENTINEL);
+  // Per follow-up 100: 眼睛 / 鼻子 / 嘴巴 / 皮肤 / 体型 are first-class dropdown
+  // locks. Default RANDOM_SENTINEL → backend samples the rich pool
+  // deterministically.
+  const [eyes, setEyes] = useState<string>(RANDOM_SENTINEL);
+  const [nose, setNose] = useState<string>(RANDOM_SENTINEL);
+  const [lips, setLips] = useState<string>(RANDOM_SENTINEL);
+  const [skin, setSkin] = useState<string>(RANDOM_SENTINEL);
+  const [body, setBody] = useState<string>(RANDOM_SENTINEL);
   const [notes, setNotes] = useState<string>("");
   const [resolution, setResolution] = useState<string>(ATTR_OPTIONS.resolution[0]);
   // Per follow-up 055 + 057: split string-state for the input from the
@@ -72,6 +79,10 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
   const [progress, setProgress] = useState<Progress | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const cancelledRef = useRef<boolean>(false);
+  // Per follow-up 082: stash the preview's batch-coordination metadata so
+  // the confirm path forwards identical batch_seed + batch_size to every
+  // generate call — same coordination that fired during preview.
+  const previewBatchRef = useRef<{ batchSeed: number; batchSize: number } | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -97,26 +108,47 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
       // is genuinely distinct (explicit seeds prevent the millisecond-
       // precision base_seed collision when calls fire in the same tick).
       const baseSeed = Date.now();
+      // Per follow-up 082: one batch_seed per click; passed to each parallel
+      // count=1 call along with batch_size + slot_index so the backend can
+      // resolve within-batch-distinct face/body pool draws deterministically.
+      const batchSeed = baseSeed;
+      const batchSize = count;
+      // Per follow-up 100: eyes / skin / body stay un-rolled at the frontend.
+      // Backend deterministically samples the rich pool off the slot seed when
+      // the value is RANDOM_SENTINEL — frontend doesn't pick a slug from the
+      // 6-7 dropdown options because that would lose the richer multi-trait
+      // pool descriptors users get from "random".
       const slotPlans = Array.from({ length: count }, (_, i) => ({
         seed: baseSeed + i,
         ethnicity: ethnicity === RANDOM_SENTINEL ? rollRandomAttr("ethnicity") : ethnicity,
         gender: gender === RANDOM_SENTINEL ? rollRandomAttr("gender") : gender,
         age_range: ageRange === RANDOM_SENTINEL ? rollRandomAttr("age_range") : ageRange,
         look: look === RANDOM_SENTINEL ? rollRandomAttr("look") : look,
-        style: style === RANDOM_SENTINEL ? rollRandomAttr("style") : style,
+        eyes: eyes === RANDOM_SENTINEL ? "" : eyes,
+        nose: nose === RANDOM_SENTINEL ? "" : nose,
+        lips: lips === RANDOM_SENTINEL ? "" : lips,
+        skin: skin === RANDOM_SENTINEL ? "" : skin,
+        body: body === RANDOM_SENTINEL ? "" : body,
       }));
       const responses = await Promise.all(
-        slotPlans.map((plan) =>
+        slotPlans.map((plan, i) =>
           previewPrompts({
             count: 1,
             ethnicity: plan.ethnicity,
             gender: plan.gender,
             age_range: plan.age_range,
             look: plan.look,
-            style: plan.style,
             notes,
             resolution,
             seeds: [plan.seed],
+            batch_seed: batchSeed,
+            batch_size: batchSize,
+            slot_index: i,
+            eyes: plan.eyes,
+            nose: plan.nose,
+            lips: plan.lips,
+            skin: plan.skin,
+            body: plan.body,
           }),
         ),
       );
@@ -132,11 +164,16 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
             gender: plan.gender,
             age_range: plan.age_range,
             look: plan.look,
-            style: plan.style,
             notes,
+            eyes: plan.eyes,
+            nose: plan.nose,
+            lips: plan.lips,
+            skin: plan.skin,
+            body: plan.body,
           },
         };
       });
+      previewBatchRef.current = { batchSeed, batchSize };
       setPreview({ prompts, resolution });
     } catch (err) {
       const msg =
@@ -149,7 +186,7 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
     } finally {
       setPreviewBusy(false);
     }
-  }, [ageRange, busy, count, ethnicity, gender, look, notes, previewBusy, resolution, style]);
+  }, [ageRange, body, busy, count, ethnicity, eyes, gender, lips, look, nose, notes, previewBusy, resolution, skin]);
 
   const onConfirmGenerate = useCallback(async () => {
     if (!preview || busy) return;
@@ -204,16 +241,28 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
           // reviewed prompt 1:1.
           const entry = previewSnapshot.prompts[slot - 1];
           const slotAttrs = entry?.attrs;
+          // Per follow-up 082: forward the same batch_seed + batch_size +
+          // per-slot slot_index used during preview so each Kling-fired
+          // prompt matches the previewed one byte-for-byte (pool draws
+          // come from the same _resolve_batch_picks resolution).
+          const batchMeta = previewBatchRef.current;
           const result = await generateActors({
             count: 1,
             ethnicity: slotAttrs?.ethnicity ?? ethnicity,
             gender: slotAttrs?.gender ?? gender,
             age_range: slotAttrs?.age_range ?? ageRange,
             look: slotAttrs?.look ?? look,
-            style: slotAttrs?.style ?? style,
             notes: slotAttrs?.notes ?? notes,
             resolution,
             seeds: [seedsList[slot - 1]],
+            batch_seed: batchMeta?.batchSeed ?? null,
+            batch_size: batchMeta?.batchSize ?? null,
+            slot_index: slot - 1,
+            eyes: slotAttrs?.eyes ?? (eyes === RANDOM_SENTINEL ? "" : eyes),
+            nose: slotAttrs?.nose ?? (nose === RANDOM_SENTINEL ? "" : nose),
+            lips: slotAttrs?.lips ?? (lips === RANDOM_SENTINEL ? "" : lips),
+            skin: slotAttrs?.skin ?? (skin === RANDOM_SENTINEL ? "" : skin),
+            body: slotAttrs?.body ?? (body === RANDOM_SENTINEL ? "" : body),
           });
           if (result.generated.length > 0) {
             done += 1;
@@ -253,7 +302,7 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
     });
     setBusy(false);
     setPreview(null);
-  }, [ageRange, busy, ethnicity, gender, look, notes, onGenerated, preview, resolution, style]);
+  }, [ageRange, body, busy, ethnicity, eyes, gender, lips, look, nose, notes, onGenerated, preview, resolution, skin]);
 
   const requestCancel = useCallback(() => {
     cancelledRef.current = true;
@@ -316,10 +365,34 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
                 {ATTR_OPTIONS.look.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.look[o]}</option>)}
               </select>
             </Field>
-            <Field label="风格" id="style">
-              <select value={style} onChange={(e) => setStyle(e.target.value)} disabled={busy || previewBusy}>
+            <Field label="眼睛" id="eyes">
+              <select value={eyes} onChange={(e) => setEyes(e.target.value)} disabled={busy || previewBusy}>
                 <option value={RANDOM_SENTINEL}>🎲 随机</option>
-                {ATTR_OPTIONS.style.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.style[o]}</option>)}
+                {ATTR_OPTIONS.eyes.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.eyes[o]}</option>)}
+              </select>
+            </Field>
+            <Field label="鼻子" id="nose">
+              <select value={nose} onChange={(e) => setNose(e.target.value)} disabled={busy || previewBusy}>
+                <option value={RANDOM_SENTINEL}>🎲 随机</option>
+                {ATTR_OPTIONS.nose.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.nose[o]}</option>)}
+              </select>
+            </Field>
+            <Field label="嘴巴" id="lips">
+              <select value={lips} onChange={(e) => setLips(e.target.value)} disabled={busy || previewBusy}>
+                <option value={RANDOM_SENTINEL}>🎲 随机</option>
+                {ATTR_OPTIONS.lips.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.lips[o]}</option>)}
+              </select>
+            </Field>
+            <Field label="皮肤" id="skin">
+              <select value={skin} onChange={(e) => setSkin(e.target.value)} disabled={busy || previewBusy}>
+                <option value={RANDOM_SENTINEL}>🎲 随机</option>
+                {ATTR_OPTIONS.skin.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.skin[o]}</option>)}
+              </select>
+            </Field>
+            <Field label="体型" id="body">
+              <select value={body} onChange={(e) => setBody(e.target.value)} disabled={busy || previewBusy}>
+                <option value={RANDOM_SENTINEL}>🎲 随机</option>
+                {ATTR_OPTIONS.body.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.body[o]}</option>)}
               </select>
             </Field>
             <Field label={`数量 (1–${MAX_BATCH_COUNT})`} id="count">
@@ -431,7 +504,7 @@ function PromptPreviewModal({ preview, onCancel, onConfirm }: PreviewModalProps)
                 </div>
                 {p.attrs ? (
                   <div className="prompt-preview-attrs">
-                    {p.attrs.ethnicity} / {p.attrs.gender} / {p.attrs.age_range} / {p.attrs.look} / {p.attrs.style}
+                    {p.attrs.ethnicity} / {p.attrs.gender} / {p.attrs.age_range} / {p.attrs.look}
                   </div>
                 ) : null}
                 <details>

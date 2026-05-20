@@ -63,3 +63,46 @@ class ConcatShotCharactersResultCdto:
             "used": [u.to_payload() for u in self.used],
             "skipped": [s.to_payload() for s in self.skipped],
         }
+
+
+@dataclass(frozen=True)
+class CharacterViewCdto:
+    timestamp: float
+    role: str
+    path: str
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"timestamp": self.timestamp, "role": self.role, "path": self.path}
+
+
+@dataclass(frozen=True)
+class CharacterAudioCdto:
+    path: str
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"path": self.path}
+
+
+@dataclass(frozen=True)
+class CharacterViewFailureCdto:
+    target: str
+    error: str
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"target": self.target, "error": self.error}
+
+
+@dataclass(frozen=True)
+class ExtractCharacterViewsResultCdto:
+    src_rel: str
+    views: tuple[CharacterViewCdto, ...]
+    audio: CharacterAudioCdto | None
+    failures: tuple[CharacterViewFailureCdto, ...]
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "src": self.src_rel,
+            "views": [v.to_payload() for v in self.views],
+            "audio": self.audio.to_payload() if self.audio is not None else None,
+            "failures": [f.to_payload() for f in self.failures],
+        }

@@ -51,8 +51,13 @@ class ActorCommand:
             gender=input_cdto.gender,
             age_range=input_cdto.age_range,
             look=input_cdto.look,
-            style=input_cdto.style,
             notes=input_cdto.notes,
+            eyes=input_cdto.eyes,
+            nose=input_cdto.nose,
+            lips=input_cdto.lips,
+            face=input_cdto.face,
+            skin=input_cdto.skin,
+            body=input_cdto.body,
         )
         attrs.validate()
         validate_batch_count(input_cdto.count)
@@ -65,6 +70,9 @@ class ActorCommand:
                 input_cdto.resolution,
                 input_cdto.seeds,
                 archetype=input_cdto.archetype,
+                batch_seed=input_cdto.batch_seed,
+                batch_size=input_cdto.batch_size,
+                slot_index=input_cdto.slot_index,
             )
         except InvalidAttribute as exc:
             raise InvalidActorAttributeError(str(exc)) from exc

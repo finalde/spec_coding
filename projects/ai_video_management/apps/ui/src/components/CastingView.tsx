@@ -16,14 +16,13 @@ export interface CastingViewProps {
   onChange: () => void;
 }
 
-type FilterKey = "ethnicity" | "gender" | "age_range" | "look" | "style";
+type FilterKey = "ethnicity" | "gender" | "age_range" | "look";
 
 interface FilterState {
   ethnicity: string;
   gender: string;
   age_range: string;
   look: string;
-  style: string;
 }
 
 const ALL = "(全部)";
@@ -55,7 +54,6 @@ export function CastingView({ castingPath, onChange }: CastingViewProps): JSX.El
     gender: ALL,
     age_range: ALL,
     look: ALL,
-    style: ALL,
   });
   const [newRole, setNewRole] = useState<string>("");
   const [newNotes, setNewNotes] = useState<string>("");
@@ -215,7 +213,7 @@ export function CastingView({ castingPath, onChange }: CastingViewProps): JSX.El
                       {actor ? (
                         <span>
                           {actor.ethnicity} · {actor.gender} · {actor.age_range} ·{" "}
-                          {actor.look} · {actor.style}
+                          {actor.look}
                         </span>
                       ) : null}
                     </td>

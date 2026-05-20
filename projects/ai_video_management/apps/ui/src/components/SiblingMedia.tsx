@@ -15,13 +15,27 @@
  * retained for quick single archives.
  */
 import { useEffect, useMemo, useState } from "react";
-import { archiveMedia, extractFrames, mediaUrl, unarchiveMedia } from "../api";
+import { archiveMedia, extractCharacterViews, extractFrames, mediaUrl, unarchiveMedia } from "../api";
+import { announceToast as announce } from "../lib/announce";
 import { ApiError } from "../types";
 
 const VIDEO_EXTS = new Set([".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"]);
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
-const MEDIA_EXTS = new Set([...VIDEO_EXTS, ...IMAGE_EXTS]);
+const AUDIO_EXTS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
+const MEDIA_EXTS = new Set([...VIDEO_EXTS, ...IMAGE_EXTS, ...AUDIO_EXTS]);
 const ARCHIVE_DIR_NAME = "archive";
+
+/** Matches `ai_videos/{drama}/characters/c{N}[_{slug}]/{file}.{video_ext}`.
+ * Used to gate the 🖼 three-view + audio extraction button so it only
+ * appears for character turntable videos (rule #12.5 v9 sources).
+ * Mirrors the backend `_CHARACTER_DIR_RE` shape in character_video__writer.py.
+ */
+const CHARACTER_VIDEO_PATH_RE =
+  /^ai_videos\/[^/_][^/]*\/characters\/c\d+(?:_[^/]+)?\/[^/]+\.(?:mp4|mov|webm|mkv|avi|m4v)$/i;
+
+export function isCharacterVideoPath(path: string): boolean {
+  return CHARACTER_VIDEO_PATH_RE.test(path);
+}
 
 export interface SiblingMediaProps {
   currentPath: string;
@@ -63,16 +77,6 @@ function findArchivedMedia(currentPath: string, all: string[]): string[] {
     .sort();
 }
 
-function announce(message: string): void {
-  const region = document.getElementById("aria-live-toast");
-  if (region) {
-    region.textContent = "";
-    window.setTimeout(() => {
-      region.textContent = message;
-    }, 30);
-  }
-}
-
 function basename(path: string): string {
   return path.split("/").pop() ?? path;
 }
@@ -90,12 +94,14 @@ interface MediaTileProps {
   archived: boolean;
   busy: boolean;
   extracting: boolean;
+  extractingViews: boolean;
   selected: boolean;
   selectionBusy: boolean;
   onToggleSelect: (path: string) => void;
   onArchive: (path: string) => void;
   onUnarchive: (path: string) => void;
   onExtractFrames: (path: string) => void;
+  onExtractCharacterViews: (path: string) => void;
 }
 
 function MediaTile({
@@ -103,15 +109,19 @@ function MediaTile({
   archived,
   busy,
   extracting,
+  extractingViews,
   selected,
   selectionBusy,
   onToggleSelect,
   onArchive,
   onUnarchive,
   onExtractFrames,
+  onExtractCharacterViews,
 }: MediaTileProps): JSX.Element {
   const ext = extOf(path);
   const isVideo = VIDEO_EXTS.has(ext);
+  const isAudio = AUDIO_EXTS.has(ext);
+  const isCharacterVideo = isVideo && isCharacterVideoPath(path);
   const filename = basename(path);
   const url = mediaUrl(path);
   const handleClick = (): void => {
@@ -139,6 +149,8 @@ function MediaTile({
       />
       {isVideo ? (
         <video controls preload="metadata" src={url} />
+      ) : isAudio ? (
+        <audio controls preload="metadata" src={url} />
       ) : (
         <img src={url} alt={filename} loading="lazy" />
       )}
@@ -157,6 +169,18 @@ function MediaTile({
             title="Extract 5 canonical reference frames (hero / reverse / vert / mid / detail) into ./frames/ — overwrites previous extraction from this scene folder"
           >
             {extracting ? "⏳ Extracting…" : "🎞 Extract Frames"}
+          </button>
+        ) : null}
+        {isCharacterVideo && !archived ? (
+          <button
+            type="button"
+            className="sibling-media-views-btn"
+            onClick={() => onExtractCharacterViews(path)}
+            disabled={busy || extractingViews}
+            aria-label={`Extract 3 views and audio from ${filename}`}
+            title="提取三视图 (front / side / back) + 音频 (.mp3) 到 ./views/ — 适用于 v9 character turntable (15s slow-orbit)"
+          >
+            {extractingViews ? "⏳ 提取中…" : "🖼 提取三视图+音频"}
           </button>
         ) : null}
         <button
@@ -237,6 +261,7 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
   const [busyPath, setBusyPath] = useState<string | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
   const [extractingPath, setExtractingPath] = useState<string | null>(null);
+  const [extractingViewsPath, setExtractingViewsPath] = useState<string | null>(null);
   const [selectedActive, setSelectedActive] = useState<Set<string>>(() => new Set());
   const [selectedArchived, setSelectedArchived] = useState<Set<string>>(() => new Set());
 
@@ -294,6 +319,27 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
       announce(`Extract frames failed: ${errorKind(err)}`);
     } finally {
       setExtractingPath(null);
+    }
+  };
+
+  const handleExtractCharacterViews = async (path: string): Promise<void> => {
+    setExtractingViewsPath(path);
+    try {
+      const result = await extractCharacterViews(path);
+      const viewCount = result.views.length;
+      const hasAudio = result.audio !== null;
+      const failCount = result.failures.length;
+      const audioSuffix = hasAudio ? " + 音频" : "";
+      const summary =
+        failCount === 0
+          ? `Extracted ${viewCount} 视图${audioSuffix} from ${basename(path)} → views/`
+          : `Extracted ${viewCount} 视图${audioSuffix} from ${basename(path)} (${failCount} failed)`;
+      announce(summary);
+      onChange?.();
+    } catch (err) {
+      announce(`Extract views failed: ${errorKind(err)}`);
+    } finally {
+      setExtractingViewsPath(null);
     }
   };
 
@@ -366,12 +412,14 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
                 archived={false}
                 busy={busy || busyPath === p}
                 extracting={extractingPath === p}
+                extractingViews={extractingViewsPath === p}
                 selected={selectedActive.has(p)}
                 selectionBusy={busy}
                 onToggleSelect={toggleActive}
                 onArchive={handleArchive}
                 onUnarchive={handleUnarchive}
                 onExtractFrames={handleExtractFrames}
+                onExtractCharacterViews={handleExtractCharacterViews}
               />
             ))}
           </div>
@@ -397,12 +445,14 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
                 archived
                 busy={busy || busyPath === p}
                 extracting={extractingPath === p}
+                extractingViews={extractingViewsPath === p}
                 selected={selectedArchived.has(p)}
                 selectionBusy={busy}
                 onToggleSelect={toggleArchivedSel}
                 onArchive={handleArchive}
                 onUnarchive={handleUnarchive}
                 onExtractFrames={handleExtractFrames}
+                onExtractCharacterViews={handleExtractCharacterViews}
               />
             ))}
           </div>

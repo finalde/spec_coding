@@ -164,14 +164,25 @@ export interface ActorAttrs {
   gender: string;
   age_range: string;
   look: string;
-  style: string;
   notes?: string;
+  /** Per follow-up 100: optional user-locked feature descriptors. Empty
+   * string / RANDOM_SENTINEL → backend samples the rich pool deterministically
+   * by seed; a curated Chinese descriptor substitutes verbatim into the
+   * prompt's 眼睛 / 鼻子 / 嘴巴 / 皮肤 / 体型 line. */
+  eyes?: string;
+  nose?: string;
+  lips?: string;
+  skin?: string;
+  body?: string;
 }
 
 export interface ActorInfo extends ActorAttrs {
   id: string;
   image_path: string;
   mtime: number;
+  /** Per follow-up 086: true iff this actor appears in any drama's
+   * casting.md. Powers the ActorGrid 分配状态 filter chip. */
+  is_assigned?: boolean;
 }
 
 export interface GenerateActorsResult {
@@ -187,6 +198,16 @@ export interface GenerateActorsRequest extends ActorAttrs {
    * confirm calls so each actor's sidecar carries the slug from first
    * write. Standard callers pass null/omitted. */
   archetype?: string | null;
+  /** Per follow-up 082: within-batch pool-diversity coordination. Set
+   * batchSeed once per generate/preview click + pass slotIndex = i +
+   * batchSize on each of N parallel count=1 calls. Backend uses these
+   * to resolve the 7 face/body pool draws so no two slots in the same
+   * batch share an eye / nose / lips / brow / contour / skin / body
+   * descriptor (bias-preferred, exhaust-then-fall-through). */
+  batch_seed?: number | null;
+  batch_size?: number | null;
+  slot_index?: number | null;
+  // eyes / skin / body come from ActorAttrs (follow-up 100).
 }
 
 /** Per follow-up 059 / 064: per-slot preview entry. `body_prompt` is the
@@ -314,8 +335,31 @@ export const ATTR_OPTIONS = {
   age_range: ["18-25", "26-35", "36-50", "51-65", "65+"] as const,
   // Per follow-up 064: 5 character-archetype-flavored values appended after the original 8 physical-appearance values.
   look: ["handsome", "beautiful", "cute", "mature", "rugged", "soft", "aristocratic", "fierce", "righteous", "sinister", "seductive", "cunning", "innocent"] as const,
-  style: ["modern-casual", "period-ancient-china", "period-western", "business", "streetwear", "sci-fi", "fantasy"] as const,
   resolution: ["normal", "2k", "4k"] as const,
+  // Per follow-up 100: optional user-locked feature dropdowns. MUST stay in
+  // sync with EYES_OPTIONS / NOSE_OPTIONS / LIPS_OPTIONS / SKIN_OPTIONS /
+  // BODY_OPTIONS in libs/domain/value_objects/actor__valueobject.py.
+  eyes: [
+    "大眼", "细长眼", "圆眼", "杏眼", "桃花眼", "凤眼", "鹿眼",
+    "小眼", "丹凤眼", "狐眼", "单眼皮", "双眼皮", "内双", "深邃眼",
+  ] as const,
+  nose: [
+    "高挺", "挺直", "小巧", "翘鼻", "鹰钩", "蒜头", "塌鼻",
+    "驼峰鼻", "朝天鼻", "宽鼻", "窄鼻", "圆鼻头", "尖鼻",
+  ] as const,
+  lips: [
+    "樱桃小嘴", "丰唇", "薄唇", "厚唇", "嘟嘟嘴", "上翘嘴角",
+    "大嘴", "小嘴", "性感唇", "苹果唇", "嘴角下垂", "棱角分明唇",
+  ] as const,
+  skin: [
+    "白皙", "小麦色", "古铜色", "瓷白", "象牙白", "蜜糖色",
+    "黝黑", "苍白", "红润", "雪白", "焦糖色", "深棕色", "橄榄色", "麦色",
+  ] as const,
+  body: [
+    "高挑修长", "中等匀称", "娇小玲珑", "纤瘦", "丰满", "健硕",
+    "高大", "矮小", "魁梧",
+    "骨感", "偏瘦", "微胖", "胖", "肥胖", "过度肥胖",
+  ] as const,
 };
 
 /** Per follow-up 063: Chinese display labels for ATTR_OPTIONS slugs. */
@@ -336,13 +380,39 @@ export const ATTR_LABELS_ZH: { [K in keyof typeof ATTR_OPTIONS]: Record<string, 
     "righteous": "正义", "sinister": "阴邪", "seductive": "妩媚",
     "cunning": "狡诈", "innocent": "天真",
   },
-  style: {
-    "modern-casual": "现代休闲", "period-ancient-china": "古装仙侠",
-    "period-western": "西方古装", "business": "商务",
-    "streetwear": "街头潮流", "sci-fi": "科幻", "fantasy": "奇幻",
-  },
   resolution: {
     "normal": "普通 (~1024px Kling 原始)", "2k": "2K (2048px)", "4k": "4K (4096px)",
+  },
+  eyes: {
+    "大眼": "大眼", "细长眼": "细长眼", "圆眼": "圆眼", "杏眼": "杏眼",
+    "桃花眼": "桃花眼", "凤眼": "凤眼", "鹿眼": "鹿眼",
+    "小眼": "小眼", "丹凤眼": "丹凤眼", "狐眼": "狐眼",
+    "单眼皮": "单眼皮", "双眼皮": "双眼皮", "内双": "内双", "深邃眼": "深邃眼",
+  },
+  nose: {
+    "高挺": "高挺", "挺直": "挺直", "小巧": "小巧", "翘鼻": "翘鼻",
+    "鹰钩": "鹰钩", "蒜头": "蒜头", "塌鼻": "塌鼻",
+    "驼峰鼻": "驼峰鼻", "朝天鼻": "朝天鼻", "宽鼻": "宽鼻",
+    "窄鼻": "窄鼻", "圆鼻头": "圆鼻头", "尖鼻": "尖鼻",
+  },
+  lips: {
+    "樱桃小嘴": "樱桃小嘴", "丰唇": "丰唇", "薄唇": "薄唇",
+    "厚唇": "厚唇", "嘟嘟嘴": "嘟嘟嘴", "上翘嘴角": "上翘嘴角",
+    "大嘴": "大嘴", "小嘴": "小嘴", "性感唇": "性感唇",
+    "苹果唇": "苹果唇", "嘴角下垂": "嘴角下垂", "棱角分明唇": "棱角分明唇",
+  },
+  skin: {
+    "白皙": "白皙", "小麦色": "小麦色", "古铜色": "古铜色",
+    "瓷白": "瓷白", "象牙白": "象牙白", "蜜糖色": "蜜糖色",
+    "黝黑": "黝黑", "苍白": "苍白", "红润": "红润", "雪白": "雪白",
+    "焦糖色": "焦糖色", "深棕色": "深棕色", "橄榄色": "橄榄色", "麦色": "麦色",
+  },
+  body: {
+    "高挑修长": "高挑修长", "中等匀称": "中等匀称", "娇小玲珑": "娇小玲珑",
+    "纤瘦": "纤瘦", "丰满": "丰满", "健硕": "健硕",
+    "高大": "高大", "矮小": "矮小", "魁梧": "魁梧",
+    "骨感": "骨感", "偏瘦": "偏瘦", "微胖": "微胖",
+    "胖": "胖", "肥胖": "肥胖", "过度肥胖": "过度肥胖",
   },
 };
 
@@ -361,12 +431,21 @@ export function imageUrl(path: string, mtime: number): string {
   return `/api/file?path=${encodeURIComponent(path)}&mtime=${encodeURIComponent(String(mtime))}`;
 }
 
-/** Build a same-origin URL for raw media (image / video) via /api/media route.
+/** Build a same-origin URL for raw media (image / video / audio) via /api/media.
  * Bypasses /api/file's base64 + 1 MB limit. Per follow-up 005.
+ *
+ * Cache busting: an mtime arg takes precedence (per-file mtime, e.g. ActorGrid).
+ * Otherwise we append a module-level buster bumped on every tree refresh by
+ * `bumpMediaCacheBuster()` — this evicts stale browser cache after a regen
+ * (e.g. character views) where the URL path is unchanged but the bytes are not.
  */
+let _mediaCacheBuster: number = Date.now();
+export function bumpMediaCacheBuster(): void {
+  _mediaCacheBuster = Date.now();
+}
 export function mediaUrl(path: string, mtime?: number): string {
-  const cb = mtime !== undefined ? `&mtime=${encodeURIComponent(String(mtime))}` : "";
-  return `/api/media?path=${encodeURIComponent(path)}${cb}`;
+  const v = mtime !== undefined ? mtime : _mediaCacheBuster;
+  return `/api/media?path=${encodeURIComponent(path)}&v=${encodeURIComponent(String(v))}`;
 }
 
 export interface TruncateCharacterVideoResult {
@@ -410,4 +489,35 @@ export async function concatShotCharacters(path: string): Promise<ConcatShotChar
     body: JSON.stringify({ path }),
   });
   return readJson<ConcatShotCharactersResult>(response);
+}
+
+export interface CharacterView {
+  timestamp: number;
+  role: string;
+  path: string;
+}
+
+export interface CharacterAudio {
+  path: string;
+}
+
+export interface CharacterViewFailure {
+  target: string;
+  error: string;
+}
+
+export interface ExtractCharacterViewsResult {
+  src: string;
+  views: CharacterView[];
+  audio: CharacterAudio | null;
+  failures: CharacterViewFailure[];
+}
+
+export async function extractCharacterViews(path: string): Promise<ExtractCharacterViewsResult> {
+  const response = await fetch("/api/extract-character-views", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ExtractCharacterViewsResult>(response);
 }

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from libs.application.dtos.character_video__dto import (
     ConcatShotCharactersResultCdto,
+    ExtractCharacterViewsResultCdto,
     TruncateCharacterVideoResultCdto,
 )
 from libs.application.mappers.character_video__mapper import CharacterVideoMapper
 from libs.domain.errors.character_video__error import (
+    AudioExtractFailedError,
     CharacterVideoNotFoundError,
     ConcatFailedError,
     FfmpegMissingForCharacterVideoError,
@@ -18,9 +20,12 @@ from libs.domain.errors.character_video__error import (
     NotShotMdError,
     ShotMdNotFoundError,
     TruncateFailedError,
+    ViewExtractFailedError,
 )
 from libs.infrastructure.writers.character_video__writer import (
+    AudioExtractFailed,
     CharacterVideoTruncator,
+    CharacterViewExtractor,
     ConcatFailed,
     FfmpegMissing,
     InvalidPath,
@@ -30,6 +35,7 @@ from libs.infrastructure.writers.character_video__writer import (
     NotShotMd,
     ShotConcatBuilder,
     TruncateFailed,
+    ViewExtractFailed,
 )
 
 
@@ -38,9 +44,11 @@ class CharacterVideoCommand:
         self,
         truncator: CharacterVideoTruncator,
         builder: ShotConcatBuilder,
+        extractor: CharacterViewExtractor,
     ) -> None:
         self._truncator = truncator
         self._builder = builder
+        self._extractor = extractor
 
     def truncate(self, rel_path: str) -> TruncateCharacterVideoResultCdto:
         try:
@@ -73,3 +81,20 @@ class CharacterVideoCommand:
         except ConcatFailed as exc:
             raise ConcatFailedError(str(exc)) from exc
         return CharacterVideoMapper.concat_to_cdto(result)
+
+    def extract_views(self, rel_path: str) -> ExtractCharacterViewsResultCdto:
+        try:
+            result = self._extractor.extract(rel_path)
+        except InvalidPath as exc:
+            raise InvalidCharacterVideoPathError(str(exc)) from exc
+        except NotCharacterVideo as exc:
+            raise NotCharacterVideoError(str(exc)) from exc
+        except NotFound as exc:
+            raise CharacterVideoNotFoundError(str(exc)) from exc
+        except FfmpegMissing as exc:
+            raise FfmpegMissingForCharacterVideoError(str(exc)) from exc
+        except AudioExtractFailed as exc:
+            raise AudioExtractFailedError(str(exc)) from exc
+        except ViewExtractFailed as exc:
+            raise ViewExtractFailedError(str(exc)) from exc
+        return CharacterVideoMapper.views_to_cdto(result)

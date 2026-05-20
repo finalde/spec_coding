@@ -24,6 +24,12 @@ _MEDIA_MIME_MAP: dict[str, str] = {
     ".mkv": "video/x-matroska",
     ".avi": "video/x-msvideo",
     ".m4v": "video/mp4",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
 }
 
 

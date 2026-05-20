@@ -22,8 +22,12 @@ class ActorListRowQdto:
     gender: str
     age_range: str
     look: str
-    style: str
     notes: str
+    # Per follow-up 086: True iff this actor_id appears in any drama's
+    # casting.md row. Set by `ActorQuery.list()` using
+    # `CastingRepository.assigned_actor_ids()` (one bulk scan). Powers the
+    # ActorGrid 分配状态 filter chip (全部 / 已分配 / 未分配).
+    is_assigned: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -34,8 +38,8 @@ class ActorListRowQdto:
             "gender": self.gender,
             "age_range": self.age_range,
             "look": self.look,
-            "style": self.style,
             "notes": self.notes,
+            "is_assigned": self.is_assigned,
         }
 
 
@@ -100,7 +104,6 @@ class GenerateActorsInputCdto:
     gender: str
     age_range: str
     look: str
-    style: str
     notes: str
     resolution: str
     seeds: list[int] | None
@@ -109,6 +112,26 @@ class GenerateActorsInputCdto:
     # row from first write. Standard-mode callers pass None (the sidecar
     # gets backfilled by `migrate_archetypes()` at next startup).
     archetype: str | None = None
+    # Per follow-up 082: optional batch-coordination fields. When all three
+    # are non-None, the infra-layer pool resolves the 7 face/body pool draws
+    # via `_resolve_batch_picks(batch_seed, batch_size, slot_index, ...)` so
+    # no two slots in the same batch share the same eye / nose / lips / brow
+    # / contour / skin / body descriptor (bias-preferred, exhaust-then-fall-
+    # through). Frontend computes `batch_seed = Date.now()` once per click
+    # and passes `slot_index = i` on each of N parallel count=1 calls.
+    batch_seed: int | None = None
+    batch_size: int | None = None
+    slot_index: int | None = None
+    # Per follow-up 100: optional user-locked feature descriptors. Empty
+    # string / "__random__" → pool sample (existing behaviour). Curated
+    # Chinese string → substituted verbatim into the prompt's 眼睛 / 皮肤 /
+    # 体型 line.
+    eyes: str = ""
+    nose: str = ""
+    lips: str = ""
+    face: str = ""
+    skin: str = ""
+    body: str = ""
 
 
 @dataclass(frozen=True)

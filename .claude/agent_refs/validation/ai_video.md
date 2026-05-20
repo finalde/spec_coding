@@ -80,6 +80,27 @@ Per `validation/general.md` principle 8 + `CLAUDE.md` § Pinned items survive re
 
 After all automated levels pass for a work unit (one episode for novels, the whole short for shorts), the parent emits `validation.requires_manual_walkthrough` with the prompt: *"Open `characters/ref_images/`, the shot list, and 2–3 shot prompts in random order — confirm character description matches across shots and the shot list reads as a coherent scene."* User confirmation closes the work unit.
 
+### 9. 短剧故事 + 台词大师 (storyteller-dialogue master review)
+
+Every newly-emitted or regenerated shot / episode / shotlist item is reviewed by a "短剧故事 + 台词大师" specialist BEFORE the work unit is marked done. The master enforces the dialogue + shot-design criteria documented in `agent_refs/project/ai_video.md` §12.4-D ("短剧故事 + 台词大师 review criteria"). At stage 5 this is one of the parallel level-specialist workers; at stage 6 the master runs against every shot md as it's written (per work unit) and at the closing pass of every episode / shot list.
+
+Validator pseudo-rule per shot:
+
+1. Parse the `台词 / 字幕:` section. For each line: check 通俗易懂性 (modern colloquial Chinese, no untriggered 古文 / 文言文 / 玄学 aphorisms), 信息量 (advances plot or reveals stake / character), 节奏 (≤ 15 字 punchy unless ceremonial), 角色声口 (line voice matches the character's personality and station per `characters/<role>.md`). Lines failing on any axis → flag with proposed alternate.
+2. Check shot's hook landing — 黄金钩 / 反转 / cliffhanger shots must have their named hook visibly landed in 镜头 + 动作 + 台词 within the declared seconds.
+3. Check 情节链 — the shot's beat must be a non-removable step in the episode's plot chain (per `episode.md` arc). Decorative shots whose removal wouldn't break the chain are flagged.
+4. Check character-station fidelity — speaker tone in `(语气..., 朝/望谁): "..."` matches the character's 锁定描述符 from §12.4-C and §12.4-D combined.
+
+Severity:
+
+- One dialogue line fails 通俗易懂性 → `warning` with proposed rewrite.
+- A shot's hook is named but not landed → `blocker`.
+- A character's voice contradicts their `characters/<role>.md` 角色定位 → `blocker`.
+- Two shots within the same episode reuse near-identical dialogue templates (e.g., 两个角色 都说 "今日便是你的劫数") → `warning` with differentiation hint.
+- 沿用 anachronistic character references (a name from a later arc appears in an earlier shot) → `blocker`.
+
+The master's output is a per-shot inline patch list, NOT free-form prose review: each failure cites the shot, the failing line, the criterion, and the proposed rewrite. The parent applies the patches surgically and re-runs the level until 0 blockers + ≤ 2 warnings remain.
+
 ## Severity escalations specific to ai_video
 
 | Issue class | Severity | Reason |

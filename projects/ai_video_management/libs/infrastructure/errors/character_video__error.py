@@ -32,3 +32,9 @@ class NoCharacterTable(Exception):
 
 class ConcatFailed(Exception):
     pass
+
+class ViewExtractFailed(Exception):
+    pass
+
+class AudioExtractFailed(Exception):
+    pass

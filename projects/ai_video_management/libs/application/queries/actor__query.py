@@ -36,7 +36,12 @@ class ActorQuery:
         self._casting = casting
 
     def list(self) -> ActorListQdto:
-        return ActorMapper.list_to_qdto(self._pool.list_actors())
+        """Per follow-up 086: tag each actor with `is_assigned` so the
+        ActorGrid 分配状态 filter chip works client-side without N round
+        trips. One bulk scan of all casting.md files via
+        `CastingRepository.assigned_actor_ids()`."""
+        assigned_ids = self._casting.assigned_actor_ids()
+        return ActorMapper.list_to_qdto(self._pool.list_actors(), assigned_ids=assigned_ids)
 
     def preview_prompts(self, input_cdto: GenerateActorsInputCdto) -> PreviewPromptsQdto:
         """Dry-run prompt preview (follow-up 032). Computes the same
@@ -47,8 +52,13 @@ class ActorQuery:
             gender=input_cdto.gender,
             age_range=input_cdto.age_range,
             look=input_cdto.look,
-            style=input_cdto.style,
             notes=input_cdto.notes,
+            eyes=input_cdto.eyes,
+            nose=input_cdto.nose,
+            lips=input_cdto.lips,
+            face=input_cdto.face,
+            skin=input_cdto.skin,
+            body=input_cdto.body,
         )
         attrs.validate()
         validate_batch_count(input_cdto.count)
@@ -59,6 +69,9 @@ class ActorQuery:
                 input_cdto.count,
                 input_cdto.resolution,
                 seeds=input_cdto.seeds,
+                batch_seed=input_cdto.batch_seed,
+                batch_size=input_cdto.batch_size,
+                slot_index=input_cdto.slot_index,
             )
         except InvalidAttribute as exc:
             raise InvalidActorAttributeError(str(exc)) from exc

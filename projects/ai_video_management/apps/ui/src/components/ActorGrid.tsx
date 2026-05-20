@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ATTR_OPTIONS, castingAssign, deleteActor, listActors, mediaUrl, type ActorInfo } from "../api";
 import { extractDramas, type DramaChoice } from "../lib/dramas";
+import { announceToast } from "../lib/announce";
 import { ApiError, type TreeNode } from "../types";
 
 const PAGE_SIZE = 50;
@@ -34,6 +35,13 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
   const [filterEthnicity, setFilterEthnicity] = useState<string>(FILTER_ALL);
   const [filterGender, setFilterGender] = useState<string>(FILTER_ALL);
   const [filterAgeRange, setFilterAgeRange] = useState<string>(FILTER_ALL);
+  const [filterLook, setFilterLook] = useState<string>(FILTER_ALL);
+  // Per follow-up 086: filter by whether actor is already assigned to a role.
+  // "all" (default) / "assigned" (in any casting.md) / "unassigned" (free).
+  const [filterAssigned, setFilterAssigned] = useState<"all" | "assigned" | "unassigned">("all");
+  // Zoom lightbox: holds the actor whose full-size image is being viewed.
+  // Null = closed. Set via the per-tile 🔍 overlay button.
+  const [zoomActor, setZoomActor] = useState<ActorInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,9 +66,12 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
       if (filterEthnicity !== FILTER_ALL && a.ethnicity !== filterEthnicity) return false;
       if (filterGender !== FILTER_ALL && a.gender !== filterGender) return false;
       if (filterAgeRange !== FILTER_ALL && a.age_range !== filterAgeRange) return false;
+      if (filterLook !== FILTER_ALL && a.look !== filterLook) return false;
+      if (filterAssigned === "assigned" && !a.is_assigned) return false;
+      if (filterAssigned === "unassigned" && a.is_assigned) return false;
       return true;
     });
-  }, [actors, filterEthnicity, filterGender, filterAgeRange]);
+  }, [actors, filterEthnicity, filterGender, filterAgeRange, filterLook, filterAssigned]);
 
   const totalPages = useMemo(() => {
     if (filteredActors.length === 0) return 1;
@@ -70,7 +81,7 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
   // Reset page when filters change so user starts from page 1 of filtered set.
   useEffect(() => {
     setPage(0);
-  }, [filterEthnicity, filterGender, filterAgeRange]);
+  }, [filterEthnicity, filterGender, filterAgeRange, filterLook, filterAssigned]);
 
   useEffect(() => {
     if (page >= totalPages) setPage(Math.max(0, totalPages - 1));
@@ -93,12 +104,18 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
   }, []);
 
   const onTileClick = useCallback(
-    (actorId: string, imagePath: string) => {
+    (actorId: string, _imagePath: string) => {
       if (selectMode) {
         toggleSelected(actorId);
         return;
       }
-      navigate(`/file/${encodeURIComponent(imagePath)}`);
+      // Per follow-up 095: redirect to the actor's main sidecar page
+      // (ai_videos/_actors/{id}/{id}.md → ActorView via Reader path-shape
+      // detection) instead of the raw jpg viewer. The jpg is already shown
+      // as the tile thumbnail; users want the bible + assignments + delete
+      // controls on click-through.
+      const mdPath = `ai_videos/_actors/${actorId}/${actorId}.md`;
+      navigate(`/file/${encodeURIComponent(mdPath)}`);
     },
     [navigate, selectMode, toggleSelected],
   );
@@ -220,6 +237,24 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
               {ATTR_OPTIONS.age_range.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </label>
+          <label>
+            外貌气质
+            <select value={filterLook} onChange={(e) => setFilterLook(e.target.value)}>
+              <option value={FILTER_ALL}>全部</option>
+              {ATTR_OPTIONS.look.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </label>
+          <label>
+            分配状态
+            <select
+              value={filterAssigned}
+              onChange={(e) => setFilterAssigned(e.target.value as "all" | "assigned" | "unassigned")}
+            >
+              <option value="all">全部</option>
+              <option value="assigned">🎬 已分配</option>
+              <option value="unassigned">⚪ 未分配</option>
+            </select>
+          </label>
         </div>
         {totalPages > 1 ? (
           <div className="actor-grid-pagination" role="navigation" aria-label="演员池分页">
@@ -247,14 +282,41 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
               {selectMode ? (
                 <span className="actor-grid-checkbox" aria-hidden="true">{selected ? "✓" : "○"}</span>
               ) : null}
-              <img
-                className="actor-tile-image"
-                src={mediaUrl(actor.image_path, actor.mtime)}
-                alt={actor.id}
-                loading="lazy"
-              />
+              <div className="actor-tile-image-wrapper">
+                <img
+                  className="actor-tile-image"
+                  src={mediaUrl(actor.image_path, actor.mtime)}
+                  alt={actor.id}
+                  loading="lazy"
+                />
+                <span
+                  className="actor-tile-zoom"
+                  role="button"
+                  tabIndex={0}
+                  title="放大查看"
+                  aria-label={`放大查看 ${actor.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoomActor(actor);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setZoomActor(actor);
+                    }
+                  }}
+                >
+                  🔍
+                </span>
+              </div>
               <div className="actor-tile-meta">
-                <div className="actor-tile-id">{actor.id}</div>
+                <div className="actor-tile-id">
+                  {actor.id}
+                  {actor.is_assigned ? (
+                    <span className="actor-tile-assigned-badge" title="已分配到角色">🎬</span>
+                  ) : null}
+                </div>
                 <div className="actor-tile-chips">
                   <span className="actor-tile-chip">{actor.ethnicity}</span>
                   <span className="actor-tile-chip">{actor.gender}</span>
@@ -296,6 +358,69 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
           onAssigned={() => { onChange(); }}
         />
       ) : null}
+      {zoomActor ? (
+        <ActorImageLightbox actor={zoomActor} onClose={() => setZoomActor(null)} />
+      ) : null}
+    </div>
+  );
+}
+
+/** Lightbox for zooming an actor image. Click image to toggle between
+ * "fit" (max-95vw × max-95vh, contain) and "1:1" (image's native pixel
+ * dimensions, with scroll if larger than viewport). Esc or backdrop click
+ * closes. Focus is captured on the close button for keyboard users.
+ */
+interface ActorImageLightboxProps {
+  actor: ActorInfo;
+  onClose: () => void;
+}
+
+function ActorImageLightbox({ actor, onClose }: ActorImageLightboxProps): JSX.Element {
+  const [mode, setMode] = useState<"fit" | "native">("fit");
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="actor-lightbox-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`放大查看 ${actor.id}`}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        className="actor-lightbox-close"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        aria-label="关闭放大视图"
+        autoFocus
+      >
+        ×
+      </button>
+      <div
+        className={`actor-lightbox-scroll actor-lightbox-${mode}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          className={`actor-lightbox-img actor-lightbox-img-${mode}`}
+          src={mediaUrl(actor.image_path, actor.mtime)}
+          alt={actor.id}
+          onClick={() => setMode((m) => (m === "fit" ? "native" : "fit"))}
+          title={mode === "fit" ? "点击查看原始尺寸" : "点击适应屏幕"}
+        />
+      </div>
+      <div className="actor-lightbox-hint">
+        {actor.id} · {mode === "fit" ? "适应屏幕（点图切换 1:1）" : "原始尺寸（点图回到适应屏幕）"} · Esc 关闭
+      </div>
     </div>
   );
 }
@@ -403,9 +528,3 @@ function AssignCharacterModal({ actorIds, dramas, onClose, onAssigned }: AssignM
   );
 }
 
-function announceToast(message: string): void {
-  const region = document.getElementById("aria-live-toast");
-  if (!region) return;
-  region.textContent = "";
-  window.setTimeout(() => { region.textContent = message; }, 30);
-}

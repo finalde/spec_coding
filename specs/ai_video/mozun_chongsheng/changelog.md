@@ -2,6 +2,471 @@
 
 Append-only follow-up audit log。每条记录该 follow-up 改了什么、哪些下游 artifact 被同步 surgical patch。
 
+## Follow-up 028 — 2026-05-19 20:22:33
+Source: user_input/follow_ups/028-20260519-202233-character-ref-v11-simplified-prompt.md (cross-project ripple from ai_video_management follow-up 099)
+
+Trigger: ai_video_management 099 — user empirical test of v10.2 character mp4 renders: "the camera did not move as you intended in the charactor prompt, I think kling got confused, you need to tell it in a more simple way and only once in the prompt. currently the it shart to turn around to side view at only about 5s. ... yes, the video does not have a backview in it, I think it start to move around 4~5s so the last frame in the video is still side view."
+
+修法 — v10.2 → v11 (third same-day pivot on character ref prompt; v10.2 prompt was verbose, v11 simplifies):
+
+**Character turntable schema v10.2 → v11:**
+- Schedule unchanged — same 3 static landings + 2 short transitions, same `CANONICAL_VIEWS (1.0, 3.5, 6.0)` timestamps. **No code change to ai_video_management.**
+- Prompt rendering simplified: motion described ONCE in 动作 timed beats (not 4x across 镜头 + 动作 + 节奏 + 负向). Plain Chinese ("镜头围绕角色顺时针绕 90° 到角色左侧身") instead of jargon ("motion bridge 缓慢顺时针 orbit 0° → 90°"). 锁定机位 wording removed entirely (model interprets "锁定" as "全程不动" which conflicts with motion beats).
+- 镜头 line: framing/lens only — no motion path. 动作 6-line block → 5-line block (0-1s + 1-2s collapsed into single 0-2s beat). 节奏 = single sentence (no path repetition). 负向 = 10 simple bans (no qualifier paragraphs).
+
+**Why v10.2 → v11 same day:**
+
+027 (v10.2) was applied this morning. User immediately re-rendered character mp4s + clicked 🖼 extract. Empirical result: motion delayed to ~5s in rendered output (vs spec 2s). User diagnosis: "kling got confused" by the prompt's redundant 4-field motion description with technical jargon. v11 strips that down — motion mentioned ONCE in 动作 in plain Chinese.
+
+**项目落地 — 10 character md files patched via two one-shot Python scripts:**
+
+Script 1: `C:/Users/light/AppData/Local/Temp/patch_chars_v11.py` — 12 substitutions per file (10 fixed-string + 2 multi-line regex with capture groups preserving character-specific dialogue + name).
+
+Script 2: `C:/Users/light/AppData/Local/Temp/patch_chars_v11_fix.py` — corrective patch for 2 patterns script 1 missed (title line wording in files differed from rule template; 光线 line had no `**轮廓光 + key 在 orbit 全程保持稳定**` tail).
+
+Files patched (all 10 confirmed at v11, zero v10.2 motion-jargon markers remaining):
+- `ai_videos/mozun_chongsheng/characters/c1_沧冥/c1_沧冥.md` — 12 (script 1) + 2 (script 2 title + 光线).
+- `ai_videos/mozun_chongsheng/characters/c2_叶无尘/c2_叶无尘.md` — 12 + 1 (no 光晕 segment, 光线 regex didn't match — kept v10.2 wording, cosmetic only).
+- `ai_videos/mozun_chongsheng/characters/c3_苏璃月/c3_苏璃月.md` — 12 + 2.
+- `ai_videos/mozun_chongsheng/characters/c4_柳红袖/c4_柳红袖.md` — 12 + 1 (no 光晕 segment).
+- `ai_videos/mozun_chongsheng/characters/c5_苓夭夭/c5_苓夭夭.md` — 12 + 1 (no 光晕 segment).
+- `ai_videos/mozun_chongsheng/characters/c6_白月清/c6_白月清.md` — 12 + 2.
+- `ai_videos/mozun_chongsheng/characters/c7_赵焚天/c7_赵焚天.md` — 12 + 2.
+- `ai_videos/mozun_chongsheng/characters/c8_方鼎元/c8_方鼎元.md` — 12 + 2.
+- `ai_videos/mozun_chongsheng/characters/c9_韩夺心/c9_韩夺心.md` — 12 + 2.
+- `ai_videos/mozun_chongsheng/characters/c10_司空玄/c10_司空玄.md` — 12 + 2.
+
+Sanity-checked forbidden markers (all confirmed zero across all 10 files post-patch):
+- `5-phase locked-framing single-take` (v10.2 title marker)
+- `5 阶段 timed beats (0-2s 锁定机位` (v10.2 镜头 marker)
+- `motion bridge 缓慢顺时针` (v10.2 动作 jargon)
+- `锁定机位 左侧身 90° medium-full` + `锁定机位 背面 180° medium-full` (v10.2 动作 jargon)
+- `motion bridge 段速度 ≤ 90°/s` + `motion 跨越目标角度` + `静态段内继续微调机位` (v10.2 负向 qualifier paragraphs)
+- `锁定 framing 5-phase 单 take` (v10.2 节奏 marker)
+- `(reference 上传上限 v10.2)` (v10.2 负向 leading marker)
+- `落声 + 自我识别 + motion 0°→90°` + `over 静态侧身 hold + motion 90°→180°` + `情绪 peak + catch + final lock（over 静态背面 settle）` (v10.2 用途 markers)
+
+Per-character preserved content (verified via regex named capture groups in script 1's 动作 block + 台词 enumeration regexes):
+- Character name in slot 3 ("三, 我是 {NAME}") — kept verbatim.
+- 标志台词 #1 in slot 4 — preserved (now appears ONCE in 动作 5-7s beat instead of v10.2's 3 occurrences across 3-4s + 4-5s + dialogue enumeration).
+- 标志台词 #2 in slot 5 — preserved.
+
+Spot-check on c1_沧冥 confirmed:
+- Title line at v11: `沧冥 · 魔尊本相 — 角色 reference 7s 单 take` (one-liner, dropped the 「(7s, 0-2s 静态正面 + ...)」 suffix).
+- 镜头 line: framing/lens only, no motion path enumeration.
+- 动作 5 plain-Chinese beats:
+  - `0-2s: 镜头正面拍角色 medium-full. 角色站定, 自然呼吸, 眼神看镜, 说"一", "二". **必须在 2.0s 前说完**.`
+  - `2-3s: 镜头围绕角色顺时针绕 90° 到角色左侧身. 角色保持站立不动只呼吸.`
+  - `3-4s: 镜头停在左侧身角度不动. 角色说"三, 我是 沧冥".`
+  - `4-5s: 镜头继续顺时针绕 90° 到角色背面. 角色保持站立不动只呼吸.`
+  - `5-7s: 镜头停在背面角度不动. 角色说: "当年你们怎么对我，今日我便十倍奉还", 然后说: "本尊从不解释，只清算"; 自然定格收尾.`
+- 节奏 line at v11: `单 take 7s, 角色站立不动只说话, 镜头按 动作 timed beats 旋转 + 停顿.`
+- 负向 line: 10 simple bans (`dolly / zoom / 距离变化 / framing 变化 / 角色转身 / 角色走动 / cut / transition / fade / 超过 7s`) — no qualifier paragraphs.
+- 渲染样式 untouched (character-specific style adders preserved).
+- Character bible (lines 1-78) untouched.
+
+### Status of 027 (v10.2 patch, applied this morning)
+
+027 had `cross-project ripple from ai_video_management follow-up 098` marker; now marked SUPERSEDED at top with note pointing to 028.
+
+024 → 025 (v9, never applied) → 026 (v10, applied morning) → 027 (v10.2, applied morning+) → 028 (v11, applied this evening). Same-day triple pivot — empirical feedback loop from rendering + clicking extract caught v10's flaw → v10.2 fix shipped → v10.2 prompt verbosity caught → v11 fix shipped, all within hours.
+
+### Touch list (this follow-up)
+
+- 10 character md files (patched via two scripts, see above).
+- `specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md` — header bump 028.
+- `specs/ai_video/mozun_chongsheng/changelog.md` — 本条目.
+- `specs/ai_video/mozun_chongsheng/user_input/follow_ups/028-…` — follow-up draft itself.
+- `specs/ai_video/mozun_chongsheng/user_input/follow_ups/027-…` — added `SUPERSEDED by 028` tag at top.
+
+### User-side action after this lands
+
+1. Re-render the 10 character turntable mp4s at 7s with v11 prompt. v10 + v10.2 renders from earlier today are invalidated.
+2. Upload one v11 mp4 to Kling — empirical test whether the simpler prompt fixes the timing. Expected: motion starts at ~2s (not v10.2's ~5s).
+3. Click 🖼 button — 3 stills should now be at clean 0° / 90° / 180° angles (front from 0-2s static, side from 3-4s static side, back from 5-7s static back).
+4. If motion is still delayed past ~3s, report back — escalate to v12 (shift schedule earlier, break 0-2s truncate-compat) or v13 (multi-clip path — most bulletproof).
+
+No conflicts found in: `interview/qa.md` / `findings/dossier.md` / `final_specs/spec.md` (none reference character ref prompt text), `episodes/ep{01..05}/prompts/shot{NN}/shot{NN}.md` (shot prompts only reference `{ref_cN_xxx}` placeholders), `arc_outline.md` / `style_guide.md` / `world.md` (character ref schema not embedded). Scene reference rule #12.10 v3 untouched (orthogonal).
+
+## Follow-up 027 — 2026-05-19 00:06:05
+Source: user_input/follow_ups/027-20260519-000605-character-ref-7s-v10.2-static-landings.md (cross-project ripple from ai_video_management follow-up 098)
+
+Trigger: ai_video_management 098 — user empirical test of v10 renders showed "the side is still almost front, the back picture actually shows side ... the video does not have a backview in it, I think it start to move around 4~5s so the last frame in the video is still side view. Please update the prompt now".
+
+修法 — v10 → v10.2 (same-day pivot after v10 empirical failure):
+
+**Character turntable schema v10 → v10.2:**
+- 时长 7s → 7s (unchanged absolute value but structurally different: v10 = single 4s continuous 180° orbit, v10.2 = 5-phase = static front + 1s motion bridge + static side + 1s motion bridge + static back).
+- Camera path: v10 「2-6s 缓慢顺时针 180° orbit at 45°/s 单条连续」 → v10.2 「2-3s motion 0°→90° + 3-4s 锁定 90° + 4-5s motion 90°→180° + 5-7s 锁定 180°」.
+- Angle contract: v10 「时间 × 速度 = 角度」 (45°/s × 4s = 180°) → v10.2 「明确 landing 角度 hold」 (motion bridge 终止在精确 90° / 180°, static lock 段镜头完全不动).
+- Extraction-ready timestamps (driven by ai_video_management's `CANONICAL_VIEWS` value object, updated by sibling 098): front t=1.0s (unchanged), **side t=4.0s → t=3.5s** (mid 3-4s static side; was in v10's motion segment), back t=6.0s (unchanged but now reliably lands in v10.2's 2s static back window 1s removed from motion-end).
+
+**Why v10 → v10.2 same day:**
+
+026 (v10) was applied this morning. User immediately re-rendered all 10 character mp4s with the v10 prompt + clicked the new 🖼 extract button (per ai_video_management 093 / 097). Empirical result: model under-rotates v10's single 4s continuous orbit. Spec was 45°/s × 4s = exactly 180°; rendered video shows ~22°/s with motion start delayed to ~4-5s, so the 7s video never reaches 180°. side picks at t=4.0s landed at ~45° (almost front), back picks at t=6.0s landed at ~90° (looked like side, not back).
+
+Root cause is structural: video models don't honor timed-beat speed instructions for "slow continuous motion". They interpret slow relative to internal pacing, often with ease-in/ease-out at boundaries + tendency to under-rotate in short clips to avoid motion-blur risk. v10's spec math was correct; rendering doesn't follow linearly.
+
+v10.2 fix: replace single continuous orbit with 3 static landings + 2 short motion bridges. Each angle pick lands at a guaranteed-static moment. Model can pace each 1s motion bridge however it likes between landings — the static endpoints at 90° (t=3s) and 180° (t=5s) are the contract.
+
+**项目落地 — 10 character md files patched via two one-shot Python scripts:**
+
+Script 1: `C:/Users/light/AppData/Local/Temp/patch_chars_v10_2.py` — 13 fixed-string + 4 regex substitutions per file (17 total).
+
+Script 2: `C:/Users/light/AppData/Local/Temp/patch_chars_v10_2_fix.py` — 1 multi-line regex per file. Corrective patch: split v10's combined 3-5s + 5-7s beats into v10.2's 3-line structure (3-4s static side + 4-5s motion bridge + 5-7s static back). Script 1's multi-line regex assumed v10 had 3 motion-beat lines (matching agent_refs rule's spec); reality was 2 (during v8 → v10 patching earlier, I had accidentally combined v9's 3-line structure into 2 lines for v10). Script 2 reads the actual 2-line state and produces v10.2's 3-line state, preserving 标志台词 #1 and #2 via two capture groups.
+
+Files patched (all 10 confirmed at v10.2, zero v10 markers remaining):
+- `ai_videos/mozun_chongsheng/characters/c1_沧冥/c1_沧冥.md` — 17 substitutions (script 1) + 1 block split (script 2).
+- `ai_videos/mozun_chongsheng/characters/c2_叶无尘/c2_叶无尘.md` — 17 + 1.
+- `ai_videos/mozun_chongsheng/characters/c3_苏璃月/c3_苏璃月.md` — 17 + 1.
+- `ai_videos/mozun_chongsheng/characters/c4_柳红袖/c4_柳红袖.md` — 17 + 1.
+- `ai_videos/mozun_chongsheng/characters/c5_苓夭夭/c5_苓夭夭.md` — 17 + 1.
+- `ai_videos/mozun_chongsheng/characters/c6_白月清/c6_白月清.md` — 17 + 1.
+- `ai_videos/mozun_chongsheng/characters/c7_赵焚天/c7_赵焚天.md` — 17 + 1.
+- `ai_videos/mozun_chongsheng/characters/c8_方鼎元/c8_方鼎元.md` — 17 + 1.
+- `ai_videos/mozun_chongsheng/characters/c9_韩夺心/c9_韩夺心.md` — 17 + 1.
+- `ai_videos/mozun_chongsheng/characters/c10_司空玄/c10_司空玄.md` — 17 + 1.
+
+Sanity-checked forbidden markers (all confirmed zero across all 10 files post-patch):
+- `single continuous take + 0-2s 一/二 lock + 180° orbit` (v10 文件说明 marker)
+- `3 阶段连续运动` (v10 镜头 line marker)
+- `3 阶段连续运镜单 take` (v10 动作 heading marker)
+- `(reference 上传上限 v10)` (v10 负向 marker)
+- `side t=4.0s` (v10 抽帧时间戳 marker)
+- `over orbit 0-90°` + `over orbit 90°-180°` (v10 enumeration markers)
+- `3-5s: 镜头继续缓慢 orbit, 45° → 135°` + `5-7s: 镜头继续缓慢 orbit 135° → 180°` (v10 beat 3-5s + 5-7s markers, the load-bearing structural lines)
+
+Per-character preserved content (verified via regex capture groups):
+- Slot 3 `三, 我是 {NAME}` — character name kept verbatim across regex 4 (beat 2-3s).
+- Slot 4 `{标志台词 #1}` — preserved via script 2's regex capture group \1; line now appears TWICE in the file (3-4s beat 起声 + 4-5s beat 续声 + 落声).
+- Slot 5 `{标志台词 #2}` — preserved via script 2's regex capture group \2.
+
+Spot-check on c1_沧冥 confirmed:
+- 镜头 line at v10.2 (`单镜头连续运镜 single continuous take · 9:16 竖屏 · 5 阶段 timed beats (0-2s 锁定正面 + 2-3s motion bridge 0°→90° + 3-4s 锁定左侧身 + 4-5s motion bridge 90°→180° + 5-7s 锁定背面 settle)`).
+- 动作 5 distinct beats (0-1s / 1-2s / 2-3s / 3-4s / 4-5s / 5-7s) — 6 lines (0-1s and 1-2s are separate beats but bundled in "static front lock" phase).
+- Beat 3-4s preserves `当年你们怎么对我，今日我便十倍奉还` + ` 起声 (标准声线 timbre baseline)`.
+- Beat 4-5s preserves `当年你们怎么对我，今日我便十倍奉还` + ` 续声 + 落声`.
+- Beat 5-7s preserves `本尊从不解释，只清算` + `(catch + 情绪 peak + final lock); 自然定格收尾`.
+- 节奏 line at v10.2 (`锁定 framing 5-phase 单 take, 3 static landings (0-2s / 3-4s / 5-7s) + 2 motion bridges (2-3s / 4-5s 各 1s)`).
+- 负向 line: 14 video-specific items including new `不要 motion 跨越目标角度` + `不要 静态段内继续微调机位`, modified quals for fast-motion-speed + cut/transition + motion-blur.
+- Bottom 5-row table heading at v10.2 (`抽帧时间戳 front t=1.0s / side t=3.5s / back t=6.0s, 全部来自 static lock 帧`).
+- Character bible (lines 1-78) untouched.
+
+### Status of 026 (v10 patch, applied this morning)
+
+026 had `cross-project ripple from ai_video_management follow-up 096` marker; now marked SUPERSEDED at top with note pointing to 027.
+
+024 → 025 (v9, never applied) → 026 (v10, applied this morning) → 027 (v10.2, applied this evening). Same-day double pivot.
+
+### Touch list (this follow-up)
+
+- 10 character md files (patched via two scripts, see above).
+- `specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md` — header bump 027.
+- `specs/ai_video/mozun_chongsheng/changelog.md` — 本条目.
+- `specs/ai_video/mozun_chongsheng/user_input/follow_ups/027-…` — follow-up draft itself.
+- `specs/ai_video/mozun_chongsheng/user_input/follow_ups/026-…` — added `SUPERSEDED by 027` tag at top.
+
+### User-side action after this lands
+
+1. Re-render the 10 character turntable mp4s at 7s with the v10.2 prompt. v10 renders from this morning are invalidated by v10.2's structural change.
+2. Upload one v10.2 mp4 to Kling for validator empirical test before batch-rendering all 10. Hypothesis: bookended motion segments with 0 velocity at landing boundaries ≠ v6 whip-pan; if v10 passed validator, v10.2 should pass.
+3. Click 🖼 button (now on both direct-mp4 page AND SiblingMedia tile per 097) — 3 picks all from static lock frames (front t=1.0 in 0-2s static, side t=3.5 in 3-4s static side, back t=6.0 in 5-7s static back).
+4. Re-trigger ai_video_management 短角色合辑 + ✂ 截到 2s tool — confirm 0-2s 切片 content byte-identical (unchanged from v10).
+
+No conflicts found in: `interview/qa.md` / `findings/dossier.md` / `final_specs/spec.md` (none reference character ref schedule timing), `episodes/ep{01..05}/prompts/shot{NN}/shot{NN}.md` (shot prompts only reference `{ref_cN_xxx}` placeholders), `arc_outline.md` / `style_guide.md` / `world.md` (character ref schema not embedded). Scene reference rule #12.10 v3 untouched (orthogonal).
+
+## Follow-up 026 — 2026-05-18 22:40:47
+Source: user_input/follow_ups/026-20260518-224047-character-ref-7s-locked-framing-v10.md (cross-project ripple from ai_video_management follow-up 096)
+
+Trigger: ai_video_management 096 — user directive 「我需要 character 视频生成后能可靠地抽出 4 样东西 — 全身正面（要能看清脸）/ 全身侧面 / 全身背面 + 一段音频。7s 的视频 prompt 你帮我设计成抽取这 4 样东西最容易的形态」; this turn 「please update them to v10」.
+
+修法 — v8 → v10 (skips v9 entirely; 025's v9 script was specced but never run):
+
+**Character turntable schema v8 → v10:**
+- 时长 7s → 7s (absolute value unchanged but the 7s is structurally different — v8 was all-static, v10 is 0-2s static front + 2-6s slow ccw 180° orbit at 45°/s + 6-7s static back lock).
+- Framing: v8 wide ~35mm (head ~1/6 frame) → v10 medium-full ~40mm (head ~1/5 frame, face more recognizable while still keeping head-to-toe in frame).
+- Camera path: v8 全 7s 锁定机位 → v10 0-2s 锁定 → 2-6s 缓慢顺时针 180° orbit (相机距角色距离锁定 throughout, no dolly, no zoom — only rotation) → 6-7s 锁定背面.
+- Extraction-ready timestamps (driven by ai_video_management's `CANONICAL_VIEWS` value object, updated by sibling 096): front t=1.0s (mid 0-2s static, unchanged from v9), side t=4.0s ((4.0-2.0)×45°/s = exactly 90° left-side), back t=6.0s ((6.0-2.0)×45°/s = exactly 180° back, coincides with orbit-end + back-lock-start).
+- All 3 picks share IDENTICAL medium-full framing because v10 forbids dolly / zoom — only the orbit angle changes. v9's mixed-framing (wide front → MCU dolly → reverse-dolly back to wide) is reversed here; that's the load-bearing v9 → v10 design change.
+
+**Why skip v9 in mozun_chongsheng:**
+
+v9 (specced in 025) was never applied to the character md files — 025's patch script was deferred to the user and never run. So when 026's script ran, it found v8 content in all 10 files and patched v8 → v10 in one pass.
+
+The 092 → 096 design pivot happened in ai_video_management: after follow-up 093 went live (the 「抽 3 视图 + 音频」 pipeline), v9's mixed framing was exposed as producing inconsistent 3-still framings. v10 was designed bottom-up around the extract pipeline: locked framing throughout so the 3 extracted pngs form a coherent character sheet at identical medium-full framing.
+
+**项目落地 — 10 character md files patched via one-shot Python script:**
+
+Script: `C:/Users/light/AppData/Local/Temp/patch_chars_v10.py` (Python 3, no external deps).
+
+Substitutions per file: 19 (15 fixed-string + 4 regex with capture groups preserving character-specific dialogue and character name).
+
+Files patched (all 10 confirmed at v10, zero v8 markers remaining):
+- `ai_videos/mozun_chongsheng/characters/c1_沧冥/c1_沧冥.md` — 19 substitutions.
+- `ai_videos/mozun_chongsheng/characters/c2_叶无尘/c2_叶无尘.md` — 19 substitutions.
+- `ai_videos/mozun_chongsheng/characters/c3_苏璃月/c3_苏璃月.md` — 19 substitutions.
+- `ai_videos/mozun_chongsheng/characters/c4_柳红袖/c4_柳红袖.md` — 19 substitutions.
+- `ai_videos/mozun_chongsheng/characters/c5_苓夭夭/c5_苓夭夭.md` — 19 substitutions.
+- `ai_videos/mozun_chongsheng/characters/c6_白月清/c6_白月清.md` — 19 substitutions.
+- `ai_videos/mozun_chongsheng/characters/c7_赵焚天/c7_赵焚天.md` — 19 substitutions.
+- `ai_videos/mozun_chongsheng/characters/c8_方鼎元/c8_方鼎元.md` — 19 substitutions.
+- `ai_videos/mozun_chongsheng/characters/c9_韩夺心/c9_韩夺心.md` — 19 substitutions.
+- `ai_videos/mozun_chongsheng/characters/c10_司空玄/c10_司空玄.md` — 19 substitutions (applied in first script invocation before console-encoding error halted printing; subsequent re-invocation found nothing to patch).
+
+Sanity-checked forbidden markers (all confirmed zero across all 10 files post-patch):
+- `static-camera single-shot` (v8 文件说明 / heading marker)
+- `同机位同构图` (v8 动作 beat prefix)
+- `7 秒内无任何镜头运动` (v8 镜头 line marker)
+- `5 段静态单 shot` (v8 动作 heading marker)
+- `(reference 上传硬上限 v8)` (v8 负向 marker)
+
+Per-character preserved content (verified via regex capture groups):
+- Slot 3 `三, 我是 {NAME}` — character name kept verbatim.
+- Slot 4 `{标志台词 #1}` — full text kept verbatim.
+- Slot 5 `{标志台词 #2}` — full text kept verbatim.
+
+Spot-check on c1_沧冥 confirmed:
+- 镜头 line is at v10 (`单镜头连续运镜 single continuous take · 9:16 竖屏 · 3 阶段连续运动`).
+- 动作 beats 0-1s + 1-2s are at v10 (`锁定机位 正面 medium-full`).
+- 动作 beat 2-3s preserves `三, 我是 沧冥` while gaining orbit-start descriptor.
+- 动作 beat 3-5s preserves `当年你们怎么对我，今日我便十倍奉还` while gaining orbit 45° → 135° descriptor.
+- 动作 beat 5-7s preserves `本尊从不解释，只清算` while gaining orbit 135° → 180° + back-lock settle descriptor.
+- 节奏 line at v10 (`锁定 framing 单方向慢速 orbit 7s 单 take`).
+- 负向 line at v10 (13 video-specific items including no-dolly + no-zoom + no-framing-change).
+- Bottom 5-row table heading at v10 (includes `抽帧时间戳 front t=1.0s / side t=4.0s / back t=6.0s` callout).
+- Character bible (lines 1-78) untouched.
+
+### Status of 024 (v8 patch) and 025 (v9 patch)
+
+024 had `SUPERSEDED by 025` marker from prior turn; now retroactively also superseded by 026 (since 025 was never applied and 026 patches directly from v8 → v10).
+
+025 marked SUPERSEDED at top in this turn with note pointing to 026 — v9 was never applied to the character files. The patch script described in 025 was deferred to the user and never ran. The character files were still at v8 when 026's script ran.
+
+### Touch list (this follow-up)
+
+- 10 character md files (patched via script, see above).
+- `specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md` — header bump 026 with full v10 design rationale + risk acknowledgment + extraction timestamp contract.
+- `specs/ai_video/mozun_chongsheng/changelog.md` — 本条目.
+- `specs/ai_video/mozun_chongsheng/user_input/follow_ups/026-…` — follow-up draft itself.
+- `specs/ai_video/mozun_chongsheng/user_input/follow_ups/025-…` — added `SUPERSEDED by 026` tag at top.
+
+### User-side action after this lands
+
+1. Re-render the 10 character turntable mp4 files at 7s with the v10 prompt. Pre-v10 mp4s (v8 static) are invalidated for the extract pipeline because they have no orbit — side / back picks at t=4.0s / t=6.0s on a v8 source produce 3 identical frontal stills.
+2. Upload one v10 mp4 to Kling reference channel for empirical validator test before re-rendering all 10. Fail-fast retreats documented: v10.1 (drop orbit) / v10.2 (insert 0.3s holds at 90° + 180°).
+3. Click 🖼 "提取三视图+音频" button on each v10-rendered character mp4 tile — extraction pipeline produces 4 outputs (front t=1.0s.png / side t=4.0s.png / back t=6.0s.png / full 7s.mp3) at IDENTICAL medium-full framing across all 3 stills.
+4. Re-trigger ai_video_management 短角色合辑 + ✂ 截到 2s tool — confirm 0-2s 切片 content byte-identical to v8 output (static + frontal + 一/二; only framing fractionally tighter wide → medium-full).
+
+No conflicts found in: `interview/qa.md` / `findings/dossier.md` / `final_specs/spec.md` (none reference turntable duration / framing details), `episodes/ep{01..05}/prompts/shot{NN}/shot{NN}.md` (shot prompts only reference `{ref_cN_xxx}` placeholders, no embedded character ref schedule), `arc_outline.md` / `style_guide.md` / `world.md` (character ref schema not embedded). Scene reference rule #12.10 v3 untouched (orthogonal).
+
+## Follow-up 025 — 2026-05-18 19:49:56
+Source: user_input/follow_ups/025-20260518-194956-character-ref-15s-slow-orbit.md (cross-project ripple from ai_video_management follow-up 092)
+
+Trigger: ai_video_management 092 — user directive 「镜头由远到近，要能拍清楚脸部，而且缓慢旋转能看到侧身和背面」, 拒绝 v8 (091/024) trade-off (静态全身远景下面部太小 + 侧身/背面 silhouette 全失)。
+
+修法 — v8 → v9 (reintroduces motion under speed + direction constraints):
+- 时长 7s → 15s
+- 镜头 「静态单镜头 locked camera · 零运动」 → 「单镜头连续运镜 single continuous take · 5 阶段连续运动 + 全程匀速 + 无方向反转 + 无定格中断」
+- 5 timed beats retimed: 0-2s 锁定 (与 v8 byte-identical) + 2-5s 缓慢 dolly-in 到 medium close-up + 5-13s 缓慢顺时针 360° orbit + reverse-dolly 回 wide + 13-15s 锁定收尾
+- Dialogue table slot #3 (2-3s → 2-5s) / #4 (3-5s → 5-10s) / #5 (5-7s → 10-15s) retimed
+- 0-2s 一/二 byte-identical 跨角色 preserved (下游 ai_video_management 2s 切片输出在 v8 + v9 完全相同)
+- 节奏 「静态」 → 「缓慢连续运镜 15s 内单 take, 镜头匀速运动, 全程单方向无反转, 仅 13-15s 段锁定」
+- 负向 11 项: drop no-camera-motion + no-cut 双重 ban; add slow-motion-only ≤45°/s + no-reversal + no-stop-and-go + no-spin-blur Kling-validator-aware bans
+
+Risk acknowledged in spec: v9 是 hypothesis (Kling validator 的 cut/transition 判定核心因子是速度 + 方向反转, 不是 motion 本身)。退路: v9.1 (drop orbit, push-in only 5s clip) 或 v8 (7s static)。
+
+修法 (3 surfaces, no ai_video_management 项目代码改动 — 那部分在 ai_video_management/changelog.md 092 entry):
+1. `specs/ai_video/mozun_chongsheng/user_input/follow_ups/025-20260518-194956-character-ref-15s-slow-orbit.md` — 本 follow-up, 含 5-phase design + per-character dialogue 时段 retime table + per-file mechanical change spec.
+2. `specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md` — header bump 025.
+3. `specs/ai_video/mozun_chongsheng/changelog.md` — 本条目.
+
+**Out-of-band 用户后续步骤** (本 turn 不动 character md files):
+- 跑 one-shot Python script 改 10 个 `ai_videos/mozun_chongsheng/characters/c{1..10}_*/c{N}_*.md` files (parallel to 091's `/tmp/patch_chars_v8.py`): apply v8 5-segment static → v9 5-phase slow-motion swap. Per-file mechanical changes 已在 follow-up 025 §「Per-file mechanical changes」 段落细化 (9 个 swap items).
+- 跑 script 前: 用户 review 025 draft + 092 parent draft + rule #12.5 v9 schema, 确认 design intent。
+- 跑 script 后: 重新渲染 1 份 turntable mp4 + 上传 Kling 做 validator empirical test。**Fail-fast checkpoint**: 如 Kling 仍拒收 (same "cuts or transitions, no clear character" error), 退到 v9.1 或 v8。
+- Validator pass 后: 批量渲 10 份 + 重新触发 ai_video_management 短角色合辑确认 0-2s 切片 byte-identical to v8 output (frontal full-body + 一/二)。
+
+Numbering note: 024 (v8) → 025 (v9), no skip. 024 stays on file marked SUPERSEDED with a one-line note pointing to 025.
+
+## Follow-up 024 — 2026-05-18 00:15:44
+Source: user_input/follow_ups/024-20260518-001544-character-ref-7s-static-camera-kling-compat.md
+Trigger: ai_video_management follow-up 091 (cross-cutting rule `.claude/agent_refs/project/ai_video.md` rule #12.5 v6 → v8); v6 15s casting reel renders 被 Kling validator 全部拒收 with `the current video contains cuts or transitions, and no clear, complete character is detected`。
+
+Numbering note: 本 turn 原 spec'd v7 7s casting reel (follow-up 023, parent 090) 在 Kling feedback 后 superseded before implementation。slot 023 file 标 SUPERSEDED 留作 audit trail; 实际 ship 走 024 + parent 091。
+
+Summary: 10 个 character turntable reference prompts 由 v6 15s casting reel 完全重做为 **v8 7s static-camera single-shot**。镜头零运动 (no orbit / push-in / pull-out / pan / tilt / zoom)、全程单 take、角色站定不动 (仅自然呼吸 + 头部微动 + 说话)。0-2s 段保 一/二 byte-identical 跨角色, 但**弃 v5/v6 的 0-2s 360° silhouette pass** (incompatible with Kling 的 single-shot 硬契约); truncate output 现仅为 frontal voice baseline。2-7s 段 per-character: 三 + 自报姓名 / 标志台词 #1 baseline / 标志台词 #2 catch+peak+final-lock。
+
+Common-level changes (already done in trigger follow-up 091):
+- `.claude/agent_refs/project/ai_video.md` rule #12.5 v6 → v8 全条 patched (含 v7 superseded 备注 + v6 archive 段)。
+
+Project-scoped patches (mozun_chongsheng 10 character files):
+
+| File | slot 4 (3-5s, baseline) | slot 5 (5-7s, catch + final lock) |
+|---|---|---|
+| c1_沧冥 | 当年你们怎么对我，今日我便十倍奉还 | 本尊从不解释，只清算 |
+| c2_叶无尘 | 进来吧，喝口热汤——我记着 | 叮——任务发布 |
+| c3_苏璃月 | 若道不在此处，此剑便指此处 | 我拜的不是宫，是道 |
+| c4_柳红袖 | 进来吧，喝口热汤 | 酒坛比仙气重要 |
+| c5_苓夭夭 | 脉里有古伤，不是凡人能受的 | 丹入腹，命在天 |
+| c6_白月清 | 璃月，为师所行皆为道 | 天道无亲，惟修者自度 |
+| c7_赵焚天 | 好兵器，要凡人血淬 | 天下第一铸 |
+| c8_方鼎元 | 魔孽休得猖狂 | 正道一统，方为天下之福 |
+| c9_韩夺心 | 剑下无情 | 夺宝灭门，亦是行义 |
+| c10_司空玄 | 你前世并非全清白 | 道在何处？道在阴影里 |
+
+Per-file mechanical changes (via `/tmp/patch_chars_v8.py` + 后续 360°-negative cleanup):
+- 文件说明 line: `15s casting reel — Seedance reference 上传约束 v6` → `7s static-camera single-shot — Kling reference 上传约束 v8 (无任何镜头运动 / 无 cut / 无 transition);前 2s 自包含（一/二）byte-identical truncate-compat`.
+- 内嵌 ```text``` fence: 标题 line 15s → 7s static-camera single-shot; 镜头 line v5 enumeration → "静态单镜头 single take · 锁定机位 ..."; 动作 block v6 7-segment → v8 5-segment (全部以「同机位同构图」开头); 台词 enumeration 8 行 → 5 行; 节奏 line "分段（15s 内 ...）" → "静态（7s 内无任何镜头运动 ...）"; 时长 15s → 7s; 负向 line v6 multi-camera bans drop + v8 single-shot bans add + v5 360° leftover negatives strip。
+- Bottom 配音对照表: 8 行 → 5 行; 表头 `8 段 ...` → `5 段 ...`。
+- 6-line stripper 清除 v5 360°-related stale negatives (`不要 镜头回切倒退（要单向 360°）` / `不要 全身在快速环绕中被裁切` / `不要 横向运镜大偏移`) 残留。
+
+Smoke (10/10 files verified):
+- 0 个文件含 `15s casting reel` / `6 段 camera-move` / `全身远景起手` (v5/v6 stale 标记) ✓
+- 0 个文件含 v5 360°-related negatives ✓
+- 10/10 file 镜头 line 已是 v8 "静态单镜头 single take · 锁定机位 ..." declaration ✓
+- 10/10 file 时长: 7s ✓
+- c1 沧冥 + c10 司空玄 spot-checks: character-specific dialogue 正确 plug 入 slots 4/5 ✓
+
+User next steps (out-of-band):
+1. 重新渲染 10 份角色 turntable mp4 按 v8 7s static-camera prompt。
+2. 上传到 Seedance / Kling, 验证 validator 不再拒 (无 cuts/transitions 应 PASS character-detector)。
+3. 重新触发 ai_video_management `✂ 截到 2s` + `生成角色合辑` 验证 0-2s 切片仍 self-sufficient (frontal full-body + 一/二)。
+
+Auto-updated:
+- `ai_videos/mozun_chongsheng/characters/c{1..10}_*/c{N}_*.md` — 10 个文件 v8 schema 应用。
+- `user_input/revised_prompt.md` — header bump 024。
+- `user_input/follow_ups/023-...-character-ref-7s-tighter-casting.md` — top 备注 SUPERSEDED by 024 before implementation (kept on file as audit trail)。
+
+No conflicts found in:
+- `episodes/ep{NN}/prompts/shotNN/shotNN.md` — shot prompts 仅引用 `{ref_cN_xxx}` placeholder, 不直接含 character ref 时长 / 台词 / 镜头文本。
+- `scenes/s*/s*.md` — scene reference 视频 rule #12.10 v3 (15s walk-through), 与 character reference rule #12.5 v8 orthogonal (scenes 不受 character-detector 约束)。
+- `final_specs/spec.md` / `findings/` / `validation/` — character ref 时长 / 镜头实现非 spec-level。
+- 历史 follow-ups 015 / 016 / 017 / 019 / 022 (4s / 15s schema ripples) + 自身 changelog 历史条目 — 历史记录保留不动。
+- 角色 bibles 的 `## 标志台词或口头禅` 段 — 不动 (read-only 引用)。
+
+## Follow-up 022 — 2026-05-17 23:13:50
+Source: user_input/follow_ups/022-20260517-231350-character-ref-15s-casting-reel.md
+Trigger: ai_video_management follow-up 088 (cross-cutting rule `.claude/agent_refs/project/ai_video.md` rule #12.5 v5 → v6)。
+
+Summary: 10 个 character turntable reference prompts 由 4s 升到 **15s casting reel**。**保留** 0-2s 自包含契约 byte-identical 跨角色 (一 + 二 + 正面定场 + 360° 回正), ai_video_management 短角色合辑 `_CONCAT_SEGMENT_S = 2.0` 切片仍 self-sufficient。**新增** 2-15s per-character casting reel: 6 个 camera moves (推近 / 反向 90° / 拉远 3/4 / 横向 pan 360° / 拉近 medium / 特写) + 4 句台词来自该角色 bible 自身 `## 标志台词或口头禅` 段 (3 句 verbatim plug into slots 4/5/7; 最短一句 reuse 作 slot 8 catch close) + 8-11s silent 表情 range capture + 13-15s 标志特征点 final-lock close-up。
+
+Common-level changes (already done in trigger follow-up 088):
+- `.claude/agent_refs/project/ai_video.md` rule #12.5 v5 → v6 全条 patched (7 段 timed-beats, 8-row dialogue table, 5 条 v6 negative, locked-fields 段标注 per-character carve-out, 设计原则段, footer attribution)。
+
+Project-scoped patches (mozun_chongsheng 10 character files surgical patch via /tmp/patch_chars_15s.py):
+
+| File | slot 4 (3-5s) | slot 5 (5-8s) | slot 7 (11-13s) | slot 8 (13-15s catch) |
+|---|---|---|---|---|
+| c1_沧冥 | 当年你们怎么对我，今日我便十倍奉还 | 本尊从不解释，只清算 | 无情无怒，才是最大威压 | 本尊从不解释，只清算 |
+| c2_叶无尘 | 进来吧，喝口热汤——我记着 | 叮——任务发布 | 我不是乞丐 | 叮——任务发布 |
+| c3_苏璃月 | 若道不在此处，此剑便指此处 | 我拜的不是宫，是道 | 我自己来 | 我自己来 |
+| c4_柳红袖 | 进来吧，喝口热汤 | 酒坛比仙气重要 | 客人，往这边来 | 酒坛比仙气重要 |
+| c5_苓夭夭 | 脉里有古伤，不是凡人能受的 | 丹入腹，命在天 | 我守这一谷山涧 | 丹入腹，命在天 |
+| c6_白月清 | 璃月，为师所行皆为道 | 天道无亲，惟修者自度 | 你不懂 | 你不懂 |
+| c7_赵焚天 | 好兵器，要凡人血淬 | 天下第一铸 | 你也想要一柄？ | 天下第一铸 |
+| c8_方鼎元 | 魔孽休得猖狂 | 正道一统，方为天下之福 | 贫道行事，自有天意 | 魔孽休得猖狂 |
+| c9_韩夺心 | 剑下无情 | 夺宝灭门，亦是行义 | 我剑所指，皆为道 | 剑下无情 |
+| c10_司空玄 | 你前世并非全清白 | 道在何处？道在阴影里 | 本座只是看着 | 本座只是看着 |
+
+Per-file mechanical changes:
+- 文件说明 line: `4s 硬上限 v5` → `15s casting reel v6;前 2s 自包含（一/二）byte-identical truncate-compat`
+- 内嵌 ```text``` fence 内: 标题 line 4s → 15s; dynamics block v5 4-segment → v6 7-segment; 台词 / 字幕 enumeration 3 行 → 8 行; 节奏 line 重写; 时长 4s → 15s; 负向 line v5 single negative → v6 5-negative bundle.
+- Bottom 配音对照表: 4 行 → 8 行; 表头 `3 句数字计数台词 + 1s 特写定格` → `8 段 timed-beats + dialogue 对照表 (0-2s lock byte-identical 跨角色 + 2-15s per-character)`.
+
+Idempotent patch script: 适用 byte-stable text replacement + regex-based block substitution; idempotency 由 "if old in text" vs "if new in text 已迁移" 两条分支保证, 重跑同结果。
+
+User next steps (out-of-band, not done in this follow-up):
+1. 按更新后的 c{N}_{name}.md → 视频 reference prompt 段重新渲染 10 份角色 turntable mp4 (≤ 15s)。
+2. 渲染前可对 prompt 视觉校对 (特别是 `角色:` line 一句话锁定 + 体型/发型 fill 与 character bible 第 1-10 字段一致; 2-15s 段 4 句台词逐字与 `## 标志台词或口头禅` 段一致)。
+3. 上传新 reference mp4 到 Seedance 验证 ≤ 15s 是否通过上传约束 (rule #12.5 v6 假设当下 Seedance 接受 15s; 若仍超限可单独 follow-up)。
+4. 重新触发 ai_video_management shot-char 合辑 / ✂ 截到 2s 工具 — 验证 0-2s 切片仍 self-sufficient (一 + 二 + 正面 360°)。
+
+Auto-updated:
+- `user_input/revised_prompt.md` — header bump 022 + Composed-from 段追加。
+
+No conflicts found in:
+- `episodes/ep{NN}/prompts/shotNN/shotNN.md` — shot prompts 仅引用 `{ref_cN_xxx}` placeholder, 不直接含 character ref 时长 / 台词文本。
+- `scenes/s*/s*.md` — scene reference 视频 rule #12.10 v3 (15s walk-through), 与 character reference rule #12.5 v6 dim-comparable, 不冲突。
+- `final_specs/spec.md` / `findings/` / `validation/` — character ref 时长 / 台词内容非 spec-level。
+- 历史 follow-ups 015 / 016 / 017 / 019 (4s schema 的 ripple) + 自身 changelog 历史条目 — 历史记录保留不动。
+- 角色 bibles 的 `## 标志台词或口头禅` 段 — 不动 (本 follow-up 是 read-only 引用 + plug into video reference prompt 段, 不修改 bible)。
+
+## Follow-up 020 — 2026-05-17 19:36:57
+Source: user_input/follow_ups/020-20260517-193657-shot-duration-15s-richer-beats.md
+Summary: 用户："change all the shots to be in 15s length, this should give you more room for more details for each shot, both 台词，运镜and 动作"。**Common-level rule bump**: CLAUDE.md § AI video rules bullet 1 由 `Every shot ≤ 15 s` → `Every shot is 15 s (default and target)`；新加 dialogue-as-first-class-field 一行，narrow "Visuals only in v1" 到 audio synthesis only (no TTS / no music)，dialogue text always allowed per rule 12.4 三选一。`agent_refs/project/ai_video.md` 规则 #6 标题 + body 同步 (+ Kling 10s cap split note via mid-seam `shotNN_lastframe.png`)；12.4 schema 表第 13 行 `时长: (≤15s)` → `(= 15s default per rule #6)`；12.4-B `时长` 行 `Always 10s` → `Always 15s` 解决 pre-020 12.4-B 内部矛盾 (line 448 `Always 10s` vs line 459 `set 时长: 15s`)；规则 #4 模板示例 `时长: ≤15s` → `时长: 15s`。**Project retrofit**: 50 个 shot mds (ep01..ep05 × shot01..shot10) Duration / 时长 全部由 10s → 15s + 动作 timed beats 由 5 拍 0–10s 扩 5–7 拍 0–15s + 镜头/运镜 ≥ 5 个 time window (≥ 1 个 10–15s 段) + 台词 ≥ 1 行 (或显式 `无台词 / 默剧`) — 由 5 个并行 sub-agent 各负责一个 episode 同 turn 完成。5 个 shotlist.md 时长列同步 10s → 15s。
+
+Auto-updated:
+- CLAUDE.md — § AI video rules bullet 1 重写为 15 s default + Kling-split note；新加 dialogue-as-first-class-field bullet narrowing audio-only carve-out (common-level — affects every future ai_video project).
+- .claude/agent_refs/project/ai_video.md — 规则 #6 标题 + body 重写；规则 12.4 schema 表第 13 行修订；规则 12.4-B `时长` 行重写 + Scope footer 引用新规则 #6；规则 #4 模板示例 `时长` 例 → 15s (common-level).
+- specs/ai_video/mozun_chongsheng/final_specs/spec.md — 顶部追加 follow-up 020 amendment block：每 shot 15 s + per-episode total ~90s → ~150s + per-shot 5–7 拍 0–15s + 镜头/运镜 ≥ 5 window + 台词 ≥ 1 行 + 2000-字 soft cap 保留 + Kling split via mid-seam.
+- specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md — Last regenerated 段重写记 follow-up 020 + scope + acceptance (Duration / 时长 → 15s + 动作 0–15s + 镜头 ≥ 5 window + 台词 ≥ 1 行 + Kling 2-call split).
+- ai_videos/mozun_chongsheng/episodes/ep{01..05}/prompts/shot{01..10}/shot{NN}.md — 50 个 shot mds 由 5 个 parallel sub-agent 同 turn 完成重写：Shot context `Duration: 10 seconds` → `Duration: 15 seconds`；视频 prompt body 中 `时长: 10s` → `时长: 15s`；动作 timed beats 5 拍 → 5–7 拍覆盖 0–15s；镜头 + 运镜 ≥ 5 time window (≥ 1 个 10–15s 段)；台词 ≥ 1 行 dialogue (或 explicit 默剧)；2000-字 soft cap 保留；Reference placeholders / 场景 / 光线 / 节奏 / 渲染样式 / 比例 / 负向 / Seam-frame seedream prompt 内容不动。
+- ai_videos/mozun_chongsheng/episodes/ep{01..05}/shotlist.md — 5 个 shotlist 时长列同步 10s → 15s；如有 episode 总时长 100s → 150s。
+
+No conflicts found in: interview/qa.md, findings/dossier.md + 5 angle-*.md, validation/* (acceptance criterion 「prompt 必带 时长 字段且 = `时长` 字段值之和 = beats 时长之和」仍然成立，只是数值由 10 → 15)，final_specs/promoted.md, validation/promoted.md, ai_videos/mozun_chongsheng/characters/* / scenes/* / style_guide.md / world.md / arc_outline.md / publish.md (时长扩展不改 style / character / scene 锁定描述符), Seam-frame `shotNN_lastframe_seedream.md` (主体定义 + 姿态 frozen instant 描述与新最后一拍 12–15s 状态需 author 自检；本 follow-up 不强制重写 lastframe seam — 见 follow-up 020 出 of scope §)，所有 ≤ follow-up 019 的历史 follow-up (immutable history; preserved).
+
+## Follow-up 019 — 2026-05-17 19:28:26
+Source: user_input/follow_ups/019-20260517-192826-character-ref-4s.md
+Trigger: ai_video_management follow-up 078（cross-cutting 规则 `.claude/agent_refs/project/ai_video.md` rule #12.5 v4 → v5）。
+
+Summary: 10 个 character turntable reference prompts 由 2.9s + Arabic "1, 2, 3" 升到 4s + 中文「一, 二, 三」+ 4 段 timed beats (0-1 / 1-2 / 2-3 / 3-4)。新增「前 2s 自包含」契约 —— 「一」「二」必须在 2.0s 前完成发声 + 镜头回正到正面，与 `ai_video_management` 短角色合辑 `ShotConcatBuilder._ffmpeg_concat` 的 `_CONCAT_SEGMENT_S = 2.0` 切片边界 + ✂ 截到 2s 按钮的下游截取对齐。3-4s 新增 1s 面部特写定格作为 face viewer 的 final lock。
+
+Common-level changes (apply to all `task_type=ai_video` projects, already done in trigger follow-up 078):
+- `.claude/agent_refs/project/ai_video.md` rule #12.5 v4 → v5（全条 patched）。
+
+Project-scoped patches (mozun_chongsheng 10 character files surgical patch):
+- `ai_videos/mozun_chongsheng/characters/c1_沧冥/c1_沧冥.md` — 文件说明 line + section header + 内嵌 ```text``` fence 内 (动作 / 台词 / 节奏 / 时长 / 负向) + bottom 配音对照表全部 byte-stable transformations 应用。
+- `ai_videos/mozun_chongsheng/characters/c2_叶无尘/c2_叶无尘.md` — 同上。
+- `ai_videos/mozun_chongsheng/characters/c3_苏璃月/c3_苏璃月.md` — 同上。
+- `ai_videos/mozun_chongsheng/characters/c4_柳红袖/c4_柳红袖.md` — 同上。
+- `ai_videos/mozun_chongsheng/characters/c5_苓夭夭/c5_苓夭夭.md` — 同上。
+- `ai_videos/mozun_chongsheng/characters/c6_白月清/c6_白月清.md` — 同上。
+- `ai_videos/mozun_chongsheng/characters/c7_赵焚天/c7_赵焚天.md` — 同上。
+- `ai_videos/mozun_chongsheng/characters/c8_方鼎元/c8_方鼎元.md` — 同上。
+- `ai_videos/mozun_chongsheng/characters/c9_韩夺心/c9_韩夺心.md` — 同上。
+- `ai_videos/mozun_chongsheng/characters/c10_司空玄/c10_司空玄.md` — 此前已部分手工 migrate（动作 / 台词 / 节奏 / 时长 / 负向 / 表 已就位），本次仅补 section header + 文件说明 line 的尾段。
+
+User next steps (out-of-band, not done in this follow-up):
+1. 按更新后的 c{N}_{name}.md → 视频 reference prompt 段重新渲染 10 份角色 turntable mp4（≤ 4s）。
+2. 渲染前可对 prompt 视觉校对（特别是「角色」line 一句话锁定 + 体型/发型 fill 与 character bible 第 1-10 字段一致）。
+3. 上传新 reference mp4 到 Seedance 验证 ≤ 4s 是否通过上传约束（rule #12.5 v5 假设当下 Seedance 接受 4s；若仍 ≥ 4s 被截断，单独 follow-up 把上限再调）。
+
+Auto-updated:
+- `user_input/revised_prompt.md` — header bump 到 follow-up 019，追加 4s + 中文一二三 + 前 2s 自包含 段。
+
+No conflicts found in:
+- `episodes/ep{NN}/prompts/shotNN/shotNN.md` — shot prompts 仅引用 `{ref_cN_xxx}` placeholder，不直接含 character ref 时长 / 台词文本。
+- `scenes/s*/s*.md` — scene reference 视频 rule #12.10 v3（15s walk-through），与 character reference rule #12.5 正交。
+- `final_specs/spec.md`、`findings/`、`validation/` — grep 0 个 2.9s 引用。
+- 历史 follow-ups 015 / 016 / 017 + 自身 changelog 历史条目 — 历史记录保留不动。
+
+## Follow-up 018 — 2026-05-17 11:16:12
+Source: user_input/follow_ups/018-20260517-111612-storyteller-dialogue-master-review.md
+Summary: 加 "短剧故事 + 台词大师" 工作流角色 + 对现有 50 shots 做首次 master pass。
+
+Common-level changes (apply to all `task_type=ai_video` projects):
+- `.claude/agent_refs/validation/ai_video.md` — 新 validation level #9 "短剧故事 + 台词大师 review"。
+- `.claude/agent_refs/project/ai_video.md` — 新 §12.4-D D1–D6 + S1–S5 评分准则 + 大师输出格式（inline patch list）。
+
+Project-scoped patches (mozun_chongsheng 50 shots master pass — ep01 first, ep02–ep05 strict pass appended):
+- `ai_videos/mozun_chongsheng/episodes/ep01/prompts/shot03/shot03.md` — 方鼎元 台词 "魔尊沧冥，今日便是你的劫数。" → "三界共讨——此乃天命。" (D4 + S5 + D6).
+- `ai_videos/mozun_chongsheng/episodes/ep01/prompts/shot04/shot04.md` — 白月清 台词 "璃月，为师所行皆为道。" → "魔尊大人，伏阵之下吧——这是天意。" (S3 anachronism).
+- `ai_videos/mozun_chongsheng/episodes/ep02/prompts/shot06/shot06.md` — 白月清 自称 "璃月愿事尊一夜" → "贫道愿事尊一夜" (S3 + D4).
+- `ai_videos/mozun_chongsheng/episodes/ep03/prompts/shot04/shot04.md` — 沧冥 台词 "无情无怒，才是最大威压。" → "原来正道，也烧人血。" (D2: 该台词已在 ep01/shot01 用过；ep03/shot04 是 沧冥 越肩对峙 赵焚天 的关键反转 beat，需要 scene-specific reveal 而非通用 branding).
+- `ai_videos/mozun_chongsheng/episodes/ep03/prompts/shot06/shot06.md` — 赵焚天 台词由 沧冥 同 shot 同台词的重复 "此器非矿石铸，乃以人血人骨。" → "正是。人骨炼器，比矿稳。" (D4 + S5: 之前是 authoring 重复粘贴错误；赵焚天 应是 admission 不是 echo).
+- `ai_videos/mozun_chongsheng/episodes/ep04/prompts/shot05/shot05.md` — 韩夺心 台词 "剑道无情，方为至道。" → "万剑出鞘，便是道。" (D5: 与 ep04/shot03 同角色 "剑下无情，何须多言。" 句式近重叠；新版引用本人 万剑悬影 法宝 + 缩到 7 字 D6).
+- 其余 44 shots 审阅通过（含 ep05 全 10 shots）。
+
+审阅但保留（intentional design choice）:
+- ep05/shot02 沧冥 "我必让你魂飞魄散！" 与 ep02/shot10 白月清 "终有一日，让你魂飞魄散。" 共用 "魂飞魄散" 短句：S5 边界 case；保留作为 主线 报复对称（白月清 ep02 立誓 → 沧冥 ep05 同句反向立誓），强化两条 revenge arc 的镜像感。
+- "魂火不灭，便是归期。" 在 ep01/shot09 / ep04/shot01 / ep05/shot01 / ep05/shot07 多处复用：D6 branded signature line（按 12.4-D D6 名场面 ≤ 7 字短句允许跨集复用，作为 character motif）。
+- "当年你们怎么对我，今日我便十倍奉还。" 在 ep01/shot06 + ep04/shot10 + ep05/shot08 复用：同上，character motif。
+
+Auto-updated:
+- `user_input/revised_prompt.md` — header bumped to follow-up 018.
+
+No conflicts found in: `final_specs/spec.md`、`findings/`、`validation/` (master 是 workflow 层 validation level，非内容 FR)。
+
 ## Follow-up 017 — 2026-05-13 10:30:00
 Source: user_input/follow_ups/017-20260513-103000-scene-ref-15s-walkthrough.md
 Summary: 场景 reference 视频 prompt 从 v2 的 **3.9s 五段极速 all-angle** 改为 v3 的 **15s walk-through 单视频**——沿一条几何连续的相机路径（连续 dolly + 平滑 yaw + 垂直俯仰 + 推进 zoom，无剪辑 / 跳切）依次悬停在 5 个 canonical 视角上，每个 dwell ≥ 0.8s 给出锐利静帧；**重要视角 frontload 在 t < 6s**（Hero / Reverse）抵御 Kling / Seedance 在 t > 12s 后的训练分布边缘漂移；新增"中间帧 buffet"概念（15s × 30fps = 450 帧，user 按需 ffmpeg 抽 3/4 角度参考，无需重新调 API）。规则层升级 `agent_refs/project/ai_video.md` rule #12.10 v2 → v3。scope 严格限于场景；角色 turntable rule #12.5 v4 / 2.9s 与 shot prompts rule #12.6 v2 未触及。
@@ -691,3 +1156,28 @@ User next steps:
 4. 第一批渲染完成后做一次"manual walkthrough"：随机抽 2-3 镜验证输出是否真人 / 影视级，然后再批量推进到剩余集数。
 
 Severity: 渲染样式偏漂是 **blocker** 等级（影响所有视觉输出），但本 follow-up 完成后已彻底修复；后续 stage-4 regen for ep06-ep60 会沿用 spec FR-26/FR-27 锁定 + style_guide.md 渲染样式锁定 段，不会再次漂移。
+
+## Follow-up 021 — 2026-05-17 20:17:26
+Source: user_input/follow_ups/021-20260517-201726-finish-020-ep01-retrofit.md
+Summary: 020 收尾 — 020 同 turn 已落地 ep02-ep05 (40 shots) + ep01/shot01-03 + 4/5 shotlists, 但 ep01/shot04-shot10 (7 shots) + ep01/shotlist.md 仍停留在 legacy 10s schema。021 不引入新规则, 仅补完 020 在 ep01 漏掉的 retrofit。
+
+根因: 020 turn 漏 ep01 shot04-10 + ep01 shotlist (验证后定位)。
+
+Auto-updated:
+- specs/ai_video/mozun_chongsheng/user_input/follow_ups/021-20260517-201726-finish-020-ep01-retrofit.md — 新建 follow-up 021 (021 = 020 ep01 retrofit; 沿用 020 的 acceptance trigger; 不重复 020 已落地的全局规则改动)。
+- specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md — Last regenerated 头 bumped 到 021 (`2026-05-17 20:17:26 — header bump for follow-up 021 (ep01 retrofit 收尾 follow-up 020)`); prior 019 bump 保留为 Prior bump。
+- ai_videos/mozun_chongsheng/episodes/ep01/prompts/shot04/shot04.md — 由 10s 重写为 15s; 动作 6→8 beats; 新台词 沧冥 10.5-12.5s "天意？——也敢拦我。" (3 dialogue lines 总); body 1540 CJK chars (< 2000 cap)。
+- ai_videos/mozun_chongsheng/episodes/ep01/prompts/shot05/shot05.md — 由 10s 重写为 15s; 动作 6→8; 新台词 沧冥 13-15s "封？尔等也配。" (漠然反击 seam 至 shot06); body 1514 CJK chars。
+- ai_videos/mozun_chongsheng/episodes/ep01/prompts/shot06/shot06.md — 由 10s 重写为 15s; 动作 6→8; 新台词 方鼎元 10.5-12.5s "众宗合击，封他魔元！" (反扑喝令 seam 至 shot07 cover-frame); body 1671 CJK chars。
+- ai_videos/mozun_chongsheng/episodes/ep01/prompts/shot07/shot07.md — 由 10s 重写为 15s; 动作 6→8; 新台词 2 行 (方鼎元 10-12.5s "五合天封禁阵 — 镇。" + 沧冥 12.5-15s "诸位 — 也敢镇我？" callback shot01); body 1773 CJK chars。
+- ai_videos/mozun_chongsheng/episodes/ep01/prompts/shot08/shot08.md — 由 10s 重写为 15s; 动作 5→7 (10-12s 沧冥赤瞳特写 蓄怒 + 12-15s 极拉远 天柱濒断 + V 形主裂); 新台词 沧冥 12-13.5s "阵起了。" (3 字 punch line); body 1990 CJK chars。
+- ai_videos/mozun_chongsheng/episodes/ep01/prompts/shot09/shot09.md — 由 10s 重写为 15s; 动作 5→7 (赤瞳虚空定格 + 头颅化粒子 + 黑色魂火脱体腾空); 新台词 沧冥魂火形态 12.5-14.5s "三界讨我……不死。" (callback shot01 "三界讨我？也敢。"); body 1999 CJK chars。判断: 原 8-10s 白闪过曝替换为 9.5s 瞳孔定格 — 白闪与新崩散 beats 冲突且断 shot10 seam。
+- ai_videos/mozun_chongsheng/episodes/ep01/prompts/shot10/shot10.md — 由 10s 重写为 15s; 动作 5→7 (8-10.5s 魂火加速穿主峰 / 10.5-12.5s 凡间小院灯火 + 少年剪影一线 / 12.5-15s freeze + 白闪 + 黑 + 下集预告字幕); 新台词 2 行 (沧冥魂火画外音 + 旁白预告"——下集 倒叙第一夜"); body 1326 CJK chars。判断: 旧 8-10s "魂火飞遁，下集见乞丐少年" 字幕替换为 "——下集 倒叙第一夜" matching ep02/shot01 倒叙入口; 凡间少年 silhouette 用背影 / 无面部保留 ambiguity。`光线/色调:` 行新增 #1a3038 深青 hex (style-guide 内 palette)。
+- ai_videos/mozun_chongsheng/episodes/ep01/shotlist.md — 总时长 90s → 150s; 时长列 8-10s → 全部 15s; 三钩落点 anchor 重算 (黄金钩 0-15s shot01 / 第一反转 45-60s shot04 / Cliffhanger 120-150s shot09+shot10); 内容描述列保留 shot 主体 narrative beat + shot01/shot05/shot06 描述行小幅补充新拍信息。
+- .audit/adhoc_agents/2026-05-17/mozun_chongsheng-20260517-200859-finish020-ep01/spawns/shot{04..10}/output.md — 7 个 spawn audit notes 写入 (per agent prompt + completion summary)。
+
+总计 patch 范围: **7 shot mds 重写 + 1 shotlist.md 重写 + 1 revised_prompt.md header bump + 1 follow-up 021 文件新建 + 7 audit spawn notes = 17 文件改动**。
+
+No conflicts found in: ep02-ep05 50 shots + 4 shotlist (020 已扩到 15s, 021 不再 touch), characters/ + ref_images/ + world.md + style_guide.md + arc_outline.md + episode.md + publish.md (角色锁定描述符 / scene refs / hex palette 不变), CLAUDE.md / agent_refs/project/ai_video.md / agent_refs/validation/ai_video.md (020 已落地全局 15s 规则), interview/qa.md / findings/ / final_specs/spec.md / validation/* (020 已在 spec.md 顶部追加 amendment block)。
+
+Severity: **020 ep01 retrofit blocker 修复** — 020 turn 漏 ep01 shot04-10 + shotlist 是已知 gap; 021 同 turn 用 7 并行 agent 收尾, 所有 50 shots 现已统一在 15s 15-beat schema 下; ep01 内 narrative seam (shot04 浅紫云纹 / shot05 紫金光柱 / shot06 黑雾反击 / shot07 五光交汇 / shot08 天柱倾折 / shot09 肉身崩散 / shot10 魂火飞遁) byte-stable 保持; 用户后续 stage-6 manual render 可一次过 50 shots 不再担心 ep01 vs ep02-05 schema 漂移。

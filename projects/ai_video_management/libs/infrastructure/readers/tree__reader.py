@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
 
 from libs.common.exposed_tree import ExposedTree, TREE_VISIBLE_EXTENSIONS
 from libs.common.sub_type_lookup import lookup as sub_type_lookup
+from libs.domain.value_objects.novel__valueobject import CANONICAL_NOVELS, categories as novel_categories
 
 _IMAGE_EXTENSIONS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
 _VIDEO_EXTENSIONS: frozenset[str] = frozenset({".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"})
+_AUDIO_EXTENSIONS: frozenset[str] = frozenset({".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"})
 _ACTOR_FOLDER_RE = re.compile(r"^actor_\d{4,}$")
 
 
@@ -27,7 +30,7 @@ class TreeReader:
             "type": "section",
             "name": "root",
             "path": "",
-            "children": [self._ai_videos_section(), self._research_section()],
+            "children": [self._ai_videos_section(), self._novels_section()],
         }
 
     def _ai_videos_section(self) -> dict[str, Any]:
@@ -54,19 +57,76 @@ class TreeReader:
             "children": children,
         }
 
-    def _research_section(self) -> dict[str, Any]:
-        research_root = self._root / "research"
-        children: list[dict[str, Any]] = (
-            self._walk_filtered(research_root, self._is_allowed_leaf)
-            if research_root.is_dir()
-            else []
-        )
+    def _novels_section(self) -> dict[str, Any]:
+        novels_root = self._root / "novels"
+        children: list[dict[str, Any]] = []
+        if novels_root.is_dir():
+            category_zh = dict(novel_categories())
+            slug_to_title: dict[str, str] = {s.slug: s.title_zh for s in CANONICAL_NOVELS}
+            slug_order: dict[str, int] = {s.slug: i for i, s in enumerate(CANONICAL_NOVELS)}
+            cat_order: dict[str, int] = {c: i for i, (c, _) in enumerate(novel_categories())}
+            for cat_dir in sorted(
+                (p for p in novels_root.iterdir() if p.is_dir() and not p.is_symlink()),
+                key=lambda p: cat_order.get(p.name, 9999),
+            ):
+                if cat_dir.name in self._exposed.excluded_dirs():
+                    continue
+                novel_nodes: list[dict[str, Any]] = []
+                for novel_dir in sorted(
+                    (p for p in cat_dir.iterdir() if p.is_dir() and not p.is_symlink()),
+                    key=lambda p: slug_order.get(p.name, 9999),
+                ):
+                    if novel_dir.name in self._exposed.excluded_dirs():
+                        continue
+                    if not self._novel_is_complete(novel_dir):
+                        continue
+                    sub = self._walk_filtered(novel_dir, self._is_allowed_leaf)
+                    novel_nodes.append(
+                        {
+                            "type": "directory",
+                            "name": novel_dir.name,
+                            "display_name": slug_to_title.get(novel_dir.name, novel_dir.name),
+                            "path": self._rel(novel_dir),
+                            "children": sub,
+                        }
+                    )
+                if not novel_nodes:
+                    continue
+                children.append(
+                    {
+                        "type": "directory",
+                        "name": cat_dir.name,
+                        "display_name": category_zh.get(cat_dir.name, cat_dir.name),
+                        "path": self._rel(cat_dir),
+                        "children": novel_nodes,
+                    }
+                )
+            for entry in sorted(
+                (p for p in novels_root.iterdir() if p.is_file() and not p.is_symlink()),
+                key=lambda p: p.name.lower(),
+            ):
+                if self._is_allowed_leaf(entry):
+                    children.append(self._leaf_for(entry))
         return {
             "type": "section",
-            "name": "Research",
+            "name": "Novels",
             "path": "",
             "children": children,
         }
+
+    def _novel_is_complete(self, novel_dir: Path) -> bool:
+        """Per follow-up 104: the Novels section only surfaces novels whose
+        `_meta.json.complete == True`. In-progress downloads stay on disk
+        (resume checkpoint preserved) but are filtered out of the sidebar.
+        """
+        meta_path = novel_dir / "_meta.json"
+        if not meta_path.is_file():
+            return False
+        try:
+            data = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return False
+        return bool(data.get("complete", False))
 
     def _walk_project(self, project_dir: Path) -> dict[str, Any] | None:
         sub = self._walk_filtered(project_dir, self._is_allowed_leaf)
@@ -159,6 +219,8 @@ class TreeReader:
             node_type = "video"
         elif ext in _IMAGE_EXTENSIONS:
             node_type = "image"
+        elif ext in _AUDIO_EXTENSIONS:
+            node_type = "audio"
         else:
             node_type = "file"
         return {"type": node_type, "name": f.name, "path": self._rel(f)}

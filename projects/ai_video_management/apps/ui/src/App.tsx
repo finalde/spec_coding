@@ -5,7 +5,7 @@ import { Reader } from "./components/Reader";
 import { Home } from "./components/Home";
 import { ActorGrid } from "./components/ActorGrid";
 import { DeletedView } from "./components/DeletedView";
-import { fetchTree } from "./api";
+import { bumpMediaCacheBuster, fetchTree } from "./api";
 import { collectFilePaths } from "./lib/linkResolver";
 import type { TreeNode } from "./types";
 
@@ -17,6 +17,7 @@ export default function App(): JSX.Element {
   const location = useLocation();
 
   const loadTree = useCallback(async () => {
+    bumpMediaCacheBuster();
     try {
       const t = await fetchTree();
       setTree(t);

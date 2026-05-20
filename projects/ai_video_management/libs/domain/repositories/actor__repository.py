@@ -33,6 +33,9 @@ class ActorRepository(Protocol):
         resolution: str,
         seeds: list[int] | None,
         archetype: str | None = None,
+        batch_seed: int | None = None,
+        batch_size: int | None = None,
+        slot_index: int | None = None,
     ) -> object: ...
 
     def preview_prompts(
@@ -41,6 +44,10 @@ class ActorRepository(Protocol):
         count: int,
         resolution: str,
         seeds: list[int] | None = None,
+        archetype: str | None = None,
+        batch_seed: int | None = None,
+        batch_size: int | None = None,
+        slot_index: int | None = None,
     ) -> dict[str, object]: ...
 
     def preview_diverse_prompts(
