@@ -55,8 +55,13 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
   const [eyes, setEyes] = useState<string>(RANDOM_SENTINEL);
   const [nose, setNose] = useState<string>(RANDOM_SENTINEL);
   const [lips, setLips] = useState<string>(RANDOM_SENTINEL);
+  const [face, setFace] = useState<string>(RANDOM_SENTINEL);
   const [skin, setSkin] = useState<string>(RANDOM_SENTINEL);
   const [body, setBody] = useState<string>(RANDOM_SENTINEL);
+  // Per multi-select redesign: qi_zhi is the only multi-select feature.
+  // Empty array = random (backend falls back to look-derived overlay).
+  // 1 entry = locked verbatim. N entries = each slot rolls one of the N.
+  const [qiZhi, setQiZhi] = useState<string[]>([]);
   const [notes, setNotes] = useState<string>("");
   const [resolution, setResolution] = useState<string>(ATTR_OPTIONS.resolution[0]);
   // Per follow-up 055 + 057: split string-state for the input from the
@@ -127,8 +132,13 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
         eyes: eyes === RANDOM_SENTINEL ? "" : eyes,
         nose: nose === RANDOM_SENTINEL ? "" : nose,
         lips: lips === RANDOM_SENTINEL ? "" : lips,
+        face: face === RANDOM_SENTINEL ? "" : face,
         skin: skin === RANDOM_SENTINEL ? "" : skin,
         body: body === RANDOM_SENTINEL ? "" : body,
+        // qi_zhi multi-select: empty subset → send "" so backend falls back to
+        // look-derived overlay; non-empty subset → roll one per slot now so
+        // the previewed value matches what gets sent on confirm.
+        qi_zhi: qiZhi.length === 0 ? "" : qiZhi[Math.floor(Math.random() * qiZhi.length)],
       }));
       const responses = await Promise.all(
         slotPlans.map((plan, i) =>
@@ -147,8 +157,10 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
             eyes: plan.eyes,
             nose: plan.nose,
             lips: plan.lips,
+            face: plan.face,
             skin: plan.skin,
             body: plan.body,
+            qi_zhi: plan.qi_zhi,
           }),
         ),
       );
@@ -168,8 +180,10 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
             eyes: plan.eyes,
             nose: plan.nose,
             lips: plan.lips,
+            face: plan.face,
             skin: plan.skin,
             body: plan.body,
+            qi_zhi: plan.qi_zhi,
           },
         };
       });
@@ -186,7 +200,7 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
     } finally {
       setPreviewBusy(false);
     }
-  }, [ageRange, body, busy, count, ethnicity, eyes, gender, lips, look, nose, notes, previewBusy, resolution, skin]);
+  }, [ageRange, body, busy, count, ethnicity, eyes, face, gender, lips, look, nose, notes, previewBusy, qiZhi, resolution, skin]);
 
   const onConfirmGenerate = useCallback(async () => {
     if (!preview || busy) return;
@@ -261,8 +275,13 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
             eyes: slotAttrs?.eyes ?? (eyes === RANDOM_SENTINEL ? "" : eyes),
             nose: slotAttrs?.nose ?? (nose === RANDOM_SENTINEL ? "" : nose),
             lips: slotAttrs?.lips ?? (lips === RANDOM_SENTINEL ? "" : lips),
+            face: slotAttrs?.face ?? (face === RANDOM_SENTINEL ? "" : face),
             skin: slotAttrs?.skin ?? (skin === RANDOM_SENTINEL ? "" : skin),
             body: slotAttrs?.body ?? (body === RANDOM_SENTINEL ? "" : body),
+            // qi_zhi: always trust the previewed per-slot value (slotAttrs).
+            // The frontend already rolled one of the user-selected subset
+            // during preview, so confirm replays the exact previewed string.
+            qi_zhi: slotAttrs?.qi_zhi ?? "",
           });
           if (result.generated.length > 0) {
             done += 1;
@@ -302,7 +321,7 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
     });
     setBusy(false);
     setPreview(null);
-  }, [ageRange, body, busy, ethnicity, eyes, gender, lips, look, nose, notes, onGenerated, preview, resolution, skin]);
+  }, [ageRange, body, busy, ethnicity, eyes, face, gender, lips, look, nose, notes, onGenerated, preview, qiZhi, resolution, skin]);
 
   const requestCancel = useCallback(() => {
     cancelledRef.current = true;
@@ -359,7 +378,7 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
                 {ATTR_OPTIONS.age_range.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.age_range[o]}</option>)}
               </select>
             </Field>
-            <Field label="外貌气质" id="look">
+            <Field label="角色原型" id="look">
               <select value={look} onChange={(e) => setLook(e.target.value)} disabled={busy || previewBusy}>
                 <option value={RANDOM_SENTINEL}>🎲 随机</option>
                 {ATTR_OPTIONS.look.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.look[o]}</option>)}
@@ -383,6 +402,12 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
                 {ATTR_OPTIONS.lips.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.lips[o]}</option>)}
               </select>
             </Field>
+            <Field label="脸型" id="face">
+              <select value={face} onChange={(e) => setFace(e.target.value)} disabled={busy || previewBusy}>
+                <option value={RANDOM_SENTINEL}>🎲 随机</option>
+                {ATTR_OPTIONS.face.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.face[o]}</option>)}
+              </select>
+            </Field>
             <Field label="皮肤" id="skin">
               <select value={skin} onChange={(e) => setSkin(e.target.value)} disabled={busy || previewBusy}>
                 <option value={RANDOM_SENTINEL}>🎲 随机</option>
@@ -394,6 +419,43 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
                 <option value={RANDOM_SENTINEL}>🎲 随机</option>
                 {ATTR_OPTIONS.body.map((o) => <option key={o} value={o}>{ATTR_LABELS_ZH.body[o]}</option>)}
               </select>
+            </Field>
+            <Field
+              label={`气质（${qiZhi.length === 0 ? "🎲 随机" : `已选 ${qiZhi.length}`}）`}
+              id="qi_zhi"
+            >
+              <div className="qi-zhi-chips" role="group" aria-label="气质多选 (留空 = 随机；选多个 = 每个 actor 随机取其一)">
+                {ATTR_OPTIONS.qi_zhi.map((o) => {
+                  const sel = qiZhi.includes(o);
+                  return (
+                    <button
+                      type="button"
+                      key={o}
+                      className={`qi-zhi-chip ${sel ? "qi-zhi-chip-selected" : ""}`}
+                      aria-pressed={sel}
+                      disabled={busy || previewBusy}
+                      onClick={() =>
+                        setQiZhi((prev) =>
+                          prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o],
+                        )
+                      }
+                    >
+                      {ATTR_LABELS_ZH.qi_zhi[o]}
+                    </button>
+                  );
+                })}
+                {qiZhi.length > 0 ? (
+                  <button
+                    type="button"
+                    className="qi-zhi-chip-clear"
+                    onClick={() => setQiZhi([])}
+                    disabled={busy || previewBusy}
+                    title="清除选择 → 改回随机"
+                  >
+                    ✕ 清空
+                  </button>
+                ) : null}
+              </div>
             </Field>
             <Field label={`数量 (1–${MAX_BATCH_COUNT})`} id="count">
               <input

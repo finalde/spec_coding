@@ -101,11 +101,24 @@ No more independent `shotNN_lastframe_seedream.md` / `shot01_startframe_seedream
 
 *(Evolution: pre-006 `shotNN_kling.md` + `shotNN_seedance.md` → 006 single `shotNN.md` + separate seam-frame `_seedream.md` files → 007 single self-contained `shotNN.md` with everything embedded.)*
 
-### 6. 15-second atomicity (target, not ceiling)
+### 6. Per-shot duration — flexible 3–15 s by plot beat (≤ 15 s ceiling)
 
-Every shot is **15 s** (default and target). 15 s is Seedance's single-generation budget and now the standard `时长:` value across every shot prompt — fill the full budget unless the scene genuinely doesn't warrant it (record a divergence note in the shot's Shot context block for any shorter shot). Anything longer than 15 s is two shots with a continuity token explaining the cut. The continuity token names the carry-over: character pose, prop position, lighting state, camera angle.
+Every shot's `时长:` is chosen **per-shot** to match what the dramatic beat actually needs, anywhere in **3–15 seconds**. 15 s is the **ceiling, not the target** — padding a 5 s reaction to 15 s of slow camera drift dilutes the beat and tells the model to invent uninstructed filler (where it typically drifts in motion / framing / lighting). Conversely, hook / cliff / monologue / cover-frame shots that genuinely carry information toward 15 s should use it.
 
-**Kling 2.1 Pro cap (10 s) note:** when a 15 s shot is rendered via Kling (per rule #5 dual-prompt policy), the user splits the render into two back-to-back Kling calls (≤10 s each) and uses the shot's own `shotNN_lastframe.png` mid-seam as input to the second call. The shot prompt itself is always written for 15 s — the Kling split is a user-side rendering step, not a schema concern. Seedance accepts 15 s directly.
+Author-side duration heuristic (non-binding — adjust per script):
+
+| Plot-beat type | Typical duration |
+|---|---|
+| Quick reaction / cut-in / micro-glance | 3–5 s |
+| Single action beat / one line of dialogue | 5–8 s |
+| Two-beat exchange / short dialogue + reaction | 8–11 s |
+| Multi-character standoff / monologue / hook landing / cover-frame | 11–15 s |
+
+The shot's `动作:` timed beats and `台词 / 字幕:` time windows MUST sum to exactly the `时长:` value. No divergence note required for any duration in 3–15 s; durations outside the range (< 3 s twitch cuts, or > 15 s) DO require an explicit divergence note in the Shot context Summary.
+
+**Kling 2.1 Pro cap (10 s) note:** when a shot's `时长:` > 10 s is rendered via Kling, the user splits the render into back-to-back Kling calls (each ≤ 10 s) and uses the shot's own `shot{NN}_lastframe.png` mid-seam as input to the second call. The shot prompt itself is always written for whatever duration the beat needs — the Kling split is a user-side rendering step, not a schema concern. Seedance accepts ≤ 15 s directly in a single call.
+
+*(rev — follow-up "flexible per-shot duration" — 2026-05-21: reversed the earlier "15 s is the target, fill the full budget" stance because user empirical review found forced-15 s shots dilute fast beats and let the model invent uninstructed filler. The earlier policy originated from a "Seedance single-generation budget" optimization that turned out to favor model uptime over dramatic pacing. New policy: duration follows the beat, with 15 s as ceiling only.)*
 
 ### 7. Aspect ratio
 
@@ -447,7 +460,7 @@ When the user clicks "🎬 生成角色合辑" in the webapp, `ShotConcatBuilder
 | `运镜:` | The mechanics of each transition: `平移`, `推`, `拉`, `环绕`, `升降`, `跟随`, `切换`, `Match cut`, `Whip pan`. Each entry tied to a 镜头 segment time. Example: `0–3s 升降镜自下缓升 / 3–6s 推镜由全景至中景 / 6–9s 环绕镜顺时针 90° / 9–12s 拉远 / 12–15s 推近特写`. |
 | `动作:` (timed beats — every character every beat) | Timed beats covering all 15s. For EVERY beat, describe what EACH character on screen is doing — not just the speaker. Standing or sitting still is forbidden unless explicitly called out as a dramatic stillness. **Plus explicit gaze / body-orientation**: every character must have a named referent at every beat — `沧冥 正脸朝方鼎元`, `白月清 侧身 45° 望沧冥右肩`, `韩夺心 余光斜睨白月清`. Default failure mode of Seedance is "speakers staring into empty space while everyone else faces forward like a school photo" — fix it by naming the target of each character's gaze and the angle of their body to the addressee. Example: `9–12s: 方鼎元拂尘下垂半寸右手微颤，身体正对沧冥目光直锁沧冥眉心；韩夺心剑出鞘三分寒光乍现，侧身 30° 朝沧冥剑尖指向沧冥心口；赵焚天双拳暗握指节作响，正面立沧冥右后方目光从下颌扫向沧冥赤瞳；白月清桃花玉佩静止悬于半空气流凝滞，斜立沧冥左前方含笑斜睨沧冥；司空玄面具下嘴角微挑，半侧身白瓷面具缝隙锁定沧冥；沧冥赤瞳骤亮金赤双瞳浮现，左手负后纹丝不动，赤瞳缓扫五人面孔最后定于方鼎元`. |
 | `台词 / 字幕:` | **MUST include per-line timing + speaker tone + speaker gaze + non-speaker reactions with gaze.** Format: `- 0–3s 方鼎元 (语气凌厉带怒，正脸朝沧冥，目光直锁沧冥眉心): "魔尊沧冥，今日便是你的劫数。" — 后期软字幕 方正粗黑 白底黑边 / 反应: 沧冥赤瞳冷睨方鼎元嘴角毫无动作；白月清侧首望沧冥玉佩轻颤；赵焚天双拳暗握目光自方鼎元转向沧冥；韩夺心余光从沧冥扫至方鼎元右手按剑；司空玄面具下半张脸朝沧冥不动`. Every dialogue line carries (a) `[start–end s]` time, (b) `{speaker} (语气..., 朝/望/视谁)`, (c) the line itself, (d) subtitle style, (e) `反应:` per non-speaker INCLUDING each one's gaze target. Seedance default failure modes this fixes: (i) wrong-speaker attribution, (ii) "everyone stands still" idle non-speakers, (iii) **"speaker stares into empty space" — A 念台词时眼睛根本不看 B**. Every speaker's gaze target MUST be named. Visual-only contract from §12.4 still applies (lines render as subtitles, never as audio prompts). |
-| `时长:` | **Always `15s`** (per rule #6 — bumped from the prior `10s` Kling-cap standard so authors get full Seedance budget and more room for 镜头/运镜/动作/台词 detail). Authors fit cameras/movement/action/dialogue beats into the 15 s window; longer scenes split across multiple shots with a continuity token. Kling renders the same 15 s shot as two back-to-back ≤10 s calls bridged by `shotNN_lastframe.png` at the 10 s mark — user-side rendering step, not a schema concern. |
+| `时长:` | **Variable 3–15 s, set per the plot beat** (per rule #6 — reversed from the earlier "always 15s" stance because forced-15s shots dilute fast beats and invite model-invented filler). Author picks the duration the dramatic beat actually needs: quick reaction / cut-in 3–5 s, single action beat 5–8 s, two-beat exchange 8–11 s, multi-character standoff / monologue / hook 11–15 s. `动作:` timed beats and `台词 / 字幕:` windows MUST sum to `时长:` exactly. Kling renders a > 10 s shot as back-to-back Kling calls bridged by `shotNN_lastframe.png` mid-seam — user-side rendering step, not a schema concern. ≤ 10 s shots render in a single Kling call (no split needed). |
 | `比例:` / `分辨率:` / `清晰度:` | **Removed entirely.** Aspect ratio and resolution are Seedance UI knobs, not prompt content. |
 | `渲染样式:` | Keep, but **strip resolution / quality tokens** (`4K HDR`, `8K`, `1080p`, `HDR`, …). Keep the artistic-style anchors (`cinematic`, `真实毛孔细节`, `三庭五眼东方面孔`, etc.). |
 | `负向:` | Unchanged. Re-paste `style_guide.md § 负向锁定` verbatim. |
@@ -501,6 +514,82 @@ shot{NN}:
 The parent applies patches surgically inline (one Edit per patch), then re-emits the shot. No prose review section is added to the shot md itself — the master's audit lives in the run's `.audit/{date}/{task_id}/events.jsonl` as `validation.issue.raised` entries with the patches as event payload.
 
 *(Originated from follow-up "短剧故事 + 台词大师 — review every shot" — 2026-05-17.)*
+
+#### 12.4-E Novel-prose-grade detail density in video prompt body (per follow-up "flexible per-shot duration + 增厚 prompt 细节" — 2026-05-21)
+
+The shot md's `## 视频 prompt` code block must read like a **director-novelist 的镜头脚本**, not a field-checklist. The schema fields stay the same (rule #12.4 v4 + 12.4-B), but the *content* inside `动作:` / `台词 / 字幕:` / `光线 / 色调:` carries the kind of micro-detail a Chinese 仙侠 / 短剧 novel would name — facial micro-expressions, breath / pulse / shoulder physical tells, sensory atmospheric beats (魔气溢出之触感 / 雷光逆吹鬓边 / 长袍下摆吃风的厚度 / 尘埃自阶面浮起的方向), tonal qualifiers on every dialogue line, and named reactions on every non-speaker. Kling / Seedance interpret the prompt literally — the more specific the spec, the less the model invents uninstructed filler.
+
+**Per-beat 动作 enrichment contract (every timed beat MUST carry at minimum 3 layers):**
+
+1. **Macro action** — what the character physically does (the existing 12.4-B requirement; e.g. `沧冥左手负后右手二指轻屈`).
+2. **Facial / 微表情** — eye state + brow + lip + jaw + breath in 5–15 字 (e.g. `赤瞳冷凝唇线略压下颌微收呼吸放缓`). Default failure mode: 角色 just "stands there" with a blank face. Fix by naming the micro-expression at every beat for every on-screen character — including non-speakers.
+3. **Body orientation + gaze target** — re-paste of the 12.4-B gaze rule, restated here because it's load-bearing: 每个 character 每个 beat 必须有 named referent (`朝沧冥` / `望阶下` / `视方鼎元拂尘`), 不允许 "面无表情望向画外" 的占位描述。
+4. **(optional but recommended for shots ≥ 8 s)** Sensory / atmospheric anchor — 1 句感官细节 carrying the scene's 时辰 / 魔气 / 雷光 / 风 / 尘 / 光晕 (e.g. `黑发被雷光气流逆吹半寸 / 长袍下摆吃风沉甸不动 / 阶面尘埃自右脚向外放射半寸`). For shots ≥ 11 s this layer is **required** at minimum every other beat.
+
+Beats that 仅含 (1) (macro action only) are a stage-6 validation **warning**; beats lacking both (2) and (3) are a **blocker**.
+
+**Per-line 台词 enrichment contract (5 elements per line, none droppable):**
+
+每一行 `- {[start–end s]} {speaker} ({语气描述, 朝/望/视谁的精确目标}): "{台词}" — {字幕样式} / 反应: {每个非说话角色的 物理动作 + 微表情 + gaze target}`
+
+12.4-B 的 5 元素已强制。本节加 6th implicit element：**语气描述** 不止情绪标签 ("冷漠")，须 carry 声线物理特征 — 音量 / 语速 / 共鸣点 / 停顿位 (e.g. `冷漠如冰带俯视感，喉腔低共鸣，每字间停半拍` 而非仅 `冷漠`)。Reason: TTS-aware downstream models (v2+) 会从语气描述提取声线参数；纯情绪标签 underspecifies。
+
+**`光线 / 色调:` 行 enrichment：**
+
+不再是单行 hex 罗列，而是 **2–4 句话** 描述：
+- 主光源方向 + 色温 (`金紫雷柱自顶 5500K key 自上方贯下，左肩 1500lux 高光`)
+- 各表面材质对光的反应 (`黑袍吸光仅左肩高光成银紫一线，金紫雷光在赤瞳虹膜形成两点反射`)
+- 时辰 / 大气感 (`冷月为光，长阶尘埃悬浮中带寒意，画面整体偏冷青调底层叠魔气暗紫`)
+- hex 主/辅/点缀仍要写，但 inline 嵌入描述句末 (`沉黑 #0a0a0a 主调 + 暗血红 #5a1a1a 阵旗补 + 紫金 #a8842c 法宝光点缀`)
+
+**与 `## 小说文本 / Novel prose` 段的关系：**
+
+「小说文本」段（rule #12.6 v2，shot md 独立散文段）仍 required，是 **人类 review 用**的全 shot 文学性叙事。本节 12.4-E 讲的是 **prompt body 内**的密度提升 — 两者不重复：
+
+- Novel prose = 散文，给人读，禁止 timed beats / hex / placeholder。
+- Prompt body 12.4-E = 结构化 timed beats + 字段，给 AI 读，但每个 beat 内文用小说式微观语言铺陈。
+
+二者同时 carry 相同的 ground-truth 但 register 不同。
+
+**字数上限 unchanged for single/dual-character shots：** rule #12.4 v4 soft 2000 / hard 2500 字仍生效。增厚不是无限制堆字 — 短 shot (3-6s) prompt body 可以 800-1200 字落地，长 shot (11-15s) 用满 ~2000 字。Padding for padding's sake = 反模式。
+
+**12.4-E density 例外（rule #12.4-E vs #12.4 v4 字数上限冲突的明文裁决）：**
+
+任何 shot — 不论单角色 / 双角色 / 多角色 / cover-frame — 一旦应用 12.4-E 的 4-layer-per-beat 强制（macro + 微表情 + body/gaze + atmospheric）+ 每角色每行台词的 6-element 强制（5 base + 6th 声线物理特征）+ 2-4 句 `光线/色调` 描述，**结构性上**就会超过 2500 字 hard cap。经验值（mozun_chongsheng ep01-ep05 empirical, 2026-05-21）：
+
+- 单角色 / 双角色 shot ≥ 8 s 应用全 12.4-E enrichment → 3500-7000 字 prompt body 是常态。
+- 多角色 (3+) cover-frame / 全员同框 shot ≥ 11 s → 6000-9500 字 prompt body 是常态。
+- 单角色 / 双角色 shot < 8 s 与 12.4-E "atmospheric layer required" 阈值脱钩，body 通常仍可在 1500-2400 字范围内（不必应用例外）。
+
+当 12.4-E 详细密度与 #12.4 v4 字数上限冲突时，**12.4-E 详细密度优先** — 因为 (a) cover-frame / 美学顶点 / 抖音封面候选 shot 的画面质量是 episode 头部钩子的生死线，(b) 即便单角色情绪长 shot 也需 12.4-E 的小说化微观语言来 anchor 模型不漂，(c) "干站着空对镜头 / 非说话者面无表情" 的失败模式 (rule #12.4 v4 负向 line) 必须被 4-layer 强制压住，比单 prompt 不被 truncate 重要。
+
+**应用契约：**
+- Shot body > 2500 字 时，在 Shot context Summary 末尾加显式 exception 注释（**所有**触发例外的 shot 都须加，不区分 cover-frame 与 density-only）：
+  - 多角色 cover-frame：`**注: 本 shot 为 cover-frame / 全员同框 (N 角色)，prompt 长度上限按 rule #12.4-E multi-character cover-frame 例外条款放宽，prompt body XXXX 字 高于 2500 字 hard cap。**`
+  - 单角色 / 双角色 density-only：`**注: 本 shot ≥ 8s 应用 rule #12.4-E 全 4-layer enrichment + 2-4 句光线/色调，prompt body XXXX 字 高于 2500 字 hard cap，按 12.4-E density 例外条款放宽。**`
+- Stage-6 validator 看到 Shot context 含上述任一注释格式 → **不**发 byte-cap blocker。看不到注释而 body > 2500 字 → 仍发 blocker。
+- (rule #12.4 v4 原有的 cover-frame 例外条款保留作 fallback ground，本节是其 12.4-E 层面的 alignment 重申 + density-only 路径补全。)
+- 超 cap 的 prompt body 推荐采用 **head-loaded 字段顺序** 做 truncation-risk mitigation（Seedance 在 ~2000 字后倾向 silent-truncate 尾部）：
+
+```
+参考: {chars-reel} / {seam-frame ref}            ← critical, chars-reel patcher 已锁定 head 位置
+场景: {ref_sN_xxx}                                ← critical scene anchor
+时长: Xs                                         ← MOVED from tail; 字段定时 anchor 必须 survive truncation
+负向: ... (full ban list)                         ← MOVED from tail; 模型同质化 / 卡通漂移的防火墙必须 survive
+镜头: + 运镜:                                     ← high-level framing schedule
+渲染样式: ...                                     ← high-level style anchor (short, robust)
+节奏: ...                                         ← short anchor
+光线 / 色调: ...                                  ← 2-4 sentence atmosphere block
+动作: ...                                         ← longest field, tolerates partial tail truncation
+台词 / 字幕: ...                                  ← second-longest field, tolerates partial tail truncation
+比例: 9:16                                       ← optional; multi-character body 通常已 strip 至 9:16 fixed UI knob per 12.4-B
+```
+
+`参考:` 行位置由 ShotConcatBuilder 锁定在头部不可移动（rule #12.4-B 既定）；其余字段顺序为推荐而非强制。Body 在 2000 字内的 shot 保留原 12.4-B 字段顺序（`参考 / 场景 / 镜头 / 运镜 / 动作 / 台词 / 光线 / 节奏 / 渲染样式 / 时长 / 负向`），仅 multi-character cover-frame / 超 cap shot 应用 head-loaded 顺序。
+
+**字符密度 sanity check：** 即便豁免 hard cap，作者仍应避免"reaction line 镜像复述" — 例如 "白月清侧身朝沧冥 / 赵焚天侧身朝沧冥 / 方鼎元侧身朝沧冥 / 韩夺心侧身朝沧冥 / 司空玄侧身朝沧冥"。多角色反应应承载差异化信息（不同 gaze target / 不同微表情 / 不同物理姿态），不是同一句话换名字。重复模式 = 12.4-E 详细密度精神之违背，即使 byte-cap 豁免也应 trim。
+
+*(Originated from follow-up "flexible per-shot duration + 增厚 prompt 细节" — 2026-05-21; amended same day with "字数上限 vs 12.4-E 详细密度 冲突裁决 + head-loaded 字段顺序" subsection after empirical run on mozun_chongsheng ep01-ep03 produced 14/30 shots > 2500 字, all genuine multi-character cover-frame 美学 anchors. Solves: ① 强制 15s 让短情节 beat 灌水, model fills with uninstructed drift; ② 12.4-B 的 timed-beats 字段过于 mechanical, "干站着说话" 的失败模式仍偶发 — 本节强制 facial micro-expression + 感官 atmospheric layer 提供 model literal-instruction; ③ user 反馈"prompt 应该像小说一样"已被 12.6 novel-prose 部分回应, 本节把同样的 narrative-density 要求落到 prompt body 内供 AI 直接消费；④ 多角色 cover-frame shot 的 12.4-E 详细密度结构性超 2500 字, 通过 cover-frame 例外条款 + head-loaded 字段顺序 mitigation 化解 — 内容质量 > 单 shot prompt 不被 truncate。)*
 
 #### 12.5 角色 reference 单 prompt 文件（character video-reference template）
 
@@ -749,7 +838,7 @@ rule #12.5 v2 **完全 supersedes rule #12.2**。rule #12.2（角色立绘 promp
 
 #### 12.6 单一 shotNN.md 文件 schema（v2，per follow-up 009）
 
-每 shot 一份 `shotNN.md` 文件，含三段：① 人类 review 用的 Shot context；② **Reference placeholders**（NEW per follow-up 009）— 列出本 shot 涉及的所有角色 + 背景场景 placeholder，user paste 到 Seedance 等模型时手动替换；③ 视频 prompt 代码块（含 `{ref_xxx}` placeholder 内联引用 + 多角色 dialogue script 格式）。
+每 shot 一份 `shotNN.md` 文件，含四段：① 人类 review 用的 Shot context；② **Reference placeholders**（NEW per follow-up 009）— 列出本 shot 涉及的所有角色 + 背景场景 placeholder，user paste 到 Seedance 等模型时手动替换；③ **小说文本 / Novel prose**（NEW per follow-up "novel-prose per shot"）— 把本 shot 写成一段散文 / 小说叙事，让 user 顺读全 ep 所有 shot 的 prose 段时**有"在读一本仙侠小说"的体验**（不是 prompt 摘要，是带着文学描写的叙述）；④ 视频 prompt 代码块（含 `{ref_xxx}` placeholder 内联引用 + 多角色 dialogue script 格式）。
 
 **Seam-frame still prompts 段已废止**（per follow-up 009 — drop start/end frame embedded code blocks）。Seam-frame 工作流仍保留作为 rule #11 的可选高阶 stitching 文档，但默认不在 shot file 内 ship；user 自行用 Seedream 生成 seam frames（image-to-video 模型路径）。
 
@@ -784,6 +873,23 @@ supersedes rule #5（pre-007 双管线 / 三件套 file 模型）+ rule #11 在 
 | `{ref_<scene_short>}` | 该场景 background reference 视频 / 图 | `scenes/{name}.md` 渲染所得（若立档）/ user 自备 |
 
 每 shot 列出**所有出场角色 + 所有出现场景** 的 placeholder。
+
+---
+
+## 小说文本 / Novel prose
+
+> 把本 shot 写成一段**带着仙侠小说文学性的散文叙述**。读者顺读全 ep 11 个 shot 的此段时，应有"在读一本小说"的连贯体验，而非翻 prompt 清单。内容**派生自** Shot context Summary + 视频 prompt body 的 `动作:` timed beats + `台词:` 字段 + `光线 / 色调:` + `场景:`，但用文学描写的笔法重写，可加入感官细节（魔气的腥涩、雷光的灼意、长袍下摆的沉甸）、心理留白、节奏短句。**禁止**直接复制 timed-beats 行（`0-2s: ...`）或 prompt placeholder（`{ref_xxx}`）。
+
+{第一行必含 @ref header — 形如 `沧冥請參考:@<小说中文名>_<人物中文名>，白月清請參考:@<小说中文名>_<人物中文名>，长阶顶請參考:@<小说中文名>_<场景中文名>`。
+
+- **<小说中文名>** = `README.md` H1 内的中文剧名（如 `魔尊归来`），**不是** task_name pinyin slug（task_name 是 `mozun_chongsheng`，仅供文件/路径用，不进 @-ref）。
+- **<人物 / 场景中文名>** = `## Reference placeholders` 段 placeholder 的中文名部分，**去掉 `cN_` / `sN_` 前缀**。例：placeholder `{ref_c1_沧冥}` → @-ref 中写 `沧冥`；placeholder `{ref_s7_山道平台}` → @-ref 中写 `山道平台`。
+- 每个 @-ref 之间用「，」分隔，**人物在前 / 场景在后**。
+- @-ref header 后空一行，再写散文正文。
+
+例：`沧冥請參考:@魔尊归来_沧冥，长阶顶請參考:@魔尊归来_长阶顶`}
+
+{200-400 字一段散文（首选）；如本 shot 信息密度大可拆 2-3 段。台词以「」或""引号嵌入散文，不另设标签。}
 
 ---
 
@@ -825,6 +931,15 @@ supersedes rule #5（pre-007 双管线 / 三件套 file 模型）+ rule #11 在 
 3. `**场景 / Scene**:` — location + 时辰 + 氛围 + 配色，引用 `scenes/{name}.md`（如已立档）。
 4. `**时长 / Duration**:` — `X seconds — hard 上限 15s` + timed beats 摘要（与视频 prompt body 的 `动作:` timed beats 同步；hard 上限是 rule #6 的 15s）。
 5. `**Reference uploads — pre-flight checklist**:` — checkbox 列表 turntable + (可选) seam-frame PNGs。
+
+**「小说文本 / Novel prose」段必填规则**（per follow-up "novel-prose per shot"）：
+
+- 每 shot 必含一段 `## 小说文本 / Novel prose`，位置在「Reference placeholders」之后、「视频 prompt」之前。缺失 = stage-6 validation `blocker`。
+- 长度 200-400 字（散文一段；信息密度极大的 cover-frame shot 可放宽到 600 字 / 拆 2-3 段）。
+- 内容必须**派生自同 shot 内**的 Summary + `动作:` timed beats + `台词:` + `光线 / 色调:` + `场景:`；可加感官 / 心理 / 节奏笔法，但不得引入 timed-beats 没有的新动作或新角色。
+- **禁止**：① 直接复制 `0-2s: ...` timed beats 行；② 出现 `{ref_xxx}` placeholder；③ 出现 hex 色号（#xxxxxx）或 fps / 比例 / 镜头景别等技术语；④ 列表 / 表格 / 代码块（必须散文）。
+- 台词以「」或 `""` 直接嵌入散文，不另加角色名 / 字体注解。
+- 顺读全 ep（11 个 shot 的 prose 段拼接）应有**"读小说"的连贯阅读体验** — 句首避免重复 "本 shot..." / "镜头中..."，多用情节衔接词（"忽而" / "与此同时" / "话音未落" / etc.）。
 
 **多角色 `台词 / 字幕` 扩展格式**（rule #12.4 v3 amend per follow-up 007）：
 

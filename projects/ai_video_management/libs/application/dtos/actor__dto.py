@@ -132,6 +132,7 @@ class GenerateActorsInputCdto:
     face: str = ""
     skin: str = ""
     body: str = ""
+    qi_zhi: str = ""
 
 
 @dataclass(frozen=True)

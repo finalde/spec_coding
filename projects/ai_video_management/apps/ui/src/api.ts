@@ -168,12 +168,14 @@ export interface ActorAttrs {
   /** Per follow-up 100: optional user-locked feature descriptors. Empty
    * string / RANDOM_SENTINEL → backend samples the rich pool deterministically
    * by seed; a curated Chinese descriptor substitutes verbatim into the
-   * prompt's 眼睛 / 鼻子 / 嘴巴 / 皮肤 / 体型 line. */
+   * prompt's 眼睛 / 鼻子 / 嘴巴 / 脸型 / 皮肤 / 体型 line. */
   eyes?: string;
   nose?: string;
   lips?: string;
+  face?: string;
   skin?: string;
   body?: string;
+  qi_zhi?: string;
 }
 
 export interface ActorInfo extends ActorAttrs {
@@ -351,6 +353,10 @@ export const ATTR_OPTIONS = {
     "樱桃小嘴", "丰唇", "薄唇", "厚唇", "嘟嘟嘴", "上翘嘴角",
     "大嘴", "小嘴", "性感唇", "苹果唇", "嘴角下垂", "棱角分明唇",
   ] as const,
+  face: [
+    "鹅蛋脸", "瓜子脸", "圆脸", "方脸", "长脸",
+    "心形脸", "国字脸", "菱形脸", "倒三角脸",
+  ] as const,
   skin: [
     "白皙", "小麦色", "古铜色", "瓷白", "象牙白", "蜜糖色",
     "黝黑", "苍白", "红润", "雪白", "焦糖色", "深棕色", "橄榄色", "麦色",
@@ -359,6 +365,12 @@ export const ATTR_OPTIONS = {
     "高挑修长", "中等匀称", "娇小玲珑", "纤瘦", "丰满", "健硕",
     "高大", "矮小", "魁梧",
     "骨感", "偏瘦", "微胖", "胖", "肥胖", "过度肥胖",
+  ] as const,
+  qi_zhi: [
+    "阳光", "温柔", "清纯", "邻家", "楚楚动人",
+    "优雅", "高冷", "冷艳", "神秘", "知性",
+    "忧郁", "颓废", "沧桑", "阴鸷", "邪魅",
+    "霸气", "不羁", "萌系", "俏皮", "妩媚",
   ] as const,
 };
 
@@ -401,6 +413,11 @@ export const ATTR_LABELS_ZH: { [K in keyof typeof ATTR_OPTIONS]: Record<string, 
     "大嘴": "大嘴", "小嘴": "小嘴", "性感唇": "性感唇",
     "苹果唇": "苹果唇", "嘴角下垂": "嘴角下垂", "棱角分明唇": "棱角分明唇",
   },
+  face: {
+    "鹅蛋脸": "鹅蛋脸", "瓜子脸": "瓜子脸", "圆脸": "圆脸",
+    "方脸": "方脸", "长脸": "长脸", "心形脸": "心形脸",
+    "国字脸": "国字脸", "菱形脸": "菱形脸", "倒三角脸": "倒三角脸",
+  },
   skin: {
     "白皙": "白皙", "小麦色": "小麦色", "古铜色": "古铜色",
     "瓷白": "瓷白", "象牙白": "象牙白", "蜜糖色": "蜜糖色",
@@ -413,6 +430,13 @@ export const ATTR_LABELS_ZH: { [K in keyof typeof ATTR_OPTIONS]: Record<string, 
     "高大": "高大", "矮小": "矮小", "魁梧": "魁梧",
     "骨感": "骨感", "偏瘦": "偏瘦", "微胖": "微胖",
     "胖": "胖", "肥胖": "肥胖", "过度肥胖": "过度肥胖",
+  },
+  qi_zhi: {
+    "阳光": "阳光", "温柔": "温柔", "清纯": "清纯", "邻家": "邻家",
+    "楚楚动人": "楚楚动人", "优雅": "优雅", "高冷": "高冷", "冷艳": "冷艳",
+    "神秘": "神秘", "知性": "知性", "忧郁": "忧郁", "颓废": "颓废",
+    "沧桑": "沧桑", "阴鸷": "阴鸷", "邪魅": "邪魅", "霸气": "霸气",
+    "不羁": "不羁", "萌系": "萌系", "俏皮": "俏皮", "妩媚": "妩媚",
   },
 };
 

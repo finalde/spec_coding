@@ -5,8 +5,9 @@ Repo root is detected by walking parents until 'novels/' or the repo marker is f
 or overridden via NOVELS_ROOT env var.
 
 Usage:
-    python -m apps.cli.novel_download              # download all
-    python -m apps.cli.novel_download <slug>       # one novel
+    python -m apps.cli.novel_download                       # download all, 1 worker (serial, polite)
+    python -m apps.cli.novel_download --workers 3           # opt into parallel (higher rate-limit risk)
+    python -m apps.cli.novel_download <slug>                # one novel (single-threaded)
 """
 from __future__ import annotations
 
@@ -40,10 +41,24 @@ def main(argv: list[str]) -> int:
     novels_root.mkdir(parents=True, exist_ok=True)
     print(f"novels_root: {novels_root}", flush=True)
 
+    # Default reverted to 1 (serial) per follow-up 106: 5 workers tripped sudugu.org's
+    # anti-bot in follow-up 105 and got the IP 302-redirected to google.com. Use
+    # --workers N to opt back into parallel once the block clears.
+    workers = 1
+    positional: list[str] = []
+    it = iter(argv[1:])
+    for tok in it:
+        if tok == "--workers":
+            workers = int(next(it, "5"))
+        elif tok.startswith("--workers="):
+            workers = int(tok.split("=", 1)[1])
+        else:
+            positional.append(tok)
+
     with NovelDownloader(novels_root=novels_root) as downloader:
         command = NovelCommand(downloader)
-        if len(argv) >= 2:
-            slug = argv[1]
+        if positional:
+            slug = positional[0]
             print(f"downloading single novel: {slug}", flush=True)
             result = downloader.download(slug, on_progress=_on_progress)
             print(
@@ -52,8 +67,8 @@ def main(argv: list[str]) -> int:
                 flush=True,
             )
             return 0 if result.complete else 1
-        print("downloading all canonical novels", flush=True)
-        results = downloader.download_all(on_progress=_on_progress)
+        print(f"downloading all canonical novels (parallel, workers={workers})", flush=True)
+        results = downloader.download_all(on_progress=_on_progress, max_workers=workers)
         print()
         print("=" * 60)
         print("SUMMARY")

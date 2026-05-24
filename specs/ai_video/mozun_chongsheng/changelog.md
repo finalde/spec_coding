@@ -2,6 +2,36 @@
 
 Append-only follow-up audit log。每条记录该 follow-up 改了什么、哪些下游 artifact 被同步 surgical patch。
 
+## Follow-up 029 — 2026-05-21 20:26:46
+Source: user_input/follow_ups/029-20260521-202646-novel-prose-per-shot.md
+
+Trigger: user — "in ai_video_management, under each episode and shot, besides the prompt for the shot lets also add another text in novels for comparison, it is like I just read a novel book, so it needs all the details like written in novel, by just reading this form all the shots. It feels exactly the same as reading a book"
+
+修法：每 shotNN.md 新增 `## 小说文本 / Novel prose` 段，位置在 `## Reference placeholders` 之后、`## 视频 prompt` 之前。首行 @-ref header（`{人物}請參考:@<小说中文名>_<人物中文名>，... {场景}請參考:@<小说中文名>_<场景中文名>`；小说名用中文剧名取自 README H1，**不是** task_name pinyin；人物/场景去 `cN_` / `sN_` 前缀；人物在前 / 场景在后）+ 200-400 字仙侠小说式散文，派生自 Shot context Summary + `动作:` timed beats + `台词:` + 场景 / 色调，禁止复制 timed-beats 行 / placeholder / 技术语。
+
+Auto-updated:
+- `.claude/agent_refs/project/ai_video.md` §12.6 — "含三段" → "含四段" + 在 schema 模板中插入 `## 小说文本 / Novel prose` 段 + 新增「小说文本 / Novel prose」段必填规则块（位置：必填子项 5 项之后、多角色台词扩展格式之前）。
+- `ai_videos/mozun_chongsheng/episodes/ep01..ep02/prompts/shotNN/shotNN.md` × 20 — 回填新段完成。
+- `ai_videos/mozun_chongsheng/episodes/ep03..ep05/prompts/shotNN/shotNN.md` × 30 — **PENDING**（prior turn 中断于 ep03；ep03-05 共 30 shots 仍待补段）。
+
+No conflicts found in: characters/, scenes/, world.md, style_guide.md, arc_outline.md, casting.md, episode.md, shotlist.md, publish.md, README.md（结构性变更不触及）。
+
+## Follow-up 030 — 2026-05-21 22:15:05
+Source: user_input/follow_ups/030-20260521-221505-novel-ref-chinese-no-prefix.md
+
+Trigger: user — "小説名字要用中文，還有任務名字前面那些c1_之類的前綴都去掉"
+
+修法：029 引入的「小说文本 / Novel prose」段 @-ref header 格式从 `@{task_name_pinyin}_{cN_中文名}` 改为 `@{小说中文名}_{中文名}`。具体到本项目：小说名 = `魔尊归来`（取自 `ai_videos/mozun_chongsheng/README.md` H1，不是 task_name pinyin slug `mozun_chongsheng`）；人物 / 场景 id 去掉 `cN_` / `sN_` 前缀。例：`沧冥請參考:@魔尊归来_沧冥，长阶顶請參考:@魔尊归来_长阶顶`。
+
+Auto-updated:
+- `.claude/agent_refs/project/ai_video.md` §12.6「小说文本 / Novel prose」必填规则块 — @-ref header 格式说明改为「中文剧名 + 去前缀中文名」并加 3 条 bullet（小说名定义 / 去前缀规则 / 排序+分隔规则）+ 一行示例。
+- `specs/ai_video/mozun_chongsheng/user_input/follow_ups/029-20260521-202646-novel-prose-per-shot.md` — `## @-ref header 规则` 段示例同步改新格式 + 增「小说名取 README H1 非 task_name pinyin」「id 去 `cN_` / `sN_` 前缀」两条说明。
+- `specs/ai_video/mozun_chongsheng/user_input/revised_prompt.md` — Last regenerated 头部 + 新增 030 一段说明（包含小说名 = `魔尊归来` 来源、去前缀规则、ep01/02 已采新格式、ep03-05 后续直接采）。
+- `ai_videos/mozun_chongsheng/episodes/ep01..ep02/prompts/shotNN/shotNN.md` × 20 — 已使用新格式（prior turn 完成时即新格式，无需再改）。
+- `ai_videos/mozun_chongsheng/episodes/ep03..ep05/prompts/shotNN/shotNN.md` × 30 — 后续补段时直接采新格式（segment 尚未补，rule 已生效）。
+
+No conflicts found in: characters/, scenes/, world.md, style_guide.md, arc_outline.md, casting.md, episode.md, shotlist.md, publish.md, README.md（仅 header 文本格式变更，不触及）。
+
 ## Follow-up 028 — 2026-05-19 20:22:33
 Source: user_input/follow_ups/028-20260519-202233-character-ref-v11-simplified-prompt.md (cross-project ripple from ai_video_management follow-up 099)
 

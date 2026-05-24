@@ -11,22 +11,32 @@ Per follow-up 096. State machine per novel:
   3. `complete: true` IFF every chapter's `done` flag is True.
 
 Resumable: re-running reads _meta.json, skips done chapters, resumes from next gap.
-Rate limit: 0.8 s between requests; exponential backoff on 429 / 5xx (up to 3 retries).
+Rate limit: 1.0–2.0 s random jitter between requests (follow-up 109); exponential
+backoff on 429 / 5xx (up to 3 retries).
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import random
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Lock
 from typing import Iterable
 
 import httpx
 
-from libs.domain.value_objects.novel__valueobject import CANONICAL_NOVELS, NovelSpec, categories, find_novel
+from libs.domain.value_objects.novel__valueobject import (
+    CANONICAL_NOVELS,
+    NovelSource,
+    NovelSpec,
+    categories,
+    find_novel,
+)
 from libs.infrastructure.errors.novel__error import (
     ChapterIndexParseFailed,
     DownloadFailed,
@@ -38,9 +48,15 @@ _USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 _REQUEST_TIMEOUT = 20.0
-_INTER_REQUEST_DELAY = 0.8
+# Random jitter rather than fixed cadence — anti-bot fingerprinting cares about
+# request *cadence* (follow-up 109; converged values from freeok/so-novel's
+# bundle/rules/rate-limit.json which uses the same min/max for sudugu + ttkan).
+_INTER_REQUEST_DELAY_MIN = 1.0
+_INTER_REQUEST_DELAY_MAX = 2.0
 _MAX_RETRIES = 3
 _BACKOFF_BASE = 1.5
+# End-of-chapter boilerplate every so-novel site rule strips via filterTxt.
+_END_OF_CHAPTER_MARKER_RE = re.compile(r"\(本章完\)")
 
 _INDEX_LIST_RE = re.compile(
     r'<div\s+id="list"\s+class="dir\s+clear">(.*?)</div>',
@@ -63,6 +79,16 @@ _INDEX_PAGE_OPTIONS_RE = re.compile(
     re.DOTALL,
 )
 _INDEX_PAGE_OPTION_RE = re.compile(r'<option\s+value="(\d+)"', re.IGNORECASE)
+
+# ttkan.co patterns — chapter index served as a single page; no pagination
+# either at index or chapter level.
+_TTKAN_CHAPTER_LINK_RE = re.compile(
+    r'<a[^>]+href="(/novel/pagea/[^"]+\.html)"[^>]*>([^<]+)</a>',
+)
+_TTKAN_CONTENT_BLOCK_RE = re.compile(
+    r'<div\s+class="content">(.*?)</div>',
+    re.DOTALL,
+)
 
 
 @dataclass
@@ -108,6 +134,8 @@ class NovelMeta:
     chapters: list[ChapterRecord] = field(default_factory=list)
     complete: bool = False
     last_updated_at: str = ""
+    active_source_host: str = ""
+    active_source_id: str = ""
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -118,6 +146,8 @@ class NovelMeta:
             "category_zh": self.category_zh,
             "source_host": self.source_host,
             "source_id": self.source_id,
+            "active_source_host": self.active_source_host,
+            "active_source_id": self.active_source_id,
             "complete": self.complete,
             "last_updated_at": self.last_updated_at,
             "chapters": [c.to_json() for c in self.chapters],
@@ -133,6 +163,8 @@ class NovelMeta:
             category_zh=str(data.get("category_zh", "仙侠")),
             source_host=str(data["source_host"]),
             source_id=str(data["source_id"]),
+            active_source_host=str(data.get("active_source_host", data.get("source_host", ""))),
+            active_source_id=str(data.get("active_source_id", data.get("source_id", ""))),
             chapters=[ChapterRecord.from_json(c) for c in data.get("chapters", [])],  # type: ignore[arg-type]
             complete=bool(data.get("complete", False)),
             last_updated_at=str(data.get("last_updated_at", "")),
@@ -164,7 +196,8 @@ class NovelDownloader:
         self,
         novels_root: Path,
         client: httpx.Client | None = None,
-        delay_seconds: float = _INTER_REQUEST_DELAY,
+        delay_min_seconds: float = _INTER_REQUEST_DELAY_MIN,
+        delay_max_seconds: float = _INTER_REQUEST_DELAY_MAX,
         max_retries: int = _MAX_RETRIES,
     ) -> None:
         self._root = novels_root
@@ -174,7 +207,8 @@ class NovelDownloader:
             headers={"User-Agent": _USER_AGENT, "Accept-Language": "zh-CN,zh;q=0.9"},
             follow_redirects=True,
         )
-        self._delay = delay_seconds
+        self._delay_min = delay_min_seconds
+        self._delay_max = delay_max_seconds
         self._max_retries = max_retries
         self._last_request_at = 0.0
 
@@ -188,58 +222,78 @@ class NovelDownloader:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
-    def download_all(self, on_progress: object = None) -> list[NovelDownloadResult]:
-        """Serial download: complete novel N (every chapter `done=True`)
-        before starting novel N+1.
+    def download_all(
+        self,
+        on_progress: object = None,
+        max_workers: int = 5,
+    ) -> list[NovelDownloadResult]:
+        """Parallel download: `max_workers` novels in flight at once.
 
-        Reverted from the round-robin design in follow-up 103 per follow-up
-        104: the user explicitly only wants completed novels in the sidebar.
-        Serial → one novel finishes → it pops into the (complete-only) tree
-        filter → next novel starts.
+        Per follow-up 105: serial mode (follow-up 104) was wall-clock-
+        bound at ~9 h for the full manifest. Parallel mode runs N novels
+        concurrently, each owning its own `httpx.Client` and rate-limit
+        clock so the 0.8 s polite delay applies per-worker, not globally
+        — peak aggregate ~6 req/s to sudugu.org with 5 workers.
+
+        Each worker downloads exactly one novel at a time (no round-
+        robin), so the user's "complete novels only" sidebar contract
+        from follow-up 104 still holds: novels pop into the sidebar one
+        at a time as workers finish them.
+
+        Per follow-up 109 the polite delay is randomized 1.0–2.0 s per
+        request rather than a fixed 0.8 s, so peak aggregate throughput
+        with 5 workers drops to ~3.3 req/s on average — anti-bot harder.
         """
         results: list[NovelDownloadResult] = []
-        for spec in CANONICAL_NOVELS:
-            try:
-                result = self.download(spec.slug, on_progress=on_progress)
-            except Exception as exc:
-                result = NovelDownloadResult(
-                    slug=spec.slug,
-                    title_zh=spec.title_zh,
-                    category=spec.category,
-                    category_zh=spec.category_zh,
-                    chapters_done=0,
-                    chapters_total=0,
-                    complete=False,
-                    errors=[f"top-level: {type(exc).__name__}: {exc}"],
-                )
-            results.append(result)
-            self._write_index_md(results + self._stub_results_for_remaining(spec))
-        return results
+        results_lock = Lock()
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            future_to_spec = {
+                pool.submit(self._download_in_isolated_worker, spec, on_progress): spec
+                for spec in CANONICAL_NOVELS
+            }
+            for future in as_completed(future_to_spec):
+                spec = future_to_spec[future]
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    result = NovelDownloadResult(
+                        slug=spec.slug,
+                        title_zh=spec.title_zh,
+                        category=spec.category,
+                        category_zh=spec.category_zh,
+                        chapters_done=0,
+                        chapters_total=0,
+                        complete=False,
+                        errors=[f"top-level: {type(exc).__name__}: {exc}"],
+                    )
+                with results_lock:
+                    results.append(result)
+        self._write_index_md(self._reorder_to_canonical(results))
+        return self._reorder_to_canonical(results)
 
-    def _stub_results_for_remaining(self, last_done: NovelSpec) -> list[NovelDownloadResult]:
-        """Build placeholder rows for novels that haven't been touched yet
-        so _index.md still lists every canonical novel (with 0/0 progress)
-        between download_all iterations.
+    def _download_in_isolated_worker(
+        self,
+        spec: NovelSpec,
+        on_progress: object,
+    ) -> NovelDownloadResult:
+        """Each worker owns its own NovelDownloader (and therefore its
+        own httpx.Client + rate-limit clock). Avoids contention on a
+        shared mutex which would serialize the workers anyway.
         """
-        passed_last = False
-        out: list[NovelDownloadResult] = []
-        for spec in CANONICAL_NOVELS:
-            if not passed_last:
-                if spec.slug == last_done.slug:
-                    passed_last = True
-                continue
-            out.append(
-                NovelDownloadResult(
-                    slug=spec.slug,
-                    title_zh=spec.title_zh,
-                    category=spec.category,
-                    category_zh=spec.category_zh,
-                    chapters_done=0,
-                    chapters_total=0,
-                    complete=False,
-                )
-            )
-        return out
+        with NovelDownloader(
+            novels_root=self._root,
+            delay_min_seconds=self._delay_min,
+            delay_max_seconds=self._delay_max,
+            max_retries=self._max_retries,
+        ) as worker:
+            return worker.download(spec.slug, on_progress=on_progress)
+
+    def _reorder_to_canonical(
+        self,
+        results: list[NovelDownloadResult],
+    ) -> list[NovelDownloadResult]:
+        order = {spec.slug: i for i, spec in enumerate(CANONICAL_NOVELS)}
+        return sorted(results, key=lambda r: order.get(r.slug, 9999))
 
     def download(self, slug: str, on_progress: object = None) -> NovelDownloadResult:
         spec = find_novel(slug)
@@ -272,14 +326,33 @@ class NovelDownloader:
         meta_path = novel_dir / "_meta.json"
         body_path = novel_dir / f"{spec.slug}.md"
         meta = self._load_or_init_meta(meta_path, spec)
-        fresh_index = self._fetch_chapter_index(spec)
+        fresh_index, active = self._fetch_chapter_index(spec)
+        source_changed = (
+            meta.active_source_host != active.host
+            or meta.active_source_id != active.source_id
+        )
+        meta.active_source_host = active.host
+        meta.active_source_id = active.source_id
         if not meta.chapters:
             meta.chapters = fresh_index
             self._write_meta(meta_path, meta)
             body_path.write_text(
-                f"# {spec.title_zh}\n\n作者：{spec.author}\n\n来源：{spec.source_host}/{spec.source_id}/\n\n",
+                f"# {spec.title_zh}\n\n作者：{spec.author}\n\n来源：{active.host}/{active.source_id}/\n\n",
                 encoding="utf-8",
             )
+        elif source_changed:
+            # New source — rewrite chapter URLs by `idx`, preserve `done`/`hash`/`error`.
+            old_by_idx = {c.idx: c for c in meta.chapters}
+            new_chapters: list[ChapterRecord] = []
+            for fresh in fresh_index:
+                prev = old_by_idx.get(fresh.idx)
+                if prev is not None:
+                    fresh.done = prev.done
+                    fresh.hash = prev.hash
+                    fresh.error = prev.error if not prev.done else None
+                new_chapters.append(fresh)
+            meta.chapters = new_chapters
+            self._write_meta(meta_path, meta)
         elif len(fresh_index) > len(meta.chapters):
             for new_ch in fresh_index[len(meta.chapters):]:
                 meta.chapters.append(new_ch)
@@ -329,6 +402,8 @@ class NovelDownloader:
             category_zh=spec.category_zh,
             source_host=spec.source_host,
             source_id=spec.source_id,
+            active_source_host="",
+            active_source_id="",
             chapters=[],
             complete=False,
         )
@@ -338,20 +413,45 @@ class NovelDownloader:
         tmp.write_text(json.dumps(meta.to_json(), ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, meta_path)
 
-    def _fetch_chapter_index(self, spec: NovelSpec) -> list[ChapterRecord]:
-        base = f"https://www.{spec.source_host}/{spec.source_id}/"
+    def _fetch_chapter_index(
+        self, spec: NovelSpec
+    ) -> tuple[list[ChapterRecord], NovelSource]:
+        """Try each source in spec.sources. Return (chapters, active_source)
+        for the first reachable + parseable one. Raise if all sources fail.
+        """
+        last_exc: Exception | None = None
+        for src in spec.sources:
+            try:
+                chapters = self._fetch_chapter_index_for_source(src)
+                return chapters, src
+            except (ChapterIndexParseFailed, SourceUnreachable) as exc:
+                last_exc = exc
+                continue
+        raise ChapterIndexParseFailed(
+            f"all {len(spec.sources)} sources failed for {spec.slug}: {last_exc}"
+        )
+
+    def _fetch_chapter_index_for_source(self, src: NovelSource) -> list[ChapterRecord]:
+        if src.host == "sudugu.org":
+            return self._fetch_index_via_sudugu(src)
+        if src.host == "cn.ttkan.co":
+            return self._fetch_index_via_ttkan(src)
+        raise ChapterIndexParseFailed(f"no scraper registered for host {src.host!r}")
+
+    def _fetch_index_via_sudugu(self, src: NovelSource) -> list[ChapterRecord]:
+        base = f"https://www.{src.host}/{src.source_id}/"
         first_html = self._http_get(base)
-        pages_to_fetch = self._discover_index_pages(first_html, spec)
+        pages_to_fetch = self._discover_index_pages_sudugu(first_html, src)
         all_links: list[tuple[str, str]] = []
-        seen_urls: set[str] = set()
-        all_links.extend(self._parse_index_links(first_html, base))
+        all_links.extend(self._parse_index_links_sudugu(first_html, base))
         for url in pages_to_fetch:
             html = self._http_get(url)
-            for rel_url, title in self._parse_index_links(html, url):
+            for rel_url, title in self._parse_index_links_sudugu(html, url):
                 all_links.append((rel_url, title))
         if not all_links:
             raise ChapterIndexParseFailed(f"no chapter links found in index at {base}")
         records: list[ChapterRecord] = []
+        seen_urls: set[str] = set()
         for rel_url, title in all_links:
             if rel_url in seen_urls:
                 continue
@@ -360,18 +460,41 @@ class NovelDownloader:
                 ChapterRecord(
                     idx=len(records) + 1,
                     title=title.strip(),
-                    url=f"https://www.{spec.source_host}{rel_url}",
+                    url=f"https://www.{src.host}{rel_url}",
                 )
             )
         return records
 
-    def _parse_index_links(self, html: str, page_url: str) -> list[tuple[str, str]]:
+    def _fetch_index_via_ttkan(self, src: NovelSource) -> list[ChapterRecord]:
+        # src.host already carries the `cn.` subdomain (follow-up 109);
+        # do NOT prepend `www.`.
+        url = f"https://{src.host}/novel/chapters/{src.source_id}"
+        html = self._http_get(url)
+        links = _TTKAN_CHAPTER_LINK_RE.findall(html)
+        if not links:
+            raise ChapterIndexParseFailed(f"no chapter links found in ttkan index at {url}")
+        records: list[ChapterRecord] = []
+        seen_urls: set[str] = set()
+        for rel_url, title in links:
+            if rel_url in seen_urls:
+                continue
+            seen_urls.add(rel_url)
+            records.append(
+                ChapterRecord(
+                    idx=len(records) + 1,
+                    title=title.strip(),
+                    url=f"https://{src.host}{rel_url}",
+                )
+            )
+        return records
+
+    def _parse_index_links_sudugu(self, html: str, page_url: str) -> list[tuple[str, str]]:
         m = _INDEX_LIST_RE.search(html)
         if m is None:
             raise ChapterIndexParseFailed(f"index list block not found at {page_url}")
         return _CHAPTER_LINK_RE.findall(m.group(1))
 
-    def _discover_index_pages(self, first_html: str, spec: NovelSpec) -> list[str]:
+    def _discover_index_pages_sudugu(self, first_html: str, src: NovelSource) -> list[str]:
         opts_match = _INDEX_PAGE_OPTIONS_RE.search(first_html)
         if opts_match is None:
             return []
@@ -385,11 +508,27 @@ class NovelDownloader:
                 page_numbers.append(n)
         page_numbers = sorted(set(page_numbers))
         return [
-            f"https://www.{spec.source_host}/{spec.source_id}/p-{n}.html"
+            f"https://www.{src.host}/{src.source_id}/p-{n}.html"
             for n in page_numbers
         ]
 
     def _fetch_chapter_full(self, spec: NovelSpec, chapter: ChapterRecord) -> str:
+        """Dispatch to per-host fetcher based on the chapter URL.
+        Falls back to next source if the active one returns nothing parseable.
+        """
+        host = self._host_of_url(chapter.url)
+        if host == "sudugu.org":
+            return self._fetch_chapter_via_sudugu(chapter, "sudugu.org")
+        if host == "cn.ttkan.co":
+            return self._fetch_chapter_via_ttkan(chapter)
+        raise DownloadFailed(f"no chapter fetcher for host {host!r} (url={chapter.url})")
+
+    @staticmethod
+    def _host_of_url(url: str) -> str:
+        m = re.match(r"https?://(?:www\.)?([^/]+)", url)
+        return m.group(1) if m else ""
+
+    def _fetch_chapter_via_sudugu(self, chapter: ChapterRecord, host: str) -> str:
         parts: list[str] = []
         current_url = chapter.url
         visited: set[str] = set()
@@ -409,8 +548,15 @@ class NovelDownloader:
             if nm is None:
                 break
             next_rel = nm.group(1)
-            current_url = f"https://www.{spec.source_host}{next_rel}"
+            current_url = f"https://www.{host}{next_rel}"
         return "\n\n".join(p for p in parts if p)
+
+    def _fetch_chapter_via_ttkan(self, chapter: ChapterRecord) -> str:
+        html = self._http_get(chapter.url)
+        cm = _TTKAN_CONTENT_BLOCK_RE.search(html)
+        if cm is None:
+            raise DownloadFailed(f"ttkan content block not found at {chapter.url}")
+        return self._extract_paragraphs(cm.group(1))
 
     def _extract_paragraphs(self, body_html: str) -> str:
         paragraphs: list[str] = []
@@ -424,14 +570,16 @@ class NovelDownloader:
                 .replace("&quot;", '"')
                 .replace("&#39;", "'")
             )
+            text = _END_OF_CHAPTER_MARKER_RE.sub("", text).strip()
             if text:
                 paragraphs.append(text)
         return "\n\n".join(paragraphs)
 
     def _http_get(self, url: str) -> str:
+        required = random.uniform(self._delay_min, self._delay_max)
         elapsed = time.monotonic() - self._last_request_at
-        if elapsed < self._delay:
-            time.sleep(self._delay - elapsed)
+        if elapsed < required:
+            time.sleep(required - elapsed)
         last_exc: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:

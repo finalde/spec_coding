@@ -238,7 +238,7 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
             </select>
           </label>
           <label>
-            外貌气质
+            角色原型
             <select value={filterLook} onChange={(e) => setFilterLook(e.target.value)}>
               <option value={FILTER_ALL}>全部</option>
               {ATTR_OPTIONS.look.map((o) => <option key={o} value={o}>{o}</option>)}

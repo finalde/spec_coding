@@ -58,6 +58,7 @@ class ActorCommand:
             face=input_cdto.face,
             skin=input_cdto.skin,
             body=input_cdto.body,
+            qi_zhi=input_cdto.qi_zhi,
         )
         attrs.validate()
         validate_batch_count(input_cdto.count)

@@ -138,13 +138,38 @@ class TreeReader:
                 "shot_count": meta.shot_count,
                 "episode_count": meta.episode_count,
             }
-        return {
+        node: dict[str, Any] = {
             "type": "directory",
             "name": project_dir.name,
             "path": self._rel(project_dir),
             "children": sub,
             "project_meta": project_meta_payload,
         }
+        zh_title = self._project_zh_title(project_dir)
+        if zh_title:
+            node["display_name"] = zh_title
+        return node
+
+    def _project_zh_title(self, project_dir: Path) -> str | None:
+        """Per CLAUDE.md AI video rules: the Chinese title lives in
+        `ai_videos/{name}/README.md`. Extract it from the first H1 line —
+        canonical shape `# 《<title>》— AI 视频项目`.
+        """
+        readme = project_dir / "README.md"
+        if not readme.is_file():
+            return None
+        try:
+            with readme.open(encoding="utf-8") as fh:
+                for line in fh:
+                    stripped = line.strip()
+                    if stripped.startswith("# "):
+                        m = re.search(r"《([^》]+)》", stripped)
+                        if m:
+                            return m.group(1)
+                        return stripped[2:].strip() or None
+        except OSError:
+            return None
+        return None
 
     def _walk_filtered(self, directory: Path, leaf_predicate: Any) -> list[dict[str, Any]]:
         children: list[dict[str, Any]] = []

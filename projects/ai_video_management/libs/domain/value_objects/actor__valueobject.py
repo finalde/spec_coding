@@ -65,6 +65,14 @@ FACE_OPTIONS: frozenset[str] = frozenset(
         "心形脸", "国字脸", "菱形脸", "倒三角脸",
     }
 )
+QI_ZHI_OPTIONS: frozenset[str] = frozenset(
+    {
+        "阳光", "温柔", "清纯", "邻家", "楚楚动人",
+        "优雅", "高冷", "冷艳", "神秘", "知性",
+        "忧郁", "颓废", "沧桑", "阴鸷", "邪魅",
+        "霸气", "不羁", "萌系", "俏皮", "妩媚",
+    }
+)
 SKIN_OPTIONS: frozenset[str] = frozenset(
     {
         "白皙", "小麦色", "古铜色", "瓷白", "象牙白", "蜜糖色",
@@ -104,6 +112,7 @@ class ActorAttrs:
     face: str = ""
     skin: str = ""
     body: str = ""
+    qi_zhi: str = ""
 
     def validate(self) -> None:
         if self.ethnicity not in ETHNICITY_OPTIONS:
@@ -122,6 +131,7 @@ class ActorAttrs:
         _validate_optional_feature(self.face, FACE_OPTIONS, "face")
         _validate_optional_feature(self.skin, SKIN_OPTIONS, "skin")
         _validate_optional_feature(self.body, BODY_OPTIONS, "body")
+        _validate_optional_feature(self.qi_zhi, QI_ZHI_OPTIONS, "qi_zhi")
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -136,6 +146,7 @@ class ActorAttrs:
             "face": self.face,
             "skin": self.skin,
             "body": self.body,
+            "qi_zhi": self.qi_zhi,
         }
 
 

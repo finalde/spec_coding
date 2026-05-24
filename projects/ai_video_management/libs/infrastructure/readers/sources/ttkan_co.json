@@ -1,0 +1,54 @@
+{
+    "bookSourceComment": "Vendored from XIU2/Yuedu#85 (Legado 3.0 community source for 天天看小说 / cn.ttkan.co). Used as the first data point for the Legado-rule reader at libs/infrastructure/readers/legado__reader.py.",
+    "bookSourceGroup": "",
+    "bookSourceName": "天天看小说",
+    "bookSourceType": 0,
+    "bookSourceUrl": "https://cn.ttkan.co",
+    "bookUrlPattern": "",
+    "customOrder": 2,
+    "enabled": true,
+    "enabledCookieJar": false,
+    "enabledExplore": false,
+    "exploreUrl": "",
+    "header": "",
+    "lastUpdateTime": 1687361913056,
+    "loginUi": "",
+    "loginUrl": "",
+    "respondTime": 21167,
+    "ruleBookInfo": {
+        "author": "//meta[@name='og:novel:author']/@content",
+        "coverUrl": "//meta[@name='og:image']/@content",
+        "downloadUrls": "",
+        "intro": "//meta[@name='og:description']/@content",
+        "kind": "//meta[@name='og:novel:category']/@content&&//meta[@name='og:novel:status']/@content",
+        "lastChapter": "//meta[@name='og:novel:latest_chapter_name']/@content",
+        "name": "//meta[@name='og:novel:book_name']/@content",
+        "tocUrl": ""
+    },
+    "ruleContent": {
+        "content": "class.content@tag.p@text",
+        "nextContentUrl": "",
+        "replaceRegex": ""
+    },
+    "ruleExplore": {},
+    "ruleReview": {},
+    "ruleSearch": {
+        "author": "tag.li.1@text",
+        "bookList": "class.novel_cell",
+        "bookUrl": "tag.a.0@href",
+        "coverUrl": "tag.amp-img.0@src",
+        "intro": "tag.li.2@text",
+        "kind": "",
+        "lastChapter": "",
+        "name": "tag.h3.0@text"
+    },
+    "ruleToc": {
+        "chapterList": "class.full_chapters@children[1]@tag.a",
+        "chapterName": "text",
+        "chapterUrl": "href",
+        "preUpdateJs": "",
+        "updateTime": ""
+    },
+    "searchUrl": "/novel/search?q={{key}}",
+    "weight": 2
+}

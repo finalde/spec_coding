@@ -2,6 +2,242 @@
 
 Append-only follow-up audit log. Each entry records what the follow-up changed and which downstream artifacts were patched in the same turn.
 
+## Follow-up 110 — 2026-05-23 12:37:01
+Source: user_input/follow_ups/110-20260523-123701-add-five-popular-xianxia.md
+Summary: 用户要求 (a) resume in-progress novel downloads (恢复 `guangyin_zhiwai` 240/1383 起继续) + workers=2; (b) Assistant 从 sudugu xianxia 排行榜挑 5 部 ongoing/complete 高人气作品补进 catalog。Background task `bxxhdmqun` 已用 `--workers 2` 启动，新增 5 个 entries 后下次启动会自动跑这 5 部。
+
+Auto-updated:
+- `specs/development/ai_video_management/user_input/revised_prompt.md` — Last regenerated bumped to 2026-05-23 12:37:01；header 摘要描述 5 部新 entries + sudugu IDs + 不强行 restart 当前 background task 的理由。
+- `projects/ai_video_management/libs/domain/value_objects/novel__valueobject.py` — 仙侠 section 末尾追加 5 个 `NovelSpec`（`jianlai` 287 / `xian_ni` 410 / `dafeng_dagengren` 405 / `chixin_xuntian` 56 / `dadao_zhengfeng` 435）。注释 `# 仙侠 — added in follow-up 110 (popular ongoing/complete picks from sudugu xianxia ranking)` 与 follow-up 103 的 expanded comment 风格一致。所有 entries 用单一 `_sudugu(...)` source（ttkan 备源 deferred）。
+- (Zero changes to `apps/cli/novel_download.py` / `libs/infrastructure/writers/novel__writer.py` — `download_all` 已 iterates `CANONICAL_NOVELS`，新 entries 透传)。
+
+Runtime state:
+- Background task `bxxhdmqun` (workers=2) 在恢复 `guangyin_zhiwai` 后继续；新增 5 部不会在当前 task 内被发现（task 启动时已 capture 旧 tuple）。
+- 用户下次手动跑 `python -m apps.cli.novel_download --workers 2` 即拉新 5 部下载（resumable 状态机 + 现有 done chapters skip）。
+- No forced restart — 当前 task 正常跑完 `guangyin_zhiwai` + 其余 in-progress 仙侠 novels 是较优策略。
+
+Deferred (not in this follow-up):
+- ttkan 备源（参考 follow-up 107 multi-source pattern；若 sudugu 抓不下来时再补）。
+- 玄幻 / 都市 / 历史 / 科幻 / 言情 catalog 扩充。
+- workers 默认值调整（保持 follow-up 106 的 serial-by-default + opt-in `--workers N`）。
+
+Severity: Low — additive catalog entries, no breaking changes, no schema changes.
+
+## Follow-up 109 — 2026-05-21 20:31:17
+Source: user_input/follow_ups/109-20260521-203117-cn-ttkan-jitter-end-of-chapter.md
+
+Trigger: user asked whether `xueant-t/novel` (Java fork of `freeok/so-novel`) could help speed up novel downloads. Investigation cloned the upstream `freeok/so-novel` repo, read `bundle/rules/{main,rate-limit,no-search,proxy-required,cloudflare}.json` + `rule-template.json5` + the Java package layout under `src/main/java/com/pcdd/sonovel/`. Reported back with a 3-tier extract plan (quick wins / declarative rule-engine refactor / 3rd-4th fallback hosts). User picked path 1 only — three trivial wins, no architectural commitment. Architectural refactor and new hosts deferred until a 3rd source is actually needed.
+
+### What was taken from so-novel
+
+- **`cn.` subdomain for ttkan** — `bundle/rules/no-search.json` targets `cn.ttkan.co` which serves Simplified Chinese. Follow-up 107 added `ttkan.co` via the `www.` subdomain which serves Traditional Chinese (acknowledged in 107's "Caveats" as a deferred opencc problem). Switching the subdomain dissolves that caveat at the source.
+- **`(本章完)` filter regex** — every site rule in `bundle/rules/*.json` lists `chapter.filterTxt: "\\(本章完\\)"`. It's a near-universal Chinese-web-novel end-of-chapter boilerplate marker; my `_extract_paragraphs` was preserving it in body files.
+- **1.0–2.0 s random jitter delay** — so-novel's `crawl.minInterval`/`maxInterval` for both sudugu + ttkan converged on `1000`/`2000` ms with random uniform jitter per request. Anti-bot fingerprinting cares about request *cadence*, not just average rate — jitter at the same average is harder to fingerprint than a fixed 0.8 s.
+
+### What was deliberately NOT taken
+
+- **Declarative `SourceRule` dataclass + bs4/selectolax CSS-selector engine.** so-novel's `rule-template.json5` schema (CSS selectors, XPath, `crawl.concurrency`/`minInterval`/`maxInterval`, `chapter.filterTxt`/`filterTag`, `toc`/`chapter.pagination`/`nextPage`) is genuinely better than my hardcoded `_TTKAN_*_RE` + `_INDEX_LIST_RE` regex approach. Held until a 3rd source actually appears.
+- **`xbiqugu.la` / `22biqu.com` / `shuhaige.net` as 3rd/4th fallback hosts.** Each would need either new `_fetch_index_via_*` + `_fetch_chapter_via_*` pairs (deepens the per-host pattern) or the refactor above. Bundled with the refactor.
+- **`@js:` post-processing rules.** ~3 sites in `main.json` embed JavaScript snippets (base64 decode, paragraph reordering). Python equivalent is mini-racer / pyjsdom — heavy for narrow use.
+- **Cloudflare and proxy-required tier hosts** (`69shuba.com`, `quanben5.com`, `xhytd.com`, etc.). Would need `curl_cffi` for TLS fingerprint spoofing or actual proxies. Not pursued.
+- **The Legado scaffolding from follow-up 108** (`libs/infrastructure/readers/legado__reader.py` + `sources/ttkan_co.json`). Stays unwired and untouched — 109 is a different direction (surgical patches to existing helpers, not a rule-engine swap).
+- **opencc 繁→简 conversion** of pre-migration Traditional Chinese body fragments. Still deferred per 107.
+
+### Code changes
+
+1. **`libs/domain/value_objects/novel__valueobject.py`** — `_ttkan(source_slug)` factory returns `NovelSource("cn.ttkan.co", source_slug)` (was `"ttkan.co"`). Single-line change. All 5 ttkan-bearing entries (`fanren_xiuxian_zhuan`, `guangyin_zhiwai`, `wanmei_shijie`, `ze_tian_ji`, `lingjing_xingzhe`) flip together.
+
+2. **`libs/infrastructure/writers/novel__writer.py`**:
+   - Module docstring rate-limit line `0.8 s` → `1.0–2.0 s random jitter (follow-up 109)`.
+   - Added `import random`.
+   - Constant `_INTER_REQUEST_DELAY = 0.8` replaced with `_INTER_REQUEST_DELAY_MIN = 1.0` + `_INTER_REQUEST_DELAY_MAX = 2.0`.
+   - New module-level `_END_OF_CHAPTER_MARKER_RE = re.compile(r"\(本章完\)")`.
+   - `NovelDownloader.__init__` signature: `delay_seconds: float` → `delay_min_seconds: float, delay_max_seconds: float`. Stored as `self._delay_min` / `self._delay_max`.
+   - `_http_get` computes `required = random.uniform(self._delay_min, self._delay_max)` and sleeps for `required - elapsed` instead of the old fixed `self._delay - elapsed`.
+   - `_download_in_isolated_worker` plumbs both new delays to per-worker `NovelDownloader` instances.
+   - `_extract_paragraphs` strips the end-of-chapter marker after entity decode and before the empty-paragraph drop, so a paragraph that contained only the marker is removed entirely.
+   - `_fetch_index_via_ttkan` URL templates drop the `www.` prefix: `https://www.{src.host}/...` → `https://{src.host}/...`. `src.host` now carries `cn.` already.
+   - `_fetch_chapter_index_for_source` host comparison `if src.host == "ttkan.co"` → `if src.host == "cn.ttkan.co"`.
+   - `_fetch_chapter_full` host comparison `if host == "ttkan.co"` → `if host == "cn.ttkan.co"`. `_host_of_url` regex `https?://(?:www\.)?([^/]+)` does NOT strip `cn.` (only `www.`), so chapter URLs of shape `https://cn.ttkan.co/...` parse to host `cn.ttkan.co` correctly.
+   - `download_all` docstring updated to reflect the new per-worker rate (~3.3 req/s aggregate at 5 workers, was ~6 req/s).
+   - `_download_in_isolated_worker` docstring expanded with the rate-justification line.
+
+3. **CLI (`apps/cli/novel_download.py`)** — no change. Uses default delays.
+
+4. **Application layer / frontend / API routes / container** — no change. `NovelSource` and `NovelSpec` schemas unchanged; compat properties `source_host`/`source_id` still return `sources[0].host`/`source_id` byte-identical to before from the caller's perspective.
+
+### Migration semantics on next launch
+
+For the 5 ttkan-bearing novels, existing `_meta.json` files carry `active_source_host="ttkan.co"`. New spec exposes `cn.ttkan.co` → `_ensure_index` evaluates `meta.active_source_host != active.host` to True → re-fetches ttkan index from the new `cn.` subdomain → builds new chapter list with `cn.ttkan.co` URLs → for each new chapter looks up the old chapter at the same `idx` and preserves `done` / `hash` / `error` (last only if `not prev.done`). Already-downloaded Traditional Chinese chapter content in the body `.md` files stays verbatim — only un-done chapters get the Simplified URL going forward, so the body file is mixed-script at the migration boundary. Sudugu-only novels (`active_source_host="sudugu.org"`) are unaffected since host is unchanged.
+
+### Verification
+
+- **Static / import smoke (5/5 PASS)**: 5 ttkan sources resolve to `cn.ttkan.co`; `_END_OF_CHAPTER_MARKER_RE.sub('', 'final.(本章完)').strip() == 'final.'`; constants `_INTER_REQUEST_DELAY_MIN=1.0` / `_MAX=2.0`; `NovelDownloader(delay_min_seconds=0.5, delay_max_seconds=1.5)` constructs and stores both; `find_novel('fanren_xiuxian_zhuan').sources` returns `[NovelSource('sudugu.org', '128'), NovelSource('cn.ttkan.co', 'fanrenxiuxianchuan-wangyu')]` in order.
+- **Live HTTP probe** against `https://cn.ttkan.co/novel/chapters/fanrenxiuxianchuan-wangyu`: HTTP 200; final URL is `cn.ttkan.co` (no redirect to `www.`); first paragraph of chapter 1 reads "二愣子睁大着双眼，直直望着茅草和烂泥糊成的黑屋顶..." (fully Simplified — `着` not `著`, `烂` not `爛`, `仓` not `倉`, etc.); 0/8 Traditional char hits, 5/8 Simplified char hits on a sample of common 简↔繁 pairs (`这国时间个学发说` vs `這國時間個學發說`); 2453 chapter links parse with existing `_TTKAN_CHAPTER_LINK_RE` (same count as follow-up 107's `www.ttkan.co` index — index shape byte-identical). First chapter link `/novel/pagea/fanrenxiuxianchuan-wangyu_1.html` confirms the chapter URL pattern is unchanged.
+- **No filesystem mutation this turn**: existing `_meta.json` files untouched. Migration triggers automatically on the next `python -m apps.cli.novel_download` invocation.
+
+### Auto-updated
+
+- `user_input/revised_prompt.md` — `**Last regenerated:**` header bumped from 108 to 109; the 108 entry demoted to `**Prior bump:**` chain.
+- `changelog.md` — this entry.
+
+### No conflicts found in
+
+- `interview/qa.md`, `findings/*.md`, `final_specs/spec.md`, `validation/*.md` — none reference `ttkan.co`, `0.8 s` delay, or specific `(本章完)` boilerplate handling.
+
+## Follow-up 107 — 2026-05-21 00:11:30
+Source: user_input/follow_ups/107-20260521-001130-multi-source-fallback-ttkan-co.md
+
+Trigger: user picked "1 + 3" from the recovery menu — wait for the sudugu.org IP block to expire AND add multi-source fallback. The block in follow-up 106 exposed a structural weakness (single source per novel); multi-source is the architectural fix.
+
+### Probing summary
+
+9 candidate alt-sites tried; one verified usable: **ttkan.co**. Others returned 403 / connection-reset / DNS-fail (69shuba, biquge.tw, ddyueshu, biquge88, biqugesf, biqu5200, biquge.info, biquge365, bqg5). ttkan.co confirmed:
+- Has 5 of the popular novels via slug guessing (fanren_xiuxian_zhuan, guangyin_zhiwai, wanmei_shijie, ze_tian_ji, lingjing_xingzhe).
+- Chapter index served on a single page (no pagination — simpler than sudugu).
+- Chapter body in `<div class="content">` with `<p>` paragraphs — same shape as sudugu.
+- Content is Traditional Chinese (sudugu was Simplified). Body files will end up mixed for novels that source-switch; user can run opencc later if uniform script is needed.
+
+### Design
+
+- New `NovelSource(host, source_id)` frozen dataclass in domain VO.
+- `NovelSpec.sources: tuple[NovelSource, ...]` replaces single `source_host` + `source_id` fields. Compat properties (`spec.source_host`, `spec.source_id`) return `sources[0]` so all callers (queries, mappers, DTOs, frontend) stay byte-identical.
+- `NovelMeta` gains `active_source_host` + `active_source_id` fields. Empty until first successful index fetch. JSON `from_json` falls back to `source_host` / `source_id` for legacy meta files (zero migration noise).
+- 5 novels updated to multi-source: `fanren_xiuxian_zhuan` (sudugu→ttkan), `guangyin_zhiwai`, `wanmei_shijie`, `ze_tian_ji`, `lingjing_xingzhe`. The other 34 stay sudugu-only — extending the manifest requires manual ttkan-slug discovery per novel.
+
+### Infrastructure dispatch
+
+Writer rewritten with per-host scrapers:
+- `_fetch_index_via_sudugu(src)` — paginated index (existing logic, factored out).
+- `_fetch_index_via_ttkan(src)` — single-page index, anchor pattern `<a href="/novel/pagea/{slug}_{N}.html">第N章 标题</a>`.
+- `_fetch_chapter_via_sudugu(chapter, host)` — chapter with `下一页` pagination (existing logic).
+- `_fetch_chapter_via_ttkan(chapter)` — single chapter page, content in `<div class="content">`.
+- `_fetch_chapter_index(spec)` iterates `spec.sources`, returns first success; dispatcher uses `src.host` to pick scraper.
+- `_fetch_chapter_full(spec, chapter)` dispatches on the URL's host (parsed via static `_host_of_url`), so chapter URLs from different sources route to the right fetcher even if a meta carries mixed URLs (it shouldn't normally — `_ensure_index` rewrites all chapter URLs on source switch).
+
+### Source switch — done flags preserved by idx
+
+When `_ensure_index` detects `meta.active_source_host != active.host` (e.g. existing meta says sudugu but sudugu is now blocked, falling through to ttkan), it:
+1. Indexes the *new* active source.
+2. Builds a new chapter list with the new source's URLs.
+3. For each new chapter, looks up the old chapter at the same `idx` and copies `done` / `hash` / `error` (the last only if `not prev.done`).
+4. Replaces `meta.chapters` and writes meta.
+
+Verified live on a copy of `xianxia/fanren_xiuxian_zhuan/_meta.json` (501 chapters done from sudugu): post-migration meta has 2453 chapters (ttkan count, vs sudugu's 2512), `done count == 501` preserved, all URLs rewritten to ttkan format, `active_source` populated. ✓
+
+### Caveats acknowledged
+
+- Chapter count differs between sources (sudugu 2512 vs ttkan 2453 for fanren). After source switch, the last ~59 sudugu-only chapters become unreachable. Acceptable: the bulk of the novel transfers cleanly. User can manually re-add them later if sudugu unblocks.
+- Traditional vs Simplified Chinese: source-switched body files will have mixed scripts at the boundary. Out of scope for this turn (opencc conversion deferred).
+- Auto-detect-and-switch mid-novel still not implemented — switch only happens at `_ensure_index` time (i.e. next launch). Acceptable: chapter-fetch failures already mark `error` in meta and stop further attempts for that chapter; next launch re-indexes and probably picks a working source.
+
+### Changes
+
+1. **Modified Python files (2)**:
+   - `libs/domain/value_objects/novel__valueobject.py` — `NovelSource` dataclass; `NovelSpec.sources` schema + compat properties; manifest updated (5 novels gain ttkan as 2nd source).
+   - `libs/infrastructure/writers/novel__writer.py` — `NovelMeta` gains `active_source_*` fields; new per-host fetcher methods (`_fetch_index_via_*`, `_fetch_chapter_via_*`); `_ensure_index` detects source change + migrates chapter URLs preserving `done`-by-idx; new patterns `_TTKAN_CHAPTER_LINK_RE` + `_TTKAN_CONTENT_BLOCK_RE`; new dispatcher `_host_of_url`.
+2. **No code change**: application layer (queries / mappers / DTOs), frontend, API routes, container — all unchanged. The new fields exist behind the existing surface.
+3. **No filesystem change** this turn: existing `xianxia/fanren_xiuxian_zhuan/_meta.json` is untouched; the source migration will trigger automatically the next time the downloader launches and finds sudugu still blocked.
+
+### Verification
+
+- `pytest tests/test_boot_smoke.py tests/test_tree_walker_consumer_walk.py::test_tree_sections_order tests/test_tree_walker_consumer_walk.py::test_novels_section_walks_repo_novels_dir tests/test_api_security_three_shapes.py::test_get_tree_unguarded` → 10/10 passing ✓
+- `_fetch_chapter_index(spec)` on fanren_xiuxian_zhuan: sudugu fails (302→google→parse fail), falls through to ttkan, returns 2453 chapters, active=`ttkan.co/fanrenxiuxianchuan-wangyu` ✓
+- `_fetch_chapter_full` on chapter 1 via ttkan: 350-char body extracted in Traditional Chinese ✓
+- Source-switch migration on copy of real fanren meta: 501 done flags preserved, URLs rewritten to ttkan, total chapters 2512→2453, active_source populated ✓
+
+### Scope deferred
+
+- Mid-novel source switch (currently only at `_ensure_index` time).
+- Search-driven ttkan slug discovery for the other 34 novels.
+- Multi-site fallback beyond ttkan (other candidates currently hostile/down).
+- opencc conversion for source-switched novels.
+- 302→google.com circuit-breaker in `_http_get` (better error reporting, not a correctness fix).
+
+## Follow-up 106 — 2026-05-20 23:57:18
+Source: user_input/follow_ups/106-20260520-235718-sudugu-ip-block-revert-to-serial-default.md
+
+Trigger: within ~10 s of launching the 5-worker parallel downloader from follow-up 105, every chapter request started returning **HTTP 302 → https://www.google.com/**. Verified the block with 3 different User-Agents (Chrome / Firefox / curl) from the same client IP — all 3 got the same 302. Sudugu.org's edge fired a per-IP anti-bot rule.
+
+User had explicitly accepted this risk in 105 ("可能封 IP" was in the choice prompt); this follow-up captures the consequence + the immediate mitigation.
+
+### Changes
+
+1. **Modified Python file**:
+   - `apps/cli/novel_download.py` — default `workers` reverted from 5 → 1. Three lines: `Usage:` docstring, the comment line above the default, the `workers = N` initializer. Parallel-mode code path (`download_all`'s ThreadPoolExecutor body + `_download_in_isolated_worker` from 105) stays intact; user can opt back into parallel via `--workers 3` once the block clears.
+2. **No filesystem cleanup** — every chapter the parallel workers attempted is `done=False` with an `error` field set; the resume loop picks them up automatically on next launch. `xianxia/fanren_xiuxian_zhuan/` checkpoint preserved at 501.
+3. **Background job**: parallel downloader killed; no relaunch this turn (waiting for the block to clear).
+
+### Verification
+
+- 3 separate UA probes (Chrome 120, Firefox 120, curl/8) to `sudugu.org/128/` and `sudugu.org/128/10643.html` — all 4 return 302 to google.com. Block is per-IP, not per-UA.
+- `apps/cli/novel_download.py` `--workers` flag still parses; `--workers 3` (or higher) still wires into `download_all(max_workers=3)`. Parallel path is dormant, not deleted.
+
+### What surfaced as a missing defense
+
+The misleading error chain was: 302 → google.com → httpx followed redirect → 200 with google's HTML → `<div class="con">` regex missed → `DownloadFailed: content block not found at <chapter URL>`. The chapter URL in the error is the *original* requested URL, not the *final* response URL, which made the message confusing. Future improvement (deferred): `_http_get` should check `response.url.host == source_host` and raise a `SourceBlocked` error early instead of letting parsing fail downstream.
+
+### User-facing trade-offs
+
+- Sidebar `Novels` section will stay empty for longer than originally hoped — the 105 parallel-run wasted ~10 s of wall-clock and traded that for a multi-minute-to-multi-hour IP block.
+- Once the block lifts (likely 15-60 min, possibly longer; CDN edge rules typically have short TTLs), `python -m apps.cli.novel_download` will resume `fanren_xiuxian_zhuan` from chapter 502, single-threaded, polite-rate.
+
+### Scope deferred
+
+- 302-detect-and-halt in `_http_get` (better error reporting for the next time we get blocked).
+- Multi-source fallback (route around a blocked source).
+- VPN/proxy integration.
+- Auto-back-off across CLI launches (detect the block, sleep, retry).
+
+## Follow-up 105 — 2026-05-20 23:51:17
+Source: user_input/follow_ups/105-20260520-235117-parallel-downloader-thread-pool.md
+
+Trigger: user picked "2 + 3" from a speedup menu: option 2 = parallel downloads (accepting higher request rate to sudugu.org), option 3 = keep existing fanren progress alive. After follow-up 104's strict-serial design, the wall-clock estimate for the 39-novel manifest was ~9 hours; the user wanted faster.
+
+### Design
+
+- `download_all` switched from serial loop to `ThreadPoolExecutor(max_workers=5)`. Each future runs `_download_in_isolated_worker(spec)` which creates a **fresh `NovelDownloader` per call** with its own `httpx.Client` + its own `_last_request_at` clock. This is critical: sharing the existing instance would have serialized workers on the shared rate-limit mutex, defeating the parallelism.
+- Per-worker 0.8 s polite delay still applies, so each individual stream is polite; but with 5 workers the aggregate request rate to sudugu.org peaks around ~6 req/s. User explicitly accepted this risk.
+- `download(slug)` (the single-novel path used by `NovelCommand.download(slug)`) is unchanged — still synchronous, still one client, still one rate clock. Parallel behavior only kicks in via `download_all`.
+- Results are sorted back into canonical (`CANONICAL_NOVELS`) order before `_write_index_md` writes the markdown index, so `_index.md` reads predictably regardless of completion-order interleaving.
+- Dead `_stub_results_for_remaining` helper from follow-up 104 removed (no longer needed — `_write_index_md` runs once at the end of `download_all`).
+- CLI gains an optional `--workers N` flag (default 5) so the user can tune up/down without code edits.
+
+### Resume contract preserved
+
+Each `novels/{cat}/{slug}/` directory is owned by exactly one worker for the duration of that novel's download — no two threads touch the same `_meta.json`. The `_load_or_init_meta` → `_ensure_index` → per-chapter `_write_meta` chain stays unchanged. `xianxia/fanren_xiuxian_zhuan/` at checkpoint 501 was picked up by the parallel runner and resumed from chapter 502.
+
+### Changes
+
+1. **Modified Python files (2)**:
+   - `libs/infrastructure/writers/novel__writer.py`:
+     - Imports added: `ThreadPoolExecutor`, `as_completed` (from `concurrent.futures`), `Lock` (from `threading`).
+     - `download_all` body replaced with thread-pool runner; new `_download_in_isolated_worker(spec, on_progress)` helper; new `_reorder_to_canonical(results)` helper.
+     - `_stub_results_for_remaining` removed (dead code from follow-up 104).
+   - `apps/cli/novel_download.py`:
+     - `--workers N` / `--workers=N` flag parsing.
+     - Banner now reads `downloading all canonical novels (parallel, workers={n})`.
+2. **Background job**: serial downloader killed at fanren=501/2512; parallel downloader relaunched with 5 workers. Verified: 5 novels in flight (fanren_xiuxian_zhuan, guangyin_zhiwai, jie_jian, meiqian_xiu_shenme_xian, xuanjian_xianzu) — all xianxia, all resuming from `_meta.json` checkpoints.
+
+### Verification
+
+- `pytest tests/test_boot_smoke.py tests/test_tree_walker_consumer_walk.py::test_tree_sections_order tests/test_tree_walker_consumer_walk.py::test_novels_section_walks_repo_novels_dir tests/test_api_security_three_shapes.py::test_get_tree_unguarded` → 10/10 passing ✓
+- `inspect.signature(NovelDownloader.download_all)` returns `(self, on_progress, max_workers)` ✓
+- 5 worker folders observed on disk within ~8 s of launch — confirms concurrent activity.
+- Fanren resume monitor armed; will fire when chapter 502 appears in log.
+
+### Trade-offs (the user explicitly accepted)
+
+- Aggregate request rate ~6 req/s → some risk that sudugu.org rate-limits or temp-blocks the IP. Mitigation: existing exponential backoff in `_http_get` (retries on 429 / 5xx, up to 3 attempts with 1.5^attempt backoff).
+- CPU/memory: 5 simultaneous httpx clients = 5 TCP connections + 5 SSL contexts. Negligible on a desktop.
+- Order of completion is non-deterministic; the sidebar's `complete-only` filter (from 104) hides this — novels just appear in arrival order as they finish.
+
+### Scope deferred
+
+- Cross-source / per-IP global rate limit (would force serial across workers).
+- Adaptive worker count (e.g. drop to 2 if 429s arrive).
+- async-IO refactor (would let us reach the polite-rate ceiling without OS threads, but ROI low at this scale).
+
 ## Follow-up 104 — 2026-05-20 23:34:36
 Source: user_input/follow_ups/104-20260520-233436-novels-serial-mode-complete-only-sidebar.md
 
@@ -3286,3 +3522,29 @@ Auto-updated:
 - specs/development/ai_video_management/user_input/revised_prompt.md — header bump (Last regenerated 2026-05-20 21:33:34, follow-up 100 narrative + previous 099 demoted to Prior bump).
 
 No conflicts found in: final_specs/spec.md (only structural mention of Breadcrumb.tsx as a ported component — no behavioral contract), findings/dossier.md (same), validation/* (no breadcrumb requirements), interview/qa.md, apps/api/* (pure frontend change), other UI components.
+
+## Follow-up 101 — 2026-05-21 00:24:55
+Source: user_input/follow_ups/101-20260521-002455-sidebar-default-collapsed.md
+Summary: Sidebar tree defaults to every directory collapsed on initial load; deep-link auto-expand of currentPath ancestors and user toggle persistence across refreshes are preserved.
+
+Auto-updated:
+- projects/ai_video_management/apps/ui/src/components/Sidebar.tsx — line 91 `accum[node.path] = true` → `accum[node.path] = false` in the tree-load `useEffect`. The render-side `isOpen = depth === 0 ? true : expanded[node.path] === true` (line 133) is unchanged, so top-level sections stay always-open. The `{ ...accum, ...prev }` merge order keeps user-toggled state across `onTreeReload` refreshes. The currentPath ancestor-expansion effect (lines 98-108) is unchanged.
+- specs/development/ai_video_management/user_input/revised_prompt.md — header bump (Last regenerated 2026-05-21 00:24:55, follow-up 101 narrative + previous 100 demoted to Prior bump).
+
+No conflicts found in: final_specs/spec.md (FR-90 mentions `_actors/` icon "Standard expand/collapse + folder navigation behavior is unchanged" — refers to that one folder’s behavior, not the global default expansion contract; no FR pins the default-expanded state), findings/dossier.md, interview/qa.md, validation/* (no sidebar default-state requirements), apps/api/* (pure frontend change), apps/ui/e2e/* (no expand/toggle assertions), other UI components.
+
+## Follow-up 108 — 2026-05-21 00:52:00
+Source: user_input/follow_ups/108-20260521-005200-legado-rule-reader.md
+Summary: Add a Legado-3.0-rule-driven HTML reader as opt-in scaffolding so future novel-source fallbacks can be added by dropping a JSON book-source under `libs/infrastructure/readers/sources/` instead of hand-coding per-host scrapers. No existing download path touched; Legado would not help with follow-up 106's speed/anti-bot problem (same HTTP signature would trip the same rate limit), so this targets follow-up 107's extension axis only.
+
+Auto-updated:
+- projects/ai_video_management/libs/infrastructure/daos/__init__.py — new role folder under infrastructure (first DAO entry for this solution).
+- projects/ai_video_management/libs/infrastructure/daos/legado_source__dao.py — frozen-dataclass DAO mirroring the Legado book-source JSON (snake_case attrs); nested `LegadoTocRulesDao` / `LegadoContentRulesDao` / `LegadoBookInfoRulesDao` / `LegadoSearchRulesDao`; `from_legado_json(dict)` constructor that drops unknown fields.
+- projects/ai_video_management/libs/infrastructure/errors/legado_source__error.py — `LegadoRuleError`, `LegadoUnsupportedSyntaxError`, `LegadoFetchError`.
+- projects/ai_video_management/libs/infrastructure/readers/legado__reader.py — `_LegadoEngine` (stateless rule evaluator: XPath / CSS / default tag-class-id path / `&&` concat / trailing `##pat##rep##`; raises on `@js:` / JSONPath / AllInOne single-colon regex) and `LegadoReader` (HTTP client + `fetch_toc` / `fetch_chapter` / `fetch_book_info`; `from_json_file(path)` classmethod; context-manager protocol; owns its `httpx.Client` with the existing downloader's UA + zh-CN headers).
+- projects/ai_video_management/libs/infrastructure/readers/sources/ttkan_co.json — vendored Legado 3.0 community source for `cn.ttkan.co` (from XIU2/Yuedu#85); first data point that exercises the rule grammar (XPath in ruleBookInfo, default-path syntax `class.content@tag.p@text` in ruleContent, `class.full_chapters@children[1]@tag.a` + bare `text`/`href` accessors in ruleToc).
+- projects/ai_video_management/pyproject.toml — add `lxml>=5.0` and `cssselect>=1.2` (HTML parse + XPath + CSS). Both ship precompiled Windows wheels for Python 3.10+; no native build chain.
+- projects/ai_video_management/requirements.txt — mirror the new deps.
+
+No conflicts found in: novel__writer.py (Legado reader is additive; existing `_fetch_index_via_sudugu` / `_fetch_index_via_ttkan` helpers unchanged — switching them to Legado JSON form would be a future follow-up with parity tests), application layer (no new query/command since nothing consumes the reader yet), apps/api/* + apps/ui/* (no route or UI surface change), apps/cli/novel_download.py (no CLI change; `--workers 1` default from follow-up 106 stays), final_specs/spec.md (no FR pins the scraper architecture; spec describes downloader behavior, not internal extensibility), findings/dossier.md, interview/qa.md, validation/* (no requirements on rule-engine layering), root pyproject.toml + requirements.txt (scoped to spec_studio platform; ai_video_management is a separate solution).
+

@@ -1244,6 +1244,55 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   opacity: 0.6;
 }
 
+/* qi_zhi multi-select: chip row spans the whole form-grid width since 20
+ * options wouldn't fit comfortably inside one of the 2-col grid cells. */
+.form-field:has(.qi-zhi-chips) {
+  grid-column: 1 / -1;
+}
+.qi-zhi-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+}
+.qi-zhi-chip,
+.qi-zhi-chip-clear {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+.qi-zhi-chip {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.qi-zhi-chip:hover:not(:disabled) {
+  border-color: var(--accent, #2563eb);
+}
+.qi-zhi-chip-selected {
+  background: var(--accent, #2563eb);
+  color: white;
+  border-color: var(--accent, #2563eb);
+}
+.qi-zhi-chip:disabled,
+.qi-zhi-chip-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.qi-zhi-chip-clear {
+  font-size: 12px;
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+}
+.qi-zhi-chip-clear:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
 /* === Casting view (follow-up 014) === */
 .casting-view {
   padding: 14px 16px;

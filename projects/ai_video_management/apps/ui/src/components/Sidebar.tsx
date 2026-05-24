@@ -88,7 +88,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
     const accum: Record<string, boolean> = {};
     const walk = (node: TreeNode): void => {
       if (node.type === "file" || node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "actor") return;
-      if (node.path) accum[node.path] = true;
+      if (node.path) accum[node.path] = false;
       for (const c of node.children ?? []) walk(c);
     };
     walk(tree);

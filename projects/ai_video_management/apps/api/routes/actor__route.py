@@ -60,6 +60,7 @@ class GenerateActorsBody(BaseModel):
     face: str = ""
     skin: str = ""
     body: str = ""
+    qi_zhi: str = ""
 
 
 class GenerateDiverseActorsBody(BaseModel):
@@ -93,6 +94,7 @@ def _generate_input(body: GenerateActorsBody) -> GenerateActorsInputCdto:
         face=body.face,
         skin=body.skin,
         body=body.body,
+        qi_zhi=body.qi_zhi,
     )
 
 
