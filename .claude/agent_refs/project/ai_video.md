@@ -228,6 +228,12 @@ AI-video generators (Kling 2.1 Pro, Seedance 1.0 Pro) cap individual clips at ~1
 > ```
 > Existing shot prompts migrated via `tools/simplify_voice_direction.py` (13 files / 17 lines, currently nvdi only — mozun_chongsheng + feng_shou_lu have no 念法 lines yet). Future shot prompts MUST follow this format; stage-6 validators MUST reject `· 念法 (...)` lines containing per-字 timing direction or `严禁 X / 严禁 Y` ban-lists (the no-copy and key-voice bullets carry all the model-actionable signal).
 
+> **⚠ 2026-05-30 amendment — 画外音/OS 台词必须显式归属说话人 + 锁定在画人物口型 (避免说话人误判).** Per follow-up "shot2 台词是太监说的, kling 误解成陈国公说的": when a shot's 台词 is spoken by a character who is NOT in frame (画外音 / OS / voice-over / reverse-POV reaction cutaway), video models (observed: **Kling** in `nvdi_tuihun_houhuile` shot02) lip-sync the line onto the most prominent ON-SCREEN face, mis-attributing the speaker. Every off-screen 台词 line MUST therefore carry BOTH:
+> 1. an explicit speaker label `【画外音 / OS · 说话人=<角色>(不在画面内)】` (NOT a bare `<角色> OS:`) so the line is not bound to a visible face;
+> 2. a `· 在画人物口型:` sub-bullet naming **every** on-screen character and stating they 全程闭口 / 嘴唇不动 / 无说话口型 (听旨方·反应方, 非说话人), 严禁把该台词对到任何在画人物嘴上。
+>
+> Reinforce in the `动作:` beats (在画人物「全程闭口、无说话口型」) and, in shots that still carry a `负向:` line (起始帧/结束帧 frames), add `不要 给<在画人物>配口型`. **内心独白 / V.O. is the same contract** — the speaker's own mouth must not move (`V.O. 内心 OS 无嘴动`); `shot06` / `shot14` are the reference good-pattern. On-screen (on-camera) dialogue instead names the visible speaker in the 台词 label as normal. Stage-6 validators SHOULD flag any OS / 画外 / V.O. 台词 line whose shot has ≥1 on-screen character but no `在画人物口型` (or equivalent `无嘴动`) directive. Existing nvdi shots fixed: shot02 (full), shot04 + shot11 (OS 余音 over on-screen 陈国公).
+
 > **⚠ 2026-05-27 amendment — `场景视角锚:` and `角色 (一句话锁定...):` body fields ABOLISHED in shot prompts.** Per follow-up "把 shot prompt裏所有 场景视角锚 都去掉" + "把角色這一段也去掉": both fields duplicate information already carried by the reference-line header at the top of every shot code block (added 2026-05-24 per rule 12.4-F — `<char>請參考: <drama>_<char>` lines and `<scene>:<drama>_<scene>` line). Body-level repetition is废话 and bloats the prompt.
 > - `场景视角锚:` (a paragraph describing which scene-mp4 dwell to anchor to + per-dwell ban list) — REMOVED. The reference-line header already names the scene handle; the model derives the anchor from the rendered scene mp4 + the `镜头:` framing description.
 > - `角色 (N 一句话锁定, byte-identical 复制自 character bibles 第 10 行):` block + its indented child rows — REMOVED. The reference-line header already names every character (visible AND voice-only OS, per rule 12.4-F contract #4); the per-character 一句话锁定 in the body just re-prints the same character handle.
@@ -1330,6 +1336,29 @@ shot_inputs:
 **Stage-6 validation**: `## 起始帧` / `## 结束帧` / `## 视频 prompt` 任一代码块首行不是对应的 `*_起始帧` / `*_结束帧` / `*_视频` 标识符 = `warning` (不阻断渲染, 但破坏下载归档命名)。
 
 *(Originated from follow-up "prompt 首行加 shot 元数据" — 2026-05-30. 下载图 / 视频按 prompt 首词命名, 加 shot 标识便于归档分类。)*
+
+#### 12.6-E 起始帧 / 结束帧 still-frame 写作契约 — 多角色相对位置 + 动作 + 表情, 无声音 (per follow-up "still-frame 描述要素" — 2026-05-30)
+
+`## 起始帧` / `## 结束帧` 是喂给 Seedream / Midjourney 的**静帧图片** prompt。图片生成器只画"这一帧定格的画面", 不放声音。因此这两段必须把"一张静止画面"描述完整、可画, 且**不含任何声音 / 台词 / 语气信息**。
+
+**必须描述清楚 (每个 on-screen 角色都写)**:
+
+1. **相对位置 (相对其他人物 + 相对画面)** — `角色姿态` 字段写明每个入画角色站 / 跪 / 坐在画面何处, 以及**彼此的相对位置关系** (谁在左 / 谁在右 / 谁在前景 / 谁在后景 / 间隔多远 / 谁面朝谁)。单角色 shot 写主体在 frame 的位置即可; 多角色 shot **必须给出角色之间的空间布局**, 不能只描述一个角色。画外不入画的角色显式标注"不入画"。
+2. **动作 (定格瞬间)** — 每个角色在 t=0 (起始帧) / t=末 (结束帧) 那一帧**凝固的物理动作 / 姿态 / 道具操作**, 一句话定格 (不是一段时间的运动)。
+3. **表情** — 每个角色的面部表情 / 眼神 / 嘴形 / 神情, 写进 `表情` 字段 (多角色时逐个写)。
+
+**禁止 (因为是静帧图片)**:
+
+- 不写台词原文 / 配音语气 / 音区音量 / 念法 / TTS 提示 — 一切声音信息只属于 `## 视频 prompt` 的 `台词 / 字幕:` 字段。
+- 不写时间区间运动 (`0-2s ...`) — 起始 / 结束帧是单一瞬间; timed 运动只属于 `## 视频 prompt` 的 `动作:`。
+
+**Stage-6 validation**:
+
+- 多角色 shot 的 `## 起始帧` / `## 结束帧` 只描述了 1 个角色、缺少角色间相对位置 = `warning`。
+- `## 起始帧` / `## 结束帧` 出现台词原文 / 配音语气 / 音量音区等声音信息 = `warning` (应移到视频 prompt 台词字段)。
+- `表情` 字段缺失 (多角色时缺其中某角色的表情) = `warning`。
+
+*(Originated from follow-up "still-frame 描述要素" — 2026-05-30. 用户要求 start / end frame 描述清楚角色相对其他人物的位置 / 动作 / 表情; 因生成图片无需声音。)*
 
 #### 12.6-B Per-episode 纯对白 `dialogue.md` derived from chapter（per follow-up xianxia_new/011 — 2026-05-24）
 

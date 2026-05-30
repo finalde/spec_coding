@@ -24,6 +24,7 @@ const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const AUDIO_EXTS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
 const MEDIA_EXTS = new Set([...VIDEO_EXTS, ...IMAGE_EXTS, ...AUDIO_EXTS]);
 const ARCHIVE_DIR_NAME = "archive";
+const RENDERS_DIR_NAME = "renders";
 
 /** Matches `ai_videos/{drama}/characters/c{N}[_{slug}]/{file}.{video_ext}`.
  * Used to gate the 🖼 three-view + audio extraction button so it only
@@ -57,6 +58,23 @@ function findSiblingMedia(currentPath: string, all: string[]): string[] {
       if (p === currentPath) return false;
       if (!p.startsWith(parent)) return false;
       const tail = p.slice(parent.length);
+      if (tail.includes("/")) return false;
+      return MEDIA_EXTS.has(extOf(p));
+    })
+    .sort();
+}
+
+/** Media inside the current folder's `renders/` subfolder — where the import
+ * flow drops shot-generated images/videos (start-frame / end-frame / video),
+ * keeping their original names. Immediate children only. */
+function findRendersMedia(currentPath: string, all: string[]): string[] {
+  const lastSlash = currentPath.lastIndexOf("/");
+  if (lastSlash < 0) return [];
+  const rendersPrefix = `${currentPath.slice(0, lastSlash + 1)}${RENDERS_DIR_NAME}/`;
+  return all
+    .filter((p) => {
+      if (!p.startsWith(rendersPrefix)) return false;
+      const tail = p.slice(rendersPrefix.length);
       if (tail.includes("/")) return false;
       return MEDIA_EXTS.has(extOf(p));
     })
@@ -257,12 +275,14 @@ function Toolbar({
 
 export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMediaProps): JSX.Element | null {
   const siblings = useMemo(() => findSiblingMedia(currentPath, knownPaths), [currentPath, knownPaths]);
+  const renders = useMemo(() => findRendersMedia(currentPath, knownPaths), [currentPath, knownPaths]);
   const archived = useMemo(() => findArchivedMedia(currentPath, knownPaths), [currentPath, knownPaths]);
   const [busyPath, setBusyPath] = useState<string | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
   const [extractingPath, setExtractingPath] = useState<string | null>(null);
   const [extractingViewsPath, setExtractingViewsPath] = useState<string | null>(null);
   const [selectedActive, setSelectedActive] = useState<Set<string>>(() => new Set());
+  const [selectedRenders, setSelectedRenders] = useState<Set<string>>(() => new Set());
   const [selectedArchived, setSelectedArchived] = useState<Set<string>>(() => new Set());
 
   // Drop selected paths that no longer exist in the lists after a tree refresh
@@ -271,10 +291,13 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
     setSelectedActive((prev) => prune(prev, siblings));
   }, [siblings]);
   useEffect(() => {
+    setSelectedRenders((prev) => prune(prev, renders));
+  }, [renders]);
+  useEffect(() => {
     setSelectedArchived((prev) => prune(prev, archived));
   }, [archived]);
 
-  if (siblings.length === 0 && archived.length === 0) return null;
+  if (siblings.length === 0 && renders.length === 0 && archived.length === 0) return null;
 
   const handleArchive = async (path: string): Promise<void> => {
     setBusyPath(path);
@@ -346,8 +369,31 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
   const toggleActive = (path: string): void => {
     setSelectedActive((prev) => toggle(prev, path));
   };
+  const toggleRendersSel = (path: string): void => {
+    setSelectedRenders((prev) => toggle(prev, path));
+  };
   const toggleArchivedSel = (path: string): void => {
     setSelectedArchived((prev) => toggle(prev, path));
+  };
+
+  const handleBatchArchiveRenders = async (): Promise<void> => {
+    const paths = renders.filter((p) => selectedRenders.has(p));
+    if (paths.length === 0) return;
+    setBusy(true);
+    const successes: string[] = [];
+    const failures: { name: string; kind: string }[] = [];
+    for (const p of paths) {
+      try {
+        await archiveMedia(p);
+        successes.push(p);
+      } catch (err) {
+        failures.push({ name: basename(p), kind: errorKind(err) });
+      }
+    }
+    setSelectedRenders(new Set());
+    setBusy(false);
+    onChange?.();
+    announce(buildBatchAnnounce("Archived", successes.length, failures));
   };
 
   const handleBatchArchive = async (): Promise<void> => {
@@ -392,6 +438,39 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
 
   return (
     <section className="sibling-media-grid" aria-label="Sibling media in folder">
+      {renders.length > 0 ? (
+        <>
+          <h3>🎬 Renders · 生成产物 (renders/)</h3>
+          <Toolbar
+            total={renders.length}
+            selectedCount={selectedRenders.size}
+            busy={busy}
+            archived={false}
+            onSelectAll={() => setSelectedRenders(new Set(renders))}
+            onClear={() => setSelectedRenders(new Set())}
+            onBatch={handleBatchArchiveRenders}
+          />
+          <div className="sibling-media-row">
+            {renders.map((p) => (
+              <MediaTile
+                key={p}
+                path={p}
+                archived={false}
+                busy={busy || busyPath === p}
+                extracting={extractingPath === p}
+                extractingViews={extractingViewsPath === p}
+                selected={selectedRenders.has(p)}
+                selectionBusy={busy}
+                onToggleSelect={toggleRendersSel}
+                onArchive={handleArchive}
+                onUnarchive={handleUnarchive}
+                onExtractFrames={handleExtractFrames}
+                onExtractCharacterViews={handleExtractCharacterViews}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
       {siblings.length > 0 ? (
         <>
           <h3>📁 Folder media · 同 folder 媒体</h3>

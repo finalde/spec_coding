@@ -168,7 +168,8 @@ function CopyableCode({ children }: CopyableCodeProps): JSX.Element {
   const preRef = useRef<HTMLPreElement>(null);
 
   // Extract the plain text of children, then re-render with field-label highlighting
-  // (per rule #12.4 v4 / follow-up 013). innerText still reads clean for copy.
+  // (per rule #12.4 v4 / follow-up 013). Copy uses the raw `trimmedBody` below
+  // (NOT innerText), so the copied prompt keeps whitespace/newlines verbatim.
   const plain = useMemo(() => extractText(children), [children]);
   const trimmedBody = useMemo(() => plain.replace(/\n+$/, ""), [plain]);
   const highlighted = useMemo(() => renderHighlightedLines(plain), [plain]);
@@ -184,7 +185,14 @@ function CopyableCode({ children }: CopyableCodeProps): JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const handleCopy = useCallback(async () => {
-    const text = preRef.current?.innerText ?? "";
+    // Copy the code block's EXACT source text — every space and newline
+    // preserved verbatim. We deliberately do NOT read `preRef.innerText`:
+    // innerText is layout-normalized and can collapse runs of whitespace /
+    // alter newlines depending on CSS + the per-line <span> highlighting,
+    // which garbles the prompt's structure for downstream models (observed:
+    // Kling mis-reading speaker/section boundaries). `trimmedBody` is the
+    // raw fenced-block body reconstructed from the source.
+    const text = trimmedBody;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -192,7 +200,7 @@ function CopyableCode({ children }: CopyableCodeProps): JSX.Element {
     } catch {
       // clipboard API unavailable — graceful fallback: nothing to do
     }
-  }, []);
+  }, [trimmedBody]);
 
   const onEditStart = useCallback(() => {
     if (!canEdit) return;

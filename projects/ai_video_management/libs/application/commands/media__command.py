@@ -27,6 +27,7 @@ from libs.domain.value_objects.media__valueobject import (
     MediaPath,
     classify_state,
 )
+from libs.infrastructure.writers.downloads__writer import RENDERS_DIR_NAME
 from libs.infrastructure.writers.media__writer import MediaArchiver, MediaRenamer
 
 
@@ -73,7 +74,7 @@ class MediaCommand:
         DramaPath(rel=rel_drama_path)
         return MediaMapper.rename_to_cdto(
             self._renamer.rename_drama(
-                rel_drama_path, excluded_folder_names=frozenset({"frames"})
+                rel_drama_path, excluded_folder_names=frozenset({"frames", RENDERS_DIR_NAME})
             )
         )
 

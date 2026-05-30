@@ -2,9 +2,14 @@
 
 Per follow-up 009: enriches the drama-row rename button into a one-click
 "import + rename" flow. Filename substring-matches against the drama's
-`characters/`, `scenes/`, and `episodes/*/prompts/shot*/` folders to choose
-a destination; unmatched files land in `<drama>/not_matched/` for manual
-triage. Only Downloads' immediate children are scanned, restricted to media
+`characters/`, `scenes/`, and `episodes/*/shots/shot*/` folders to choose
+a destination. Shot-matched media lands in the shot's `renders/` subfolder
+(`shots/shot{NN}/renders/`) with its ORIGINAL filename preserved — so the
+start-frame / end-frame / video outputs of one shot coexist without colliding
+and stay distinguishable; character/scene media still lands directly in the
+asset folder. Unmatched files land in `<drama>/not_matched/` for manual
+triage. (Shot folders were renamed `prompts/` → `shots/` per ai_video rule
+2 v3; the legacy `prompts/` name is still accepted for unmigrated trees.) Only Downloads' immediate children are scanned, restricted to media
 extensions with mtime within the last 7 days; symlinks are skipped.
 
 This module is the first place the backend reads from a path OUTSIDE
@@ -28,6 +33,7 @@ from libs.domain.errors.downloads__error import DownloadsDirMissingError
 from libs.infrastructure.writers.media__writer import MediaRenamer, RenameResult
 
 NOT_MATCHED_DIR_NAME = "not_matched"
+RENDERS_DIR_NAME = "renders"
 DEFAULT_TIME_WINDOW_SECONDS = 7 * 24 * 60 * 60
 DOWNLOADS_ENV_VAR = "AI_VIDEO_MGMT_DOWNLOADS_DIR"
 _BASENAME_INVALID = re.compile(r"[\x00-\x1f/\\:*?\"<>|]")
@@ -117,7 +123,7 @@ class DownloadsImporter:
                 result.moved.append(entry)
         rename_result = self._renamer.rename_drama(
             rel_drama_path,
-            excluded_folder_names=frozenset({NOT_MATCHED_DIR_NAME, "frames"}),
+            excluded_folder_names=frozenset({NOT_MATCHED_DIR_NAME, RENDERS_DIR_NAME, "frames"}),
         )
         result.rename = rename_result.to_payload()
         return result
@@ -139,10 +145,14 @@ class DownloadsImporter:
             for ep in sorted(episodes_dir.iterdir()):
                 if not ep.is_dir() or ep.is_symlink():
                     continue
-                prompts_dir = ep / "prompts"
-                if not prompts_dir.is_dir():
+                # Shot folders live under episodes/{ep}/shots/ (renamed from
+                # the legacy prompts/ per ai_video rule 2 v3). Accept either.
+                shots_dir = ep / "shots"
+                if not shots_dir.is_dir():
+                    shots_dir = ep / "prompts"
+                if not shots_dir.is_dir():
                     continue
-                for shot in sorted(prompts_dir.iterdir()):
+                for shot in sorted(shots_dir.iterdir()):
                     if not shot.is_dir() or shot.is_symlink():
                         continue
                     tokens = self._tokens(shot.name)
@@ -152,7 +162,12 @@ class DownloadsImporter:
                         extra.append(f"{ep_name}_{shot.name}".lower())
                         extra.append(ep_name.lower())
                     tokens = tuple(dict.fromkeys((*tokens, *extra)))
-                    out.append(_Candidate(folder=shot, kind="shot", tokens=tokens))
+                    # Shot media goes into the shot's renders/ subfolder so the
+                    # start/end/video outputs coexist with original names and
+                    # don't clutter or collide with shot{NN}.md.
+                    out.append(
+                        _Candidate(folder=shot / RENDERS_DIR_NAME, kind="shot", tokens=tokens)
+                    )
         return out
 
     @staticmethod
@@ -251,5 +266,6 @@ __all__ = [
     "DownloadsImporter",
     "ImportResult",
     "NOT_MATCHED_DIR_NAME",
+    "RENDERS_DIR_NAME",
     "RenameResult",
 ]
