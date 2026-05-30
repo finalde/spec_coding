@@ -28,3 +28,23 @@ class ActorAlreadyAssignedError(ActorDomainError):
         super().__init__(f"actor {actor_id} has {len(assignments)} assignment(s)")
         self.actor_id: str = actor_id
         self.assignments: list[dict[str, object]] = assignments
+
+
+class ActorAlreadyDeletedError(ActorDomainError):
+    """The actor folder is already under _deleted/."""
+
+
+class ActorDeleteTargetExistsError(ActorDomainError):
+    """The target path under _deleted/_actors/ already exists."""
+
+
+class ActorDeleteFailedError(ActorDomainError):
+    """OS-level failure during the rename / mkdir step of delete_actor."""
+
+
+class ActorGenerationDirMissingError(ActorDomainError):
+    """The _actors directory cannot be created (filesystem error at generation time)."""
+
+
+class AssignmentsScanFailedError(ActorDomainError):
+    """OS-level failure while scanning casting.md files for actor assignments."""

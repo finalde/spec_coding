@@ -5,12 +5,21 @@ closed enums of acceptable values. No I/O, no framework imports.
 The on-disk representation (jpg filename, sidecar md format, folder name)
 is the infrastructure's job to materialise; this object is the canonical
 in-memory shape of what the user picked.
+
+Per follow-up 114: `validate_actor_id` lives here (was the only meaningful
+piece of `libs/domain/entities/actor__entity.py`, which was a 32-line
+behaviour-less holder and was deleted). Validation now runs automatically
+in `__post_init__` rather than being a separate call site users can forget.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
-from libs.domain.errors.actor__error import InvalidActorAttributeError
+from libs.domain.errors.actor__error import (
+    InvalidActorAttributeError,
+    InvalidActorIdError,
+)
 
 ETHNICITY_OPTIONS: frozenset[str] = frozenset(
     {"asian", "east-asian", "south-asian", "caucasian", "african", "latino", "middle-eastern", "mixed"}
@@ -22,10 +31,6 @@ LOOK_OPTIONS: frozenset[str] = frozenset(
         # Original 8 physical-appearance values.
         "handsome", "beautiful", "cute", "mature", "rugged", "soft", "aristocratic", "fierce",
         # Per follow-up 064: 5 character-archetype-flavored values.
-        # MUST stay in sync with `libs/infrastructure/writers/actor__writer.py::LOOK_OPTIONS`
-        # — both enums are checked at different layers (domain validate() +
-        # infra _validate_attrs); a mismatch produces a confusing
-        # 400 invalid_attribute on the new values.
         "righteous", "sinister", "seductive", "cunning", "innocent",
     }
 )
@@ -35,11 +40,9 @@ NOTES_MAX_LEN: int = 500
 MIN_BATCH_COUNT: int = 1
 MAX_BATCH_COUNT: int = 50
 
-# Per follow-up 100: optional dropdown locks for the 3 feature lines users
+# Per follow-up 100: optional dropdown locks for the feature lines users
 # care about most. Each accepts either RANDOM_SENTINEL_VALUES (= use pool) or
-# one of the curated Chinese descriptors below. The prompt builder
-# (`actor__chinese_prompt.py`) substitutes the locked value verbatim and
-# falls back to deterministic pool sampling otherwise.
+# one of the curated Chinese descriptors below.
 RANDOM_SENTINEL_VALUES: frozenset[str] = frozenset({"", "__random__", "random", "随机"})
 EYES_OPTIONS: frozenset[str] = frozenset(
     {
@@ -87,6 +90,8 @@ BODY_OPTIONS: frozenset[str] = frozenset(
     }
 )
 
+_ACTOR_ID_RE = re.compile(r"^actor_\d{4,}$")
+
 
 def _validate_optional_feature(value: str, options: frozenset[str], name: str) -> None:
     if value in RANDOM_SENTINEL_VALUES:
@@ -104,8 +109,6 @@ class ActorAttrs:
     age_range: str
     look: str
     notes: str = ""
-    # Per follow-up 100: optional user-locked feature descriptors. Each
-    # defaults to "" (treated as random pool sample by the prompt builder).
     eyes: str = ""
     nose: str = ""
     lips: str = ""
@@ -113,6 +116,9 @@ class ActorAttrs:
     skin: str = ""
     body: str = ""
     qi_zhi: str = ""
+
+    def __post_init__(self) -> None:
+        self.validate()
 
     def validate(self) -> None:
         if self.ethnicity not in ETHNICITY_OPTIONS:
@@ -133,21 +139,10 @@ class ActorAttrs:
         _validate_optional_feature(self.body, BODY_OPTIONS, "body")
         _validate_optional_feature(self.qi_zhi, QI_ZHI_OPTIONS, "qi_zhi")
 
-    def to_dict(self) -> dict[str, str]:
-        return {
-            "ethnicity": self.ethnicity,
-            "gender": self.gender,
-            "age_range": self.age_range,
-            "look": self.look,
-            "notes": self.notes,
-            "eyes": self.eyes,
-            "nose": self.nose,
-            "lips": self.lips,
-            "face": self.face,
-            "skin": self.skin,
-            "body": self.body,
-            "qi_zhi": self.qi_zhi,
-        }
+
+def validate_actor_id(actor_id: str) -> None:
+    if not _ACTOR_ID_RE.match(actor_id):
+        raise InvalidActorIdError(f"actor_id={actor_id!r} does not match shape actor_NNNN")
 
 
 def validate_batch_count(count: int) -> None:

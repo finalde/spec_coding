@@ -8,16 +8,8 @@ from libs.application.dtos.casting__dto import (
 )
 from libs.application.mappers.casting__mapper import CastingMapper
 from libs.domain.entities.casting__entity import validate_role
-from libs.domain.errors.actor__error import InvalidActorIdError
-from libs.domain.errors.casting__error import (
-    DramaNotFoundError,
-    InvalidDramaPathError,
-    InvalidRoleError,
-)
 from libs.domain.repositories.casting__repository import CastingRepository
 from libs.domain.value_objects.drama__valueobject import DramaPath
-from libs.infrastructure.writers.casting__writer import InvalidActorId, InvalidRole
-from libs.infrastructure.writers.media__writer import DramaNotFound, InvalidDramaPath
 
 
 class CastingCommand:
@@ -27,32 +19,34 @@ class CastingCommand:
     def assign(self, input_cdto: AssignActorInputCdto) -> CastingQdto:
         DramaPath(rel=input_cdto.rel_drama_path)
         validate_role(input_cdto.role)
-        try:
-            result = self._casting.assign(
-                input_cdto.rel_drama_path,
-                input_cdto.role,
-                input_cdto.actor_id,
-                input_cdto.notes,
-            )
-        except InvalidDramaPath as exc:
-            raise InvalidDramaPathError(str(exc)) from exc
-        except InvalidRole as exc:
-            raise InvalidRoleError(str(exc)) from exc
-        except InvalidActorId as exc:
-            raise InvalidActorIdError(str(exc)) from exc
-        except DramaNotFound as exc:
-            raise DramaNotFoundError(str(exc)) from exc
+        result = self._casting.assign(
+            input_cdto.rel_drama_path,
+            input_cdto.role,
+            input_cdto.actor_id,
+            input_cdto.notes,
+        )
         return CastingMapper.to_qdto(result)
 
     def unassign(self, input_cdto: UnassignActorInputCdto) -> CastingQdto:
         DramaPath(rel=input_cdto.rel_drama_path)
         validate_role(input_cdto.role)
-        try:
-            result = self._casting.unassign(input_cdto.rel_drama_path, input_cdto.role)
-        except InvalidDramaPath as exc:
-            raise InvalidDramaPathError(str(exc)) from exc
-        except InvalidRole as exc:
-            raise InvalidRoleError(str(exc)) from exc
-        except DramaNotFound as exc:
-            raise DramaNotFoundError(str(exc)) from exc
+        result = self._casting.unassign(input_cdto.rel_drama_path, input_cdto.role)
+        return CastingMapper.to_qdto(result)
+
+    # Voice surface (follow-up 115). The signatures stay route-friendly:
+    # plain positional + optional notes rather than wrapping in a dedicated
+    # Cdto, because the voice flows are pure pass-through to the repository
+    # (validation happens in the domain).
+    def assign_voice(
+        self, rel_drama_path: str, role: str, voice_id: str, notes: str | None = None
+    ) -> CastingQdto:
+        DramaPath(rel=rel_drama_path)
+        validate_role(role)
+        result = self._casting.assign_voice(rel_drama_path, role, voice_id, notes)
+        return CastingMapper.to_qdto(result)
+
+    def unassign_voice(self, rel_drama_path: str, role: str) -> CastingQdto:
+        DramaPath(rel=rel_drama_path)
+        validate_role(role)
+        result = self._casting.unassign_voice(rel_drama_path, role)
         return CastingMapper.to_qdto(result)

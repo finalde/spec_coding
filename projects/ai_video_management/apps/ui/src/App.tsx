@@ -5,6 +5,7 @@ import { Reader } from "./components/Reader";
 import { Home } from "./components/Home";
 import { ActorGrid } from "./components/ActorGrid";
 import { DeletedView } from "./components/DeletedView";
+import { VoiceGrid } from "./components/VoiceGrid";
 import { bumpMediaCacheBuster, fetchTree } from "./api";
 import { collectFilePaths } from "./lib/linkResolver";
 import type { TreeNode } from "./types";
@@ -82,6 +83,10 @@ export default function App(): JSX.Element {
           <Route
             path="/actors"
             element={<ActorGrid tree={tree} onChange={() => setRefreshKey((k) => k + 1)} />}
+          />
+          <Route
+            path="/voices"
+            element={<VoiceGrid tree={tree} onChange={() => setRefreshKey((k) => k + 1)} />}
           />
           <Route
             path="/deleted"

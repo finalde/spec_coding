@@ -370,6 +370,142 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   border-color: rgba(56, 161, 105, 0.6);
 }
 
+/* Per-block inline edit (follow-up 116, 2026-05-25) — the Renderer wraps each
+ * fenced code block with an actions strip at top-right. ai_videos/ files get
+ * a ✏ Edit button next to 复制; click toggles a textarea swap of just that
+ * block. Each block has independent edit state — multi-prompt files (scenes /
+ * characters) can be edited prompt-by-prompt without touching the others.
+ */
+.markdown-view .code-block-wrapper .code-block-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  z-index: 1;
+}
+.markdown-view .code-block-wrapper .code-block-actions .copy-btn {
+  position: static;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--pre-fg);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+}
+.markdown-view .code-block-wrapper .code-block-actions .copy-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.markdown-view .code-block-wrapper .code-block-actions .copy-btn:active {
+  transform: translateY(1px);
+}
+.markdown-view .code-block-wrapper .code-block-actions .copy-btn.copied {
+  background: rgba(56, 161, 105, 0.28);
+  color: #b7f5cd;
+  border-color: rgba(56, 161, 105, 0.6);
+}
+.markdown-view .code-block-wrapper .code-block-edit-btn {
+  /* Solid accent so the per-prompt edit affordance pops on the dark code
+     block; users were missing this button against the prior subtle blue
+     tint (see follow-up 2026-05-30 "prompt edit 不是整個page的edit"). */
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border-color: var(--accent) !important;
+  font-weight: 600 !important;
+  padding: 5px 14px !important;
+  box-shadow: 0 1px 4px rgba(9, 105, 218, 0.45);
+}
+.markdown-view .code-block-wrapper .code-block-edit-btn:hover {
+  background: var(--accent-strong) !important;
+  border-color: var(--accent-strong) !important;
+  box-shadow: 0 2px 7px rgba(9, 105, 218, 0.55);
+  transform: translateY(-1px);
+}
+.markdown-view .code-block-wrapper .code-block-save-btn {
+  background: rgba(56, 161, 105, 0.28) !important;
+  color: #b7f5cd !important;
+  border-color: rgba(56, 161, 105, 0.6) !important;
+}
+.markdown-view .code-block-wrapper .code-block-save-btn:hover {
+  background: rgba(56, 161, 105, 0.42) !important;
+}
+.renderer-edit-hint {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f4ebff 100%);
+  border: 1px solid rgba(9, 105, 218, 0.28);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+.renderer-edit-hint strong {
+  color: var(--accent-strong);
+}
+.renderer-edit-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 1px 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+.renderer-edit-hint-chip {
+  display: inline-block;
+  padding: 2px 9px;
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+.markdown-view .code-block-wrapper .code-block-save-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.markdown-view .code-block-wrapper-editing {
+  position: relative;
+  margin: 14px 0;
+  border: 1px solid rgba(120, 145, 220, 0.6);
+  border-radius: 4px;
+  padding: 38px 8px 8px;
+  background: rgba(120, 145, 220, 0.06);
+}
+.markdown-view .code-block-textarea {
+  width: 100%;
+  min-height: 240px;
+  background: var(--pre-bg);
+  color: var(--pre-fg);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.markdown-view .code-block-textarea:focus {
+  outline: 2px solid var(--accent, #6c8cd6);
+  outline-offset: -1px;
+}
+.markdown-view .code-block-edit-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(217, 64, 64, 0.16);
+  border: 1px solid rgba(217, 64, 64, 0.48);
+  border-radius: 4px;
+  color: #ffb4b4;
+  font-size: 13px;
+}
+
 /* Media view (per follow-up 005 ai_video_management) — full-bleed image / video viewer */
 .media-view {
   padding: 24px;
@@ -1946,4 +2082,1159 @@ details[open] > .prompt-preview-toggle::before {
 .deleted-bulk-purge:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ============================================================================
+   Voice pool (follow-up 115) — VoiceGrid, VoiceView, VoicePoolGenerator
+   ============================================================================ */
+
+/* ---- VoiceGrid page ---- */
+.voice-page {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.voice-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.voice-page-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.voice-page-title h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.voice-page-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 2px 10px;
+  background: var(--bg-toolbar);
+  border-radius: 12px;
+}
+.voice-page-count-sep { opacity: 0.5; margin: 0 2px; }
+.voice-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.voice-filters select {
+  font-size: 13px;
+  padding: 5px 10px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 120ms;
+}
+.voice-filters select:hover {
+  border-color: var(--border-strong);
+}
+.voice-filters select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- VoiceGrid tiles ---- */
+.voice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.voice-tile {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 120ms, box-shadow 120ms, transform 120ms;
+}
+.voice-tile:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(9, 105, 218, 0.10);
+  transform: translateY(-1px);
+}
+.voice-tile-playing {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.20);
+}
+.voice-tile-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f5e9ff 50%, #fff4e6 100%);
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  text-align: center;
+}
+.voice-tile-cover:hover {
+  background: linear-gradient(135deg, #e6ecff 0%, #f0dfff 50%, #ffefd9 100%);
+}
+.voice-tile-cover:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+.voice-tile-icon {
+  font-size: 40px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
+}
+.voice-tile-archetype {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2328;
+  letter-spacing: 0.04em;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 14px;
+  backdrop-filter: blur(4px);
+}
+.voice-tile-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.voice-tile-id-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.voice-tile-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.voice-tile-badge {
+  font-size: 10px;
+  padding: 1px 7px;
+  background: #e0f2fe;
+  color: #0c4a6e;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.voice-tile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.voice-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.voice-chip-muted {
+  opacity: 0.55;
+}
+.voice-tile-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.voice-play-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms, transform 80ms;
+}
+.voice-play-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  transform: scale(1.06);
+}
+.voice-play-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.voice-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: #b42318;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.voice-delete-btn:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+.voice-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.voice-delete-btn-large {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ---- VoiceGrid pagination ---- */
+.voice-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 10px;
+  font-size: 13px;
+}
+.voice-pagination button {
+  padding: 5px 11px;
+  background: var(--bg-toolbar);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.voice-pagination button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.voice-pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.voice-pagination-indicator {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-muted);
+  padding: 0 12px;
+}
+
+/* ---- VoiceGrid empty / loading / toast ---- */
+.voice-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 24px;
+  background: var(--bg-panel);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+}
+.voice-empty-icon {
+  font-size: 48px;
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+.voice-empty p {
+  margin: 0;
+  font-size: 14px;
+}
+.voice-empty-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.voice-empty-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 1px 6px;
+  background: var(--bg-toolbar);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.voice-empty-inline {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+.voice-loading {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 16px;
+}
+.voice-toast {
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  border-left: 3px solid;
+}
+.voice-toast-ok {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #10b981;
+}
+.voice-toast-err {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #ef4444;
+}
+
+/* ---- VoiceView ---- */
+.voice-view {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1200px;
+}
+.voice-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.voice-view-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.voice-view-title h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text);
+}
+.voice-view-title-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.voice-view-error {
+  padding: 24px;
+  color: #991b1b;
+  background: #fef2f2;
+  border-radius: 8px;
+}
+.voice-section {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.voice-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+.voice-grid-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr);
+  gap: 16px;
+}
+@media (max-width: 920px) {
+  .voice-grid-layout { grid-template-columns: 1fr; }
+}
+
+/* ---- VoiceView audio panel ---- */
+.voice-audio-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.voice-audio-player {
+  width: 100%;
+  min-height: 40px;
+}
+.voice-audio-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.voice-audio-filename {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.voice-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 24px;
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fafbff 0%, #f5f7ff 100%);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 140ms, background 140ms, transform 140ms;
+}
+.voice-dropzone:hover,
+.voice-dropzone:focus-visible {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, #f3f6ff 0%, #ebf0ff 100%);
+  outline: none;
+}
+.voice-dropzone-active {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, #e6ecff 0%, #d8e0ff 100%);
+  transform: scale(1.01);
+}
+.voice-dropzone-icon {
+  font-size: 32px;
+  color: var(--accent);
+  line-height: 1;
+}
+.voice-dropzone-headline {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.voice-dropzone-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.voice-dropzone-sub code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 1px 6px;
+  background: var(--bg-toolbar);
+  border-radius: 4px;
+  margin: 0 1px;
+  font-size: 12px;
+}
+.voice-dropzone-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  opacity: 0.85;
+}
+
+/* ---- VoiceView metadata ---- */
+.voice-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+.voice-meta-row {
+  display: contents;
+}
+.voice-meta dt {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+.voice-meta dd {
+  margin: 0;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+/* ---- VoiceView prompt ---- */
+.voice-prompt-card {
+  position: relative;
+  background: #1e1e2e;
+  color: #d4d4d8;
+  border-radius: 8px;
+  padding: 14px 16px;
+  padding-top: 38px;
+}
+.voice-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d4d4d8;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 120ms;
+}
+.voice-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.voice-copy-btn:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+.voice-prompt-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+/* ---- VoiceView assignments ---- */
+.voice-assignments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.voice-assignment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.voice-assignment-drama {
+  font-weight: 600;
+  color: var(--text);
+}
+.voice-assignment-sep {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.voice-assignment-role {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text);
+}
+.voice-assignment-warn {
+  color: #d97706;
+  cursor: help;
+}
+.voice-assignment-notes {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  margin-left: 4px;
+}
+.voice-assignment-unassign {
+  margin-left: auto;
+}
+
+/* ---- Reusable buttons (voice flow) ---- */
+.voice-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, transform 80ms;
+  border: 1px solid transparent;
+  font-family: inherit;
+}
+.voice-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.voice-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.voice-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.voice-btn-primary {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+  font-weight: 500;
+}
+.voice-btn-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.voice-btn-secondary {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+.voice-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+/* ---- VoicePoolGenerator modal ---- */
+.voice-gen-panel {
+  max-width: 720px;
+  width: 92vw;
+}
+.voice-gen-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.voice-gen-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.voice-gen-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 180px;
+}
+.voice-gen-field-narrow {
+  flex: 0 0 auto;
+  min-width: 130px;
+}
+.voice-gen-field-block {
+  flex: 1 1 100%;
+}
+.voice-gen-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.voice-gen-field input,
+.voice-gen-field select,
+.voice-gen-field textarea {
+  padding: 7px 10px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  transition: border-color 120ms;
+}
+.voice-gen-field input:focus,
+.voice-gen-field select:focus,
+.voice-gen-field textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.voice-gen-field textarea {
+  resize: vertical;
+  font-family: inherit;
+  min-height: 50px;
+}
+
+/* ---- VoiceView header actions row ---- */
+.voice-view-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---- VoiceView inline AssignVoiceForm ---- */
+.voice-assign-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.voice-assign-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  margin-top: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.voice-assign-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ---- VoiceGrid select mode ---- */
+.voice-tile-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  box-shadow: 0 0 0 4px rgba(9, 105, 218, 0.10);
+}
+.voice-tile-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  border: 2px solid var(--accent);
+  z-index: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.voice-tile-selected .voice-tile-checkbox {
+  background: var(--accent);
+  color: #ffffff;
+}
+.voice-tile-cover {
+  position: relative;  /* ensure the absolute checkbox positions to the cover */
+}
+
+/* ---- VoiceGrid sticky select footer ---- */
+.voice-select-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin: 0 -24px -20px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+  flex-wrap: wrap;
+  z-index: 5;
+}
+.voice-select-count {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+.voice-select-count strong {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  margin: 0 2px;
+}
+
+/* ---- BulkAssign error log ---- */
+.voice-bulk-errlog {
+  font-size: 12px;
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.voice-bulk-errlog summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 500;
+}
+.voice-bulk-errlog ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+}
+.voice-bulk-errlog li {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 2px 0;
+}
+
+/* ============================================================================
+   Prompt edit mode (Voice / Actor / ShotPair / ImageRef views)
+   ============================================================================ */
+
+/* Shared action-button row inside a prompt card. */
+.voice-prompt-actions,
+.actor-view-prompt-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+
+/* Voice / Actor prompt cards expand bottom padding when editing so the
+   textarea has space and the action buttons don't overlap text. */
+.voice-prompt-card-editing,
+.actor-view-prompt-card-editing {
+  padding-top: 44px;
+}
+
+/* Reuse `.voice-copy-btn` and `.actor-view-copy-btn` for both Copy and Edit;
+   the Save variant gets a green accent so it pops as the primary action. */
+.voice-prompt-save-btn,
+.actor-view-prompt-save-btn,
+.shot-pane-save-btn {
+  background: rgba(16, 185, 129, 0.22) !important;
+  border-color: rgba(16, 185, 129, 0.55) !important;
+  color: #d1fae5 !important;
+}
+.voice-prompt-save-btn:hover:not(:disabled),
+.actor-view-prompt-save-btn:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.35) !important;
+}
+.shot-pane-save-btn {
+  /* light-theme variant — shot pane buttons sit on white chrome */
+  background: #d1fae5 !important;
+  border-color: #34d399 !important;
+  color: #065f46 !important;
+}
+.shot-pane-save-btn:hover:not(:disabled) {
+  background: #a7f3d0 !important;
+}
+
+/* Voice prompt textarea — dark to match the surrounding code-block card. */
+.voice-prompt-textarea {
+  width: 100%;
+  background: transparent;
+  color: #d4d4d8;
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  resize: vertical;
+  min-height: 160px;
+  outline: none;
+}
+.voice-prompt-textarea:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.25);
+}
+
+/* Actor prompt textarea — actor uses light-theme card per existing styles. */
+.actor-view-prompt-textarea {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  resize: vertical;
+  min-height: 160px;
+  outline: none;
+}
+.actor-view-prompt-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.18);
+}
+.actor-view-prompt-card {
+  position: relative;
+}
+
+/* ShotPairView: per-pane action row + edit wrapper. */
+.shot-pane-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.shot-pane-edit-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+.shot-pane-edit-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-toolbar);
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+.shot-pane-edit-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 1px 5px;
+  background: var(--bg);
+  border-radius: 3px;
+  color: var(--text);
+}
+.shot-pane-textarea {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  resize: vertical;
+  min-height: 280px;
+  outline: none;
+}
+.shot-pane-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.18);
+}
+.shot-pane-edit-error {
+  font-size: 12px;
+  padding: 6px 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+}
+.shot-pane-editing {
+  background: linear-gradient(0deg, #fdfdfd 0%, #f7faff 100%);
+}
+
+/* ImageRefView reuses the shot-pane edit-wrapper / textarea classes;
+   only the pane-header layout needs a small tweak so the buttons sit
+   right-aligned next to the label. */
+.image-ref-pane-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.image-ref-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============================================================================
+   PromptStructuredEditor — schema-driven form replacing the raw textarea
+   ============================================================================ */
+
+.prompt-structured-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.prompt-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.prompt-editor-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.prompt-editor-toolbar {
+  display: flex;
+  gap: 6px;
+}
+.prompt-editor-mode-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  background: var(--bg-toolbar);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.prompt-editor-mode-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.prompt-editor-mode-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.prompt-editor-mode-active {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border-color: var(--accent) !important;
+}
+
+.prompt-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.prompt-editor-no-fields {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 16px;
+  background: var(--bg-toolbar);
+  border-radius: 6px;
+  text-align: center;
+}
+.prompt-editor-freeform {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-toolbar);
+  border-radius: 4px;
+  padding: 6px 10px;
+}
+.prompt-editor-freeform summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text);
+}
+.prompt-editor-freeform pre {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  background: var(--bg);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text);
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.prompt-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.prompt-editor-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.prompt-editor-field-input,
+.prompt-editor-field-textarea,
+.prompt-editor-field-select {
+  width: 100%;
+  padding: 6px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  line-height: 1.55;
+}
+.prompt-editor-field-textarea {
+  resize: vertical;
+  min-height: 44px;
+}
+.prompt-editor-field-input:focus,
+.prompt-editor-field-textarea:focus,
+.prompt-editor-field-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.prompt-editor-dropdown-wrapper {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.prompt-editor-dropdown-wrapper .prompt-editor-field-select {
+  flex: 0 0 160px;
+}
+.prompt-editor-dropdown-custom {
+  flex: 1;
+}
+
+.prompt-editor-multiselect {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.prompt-editor-multiselect-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.prompt-editor-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-panel);
+}
+.prompt-editor-checkbox input {
+  margin: 0;
+}
+.prompt-editor-multiselect-add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.prompt-editor-multiselect-add .prompt-editor-field-input {
+  flex: 0 0 200px;
+}
+.prompt-editor-multiselect-empty {
+  font-size: 12px;
+}
+
+.prompt-editor-raw-textarea {
+  width: 100%;
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  resize: vertical;
+  min-height: 200px;
+  outline: none;
+}
+.prompt-editor-raw-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.18);
+}
+
+.prompt-editor-footer {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.prompt-editor-save {
+  font-weight: 600;
+}
+.prompt-editor-error {
+  padding: 6px 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font-size: 12px;
 }

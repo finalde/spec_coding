@@ -10,16 +10,15 @@ from typing import Any
 
 from libs.common.exposed_tree import ALLOWED_EXTENSIONS, MAX_FILE_BYTES, ExposedTree
 from libs.common.safe_resolve import SafeResolver
-
-
-from libs.infrastructure.errors.file__error import (  # noqa: F401
-    UnsupportedExtension,
-    FileTooLarge,
-    InvalidBodyEncoding,
-    OutsideSandbox,
-    MissingIfUnmodifiedSince,
-    StaleWrite,
+from libs.domain.errors.file__error import (
+    FileNotInSandboxError,
+    FileTooLargeError,
+    InvalidBodyEncodingError,
+    MissingIfUnmodifiedSinceError,
+    StaleWriteError,
+    UnsupportedFileExtensionError,
 )
+
 _TEXT_EXTENSIONS: frozenset[str] = frozenset(
     {".md", ".json", ".yaml", ".yml", ".jsonl", ".txt"}
 )
@@ -55,43 +54,43 @@ class FileWriter:
     ) -> WriteResult:
         resolved = self._resolver.resolve(rel)
         if resolved is None:
-            raise OutsideSandbox()
+            raise FileNotInSandboxError()
         ext = Path(rel).suffix.lower() if isinstance(rel, str) else ""
         if ext not in ALLOWED_EXTENSIONS:
-            raise UnsupportedExtension(ext)
+            raise UnsupportedFileExtensionError(ext)
         if ext in _IMAGE_EXTENSIONS:
-            raise UnsupportedExtension(ext)
+            raise UnsupportedFileExtensionError(ext)
         if ext not in _TEXT_EXTENSIONS:
-            raise UnsupportedExtension(ext)
+            raise UnsupportedFileExtensionError(ext)
 
         body = content.encode("utf-8")
         if len(body) > MAX_FILE_BYTES:
-            raise FileTooLarge(len(body))
+            raise FileTooLargeError(len(body))
 
         prefix = body[:16]
         if b"\x00" in prefix:
-            raise InvalidBodyEncoding("nul_in_prefix")
+            raise InvalidBodyEncodingError("nul_in_prefix")
         try:
             prefix.decode("utf-8")
         except UnicodeDecodeError as e:
             try:
                 body[: min(64, len(body))].decode("utf-8")
             except UnicodeDecodeError:
-                raise InvalidBodyEncoding("invalid_utf8_prefix") from e
+                raise InvalidBodyEncodingError("invalid_utf8_prefix") from e
 
         parent = resolved.parent
         if not parent.is_dir():
-            raise OutsideSandbox()
+            raise FileNotInSandboxError()
 
         # If-Unmodified-Since is REQUIRED for existing files (mtime concurrency guard).
         if resolved.exists():
             if if_unmodified_since is None:
-                raise MissingIfUnmodifiedSince()
+                raise MissingIfUnmodifiedSinceError()
             current_mtime = resolved.stat().st_mtime
             requested = self._parse_http_date(if_unmodified_since)
             if requested is not None:
                 if current_mtime > requested + 1.0:
-                    raise StaleWrite(current_mtime=current_mtime)
+                    raise StaleWriteError(current_mtime=current_mtime)
 
         fd, tmp_path = tempfile.mkstemp(prefix=".tmp_", dir=str(parent))
         try:

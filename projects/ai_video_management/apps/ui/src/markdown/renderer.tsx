@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
@@ -7,11 +7,50 @@ import remarkGfm from "remark-gfm";
 import { useNavigate } from "react-router-dom";
 import { resolveLink } from "../lib/linkResolver";
 import { BrokenLink } from "../components/BrokenLink";
+import { findAllFencedCode, replaceFencedCodeAt } from "../lib/promptEdit";
+import { blockKindFromHeading, type BlockKind } from "../lib/promptSchema";
+import { putFile } from "../api";
+import { ApiError } from "../types";
+import { PromptStructuredEditor } from "../components/PromptStructuredEditor";
 
 export interface RendererProps {
   content: string;
   currentPath: string;
   knownPaths: string[];
+  /** When set, every fenced code block under `currentPath` gets an inline ✏ Edit button
+   * that replaces just that block (not the whole file) via PUT /api/file with concurrency.
+   * Typically set true for files under `ai_videos/`. Requires `mtimeHttp` + `onSaved`. */
+  editEnabled?: boolean;
+  /** `mtime_http` of the loaded file — used for If-Unmodified-Since concurrency guard. */
+  mtimeHttp?: string;
+  /** Called after a successful per-block save so the parent can refetch + refresh `content`. */
+  onSaved?: () => void;
+  /** Character display names for the 人物 multi-select in shot prompt blocks. */
+  characterOptions?: string[];
+  /** Scene display names for the 场景 picker in shot prompt blocks. */
+  sceneOptions?: string[];
+}
+
+/** For each fenced block (by source-order index), classify it by the nearest
+ *  preceding `## ` heading into a shot block kind, or null. */
+function computeIndexToKind(content: string): Map<number, BlockKind | null> {
+  const blocks = findAllFencedCode(content);
+  const headings: { pos: number; text: string }[] = [];
+  const headingRe = /^#{1,6}[ \t]+(.+)$/gm;
+  let hm: RegExpExecArray | null;
+  while ((hm = headingRe.exec(content)) !== null) {
+    headings.push({ pos: hm.index, text: hm[1] });
+  }
+  const out = new Map<number, BlockKind | null>();
+  blocks.forEach((b, i) => {
+    let nearest: string | null = null;
+    for (const h of headings) {
+      if (h.pos < b.start) nearest = h.text;
+      else break;
+    }
+    out.set(i, nearest ? blockKindFromHeading(nearest) : null);
+  });
+  return out;
 }
 
 /** Pre-render regex pass wrapping locked-descriptor blocks in <span class="locked-block">.
@@ -46,10 +85,6 @@ function applyRefPlaceholderPill(source: string): string {
       });
     })
     .join("");
-}
-
-interface CopyableCodeProps {
-  children: ReactNode;
 }
 
 /** Field labels in prompt body that get highlighted as markdown-style key headers.
@@ -104,9 +139,49 @@ function renderHighlightedLines(text: string): ReactNode {
   });
 }
 
+interface EditPromptContextValue {
+  editEnabled: boolean;
+  currentPath: string;
+  mtimeHttp: string | undefined;
+  /** Body → first matching block index (0-indexed). Duplicate bodies resolve to first occurrence. */
+  bodyToIndex: Map<string, number>;
+  /** Current file content; refreshed by parent on save (so freshly-keyed lookups stay correct). */
+  fileContent: string;
+  /** Triggers parent refetch after a successful save. */
+  onSaved: (() => void) | undefined;
+  /** Block index → shot block kind (start/end/video) or null for non-shot blocks. */
+  indexToKind: Map<number, BlockKind | null>;
+  /** Character display names for the 人物 multi-select. */
+  characterOptions: string[];
+  /** Scene display names for the 场景 picker. */
+  sceneOptions: string[];
+}
+
+const EditPromptContext = createContext<EditPromptContextValue | null>(null);
+
+interface CopyableCodeProps {
+  children: ReactNode;
+}
+
 function CopyableCode({ children }: CopyableCodeProps): JSX.Element {
   const [copied, setCopied] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
+
+  // Extract the plain text of children, then re-render with field-label highlighting
+  // (per rule #12.4 v4 / follow-up 013). innerText still reads clean for copy.
+  const plain = useMemo(() => extractText(children), [children]);
+  const trimmedBody = useMemo(() => plain.replace(/\n+$/, ""), [plain]);
+  const highlighted = useMemo(() => renderHighlightedLines(plain), [plain]);
+
+  const ctx = useContext(EditPromptContext);
+  // Resolve this block's index by matching its body text against the pre-computed map.
+  const blockIndex = ctx ? (ctx.bodyToIndex.get(trimmedBody) ?? -1) : -1;
+  const canEdit = ctx?.editEnabled === true && blockIndex >= 0 && ctx.mtimeHttp !== undefined;
+
+  const [editing, setEditing] = useState(false);
+  const [buffer, setBuffer] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleCopy = useCallback(async () => {
     const text = preRef.current?.innerText ?? "";
@@ -119,57 +194,170 @@ function CopyableCode({ children }: CopyableCodeProps): JSX.Element {
     }
   }, []);
 
-  // Extract the plain text of children, then re-render with field-label highlighting
-  // (per rule #12.4 v4 / follow-up 013). innerText still reads clean for copy.
-  const plain = useMemo(() => extractText(children), [children]);
-  const highlighted = useMemo(() => renderHighlightedLines(plain), [plain]);
+  const onEditStart = useCallback(() => {
+    if (!canEdit) return;
+    setBuffer(trimmedBody);
+    setError(null);
+    setEditing(true);
+  }, [canEdit, trimmedBody]);
+
+  const onEditCancel = useCallback(() => {
+    setEditing(false);
+    setBuffer("");
+    setError(null);
+  }, []);
+
+  // Note: save semantics now live inline in the `if (editing)` branch so the
+  // structured editor can hand the canonical body back without round-tripping
+  // through our `buffer` state. See onStructuredSave below.
+
+  if (editing) {
+    // The structured editor owns its own state — wire its onSave callback
+    // back to our onEditSave with the body the editor produced.
+    const onStructuredSave = async (newBody: string): Promise<void> => {
+      if (!ctx || !canEdit || saving) return;
+      setSaving(true);
+      setError(null);
+      try {
+        const newContent = replaceFencedCodeAt(ctx.fileContent, blockIndex, newBody);
+        await putFile(ctx.currentPath, newContent, { ifUnmodifiedSince: ctx.mtimeHttp });
+        setEditing(false);
+        setBuffer("");
+        ctx.onSaved?.();
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409) {
+          setError("文件已被外部修改，请刷新后重试（你的编辑保留在 textarea 中）");
+        } else if (err instanceof ApiError) {
+          setError(`保存失败: ${err.detail?.kind ?? err.status}`);
+        } else {
+          setError(`保存失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } finally {
+        setSaving(false);
+      }
+    };
+    const kind = ctx?.indexToKind.get(blockIndex) ?? null;
+    const kindLabel = kind === "start" ? "起始帧" : kind === "end" ? "结束帧" : kind === "video" ? "视频 prompt" : `prompt block #${blockIndex + 1}`;
+    return (
+      <div className="code-block-wrapper code-block-wrapper-editing">
+        <PromptStructuredEditor
+          initialBody={buffer}
+          onSave={onStructuredSave}
+          onCancel={onEditCancel}
+          saving={saving}
+          errorMessage={error}
+          blockLabel={kindLabel}
+          blockKind={kind}
+          characterOptions={ctx?.characterOptions ?? []}
+          sceneOptions={ctx?.sceneOptions ?? []}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="code-block-wrapper">
-      <button
-        type="button"
-        className={`copy-btn${copied ? " copied" : ""}`}
-        onClick={handleCopy}
-        aria-label={copied ? "已复制" : "复制 prompt"}
-      >
-        {copied ? "已复制 ✓" : "复制 Copy"}
-      </button>
+      <div className="code-block-actions">
+        <button
+          type="button"
+          className={`copy-btn${copied ? " copied" : ""}`}
+          onClick={handleCopy}
+          aria-label={copied ? "已复制" : "复制 prompt"}
+        >
+          {copied ? "已复制 ✓" : "复制 Copy"}
+        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            className="copy-btn code-block-edit-btn"
+            onClick={onEditStart}
+            title="直接编辑此 prompt 代码块（不影响文件其他部分）"
+            aria-label="Edit prompt block"
+          >
+            ✏ Edit
+          </button>
+        ) : null}
+      </div>
       <pre ref={preRef}><code>{highlighted}</code></pre>
     </div>
   );
 }
 
-export function Renderer({ content, currentPath, knownPaths }: RendererProps): JSX.Element {
+export function Renderer({
+  content,
+  currentPath,
+  knownPaths,
+  editEnabled,
+  mtimeHttp,
+  onSaved,
+  characterOptions = [],
+  sceneOptions = [],
+}: RendererProps): JSX.Element {
   const navigate = useNavigate();
   const known = useMemo(() => new Set(knownPaths), [knownPaths]);
   const isKnown = (p: string): boolean => known.has(p);
   const processed = useMemo(() => applyRefPlaceholderPill(applyLockedBlockPill(content)), [content]);
 
+  const blocks = useMemo(() => findAllFencedCode(content), [content]);
+  const bodyToIndex = useMemo(() => {
+    const m = new Map<string, number>();
+    blocks.forEach((b, i) => {
+      const key = b.body.replace(/\n+$/, "");
+      if (!m.has(key)) m.set(key, i);
+    });
+    return m;
+  }, [blocks]);
+
+  const indexToKind = useMemo(() => computeIndexToKind(content), [content]);
+
+  const ctxValue = useMemo<EditPromptContextValue>(() => ({
+    editEnabled: editEnabled === true,
+    currentPath,
+    mtimeHttp,
+    bodyToIndex,
+    fileContent: content,
+    onSaved,
+    indexToKind,
+    characterOptions,
+    sceneOptions,
+  }), [editEnabled, currentPath, mtimeHttp, bodyToIndex, content, onSaved, indexToKind, characterOptions, sceneOptions]);
+
+  const hasFences = blocks.length > 0;
   return (
     <div className="markdown-view" lang="zh-Hans">
       <span id="locked-block-desc" className="visually-hidden">
         锁定描述符块 — byte-equality contract; do not edit
       </span>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeSanitize, rehypeHighlight]}
-        components={{
-          a: ({ href, children, ...rest }) => {
-            if (typeof href !== "string") return <span>{children}</span>;
-            const resolved = resolveLink({ currentFile: currentPath, href, isKnown });
-            if (resolved.kind === "external") return <a href={resolved.href} target="_blank" rel="noopener noreferrer" {...rest}>{children}</a>;
-            if (resolved.kind === "anchor") return <a href={resolved.hash} {...rest}>{children}</a>;
-            if (resolved.kind === "internal") {
-              const target = `/file/${encodeURIComponent(resolved.path)}${resolved.hash ?? ""}`;
-              return <a href={target} onClick={(e) => { e.preventDefault(); navigate(target); }}>{children}</a>;
-            }
-            return <BrokenLink href={resolved.href} title={resolved.title}>{children}</BrokenLink>;
-          },
-          pre: ({ children }) => <CopyableCode>{children}</CopyableCode>,
-        }}
-      >
-        {processed}
-      </ReactMarkdown>
+      {editEnabled === true && hasFences ? (
+        <div className="renderer-edit-hint" role="status">
+          <strong>💡 编辑 prompt：</strong>
+          每个 <code>```text</code> 代码块右上角都有一个 <span className="renderer-edit-hint-chip">✏ Edit</span> 按钮。
+          点它进入<strong>结构化表单编辑</strong>（仅修改该 prompt 块，不影响其他段落）。
+          整篇 markdown 的「编辑全文」按钮已隐藏，避免误开 page-level edit。
+        </div>
+      ) : null}
+      <EditPromptContext.Provider value={ctxValue}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeSanitize, rehypeHighlight]}
+          components={{
+            a: ({ href, children, ...rest }) => {
+              if (typeof href !== "string") return <span>{children}</span>;
+              const resolved = resolveLink({ currentFile: currentPath, href, isKnown });
+              if (resolved.kind === "external") return <a href={resolved.href} target="_blank" rel="noopener noreferrer" {...rest}>{children}</a>;
+              if (resolved.kind === "anchor") return <a href={resolved.hash} {...rest}>{children}</a>;
+              if (resolved.kind === "internal") {
+                const target = `/file/${encodeURIComponent(resolved.path)}${resolved.hash ?? ""}`;
+                return <a href={target} onClick={(e) => { e.preventDefault(); navigate(target); }}>{children}</a>;
+              }
+              return <BrokenLink href={resolved.href} title={resolved.title}>{children}</BrokenLink>;
+            },
+            pre: ({ children }) => <CopyableCode>{children}</CopyableCode>,
+          }}
+        >
+          {processed}
+        </ReactMarkdown>
+      </EditPromptContext.Provider>
     </div>
   );
 }

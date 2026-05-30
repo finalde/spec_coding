@@ -14,9 +14,11 @@ import {
   deleteActor,
   fetchActorAssignments,
   mediaUrl,
+  putFile,
   type ActorAssignment,
 } from "../api";
 import { extractDramas, type DramaChoice } from "../lib/dramas";
+import { findAllFencedCode, replaceFencedCodeAt } from "../lib/promptEdit";
 import { ApiError } from "../types";
 import type { FileResult, TreeNode } from "../types";
 
@@ -30,9 +32,18 @@ export interface ActorViewProps {
   onSaved?: () => void;
 }
 
+interface ParsedActorPrompt {
+  /** Trimmed body of this fenced code block. */
+  body: string;
+  /** Block index in source order (0-indexed), used by replaceFencedCodeAt for save. */
+  blockIndex: number;
+  /** Heading text immediately preceding this code block (e.g. "生成 prompt (face shot)"). */
+  heading: string;
+}
+
 interface ParsedActor {
   fields: Array<{ key: string; value: string }>;
-  prompt: string | null;
+  prompts: ParsedActorPrompt[];
 }
 
 export function ActorView({ primaryFile, primaryPath, knownPaths, tree, onSaved }: ActorViewProps): JSX.Element {
@@ -42,7 +53,6 @@ export function ActorView({ primaryFile, primaryPath, knownPaths, tree, onSaved 
   const actorId = useMemo<string>(() => deriveActorId(primaryPath), [primaryPath]);
   const dramas = useMemo<DramaChoice[]>(() => extractDramas(tree), [tree]);
 
-  const [copied, setCopied] = useState<boolean>(false);
   const [deleting, setDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<ActorAssignment[]>([]);
@@ -65,17 +75,6 @@ export function ActorView({ primaryFile, primaryPath, knownPaths, tree, onSaved 
   }, [actorId]);
 
   useEffect(() => { void loadAssignments(); }, [loadAssignments]);
-
-  const onCopy = async (): Promise<void> => {
-    if (!parsed.prompt) return;
-    try {
-      await navigator.clipboard.writeText(parsed.prompt);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
-  };
 
   const onDelete = async (): Promise<void> => {
     if (deleting) return;
@@ -165,21 +164,18 @@ export function ActorView({ primaryFile, primaryPath, knownPaths, tree, onSaved 
             <div className="muted">无元数据</div>
           )}
 
-          {parsed.prompt ? (
+          {parsed.prompts.length > 0 ? (
             <>
-              <h3 className="actor-view-section-title">生成 prompt</h3>
-              <div className="actor-view-prompt-card">
-                <button
-                  type="button"
-                  className="actor-view-copy-btn"
-                  onClick={onCopy}
-                  aria-label="Copy prompt to clipboard"
-                  title="Copy"
-                >
-                  {copied ? "✓ Copied" : "📋 Copy"}
-                </button>
-                <pre className="actor-view-prompt-text">{parsed.prompt}</pre>
-              </div>
+              {parsed.prompts.map((p) => (
+                <ActorPromptCard
+                  key={p.blockIndex}
+                  prompt={p}
+                  fileContent={primaryFile.content}
+                  filePath={primaryPath}
+                  mtimeHttp={primaryFile.mtime_http}
+                  onSaved={onSaved}
+                />
+              ))}
             </>
           ) : null}
         </section>
@@ -345,6 +341,130 @@ function AssignForm({ actorId, dramas, existing, onClose, onAssigned }: AssignFo
   );
 }
 
+interface ActorPromptCardProps {
+  prompt: ParsedActorPrompt;
+  fileContent: string;
+  filePath: string;
+  mtimeHttp: string;
+  onSaved?: () => void;
+}
+
+function ActorPromptCard({ prompt, fileContent, filePath, mtimeHttp, onSaved }: ActorPromptCardProps): JSX.Element {
+  const [editMode, setEditMode] = useState<boolean>(false);
+  const [editBuffer, setEditBuffer] = useState<string>("");
+  const [editSaving, setEditSaving] = useState<boolean>(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const onCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(prompt.body);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  }, [prompt.body]);
+
+  const onEditStart = useCallback(() => {
+    setEditBuffer(prompt.body);
+    setEditError(null);
+    setEditMode(true);
+  }, [prompt.body]);
+
+  const onEditCancel = useCallback(() => {
+    setEditMode(false);
+    setEditBuffer("");
+    setEditError(null);
+  }, []);
+
+  const onEditSave = useCallback(async () => {
+    if (editSaving) return;
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const newContent = replaceFencedCodeAt(fileContent, prompt.blockIndex, editBuffer);
+      await putFile(filePath, newContent, { ifUnmodifiedSince: mtimeHttp });
+      setEditMode(false);
+      setEditBuffer("");
+      if (onSaved) onSaved();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setEditError("文件已被外部修改，请刷新后重试（你的编辑保留在 textarea 中）");
+      } else {
+        setEditError(formatError(err));
+      }
+    } finally {
+      setEditSaving(false);
+    }
+  }, [editBuffer, editSaving, fileContent, filePath, mtimeHttp, onSaved, prompt.blockIndex]);
+
+  return (
+    <>
+      <h3 className="actor-view-section-title">{prompt.heading}</h3>
+      <div className={`actor-view-prompt-card${editMode ? " actor-view-prompt-card-editing" : ""}`}>
+        <div className="actor-view-prompt-actions">
+          {!editMode ? (
+            <>
+              <button
+                type="button"
+                className="actor-view-copy-btn"
+                onClick={() => void onCopy()}
+                aria-label="Copy prompt to clipboard"
+                title="Copy"
+              >
+                {copied ? "✓ Copied" : "📋 Copy"}
+              </button>
+              <button
+                type="button"
+                className="actor-view-copy-btn"
+                onClick={onEditStart}
+                title="直接编辑此 prompt 内容（不影响文件其他部分）"
+              >
+                ✏ Edit
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="actor-view-copy-btn actor-view-prompt-save-btn"
+                onClick={() => void onEditSave()}
+                disabled={editSaving}
+              >
+                {editSaving ? "保存中…" : "✓ Save"}
+              </button>
+              <button
+                type="button"
+                className="actor-view-copy-btn"
+                onClick={onEditCancel}
+                disabled={editSaving}
+              >
+                ✕ Cancel
+              </button>
+            </>
+          )}
+        </div>
+        {!editMode ? (
+          <pre className="actor-view-prompt-text">{prompt.body}</pre>
+        ) : (
+          <textarea
+            className="actor-view-prompt-textarea"
+            value={editBuffer}
+            onChange={(e) => setEditBuffer(e.target.value)}
+            spellCheck={false}
+            rows={Math.min(40, Math.max(10, editBuffer.split("\n").length + 1))}
+            disabled={editSaving}
+          />
+        )}
+        {editError ? (
+          <div role="alert" className="actor-view-delete-error">{editError}</div>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 function formatError(err: unknown): string {
   if (err instanceof ApiError) {
     const kind = err.detail?.kind;
@@ -380,7 +500,28 @@ function findFaceImage(mdPath: string, knownPaths: string[]): string | null {
 }
 
 function parseActorMd(content: string): ParsedActor {
-  return { fields: parseFields(content), prompt: parsePrompt(content) };
+  return { fields: parseFields(content), prompts: parsePrompts(content) };
+}
+
+function parsePrompts(content: string): ParsedActorPrompt[] {
+  const blocks = findAllFencedCode(content);
+  return blocks.map((b, i) => ({
+    body: b.body.replace(/\n+$/, ""),
+    blockIndex: i,
+    heading: nearestHeadingBefore(content, b.start),
+  }));
+}
+
+/** Walk backwards from `pos` and return the text of the nearest H1/H2/H3 above. */
+function nearestHeadingBefore(content: string, pos: number): string {
+  const before = content.slice(0, pos);
+  const m = /^(#{1,3})\s+(.+)$/gm;
+  let last: string = "生成 prompt";
+  let r: RegExpExecArray | null;
+  while ((r = m.exec(before)) !== null) {
+    last = r[2].trim();
+  }
+  return last;
 }
 
 function parseFields(content: string): Array<{ key: string; value: string }> {
@@ -405,8 +546,3 @@ function parseFields(content: string): Array<{ key: string; value: string }> {
   return out;
 }
 
-function parsePrompt(content: string): string | null {
-  const match = /```[^\n]*\n([\s\S]*?)\n```/.exec(content);
-  if (!match) return null;
-  return match[1].trim();
-}

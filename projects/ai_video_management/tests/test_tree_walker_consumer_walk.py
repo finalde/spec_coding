@@ -28,13 +28,15 @@ def test_tree_consumer_walk() -> None:
 
 
 def test_tree_sections_order() -> None:
-    """Sections render in order: AI Videos, then Novels (per follow-up 096
-    research/ retired in favor of novels/)."""
+    """Sections render in order: AI Videos, Downloaded Novels, My Novel.
+    Per follow-up 096 research/ was retired in favor of novels/; per
+    follow-up 113 novels/ was further split into downloaded_novels/ and
+    my_novel/."""
     exposed = ExposedTree(repo_root())
     walker = TreeReader(exposed)
     tree = walker.build()
     section_names = [child["name"] for child in tree["children"]]
-    assert section_names == ["AI Videos", "Novels"], section_names
+    assert section_names == ["AI Videos", "Downloaded Novels", "My Novel"], section_names
 
 
 def test_ai_videos_section_has_project_meta_for_wukong() -> None:
@@ -53,23 +55,38 @@ def test_ai_videos_section_has_project_meta_for_wukong() -> None:
     assert wukong["project_meta"]["sub_type"] == "short"
 
 
-def test_novels_section_walks_repo_novels_dir() -> None:
-    """Follow-up 096: novels/ surfaces under the Novels section (replaces the
-    earlier research/ section per follow-up 003)."""
+def test_downloaded_novels_section_walks_repo_downloaded_novels_dir() -> None:
+    """Follow-up 113: downloaded_novels/ (renamed from novels/) surfaces under
+    the 'Downloaded Novels' section (which itself replaced the earlier
+    'Novels' section per follow-up 096; that section in turn replaced
+    'research/' per follow-up 003).
+    """
     exposed = ExposedTree(repo_root())
     walker = TreeReader(exposed)
     tree = walker.build()
-    novels_section = next(
-        (c for c in tree["children"] if c["name"] == "Novels"), None
+    section = next(
+        (c for c in tree["children"] if c["name"] == "Downloaded Novels"), None
     )
-    assert novels_section is not None, "Novels section missing"
-    assert novels_section["type"] == "section"
-    if (repo_root() / "novels").is_dir():
-        # When the repo's novels/ exists with downloaded content, the section
-        # should contain at least one child node.
-        names = [c["name"] for c in novels_section["children"]]
-        # Empty acceptable — downloads may not have started yet.
+    assert section is not None, "Downloaded Novels section missing"
+    assert section["type"] == "section"
+    if (repo_root() / "downloaded_novels").is_dir():
+        names = [c["name"] for c in section["children"]]
         assert isinstance(names, list)
+
+
+def test_my_novel_section_walks_repo_my_novel_dir() -> None:
+    """Follow-up 113: my_novel/ is the new sibling surface for original
+    manuscripts (distinct from downloaded_novels/ baseline corpus).
+    Section surfaces unconditionally; empty when no projects exist yet."""
+    exposed = ExposedTree(repo_root())
+    walker = TreeReader(exposed)
+    tree = walker.build()
+    section = next(
+        (c for c in tree["children"] if c["name"] == "My Novel"), None
+    )
+    assert section is not None, "My Novel section missing"
+    assert section["type"] == "section"
+    assert isinstance(section["children"], list)
 
 
 def test_image_leaves_typed_as_image() -> None:

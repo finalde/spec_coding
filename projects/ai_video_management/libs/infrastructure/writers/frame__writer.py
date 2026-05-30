@@ -37,15 +37,14 @@ import imageio_ffmpeg
 
 from libs.common.exposed_tree import ExposedTree
 from libs.common.safe_resolve import SafeResolver
-
-
-from libs.infrastructure.errors.frame__error import (  # noqa: F401
-    InvalidPath,
-    NotFound,
-    NotVideo,
-    FfmpegMissing,
-    ExtractFailed,
+from libs.domain.errors.frame__error import (
+    FfmpegMissingError,
+    FrameExtractFailedError,
+    InvalidVideoPathError,
+    NotVideoError,
+    VideoNotFoundError,
 )
+
 VIDEO_EXTENSIONS: frozenset[str] = frozenset(
     {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
 )
@@ -113,7 +112,7 @@ class FrameExtractor:
         try:
             ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
         except Exception as exc:  # imageio_ffmpeg raises various on failure
-            raise FfmpegMissing(str(exc)) from exc
+            raise FfmpegMissingError(str(exc)) from exc
         # Prefix = scene folder name (parent dir), so any mp4 take in the
         # same folder overwrites the same set of PNGs on re-extract.
         prefix = src.parent.name
@@ -121,7 +120,7 @@ class FrameExtractor:
         try:
             out_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise ExtractFailed(f"could not create frames dir: {exc}") from exc
+            raise FrameExtractFailedError(f"could not create frames dir: {exc}") from exc
         self._sweep_pngs(out_dir)
         frames: list[FrameResult] = []
         failures: list[tuple[float, str, str]] = []
@@ -162,7 +161,7 @@ class FrameExtractor:
             )
         if not frames:
             joined = "; ".join(f"t={t}: {e}" for (t, _r, e) in failures)
-            raise ExtractFailed(joined or "no frames produced")
+            raise FrameExtractFailedError(joined or "no frames produced")
         return ExtractResult(
             src_rel=self._rel(src),
             frames=tuple(frames),
@@ -186,17 +185,17 @@ class FrameExtractor:
 
     def _validate_video_source(self, rel: str) -> Path:
         if not isinstance(rel, str) or rel == "":
-            raise InvalidPath("path is empty")
+            raise InvalidVideoPathError("path is empty")
         if not self._exposed.is_inside(rel):
-            raise NotFound("path outside sandbox")
+            raise VideoNotFoundError("path outside sandbox")
         ext = Path(rel).suffix.lower()
         if ext not in VIDEO_EXTENSIONS:
-            raise NotVideo("extension is not a video type")
+            raise NotVideoError("extension is not a video type")
         resolved = self._resolver.resolve(rel)
         if resolved is None or not resolved.is_file():
-            raise NotFound("file does not exist")
+            raise VideoNotFoundError("file does not exist")
         if resolved.is_symlink():
-            raise NotFound("symlink is not allowed")
+            raise VideoNotFoundError("symlink is not allowed")
         return resolved
 
     def _rel(self, p: Path) -> str:

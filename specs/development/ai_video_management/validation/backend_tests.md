@@ -742,3 +742,21 @@ The boot-smoke unit uses `unit_kind="boot_smoke"` and `severity="critical"` per 
 - BDD scenarios (level-02).
 - Security review beyond the gate-tests above (level-04).
 - Accessibility / manual walkthrough (level-06).
+
+---
+
+## Voice pool (follow-up 115) — U8 additions
+
+New pytest modules required when U8 lands. Each is **additive**; do NOT touch the actor-pool modules.
+
+| Module | Severity | Covers |
+|---|---|---|
+| `tests/test_voice_writer.py` | blocker | `VoiceCommand.generate` writes `voice_NNNN/voice_NNNN.md` with the FR-86v Chinese metadata table + fenced "生成 prompt" block; `_allocate_voice_id` race-safety via `mkdir(exist_ok=False)`; `_reap_incomplete_folders` drops md-less folders. |
+| `tests/test_voice_chinese_prompt.py` | blocker | Archetype-overlay produces distinct prompts per archetype (the `_VOICE_ARCHETYPE_BIAS_ZH` parallel of `_LOOK_FEATURE_BIAS_ZH`); seed determinism (same seed → byte-equal prompt). |
+| `tests/test_voice_no_outbound_http.py` | **critical** | **Load-bearing carve-out test.** Static grep across `libs/infrastructure/writers/voice__*.py` + `libs/application/commands/voice__command.py` + `libs/application/queries/voice__query.py` asserts zero matches for `httpx.AsyncClient`, `requests.`, `urllib.request`, literal `https://`, `urlopen`, `socket.socket`. Asserts `libs/infrastructure/clients/voice_*.py` does NOT exist. Failure → critical halt, no revision rounds (a Kling-style HTTP path slipping into the voice pool recreates the entire provider-management surface this follow-up was designed to avoid). |
+| `tests/test_voice_audio_upload.py` | blocker | FR-9v5 multipart parser: `.mp3` ≤ 10 MiB → 200; `.svg` → 400 `extension_not_allowed`; > 10 MiB → 413; missing voice folder → 404; symlink target refused; sidecar `audio_sample` row atomic update. |
+| `tests/test_voice_delete_refuse_on_assign.py` | blocker | FR-9v4 refuse-on-assignment: assigned `voice_id` returns 409 + folder untouched; unassigned `voice_id` moves to `_deleted/_voices/`. Mirrors `test_actor_delete` but inherits the follow-up-043 amendment (no cascade unassign). |
+| `tests/test_casting_voice_column.py` | blocker | `casting.md` schema gains a `voice_id` column; FR-9v6 upsert preserves any existing `actor_id` cell on the same row; per-character `_cast.md` writes/clears only the "🎙 配音" section without touching the actor section. |
+| `tests/test_boot_smoke.py` (extension) | blocker | Existing boot-smoke matrix gains assertions that `("POST", "/api/voices/generate")`, `("POST", "/api/voices/preview-prompts")`, `("POST", "/api/voices/generate-diverse")`, `("POST", "/api/voices/delete")`, `("POST", "/api/voices/{id}/audio")`, `("POST", "/api/casting/assign-voice")`, `("DELETE", "/api/casting/assign-voice")`, `("GET", "/api/voices")`, `("GET", "/api/voices/assignments")` are in `app.routes`. |
+
+The `test_voice_no_outbound_http.py` check is the cheapest contract enforcement available — a single failing grep tells the implementer they wandered off the local-only carve-out before any runtime test is needed.

@@ -545,3 +545,288 @@ export async function extractCharacterViews(path: string): Promise<ExtractCharac
   });
   return readJson<ExtractCharacterViewsResult>(response);
 }
+
+// ============================================================================
+// Voice pool (follow-up 115). Mirrors the actor API surface above but
+// targets local-composition voice profile prompts — no provider envs, no
+// 429 retries client-side, no preview-then-confirm in v1 (the preview
+// endpoint exists; the UI calls it inline for the prompt cards).
+// ============================================================================
+
+export const VOICE_ARCHETYPE_OPTIONS = [
+  "effeminate_eunuch",
+  "mighty_general",
+  "gentle_palace_mistress",
+  "aged_master",
+  "young_jianghu_swordsman",
+  "noble_emperor",
+  "cold_assassin",
+  "coquettish_concubine",
+  "wise_elder_monk",
+  "cunning_advisor",
+] as const;
+
+export const VOICE_ARCHETYPE_LABELS_ZH: Record<string, string> = {
+  effeminate_eunuch: "陰柔太監音",
+  mighty_general: "雄壯將軍音",
+  gentle_palace_mistress: "柔美宮主音",
+  aged_master: "蒼老掌門音",
+  young_jianghu_swordsman: "年輕江湖俠音",
+  noble_emperor: "威嚴帝王音",
+  cold_assassin: "冷峻刺客音",
+  coquettish_concubine: "嬌媚妃嬪音",
+  wise_elder_monk: "慈悲高僧音",
+  cunning_advisor: "陰險謀士音",
+};
+
+export const VOICE_GENDER_OPTIONS = ["male", "female", "neutral"] as const;
+export const VOICE_AGE_OPTIONS = [
+  "child",
+  "teen",
+  "young_adult",
+  "middle_aged",
+  "elderly",
+] as const;
+export const VOICE_PACE_OPTIONS = ["slow", "medium", "fast"] as const;
+export const VOICE_PITCH_OPTIONS = ["low", "mid", "high"] as const;
+export const VOICE_EMOTION_OPTIONS = [
+  "calm",
+  "authoritative",
+  "playful",
+  "menacing",
+  "mournful",
+  "flirtatious",
+  "solemn",
+  "whimsical",
+] as const;
+
+export const VOICE_AGE_LABELS_ZH: Record<string, string> = {
+  child: "儿童",
+  teen: "少年",
+  young_adult: "青年",
+  middle_aged: "中年",
+  elderly: "老年",
+};
+export const VOICE_GENDER_LABELS_ZH: Record<string, string> = {
+  male: "男声",
+  female: "女声",
+  neutral: "中性",
+};
+export const VOICE_EMOTION_LABELS_ZH: Record<string, string> = {
+  calm: "平静",
+  authoritative: "威严",
+  playful: "俏皮",
+  menacing: "阴狠",
+  mournful: "哀婉",
+  flirtatious: "撩拨",
+  solemn: "庄重",
+  whimsical: "随性",
+};
+export const VOICE_PACE_LABELS_ZH: Record<string, string> = {
+  slow: "慢",
+  medium: "中速",
+  fast: "快",
+};
+export const VOICE_PITCH_LABELS_ZH: Record<string, string> = {
+  low: "低音",
+  mid: "中音",
+  high: "高音",
+};
+
+export interface VoiceAttrs {
+  archetype: string;
+  gender: string;
+  age_impression: string;
+  pace?: string;
+  pitch_register?: string;
+  emotion_default?: string;
+  tone?: string;
+  signature_inflection?: string;
+  notes?: string;
+}
+
+export interface VoiceInfo extends VoiceAttrs {
+  id: string;
+  sidecar_path: string;
+  audio_path: string | null;
+  mtime: number;
+  archetype_label: string;
+  is_assigned: boolean;
+}
+
+export interface GenerateVoicesRequest extends VoiceAttrs {
+  count: number;
+  seeds?: number[] | null;
+}
+
+export interface GenerateDiverseVoicesRequest {
+  count: number;
+  gender: string;
+  age_impression?: string | null;
+  notes?: string;
+}
+
+export interface VoicePreviewSlot {
+  seed: number;
+  prompt: string;
+  archetype?: string;
+  archetype_label?: string;
+  attrs?: Record<string, unknown>;
+}
+
+export interface VoicePreviewResult {
+  prompts: VoicePreviewSlot[];
+}
+
+export interface GenerateVoicesResult {
+  generated: Array<{ id: string; sidecar_path: string; seed: number; archetype_label: string }>;
+  errors: Array<{ requested_id: string; message: string }>;
+}
+
+export interface DeleteVoiceResult {
+  from: string;
+  to: string;
+}
+
+export interface VoiceAssignment {
+  drama: string;
+  role: string;
+  notes: string;
+  character_folder: string;
+  character_folder_exists: boolean;
+}
+
+export interface VoiceAssignmentsResult {
+  voice_id: string;
+  assignments: VoiceAssignment[];
+}
+
+export interface UploadVoiceAudioResult {
+  voice_id: string;
+  audio_path: string;
+  byte_size: number;
+}
+
+export interface ExtractVoiceAudioResult {
+  voice_id: string;
+  audio_path: string;
+  extracted: Array<{ source: string; mp3_path: string; byte_size: number }>;
+  failures: Array<{ source: string; error: string }>;
+}
+
+export async function listVoices(): Promise<{ voices: VoiceInfo[] }> {
+  const response = await fetch("/api/voices", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<{ voices: VoiceInfo[] }>(response);
+}
+
+export async function previewVoicePrompts(req: GenerateVoicesRequest): Promise<VoicePreviewResult> {
+  const response = await fetch("/api/voices/preview-prompts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<VoicePreviewResult>(response);
+}
+
+export async function previewDiverseVoicePrompts(
+  req: GenerateDiverseVoicesRequest,
+): Promise<VoicePreviewResult> {
+  const response = await fetch("/api/voices/preview-diverse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<VoicePreviewResult>(response);
+}
+
+export async function generateVoices(req: GenerateVoicesRequest): Promise<GenerateVoicesResult> {
+  const response = await fetch("/api/voices/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<GenerateVoicesResult>(response);
+}
+
+export async function generateDiverseVoices(
+  req: GenerateDiverseVoicesRequest,
+): Promise<GenerateVoicesResult> {
+  const response = await fetch("/api/voices/generate-diverse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<GenerateVoicesResult>(response);
+}
+
+export async function deleteVoice(voiceId: string): Promise<DeleteVoiceResult> {
+  const response = await fetch("/api/voices/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ voice_id: voiceId }),
+  });
+  return readJson<DeleteVoiceResult>(response);
+}
+
+export async function fetchVoiceAssignments(voiceId: string): Promise<VoiceAssignmentsResult> {
+  const response = await fetch(
+    `/api/voices/assignments?voice_id=${encodeURIComponent(voiceId)}`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    },
+  );
+  return readJson<VoiceAssignmentsResult>(response);
+}
+
+export async function uploadVoiceAudio(
+  voiceId: string,
+  file: File,
+): Promise<UploadVoiceAudioResult> {
+  const form = new FormData();
+  form.append("audio", file, file.name);
+  const response = await fetch(`/api/voices/${encodeURIComponent(voiceId)}/audio`, {
+    method: "POST",
+    body: form,
+  });
+  return readJson<UploadVoiceAudioResult>(response);
+}
+
+export async function extractVoiceAudio(
+  voiceId: string,
+): Promise<ExtractVoiceAudioResult> {
+  const response = await fetch(
+    `/api/voices/${encodeURIComponent(voiceId)}/extract-audio`,
+    {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    },
+  );
+  return readJson<ExtractVoiceAudioResult>(response);
+}
+
+export async function castingAssignVoice(
+  path: string,
+  role: string,
+  voiceId: string,
+  notes?: string | null,
+): Promise<CastingResult> {
+  const response = await fetch("/api/casting/assign-voice", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, role, voice_id: voiceId, notes: notes ?? null }),
+  });
+  return readJson<CastingResult>(response);
+}
+
+export async function castingUnassignVoice(path: string, role: string): Promise<CastingResult> {
+  const response = await fetch("/api/casting/assign-voice", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, role }),
+  });
+  return readJson<CastingResult>(response);
+}

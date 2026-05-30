@@ -34,7 +34,8 @@ import random
 import re
 import socket
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
@@ -44,28 +45,22 @@ from PIL import Image
 
 from libs.common.exposed_tree import ExposedTree
 from libs.common.safe_resolve import SafeResolver
-
-
-from libs.infrastructure.errors.actor__error import (  # noqa: F401
-    InvalidAttribute,
-    GenerationDirMissing,
-    ActorNotFound,
-    ActorAlreadyDeleted,
-    ActorDeleteTargetExists,
-    ActorDeleteFailed,
+from libs.domain.errors.actor__error import (
+    ActorAlreadyDeletedError,
+    ActorDeleteFailedError,
+    ActorDeleteTargetExistsError,
+    ActorGenerationDirMissingError,
+    ActorNotFoundError,
+    InvalidActorAttributeError,
 )
-ETHNICITY_OPTIONS: frozenset[str] = frozenset(
-    {"asian", "east-asian", "south-asian", "caucasian", "african", "latino", "middle-eastern", "mixed"}
-)
-GENDER_OPTIONS: frozenset[str] = frozenset({"male", "female"})
-AGE_RANGE_OPTIONS: frozenset[str] = frozenset({"18-25", "26-35", "36-50", "51-65", "65+"})
-LOOK_OPTIONS: frozenset[str] = frozenset(
-    {
-        # Original 8 (physical appearance).
-        "handsome", "beautiful", "cute", "mature", "rugged", "soft", "aristocratic", "fierce",
-        # Per follow-up 064: 5 character-archetype-flavored values.
-        "righteous", "sinister", "seductive", "cunning", "innocent",
-    }
+# Per follow-up 114: the enum frozensets are domain-owned. Importing
+# them here (rather than redefining in-file) ensures the validation
+# schema cannot drift between layers.
+from libs.domain.value_objects.actor__valueobject import (
+    AGE_RANGE_OPTIONS,
+    ETHNICITY_OPTIONS,
+    GENDER_OPTIONS,
+    LOOK_OPTIONS,
 )
 
 # Per follow-up 064: prompt-fragment enrichment for the 5 new look values
@@ -836,7 +831,7 @@ class ActorInfo:
             "image_path": self.image_path,
             "mtime": self.mtime,
             "archetype": self.archetype,
-            **self.attrs.to_dict(),
+            **asdict(self.attrs),
         }
 
 
@@ -1103,6 +1098,63 @@ KLING_JWT_EXP_SECONDS: int = 1800
 KLING_POLL_INTERVAL_SECONDS: float = 2.0
 KLING_MAX_WAIT_SECONDS: float = 120.0
 
+# Per follow-up 112: retry budget for transient Kling submit / poll
+# failures (HTTP 429 from per-account QPS cap when 9-worker frontend pool
+# bursts 18 concurrent submits; httpx timeouts under overload). Mirrors
+# follow-up 018's pollinations retry shape: 3 retries, fixed backoff
+# [3s, 6s, 12s] cumulative ~21s. On 429 we additionally honor Kling's
+# `Retry-After` header (capped at `_KLING_RETRY_AFTER_CAP`).
+_KLING_RETRY_BACKOFFS: tuple[float, ...] = (3.0, 6.0, 12.0)
+_KLING_RETRY_AFTER_CAP: float = 60.0
+
+
+def _kling_retry_sleep_seconds(attempt: int, retry_after_header: str | None) -> float:
+    base = _KLING_RETRY_BACKOFFS[min(attempt, len(_KLING_RETRY_BACKOFFS) - 1)]
+    if retry_after_header is None:
+        return base
+    try:
+        ra = float(retry_after_header)
+    except ValueError:
+        return base
+    if ra <= 0:
+        return base
+    return min(max(ra, base), _KLING_RETRY_AFTER_CAP)
+
+
+def _kling_call_with_retry(fn: Callable[[], httpx.Response]) -> httpx.Response:
+    """Retry an httpx call on transient Kling failures.
+
+    Retries on HTTP 429 (Retry-After-honored, cap `_KLING_RETRY_AFTER_CAP`)
+    and on httpx timeout exceptions. Non-429 HTTP statuses (4xx, 5xx) and
+    non-timeout exceptions propagate immediately. Budget: 3 retries with
+    backoff [3s, 6s, 12s]; after exhaustion the final exception is
+    re-raised so the caller (`generate_batch`) records its existing
+    `http_failed: {exc}` slot error and continues with the next slot.
+    """
+    last_exc: BaseException | None = None
+    for attempt in range(len(_KLING_RETRY_BACKOFFS) + 1):
+        try:
+            return fn()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 429 or attempt >= len(_KLING_RETRY_BACKOFFS):
+                raise
+            retry_after = exc.response.headers.get("retry-after")
+            time.sleep(_kling_retry_sleep_seconds(attempt, retry_after))
+            last_exc = exc
+        except (
+            httpx.ReadTimeout,
+            httpx.ConnectTimeout,
+            httpx.WriteTimeout,
+            httpx.PoolTimeout,
+        ) as exc:
+            if attempt >= len(_KLING_RETRY_BACKOFFS):
+                raise
+            time.sleep(_kling_retry_sleep_seconds(attempt, None))
+            last_exc = exc
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("kling retry: exhausted without exception")
+
 
 def _b64url(data: bytes) -> str:
     """URL-safe base64 without padding (JWT segment encoding)."""
@@ -1277,15 +1329,20 @@ class KlingProvider:
         }
         if negative_prompt:
             body["negative_prompt"] = negative_prompt
-        resp = client.post(
-            f"{self._base}/images/generations",
-            json=body,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-        )
-        resp.raise_for_status()
+
+        def _do_post() -> httpx.Response:
+            resp = client.post(
+                f"{self._base}/images/generations",
+                json=body,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+            )
+            resp.raise_for_status()
+            return resp
+
+        resp = _kling_call_with_retry(_do_post)
         payload = resp.json()
         if payload.get("code") != 0:
             raise RuntimeError(
@@ -1305,12 +1362,16 @@ class KlingProvider:
                 raise TimeoutError(
                     f"kling: task {task_id} not done in {self._max_wait:.0f}s"
                 )
-            resp = client.get(
-                f"{self._base}/images/generations",
-                params={"pageSize": 500},
-                headers=headers,
-            )
-            resp.raise_for_status()
+            def _do_get() -> httpx.Response:
+                resp = client.get(
+                    f"{self._base}/images/generations",
+                    params={"pageSize": 500},
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                return resp
+
+            resp = _kling_call_with_retry(_do_get)
             tasks = (resp.json() or {}).get("data") or []
             for task in tasks:
                 if task.get("task_id") != task_id:
@@ -1406,21 +1467,21 @@ class ActorPool:
         """
         self._validate_attrs(attrs)
         if not MIN_BATCH_COUNT <= count <= MAX_BATCH_COUNT:
-            raise InvalidAttribute(
+            raise InvalidActorAttributeError(
                 f"count must be between {MIN_BATCH_COUNT} and {MAX_BATCH_COUNT}, got {count}"
             )
         if resolution not in RESOLUTION_OPTIONS:
-            raise InvalidAttribute(
+            raise InvalidActorAttributeError(
                 f"resolution={resolution!r} not in {sorted(RESOLUTION_OPTIONS)}"
             )
         if seeds is not None:
             if not isinstance(seeds, list) or len(seeds) != count:
-                raise InvalidAttribute(
+                raise InvalidActorAttributeError(
                     f"seeds must be a list of length {count}, got {seeds!r}"
                 )
             for s in seeds:
                 if not isinstance(s, int):
-                    raise InvalidAttribute(f"seeds must be all int, got {seeds!r}")
+                    raise InvalidActorAttributeError(f"seeds must be all int, got {seeds!r}")
         # Per follow-up 076: when archetype not supplied, derive it from
         # attrs via _classify_actor_attrs so a selected look like "seductive"
         # (妩媚) auto-maps to femme_fatale and the variance pools bias the
@@ -1470,15 +1531,15 @@ class ActorPool:
         slot.archetype)` per slot via the worker-pool (responsive UI +
         per-slot progress)."""
         if gender not in GENDER_OPTIONS:
-            raise InvalidAttribute(f"gender={gender!r} not in {sorted(GENDER_OPTIONS)}")
+            raise InvalidActorAttributeError(f"gender={gender!r} not in {sorted(GENDER_OPTIONS)}")
         if ethnicity not in ETHNICITY_OPTIONS:
-            raise InvalidAttribute(f"ethnicity={ethnicity!r} not in {sorted(ETHNICITY_OPTIONS)}")
+            raise InvalidActorAttributeError(f"ethnicity={ethnicity!r} not in {sorted(ETHNICITY_OPTIONS)}")
         if not MIN_BATCH_COUNT <= count <= MAX_BATCH_COUNT:
-            raise InvalidAttribute(
+            raise InvalidActorAttributeError(
                 f"count must be between {MIN_BATCH_COUNT} and {MAX_BATCH_COUNT}, got {count}"
             )
         if resolution not in RESOLUTION_OPTIONS:
-            raise InvalidAttribute(
+            raise InvalidActorAttributeError(
                 f"resolution={resolution!r} not in {sorted(RESOLUTION_OPTIONS)}"
             )
         plan = self._distribute_archetypes(count, gender)
@@ -1500,7 +1561,7 @@ class ActorPool:
                 "seed": seed,
                 "archetype": spec.slug,
                 "archetype_label": spec.name_zh,
-                "attrs": attrs.to_dict(),
+                "attrs": asdict(attrs),
                 "prompt": face_prompt,
                 "body_prompt": body_prompt,
                 # Per follow-up 087: same shared negative_prompt sent to Kling.
@@ -1528,26 +1589,26 @@ class ActorPool:
         first write."""
         self._validate_attrs(attrs)
         if not MIN_BATCH_COUNT <= count <= MAX_BATCH_COUNT:
-            raise InvalidAttribute(
+            raise InvalidActorAttributeError(
                 f"count must be between {MIN_BATCH_COUNT} and {MAX_BATCH_COUNT}, got {count}"
             )
         if resolution not in RESOLUTION_OPTIONS:
-            raise InvalidAttribute(
+            raise InvalidActorAttributeError(
                 f"resolution={resolution!r} not in {sorted(RESOLUTION_OPTIONS)}"
             )
         if seeds is not None:
             if not isinstance(seeds, list) or len(seeds) != count:
-                raise InvalidAttribute(
+                raise InvalidActorAttributeError(
                     f"seeds must be a list of length {count}, got {seeds!r}"
                 )
             for s in seeds:
                 if not isinstance(s, int):
-                    raise InvalidAttribute(f"seeds must be all int, got {seeds!r}")
+                    raise InvalidActorAttributeError(f"seeds must be all int, got {seeds!r}")
         actors_dir = self.actors_dir()
         try:
             actors_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise GenerationDirMissing(str(exc))
+            raise ActorGenerationDirMissingError(str(exc))
 
         # Per follow-up 076: same fall-through as preview_prompts — derive
         # archetype from attrs when caller didn't supply one. Keeps preview
@@ -1561,7 +1622,7 @@ class ActorPool:
             seed = seeds[i] if seeds is not None else base_seed + i
             try:
                 actor_id, actor_folder = self._allocate_actor_id(actors_dir)
-            except GenerationDirMissing as exc:
+            except ActorGenerationDirMissingError as exc:
                 result.errors.append({"requested_id": f"slot_{i}", "message": f"alloc_failed: {exc}"})
                 continue
             # Per follow-up 082: batch-coordinated prompts when frontend
@@ -1641,7 +1702,7 @@ class ActorPool:
                     "id": actor_id,
                     "image_path": rel_image,
                     "body_path": self._rel(body_path) if body_path is not None else None,
-                    "attrs": attrs.to_dict(),
+                    "attrs": asdict(attrs),
                     "seed": seed,
                     "resolution": resolution,
                     "archetype": archetype,
@@ -1696,22 +1757,22 @@ class ActorPool:
         plumbing. Archetype slug is recorded in the sidecar md.
         """
         if gender not in GENDER_OPTIONS:
-            raise InvalidAttribute(f"gender={gender!r} not in {sorted(GENDER_OPTIONS)}")
+            raise InvalidActorAttributeError(f"gender={gender!r} not in {sorted(GENDER_OPTIONS)}")
         if ethnicity not in ETHNICITY_OPTIONS:
-            raise InvalidAttribute(f"ethnicity={ethnicity!r} not in {sorted(ETHNICITY_OPTIONS)}")
+            raise InvalidActorAttributeError(f"ethnicity={ethnicity!r} not in {sorted(ETHNICITY_OPTIONS)}")
         if not MIN_BATCH_COUNT <= count <= MAX_BATCH_COUNT:
-            raise InvalidAttribute(
+            raise InvalidActorAttributeError(
                 f"count must be between {MIN_BATCH_COUNT} and {MAX_BATCH_COUNT}, got {count}"
             )
         if resolution not in RESOLUTION_OPTIONS:
-            raise InvalidAttribute(
+            raise InvalidActorAttributeError(
                 f"resolution={resolution!r} not in {sorted(RESOLUTION_OPTIONS)}"
             )
         actors_dir = self.actors_dir()
         try:
             actors_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise GenerationDirMissing(str(exc))
+            raise ActorGenerationDirMissingError(str(exc))
 
         result = GenerateResult()
         base_seed = int(time.time() * 1000)
@@ -1730,7 +1791,7 @@ class ActorPool:
             )
             try:
                 actor_id, actor_folder = self._allocate_actor_id(actors_dir)
-            except GenerationDirMissing as exc:
+            except ActorGenerationDirMissingError as exc:
                 result.errors.append({"requested_id": f"slot_{i}", "message": f"alloc_failed: {exc}"})
                 continue
             face_prompt = self._build_face_prompt(attrs, seed, spec.slug)
@@ -1796,7 +1857,7 @@ class ActorPool:
                     "id": actor_id,
                     "image_path": rel_image,
                     "body_path": self._rel(body_path) if body_path is not None else None,
-                    "attrs": attrs.to_dict(),
+                    "attrs": asdict(attrs),
                     "seed": seed,
                     "resolution": resolution,
                     "archetype": spec.slug,
@@ -2021,35 +2082,35 @@ class ActorPool:
         before this rename so dangling references never persist).
         """
         if not _ACTOR_ID_RE.match(actor_id):
-            raise InvalidAttribute(f"actor_id={actor_id!r} does not match shape")
+            raise InvalidActorAttributeError(f"actor_id={actor_id!r} does not match shape")
         src = self.actors_dir() / actor_id
         if not src.is_dir() or src.is_symlink():
-            raise ActorNotFound(f"actor folder not found: {actor_id}")
+            raise ActorNotFoundError(f"actor folder not found: {actor_id}")
         target = self._resolver.root / "ai_videos" / "_deleted" / ACTORS_DIR_NAME / actor_id
         if target.exists():
-            raise ActorDeleteTargetExists(self._rel(target))
+            raise ActorDeleteTargetExistsError(self._rel(target))
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise ActorDeleteFailed(f"mkdir failed: {exc}") from exc
+            raise ActorDeleteFailedError(f"mkdir failed: {exc}") from exc
         try:
             src.rename(target)
         except OSError as exc:
-            raise ActorDeleteFailed(f"rename failed: {exc}") from exc
+            raise ActorDeleteFailedError(f"rename failed: {exc}") from exc
         return {"from": self._rel(src), "to": self._rel(target)}
 
     @staticmethod
     def _validate_attrs(attrs: ActorAttrs) -> None:
         if attrs.ethnicity not in ETHNICITY_OPTIONS:
-            raise InvalidAttribute(f"ethnicity={attrs.ethnicity!r} not in schema")
+            raise InvalidActorAttributeError(f"ethnicity={attrs.ethnicity!r} not in schema")
         if attrs.gender not in GENDER_OPTIONS:
-            raise InvalidAttribute(f"gender={attrs.gender!r} not in schema")
+            raise InvalidActorAttributeError(f"gender={attrs.gender!r} not in schema")
         if attrs.age_range not in AGE_RANGE_OPTIONS:
-            raise InvalidAttribute(f"age_range={attrs.age_range!r} not in schema")
+            raise InvalidActorAttributeError(f"age_range={attrs.age_range!r} not in schema")
         if attrs.look not in LOOK_OPTIONS:
-            raise InvalidAttribute(f"look={attrs.look!r} not in schema")
+            raise InvalidActorAttributeError(f"look={attrs.look!r} not in schema")
         if len(attrs.notes) > 500:
-            raise InvalidAttribute("notes must be ≤ 500 characters")
+            raise InvalidActorAttributeError("notes must be ≤ 500 characters")
 
     @staticmethod
     def _build_prompts_for_slot(
@@ -2084,7 +2145,7 @@ class ActorPool:
                 archetype=archetype,
                 gender_slug=attrs.gender,
             )
-            attrs_dict = attrs.to_dict()
+            attrs_dict = asdict(attrs)
             return (
                 build_face_prompt_with_picks(attrs_dict, seed, archetype, picks),
                 build_body_prompt_with_picks(attrs_dict, seed, archetype, picks),
@@ -2108,7 +2169,7 @@ class ActorPool:
         综合描述 in one place per SRP.
         """
         from libs.infrastructure.writers.actor__chinese_prompt import build_face_prompt
-        return build_face_prompt(attrs.to_dict(), seed, archetype)
+        return build_face_prompt(asdict(attrs), seed, archetype)
 
     @staticmethod
     def _build_body_prompt(attrs: ActorAttrs, seed: int, archetype: str | None) -> str:
@@ -2119,7 +2180,7 @@ class ActorPool:
         Same `(seed, archetype)` → face + body share identity-anchor draws.
         """
         from libs.infrastructure.writers.actor__chinese_prompt import build_body_prompt
-        return build_body_prompt(attrs.to_dict(), seed, archetype)
+        return build_body_prompt(asdict(attrs), seed, archetype)
 
     def _allocate_actor_id(self, actors_dir: Path) -> tuple[str, Path]:
         """Atomically claim the next free actor_NNNN id via mkdir(exist_ok=False).
@@ -2145,8 +2206,8 @@ class ActorPool:
                 attempts += 1
                 continue
             except OSError as exc:
-                raise GenerationDirMissing(str(exc)) from exc
-        raise GenerationDirMissing(
+                raise ActorGenerationDirMissingError(str(exc)) from exc
+        raise ActorGenerationDirMissingError(
             f"exhausted {_MAX_ID_ALLOC_SCAN} id-allocation attempts starting from actor_{start:04d}"
         )
 
@@ -2336,19 +2397,13 @@ class ActorPool:
 __all__ = [
     "ACTORS_DIR_NAME",
     "AGE_RANGE_OPTIONS",
-    "ActorAlreadyDeleted",
     "ActorAttrs",
-    "ActorDeleteFailed",
-    "ActorDeleteTargetExists",
     "ActorInfo",
-    "ActorNotFound",
     "ActorPool",
     "DEFAULT_RESOLUTION",
     "ETHNICITY_OPTIONS",
     "GENDER_OPTIONS",
     "GenerateResult",
-    "GenerationDirMissing",
-    "InvalidAttribute",
     "KLING_ACCESS_KEY_ENV",
     "KLING_BASE_URL",
     "KLING_CFG_SCALE_ENV",

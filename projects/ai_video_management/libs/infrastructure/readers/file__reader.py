@@ -9,13 +9,12 @@ from typing import Any
 
 from libs.common.exposed_tree import ALLOWED_EXTENSIONS, MAX_FILE_BYTES, ExposedTree
 from libs.common.safe_resolve import SafeResolver
-
-
-from libs.infrastructure.errors.file__error import (  # noqa: F401
-    UnsupportedExtension,
-    FileTooLarge,
-    OutsideSandbox,
+from libs.domain.errors.file__error import (
+    FileNotInSandboxError,
+    FileTooLargeError,
+    UnsupportedFileExtensionError,
 )
+
 _TEXT_EXTENSIONS: frozenset[str] = frozenset(
     {".md", ".json", ".yaml", ".yml", ".jsonl", ".txt"}
 )
@@ -50,18 +49,18 @@ class FileReader:
     def read(self, rel: str) -> ReadResult:
         resolved = self._resolver.resolve(rel)
         if resolved is None:
-            raise OutsideSandbox()
+            raise FileNotInSandboxError()
         ext = Path(rel).suffix.lower() if isinstance(rel, str) else ""
         if ext not in ALLOWED_EXTENSIONS:
-            raise UnsupportedExtension(ext)
+            raise UnsupportedFileExtensionError(ext)
         if not resolved.is_file():
-            raise OutsideSandbox()
+            raise FileNotInSandboxError()
         try:
             stat = resolved.stat()
         except OSError as e:
-            raise OutsideSandbox() from e
+            raise FileNotInSandboxError() from e
         if stat.st_size > MAX_FILE_BYTES:
-            raise FileTooLarge(stat.st_size)
+            raise FileTooLargeError(stat.st_size)
         raw = resolved.read_bytes()
         if ext in _IMAGE_EXTENSIONS:
             content = base64.b64encode(raw).decode("ascii")

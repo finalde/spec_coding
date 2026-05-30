@@ -1,0 +1,20 @@
+{
+  "slug": "feng_shou_lu",
+  "title": "焚寿录",
+  "category": "xianxia",
+  "author": "原创 · spec-driven workflow",
+  "source": "originated from spec-driven workflow run xianxia_new-20260524-101931 (specs/ai_video/xianxia_new/)",
+  "complete": false,
+  "total_chapters_planned": 60,
+  "total_chapters_written": 1,
+  "chapters": [
+    {
+      "idx": 1,
+      "title": "第一集 落雁渊",
+      "url": null,
+      "done": true,
+      "hash": null,
+      "file": "0001-第一集 落雁渊.md"
+    }
+  ]
+}

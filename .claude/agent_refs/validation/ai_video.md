@@ -44,13 +44,13 @@ Severity:
 
 Every shot MUST ship with:
 
-- `prompts/shotNN_kling.md` — Kling text-to-video or image-to-video prompt.
-- `prompts/shotNN_seedance.md` — Seedance text-to-video prompt.
-- `prompts/shotNN_lastframe_seedream.md` — Seedream still-image prompt for the shot's final frame, per `agent_refs/project/ai_video.md` rule #11. Used as Kling's end-frame anchor and as the start-frame anchor of the next shot for clip-stitching consistency.
+- `shots/shotNN_kling.md` — Kling text-to-video or image-to-video prompt.
+- `shots/shotNN_seedance.md` — Seedance text-to-video prompt.
+- `shots/shotNN_lastframe_seedream.md` — Seedream still-image prompt for the shot's final frame, per `agent_refs/project/ai_video.md` rule #11. Used as Kling's end-frame anchor and as the start-frame anchor of the next shot for clip-stitching consistency.
 
 Additionally, the **first shot** of the video (or the first shot of each episode for novels) MUST ship with:
 
-- `prompts/shot01_startframe_seedream.md` — Seedream still-image prompt for the absolute opening frame. Used as Kling's start-frame anchor for shot 01.
+- `shots/shot01_startframe_seedream.md` — Seedream still-image prompt for the absolute opening frame. Used as Kling's start-frame anchor for shot 01.
 
 Reason: Kling and Seedance produce noticeably different output; the workflow's job is to let the user A/B both per shot. Seam-frame stills are the load-bearing mechanism for stitching multiple ≤15 s clips into a longer video without visible drift across clip boundaries.
 

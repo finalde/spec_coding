@@ -499,3 +499,20 @@ Eight render dispatch paths in `Reader.tsx`, eight covering scenarios (MarkdownV
 - **Reverse cross-tree link.** Spec defers to v2 (FR-78). X1 explicitly asserts NO reverse link — protects against a well-intentioned future implementer adding it without spec change.
 - **Manual walkthrough.** NOT in this level's scope — handled by `accessibility_and_manual.md` (specialist 06). Stage-5 strategy ensures `validation.requires_manual_walkthrough` is emitted after this level passes (per general.md principle 4 + development.md move #7).
 - **Boot smoke.** NOT in this level's scope — covered by `backend_tests.md` (specialist 03) per development.md move #4.
+
+---
+
+## Voice pool (follow-up 115) — U8 additions
+
+Two new Playwright spec files; both run under BOTH `prod-mode` and `dev-mode` projects (multi-mode parity per development.md move #1).
+
+- **`e2e/voice_grid.spec.ts`** — navigates to `/voices`, asserts (a) grid renders one tile per voice with archetype Chinese label + gender/age/emotion chips; (b) filter dropdowns (archetype / gender / age / emotion) update the visible set + reset page to 0; (c) on a tile that has `audio_path != null`, clicking ▶ calls `play()` on a single shared `HTMLAudioElement` (asserted via `page.evaluate(() => document.querySelectorAll('audio').length === 1 && !document.querySelector('audio').paused)`); (d) `e.stopPropagation()` on the ▶ button prevents navigation — the URL stays at `/voices`; (e) tile-body click navigates to `/file/ai_videos/_voices/voice_NNNN/voice_NNNN.md`; (f) select mode + bulk-delete loop calls FR-9v4 once per selected voice with per-voice error tally.
+
+- **`e2e/voice_view.spec.ts`** — navigates to `/file/ai_videos/_voices/voice_0001/voice_0001.md`, asserts (a) VoiceView 3-panel layout renders (audio panel / metadata `<dl>` / prompt card with 📋 Copy); (b) when `audio_path` is non-null, `<audio controls>` is present and `src` resolves through `/api/media`; (c) when `audio_path` is null, drop-zone text "尚未上传配音样本 — 拖入 .mp3 / .wav / .m4a 或点击选择" renders; (d) clicking 📋 Copy writes the fenced prompt to clipboard and flips to "✓ Copied" for 1.5s (mirrors FR-92 actor test); (e) assignments panel calls FR-9v8 + renders one row per assignment with `✕ 取消` calling FR-9v6 DELETE; (f) `🗑 删除` header button is disabled with tooltip when `assignments.length > 0` (server-side 409 mirror).
+
+**Test fixture prerequisites** (U7 ships, mirroring the existing fixture list):
+- `ai_videos/_voices/voice_0001/voice_0001.md` (no audio sample — drives the empty-state branch of VoiceView).
+- `ai_videos/_voices/voice_0002/voice_0002.md` + `voice_0002.mp3` (1-second silent sample, ≤ 16 KiB) — drives the playback path.
+- `ai_videos/_test_drama/characters/c1_zhuren/character.md` + an assignment of `voice_0002` to `c1_zhuren` — drives the assignments panel + delete-refusal scenario.
+
+**`pageerror` listener** stays armed (per move #9) — catches any React-reconciliation throw inside VoiceView's three-panel grid layout.

@@ -19,6 +19,7 @@ from apps.api.routes.frame__route import router as _frame_router
 from apps.api.routes.media__route import router as _media_router
 from apps.api.routes.novel__route import router as _novel_router
 from apps.api.routes.tree__route import router as _tree_router
+from apps.api.routes.voice__route import router as _voice_router
 
 router = APIRouter()
 router.include_router(_tree_router)
@@ -30,3 +31,4 @@ router.include_router(_actor_router)
 router.include_router(_casting_router)
 router.include_router(_character_video_router)
 router.include_router(_novel_router)
+router.include_router(_voice_router)

@@ -1,4 +1,12 @@
-export type TreeNodeType = "section" | "directory" | "file" | "image" | "video" | "audio" | "actor";
+export type TreeNodeType =
+  | "section"
+  | "directory"
+  | "file"
+  | "image"
+  | "video"
+  | "audio"
+  | "actor"
+  | "voice";
 
 export interface ProjectMeta {
   sub_type: "novel" | "short" | null;
@@ -15,7 +23,9 @@ export interface TreeNode {
   project_meta?: ProjectMeta | null;
   /** Only populated on `type === "actor"` leaves: relative path of the first face image inside the collapsed actor folder. */
   face_path?: string | null;
-  /** Chinese (or otherwise human-friendly) label rendered in place of `name` when present. Used by `novels/{category}/{slug}/` to show 仙侠 / 凡人修仙传 instead of the pinyin slug. */
+  /** Only populated on `type === "voice"` leaves (follow-up 115): relative path of the first audio sample inside the collapsed voice folder, or null when no sample has been uploaded yet. */
+  audio_path?: string | null;
+  /** Chinese (or otherwise human-friendly) label rendered in place of `name` when present. Used by `downloaded_novels/{category}/{slug}/` to show 仙侠 / 凡人修仙传 instead of the pinyin slug, and by `my_novel/{name}/` to show the README's H1 Chinese title. */
   display_name?: string;
 }
 

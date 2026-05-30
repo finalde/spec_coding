@@ -59,8 +59,8 @@
    characters/ref_images/{角色名}-{身份}-立绘.md → {角色名}-{身份}.png
 
 2. 用 Seedream 渲染所有 seam-frame 静帧 (按集渲染)
-   episodes/epNN/prompts/shot01_startframe_seedream.md → shot01_startframe.png  (每集首镜)
-   episodes/epNN/prompts/shotNN_lastframe_seedream.md  → shotNN_lastframe.png   (每镜)
+   episodes/epNN/shots/shot01_startframe_seedream.md → shot01_startframe.png  (每集首镜)
+   episodes/epNN/shots/shotNN_lastframe_seedream.md  → shotNN_lastframe.png   (每镜)
 
 3. 用 Kling 2.1 Pro 渲染每镜 image-to-video
    input_image_urls = [上一镜末帧 + 本镜末帧]
@@ -86,7 +86,7 @@
 
 ### 3. 渐进式 spec 扩展
 
-本次输出仅含 ep01-ep05 的详细 episode/shotlist/prompts/publish。ep06-ep60 在 `arc_outline.md` 中保留单行大纲。
+本次输出仅含 ep01-ep05 的详细 episode/shotlist/shots/publish。ep06-ep60 在 `arc_outline.md` 中保留单行大纲。
 
 后续按 5 集为一批触发 stage-4 regen 扩展：
 ```
@@ -97,8 +97,8 @@
 ### 4. 二季钩开关
 
 ep60 final shot 双版本：
-- `episodes/ep60/prompts/shot10_finale_kling.md` — single-season ending（屠尽伪君子 + 三女主成婚）
-- `episodes/ep60/prompts/shot10_hook_kling.md` — 二季钩 open ending（主女主腹微凸光一闪 + 魔气未灭）
+- `episodes/ep60/shots/shot10_finale_kling.md` — single-season ending（屠尽伪君子 + 三女主成婚）
+- `episodes/ep60/shots/shot10_hook_kling.md` — 二季钩 open ending（主女主腹微凸光一闪 + 魔气未灭）
 
 用户根据首发期留存数据二选一渲染。
 
@@ -127,7 +127,7 @@ ai_videos/mozun_chongsheng/
     ├── ep01/
     │   ├── episode.md           ← 集梗概
     │   ├── shotlist.md          ← 10 镜镜头表
-    │   ├── prompts/
+    │   ├── shots/
     │   │   ├── shot01_kling.md          ← Kling 视频 prompt
     │   │   ├── shot01_seedance.md       ← Seedance 视频 prompt
     │   │   ├── shot01_startframe_seedream.md ← 首镜首帧立绘
@@ -140,6 +140,6 @@ ai_videos/mozun_chongsheng/
 
 ## 维护
 
-- 任何角色描述符变更 → 更新对应 `characters/{role}.md` 第 10 字段"一句话锁定"，并 search-replace 所有 episodes/epNN/prompts/* 中的引用。
+- 任何角色描述符变更 → 更新对应 `characters/{role}.md` 第 10 字段"一句话锁定"，并 search-replace 所有 episodes/epNN/shots/* 中的引用。
 - 任何视觉规范变更 → 更新 `style_guide.md`，并由 stage-4 regen 重新生成相关 prompt。
 - 任何卷间大事件变更 → 更新 `arc_outline.md`，并由 stage-4 regen 同步对应集。

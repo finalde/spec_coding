@@ -1,8 +1,10 @@
-"""Novel-aggregate queries: list status of every novel on disk.
+"""Novel-aggregate queries: list status of every downloaded novel on disk.
 
-Reads `novels/{slug}/_meta.json` directly (no domain enforcement — pure
-projection). Returns one NovelStatusQdto per novel; novels with no
-`_meta.json` yet are excluded.
+Reads `downloaded_novels/{cat}/{slug}/_meta.json` directly (no domain enforcement
+— pure projection). Returns one NovelStatusQdto per novel; novels with no
+`_meta.json` yet are excluded. The `novels_root` constructor parameter is
+named after the abstract "novels root" concept; per follow-up 113 the container
+wires it to `downloaded_novels/` rather than the retired top-level `novels/`.
 """
 from __future__ import annotations
 

@@ -25,12 +25,14 @@ from libs.application.commands.file__command import FileCommand
 from libs.application.commands.frame__command import FrameCommand
 from libs.application.commands.media__command import MediaCommand
 from libs.application.commands.novel__command import NovelCommand
+from libs.application.commands.voice__command import VoiceCommand
 from libs.application.queries.actor__query import ActorQuery
 from libs.application.queries.casting__query import CastingQuery
 from libs.application.queries.file__query import FileQuery
 from libs.application.queries.media__query import MediaQuery
 from libs.application.queries.novel__query import NovelQuery
 from libs.application.queries.tree__query import TreeQuery
+from libs.application.queries.voice__query import VoiceQuery
 from libs.common.exposed_tree import ExposedTree
 from libs.common.origin import BoundOrigin
 from libs.common.safe_resolve import SafeResolver
@@ -48,6 +50,7 @@ from libs.infrastructure.writers.file__writer import FileWriter
 from libs.infrastructure.writers.frame__writer import FrameExtractor
 from libs.infrastructure.writers.media__writer import MediaArchiver, MediaRenamer
 from libs.infrastructure.writers.novel__writer import NovelDownloader
+from libs.infrastructure.writers.voice__writer import VoicePool
 
 
 class Container(containers.DeclarativeContainer):
@@ -91,12 +94,16 @@ class Container(containers.DeclarativeContainer):
     actor_pool: providers.Singleton[ActorPool] = providers.Singleton(
         ActorPool, exposed=exposed_tree, resolver=safe_resolver
     )
+    voice_pool: providers.Singleton[VoicePool] = providers.Singleton(
+        VoicePool, exposed=exposed_tree, resolver=safe_resolver
+    )
     casting: providers.Singleton[Casting] = providers.Singleton(
         Casting,
         exposed=exposed_tree,
         resolver=safe_resolver,
         renamer=media_renamer,
         actor_pool=actor_pool,
+        voice_pool=voice_pool,
     )
     character_video_truncator: providers.Singleton[CharacterVideoTruncator] = providers.Singleton(
         CharacterVideoTruncator, exposed=exposed_tree, resolver=safe_resolver
@@ -107,11 +114,14 @@ class Container(containers.DeclarativeContainer):
     character_view_extractor: providers.Singleton[CharacterViewExtractor] = providers.Singleton(
         CharacterViewExtractor, exposed=exposed_tree, resolver=safe_resolver
     )
-    novels_root: providers.Singleton[Path] = providers.Singleton(
-        lambda root: root / "novels", repo_root_path
+    downloaded_novels_root: providers.Singleton[Path] = providers.Singleton(
+        lambda root: root / "downloaded_novels", repo_root_path
+    )
+    my_novel_root: providers.Singleton[Path] = providers.Singleton(
+        lambda root: root / "my_novel", repo_root_path
     )
     novel_downloader: providers.Singleton[NovelDownloader] = providers.Singleton(
-        NovelDownloader, novels_root=novels_root
+        NovelDownloader, novels_root=downloaded_novels_root
     )
 
     # --- Application-layer factories: one per aggregate Q/C -----------------
@@ -143,6 +153,12 @@ class Container(containers.DeclarativeContainer):
     actor_query: providers.Factory[ActorQuery] = providers.Factory(
         ActorQuery, pool=actor_pool, casting=casting
     )
+    voice_command: providers.Factory[VoiceCommand] = providers.Factory(
+        VoiceCommand, pool=voice_pool, casting=casting
+    )
+    voice_query: providers.Factory[VoiceQuery] = providers.Factory(
+        VoiceQuery, pool=voice_pool, casting=casting
+    )
     casting_query: providers.Factory[CastingQuery] = providers.Factory(
         CastingQuery, casting=casting
     )
@@ -159,5 +175,5 @@ class Container(containers.DeclarativeContainer):
         NovelCommand, downloader=novel_downloader
     )
     novel_query: providers.Factory[NovelQuery] = providers.Factory(
-        NovelQuery, novels_root=novels_root
+        NovelQuery, novels_root=downloaded_novels_root
     )

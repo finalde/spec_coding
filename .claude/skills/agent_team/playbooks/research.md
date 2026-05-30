@@ -64,13 +64,25 @@ Constraints:
 - 600–1200 words; bullets and tables are fine.
 - If you can't find substantive content, say so explicitly — don't pad.
 
-Write findings to specs/{task_type}/{task_name}/findings/angle-{slug}.md with sections:
+Write findings to specs/{task_type}/{task_name}/findings/angle-{slug}.md. The file MUST begin with the worker-output envelope (per CLAUDE.md § Tool scoping and team coordination, coordination point 3):
+
+---
+worker_id: researcher-NN-{slug}
+stage: 3
+role: researcher
+angle: {slug}
+status: complete   # or partial / deferred_tool_unavailable / halted
+blockers: []
+confidence: high | medium | low
+---
+
+Then the sections:
 1. What this angle covers
 2. Key findings (bulleted, with citations)
 3. Implications for the spec (concrete, actionable)
 4. Open questions surfaced
 
-Return a 3-bullet executive summary.
+Mirror the same file (envelope + sections) into your audit output.md. Return a 3-bullet executive summary in your final message.
 ```
 
 #### Halting on deferred-tool failure

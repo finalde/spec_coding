@@ -36,3 +36,11 @@ class NotUnderAiVideosError(MediaDomainError):
 
 class NotUnderDeletedError(MediaDomainError):
     """hard_delete only operates on paths under ai_videos/_deleted/."""
+
+
+class MediaTargetExistsError(MediaDomainError):
+    """The destination path for an archive/unarchive/delete move already exists."""
+
+
+class MediaMoveFailedError(MediaDomainError):
+    """OS-level failure while moving / renaming a media file."""

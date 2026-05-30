@@ -39,7 +39,21 @@ One general-purpose worker per chosen level, all in parallel via `Agent` (single
 - `system_tests.md` — end-to-end scenarios with setup, action, assertions.
 - `performance.md`, `security.md`, `accessibility.md` — only if applicable.
 
-Capture spawn audit under `.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/spawns/level-specialist-NN-{level}/`.
+Each level file MUST begin with the worker-output envelope (per CLAUDE.md § Tool scoping and team coordination, coordination point 3):
+
+```yaml
+---
+worker_id: level-specialist-NN-{level}
+stage: 5
+role: level-specialist
+level: {level}
+status: complete | partial | halted
+blockers: []
+confidence: high | medium | low
+---
+```
+
+Mirror the same envelope into the audit `output.md`. Capture spawn audit under `.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/spawns/level-specialist-NN-{level}/`.
 
 ### 3. Consolidate into `strategy.md`
 
@@ -91,7 +105,7 @@ Not every level runs on every unit. `backend_api` → acceptance + system + unit
 ### 2. Append `validation.started`
 
 ```json
-{"ts": "<ISO 8601>", "type": "validation.started", "task_id": "...", "work_unit_id": "...", "levels": ["acceptance_criteria", "unit_tests"], "pre_reading_consulted": ["<absolute path>", ...]}
+{"ts": "<ISO 8601>", "type": "validation.started", "task_id": "...", "work_unit_id": "...", "levels": ["acceptance_criteria", "unit_tests"], "pre_reading_consulted": [{"path": "<absolute path>", "sha256": "<hex>"}, ...]}
 ```
 
 ### 3. Spawn validators in parallel
@@ -102,6 +116,21 @@ One worker per applicable level, all in parallel via `Agent`. Each:
   - Test-style levels: write minimal test code if needed and run it (`Bash`).
   - Criteria-style levels: read code/output and reason about each criterion.
 - Returns `pass`, OR a list of issues with `{id, level, severity, location, description, suggested_fix}`.
+
+Each validator's audit `output.md` MUST begin with the worker-output envelope (per CLAUDE.md § Tool scoping and team coordination, coordination point 3):
+
+```yaml
+---
+worker_id: validator-NN-{level}
+stage: 6
+role: validator
+level: {level}
+work_unit_id: {work_unit_id}
+status: complete | partial | halted
+blockers: []
+confidence: high | medium | low
+---
+```
 
 Capture spawn audit under `.audit/adhoc_agents/{YYYY-MM-DD}/{task_id}/spawns/validator-NN-{level}/`.
 

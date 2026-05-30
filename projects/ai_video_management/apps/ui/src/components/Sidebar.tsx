@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { deleteActor, importFromDownloads } from "../api";
+import { deleteActor, deleteVoice, importFromDownloads } from "../api";
 import { ApiError, type TreeNode } from "../types";
 import { ActorPoolGenerator } from "./ActorPoolGenerator";
+import { VoicePoolGenerator } from "./VoicePoolGenerator";
 
 const ACTOR_ID_RE = /^actor_\d{4,}$/;
+const VOICE_ID_RE = /^voice_\d{4,}$/;
 
 export interface SidebarProps {
   tree: TreeNode | null;
@@ -24,7 +26,9 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameToast, setRenameToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState<boolean>(false);
+  const [voiceGeneratorOpen, setVoiceGeneratorOpen] = useState<boolean>(false);
   const [deletingActorId, setDeletingActorId] = useState<string | null>(null);
+  const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
 
   const onRenameClick = useCallback(
     async (e: React.MouseEvent, dramaPath: string) => {
@@ -83,11 +87,37 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
     [deletingActorId, onTreeReload],
   );
 
+  const onVoiceDeleteClick = useCallback(
+    async (e: React.MouseEvent, voiceId: string) => {
+      e.stopPropagation();
+      if (deletingVoiceId) return;
+      const ok = window.confirm(
+        `Delete ${voiceId}? Moves folder to _deleted/_voices/. Refuses if assigned.`,
+      );
+      if (!ok) return;
+      setDeletingVoiceId(voiceId);
+      setRenameToast(null);
+      try {
+        await deleteVoice(voiceId);
+        setRenameToast({ kind: "ok", text: `已删除 ${voiceId}` });
+        if (onTreeReload) onTreeReload();
+      } catch (err) {
+        const msg = err instanceof ApiError
+          ? `删除失败: ${err.detail?.kind ?? err.status}`
+          : `删除失败: ${err instanceof Error ? err.message : String(err)}`;
+        setRenameToast({ kind: "err", text: msg });
+      } finally {
+        setDeletingVoiceId(null);
+      }
+    },
+    [deletingVoiceId, onTreeReload],
+  );
+
   useEffect(() => {
     if (!tree) return;
     const accum: Record<string, boolean> = {};
     const walk = (node: TreeNode): void => {
-      if (node.type === "file" || node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "actor") return;
+      if (node.type === "file" || node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "actor" || node.type === "voice") return;
       if (node.path) accum[node.path] = false;
       for (const c of node.children ?? []) walk(c);
     };
@@ -151,7 +181,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
     if (!tree) return;
     const accum: Record<string, boolean> = {};
     const walk = (node: TreeNode): void => {
-      if (node.type === "file" || node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "actor") return;
+      if (node.type === "file" || node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "actor" || node.type === "voice") return;
       if (node.path) accum[node.path] = false;
       for (const c of node.children ?? []) walk(c);
     };
@@ -233,7 +263,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
       ) : null}
       <div ref={treeRef} role="tree" aria-label="File tree" className="tree">
         {flat.map((item) => {
-          const isLeaf = item.node.type === "file" || item.node.type === "image" || item.node.type === "video" || item.node.type === "audio" || item.node.type === "actor";
+          const isLeaf = item.node.type === "file" || item.node.type === "image" || item.node.type === "video" || item.node.type === "audio" || item.node.type === "actor" || item.node.type === "voice";
           const hasChildren = (item.node.children ?? []).length > 0;
           const isOpen = expanded[item.node.path] === true || item.depth === 0;
           const isActive = currentPath === item.node.path;
@@ -244,6 +274,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
           const isSystemFolder = isAiVideoChild && dramaPathParts[1].startsWith("_");
           const isDrama = isAiVideoChild && !isSystemFolder;
           const isActorsRoot = isAiVideoChild && dramaPathParts[1] === "_actors";
+          const isVoicesRoot = isAiVideoChild && dramaPathParts[1] === "_voices";
           const isDeletedRoot = isAiVideoChild && dramaPathParts[1] === "_deleted";
           const isActorEntry =
             item.node.type === "actor" &&
@@ -253,7 +284,16 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
             ACTOR_ID_RE.test(dramaPathParts[2]) &&
             !dramaPathParts.includes("_deleted");
           const actorId = isActorEntry ? dramaPathParts[2] : null;
+          const isVoiceEntry =
+            item.node.type === "voice" &&
+            dramaPathParts.length >= 3 &&
+            dramaPathParts[0] === "ai_videos" &&
+            dramaPathParts[1] === "_voices" &&
+            VOICE_ID_RE.test(dramaPathParts[2]) &&
+            !dramaPathParts.includes("_deleted");
+          const voiceId = isVoiceEntry ? dramaPathParts[2] : null;
           const isDeletingThis = actorId !== null && deletingActorId === actorId;
+          const isDeletingVoiceThis = voiceId !== null && deletingVoiceId === voiceId;
           const isRenamingThis = renamingPath === item.node.path;
           return (
             <div
@@ -284,7 +324,9 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
               {item.node.type === "video" ? <span aria-hidden="true" className="tree-icon">🎬</span> : null}
               {item.node.type === "audio" ? <span aria-hidden="true" className="tree-icon">🎵</span> : null}
               {item.node.type === "actor" ? <span aria-hidden="true" className="tree-icon">🎭</span> : null}
+              {item.node.type === "voice" ? <span aria-hidden="true" className="tree-icon">🎙</span> : null}
               {isActorsRoot ? <span aria-hidden="true" className="tree-icon">🎭</span> : null}
+              {isVoicesRoot ? <span aria-hidden="true" className="tree-icon">🎙</span> : null}
               <span className="tree-label">{item.node.display_name || item.node.name}</span>
               {subType ? (
                 <span className={`subtype-badge subtype-${subType}`}
@@ -326,6 +368,28 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                   </button>
                 </>
               ) : null}
+              {isVoicesRoot ? (
+                <>
+                  <button
+                    type="button"
+                    className="drama-rename-btn"
+                    aria-label="生成新一批配音 prompt"
+                    title="本地合成 Chinese 配音 prompt，粘贴入外部 AI 配音模型"
+                    onClick={(e) => { e.stopPropagation(); setVoiceGeneratorOpen(true); }}
+                  >
+                    🎙 生成配音
+                  </button>
+                  <button
+                    type="button"
+                    className="drama-rename-btn"
+                    aria-label="在网格视图中查看所有配音"
+                    title="网格视图：archetype 筛选 + 一键试听"
+                    onClick={(e) => { e.stopPropagation(); navigate("/voices"); }}
+                  >
+                    🔲 网格
+                  </button>
+                </>
+              ) : null}
               {isDeletedRoot ? (
                 <button
                   type="button"
@@ -349,6 +413,18 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                   {isDeletingThis ? "删除中…" : "🗑"}
                 </button>
               ) : null}
+              {isVoiceEntry && voiceId ? (
+                <button
+                  type="button"
+                  className="actor-delete-btn"
+                  aria-label={`软删除 ${voiceId}`}
+                  title="软删除 voice — 移到 _deleted/_voices/（已分配的 voice 会拒绝删除）"
+                  disabled={deletingVoiceId !== null}
+                  onClick={(e) => onVoiceDeleteClick(e, voiceId)}
+                >
+                  {isDeletingVoiceThis ? "删除中…" : "🗑"}
+                </button>
+              ) : null}
             </div>
           );
         })}
@@ -356,6 +432,11 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
       <ActorPoolGenerator
         open={generatorOpen}
         onClose={() => setGeneratorOpen(false)}
+        onGenerated={() => { if (onTreeReload) onTreeReload(); }}
+      />
+      <VoicePoolGenerator
+        open={voiceGeneratorOpen}
+        onClose={() => setVoiceGeneratorOpen(false)}
         onGenerated={() => { if (onTreeReload) onTreeReload(); }}
       />
     </nav>

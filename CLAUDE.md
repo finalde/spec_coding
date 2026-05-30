@@ -107,7 +107,7 @@ Two folders sit alongside the workflow, with intentionally separate lifecycles:
 4. `agent_refs/project/general.md`.
 5. `agent_refs/project/<task_type>.md`, if present.
 
-The parent records the absolute paths it actually read in a single `pre_reading_consulted` array on the run's first `events.jsonl` event for that stage (or on each `validation.started` event in stage 6). A missing or empty array is a **critical failure** — institutional memory wasn't loaded.
+The parent records each file it actually read as `{path, sha256}` (SHA-256 of the file's bytes at read time) in a single `pre_reading_consulted` array on the run's first `events.jsonl` event for that stage (or on each `validation.started` event in stage 6). The hash turns the event into a reproducibility receipt — two runs can diff "did the playbook or a ref drift between us?" without git archaeology. A missing or empty array is a **critical failure** — institutional memory wasn't loaded.
 
 **Precedence when rules conflict:** per-task-type ref > matching `general.md` in same folder; project-scoped ref > stage-scoped ref > playbook default. A project-specific spec under `specs/{type}/{name}/` may override project-scoped refs for that one project, with a note explaining the divergence.
 
@@ -154,6 +154,27 @@ Detailed output rules live in `.claude/agent_refs/project/ai_video.md` per § St
 
 The parent writes during stage 6 runtime validation and at the start of each coordinated stage to record `pre_reading_consulted`.
 
+### Event schema
+
+Every event MUST have the common envelope: `ts` (ISO 8601 UTC string), `type` (one of the event types above), `task_id` (`{task_name}-{YYYYMMDD-HHmmss}`).
+
+Per-type required fields, in addition to the envelope:
+
+- `exec.unit.started` / `exec.unit.completed` / `exec.revision.applied`: `work_unit_id`, `work_unit_kind`.
+- `validation.started`: `work_unit_id`, `levels: string[]`, `pre_reading_consulted: {path, sha256}[]`.
+- `validation.issue.raised`: `work_unit_id`, `issue_id`, `level`, `severity`, `description`.
+- `validation.pass` / `validation.requires_manual_walkthrough`: `work_unit_id`.
+- `pipeline.halted`: `reason`, optional `work_unit_id`.
+- `regen.delete.planned` / `regen.delete.completed`: `path`, optional `count`.
+- `regen.write.completed`: `path`, `size_bytes`.
+- Stage-entry events (the synthetic event that opens each coordinated stage): `stage` (int 1–6), `pre_reading_consulted: {path, sha256}[]`.
+
+Unknown fields are allowed (forward-compatible). Missing required fields are a critical failure — the event is treated as if it didn't run, and the stage halts on synthesis.
+
+### Date-level task index
+
+`.audit/adhoc_agents/{date}/index.jsonl` is append-only and gives a one-line summary per task started that day. At task start, append `{ts, task_id, task_type, task_name, status: "started", run_dir}`. At terminal status (clean exit or `pipeline.halted`), append `{ts, task_id, status: "completed" | "halted", terminal_reason?}`. Readers derive current status from the **last** entry per `task_id` — never edit prior lines. The index is the cheap "what ran today / which task halted" lookup; the per-task `events.jsonl` is the full detail.
+
 ## Prompt triage gate (every prompt)
 
 Before doing any work, triage how the current prompt relates to the spec-driven ecosystem. This runs on **every** prompt — including casual ones — and produces exactly one of three outcomes:
@@ -180,7 +201,17 @@ The triage is itself a state-surface discipline: every rule the user gives must 
 Once a spec-driven project exists, follow-up chat may contain additional intent for it. Triage every new prompt before doing anything else.
 
 1. **Triage.** Casual chat / general question with no spec-driven impact → answer normally, no persistence. Real instruction → classify which project. **If ambiguous (project X, Y, or none), ASK the user** — do not silently pick.
-2. **Persist** at `specs/{type}/{name}/user_input/follow_ups/NNN-{YYYYMMDD-HHmmss}-{slug}.md` (NNN zero-padded, sequential). Contents: abstracted instruction (drop chitchat); prefix with `# Follow-up draft NNN — {YYYY-MM-DD}` + a one-line summary.
+2. **Persist** at `specs/{type}/{name}/user_input/follow_ups/NNN-{YYYYMMDD-HHmmss}-{slug}.md` (NNN zero-padded, sequential). Contents: abstracted instruction (drop chitchat); prefix with `# Follow-up draft NNN — {YYYY-MM-DD}` + a one-line summary. An OPTIONAL YAML frontmatter block may declare routing hints (all fields optional):
+   ```yaml
+   ---
+   target_stage: 1 | 2 | 3 | 4 | 5 | 6        # which stage this instruction primarily affects
+   target_artifacts:                            # specific files the walk should examine first
+     - validation/security.md
+     - final_specs/spec.md
+   severity: low | medium | high                # how invasive the patch is allowed to be
+   ---
+   ```
+   Frontmatter is a hint, not a contract — the downstream walk still inspects every artifact. Omit the block entirely if no routing hint is needed.
 3. **Regenerate `revised_prompt.md`** = `raw_prompt.md` + every `follow_ups/*.md` in numerical order. No confirmation needed.
 4. **Walk downstream artifacts** in order: `interview/qa.md` → `findings/dossier.md` + per-angle → `final_specs/spec.md` → `validation/strategy.md` + per-level → generated outputs under `projects/` or `ai_videos/`.
 5. **Auto-update affected sections in place.** Smallest change that resolves the conflict / fills the gap. Surgical only; no whole-file regen. Inline markers (`<!-- auto-updated by follow-up NNN -->`) are NOT added by default — ask the user if a particular update is invasive enough to warrant one.
@@ -274,6 +305,22 @@ Some tools are **deferred** — schemas not loaded at session start; calling the
 1. **The parent IS the manager** at every coordinated stage (2, 3, 5, 6). It reads playbook + refs, decides team composition, spawns workers, synthesizes outputs. There is no manager-subagent layer in between.
 2. **Workers spawn in parallel** — single message, multiple `Agent` tool calls. Canonical way to maximize parallelism on this harness.
 3. **Workers write their own outputs and audit files.** Each worker writes its artifact to the canonical `specs/{type}/{name}/` location AND its spawn audit (`prompt.md` + `output.md`) under `.audit/adhoc_agents/{date}/{task_id}/spawns/{worker_id}/`. No fabricated spawn folders.
+
+   Both the canonical artifact and the audit `output.md` MUST begin with a YAML frontmatter envelope so the parent's synthesis is machine-checkable:
+   ```yaml
+   ---
+   worker_id: researcher-03-prior-art
+   stage: 3
+   role: researcher | level-specialist | validator
+   angle: prior-art               # researcher only
+   level: security                # level-specialist / validator only
+   work_unit_id: backend_api      # validator only
+   status: complete | partial | deferred_tool_unavailable | halted
+   blockers: []                   # list of strings; empty if none
+   confidence: high | medium | low
+   ---
+   ```
+   Required fields: `worker_id`, `stage`, `role`, `status`. The remaining fields are role-conditional per the comments above. The parent rejects worker outputs missing the envelope (or with unknown `status`) and re-spawns once before halting with `pipeline.halted`.
 4. **The parent does synthesis directly** after workers finish — `qa.md`, `dossier.md`, `strategy.md` are parent-written.
 
 **Universal rules:**

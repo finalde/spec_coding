@@ -31,17 +31,19 @@ from libs.domain.value_objects.character_video__valueobject import (
     audio_output_filename,
     view_output_filename,
 )
-from libs.infrastructure.errors.character_video__error import (  # noqa: F401
-    AudioExtractFailed,
-    ConcatFailed,
-    FfmpegMissing,
-    InvalidPath,
-    NoCharacterTable,
-    NotCharacterVideo,
-    NotFound,
-    NotShotMd,
-    TruncateFailed,
-    ViewExtractFailed,
+from libs.domain.errors.character_video__error import (
+    AudioExtractFailedError,
+    CharacterVideoNotFoundError,
+    ConcatFailedError,
+    FfmpegMissingForCharacterVideoError,
+    InvalidCharacterVideoPathError,
+    InvalidShotMdPathError,
+    NoCharacterTableError,
+    NotCharacterVideoError,
+    NotShotMdError,
+    ShotMdNotFoundError,
+    TruncateFailedError,
+    ViewExtractFailedError,
 )
 # --- Shared exceptions ------------------------------------------------------
 
@@ -85,7 +87,7 @@ class CharacterVideoTruncator:
         try:
             ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
         except Exception as exc:
-            raise FfmpegMissing(str(exc)) from exc
+            raise FfmpegMissingForCharacterVideoError(str(exc)) from exc
         out_path = src.parent / _OUTPUT_NAME
         cmd = [
             ffmpeg,
@@ -108,10 +110,10 @@ class CharacterVideoTruncator:
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
-            raise TruncateFailed("ffmpeg_timeout") from exc
+            raise TruncateFailedError("ffmpeg_timeout") from exc
         if completed.returncode != 0 or not out_path.is_file():
             err = completed.stderr.decode("utf-8", errors="replace").strip()[:300]
-            raise TruncateFailed(err or "ffmpeg_failed")
+            raise TruncateFailedError(err or "ffmpeg_failed")
         return TruncateResult(
             src_rel=self._rel(src),
             out_rel=self._rel(out_path),
@@ -120,23 +122,23 @@ class CharacterVideoTruncator:
 
     def _validate_character_video_source(self, rel: str) -> Path:
         if not isinstance(rel, str) or rel == "":
-            raise InvalidPath("path is empty")
+            raise InvalidCharacterVideoPathError("path is empty")
         if not self._exposed.is_inside(rel):
-            raise InvalidPath("path outside sandbox")
+            raise InvalidCharacterVideoPathError("path outside sandbox")
         ext = Path(rel).suffix.lower()
         if ext not in VIDEO_EXTENSIONS:
-            raise NotCharacterVideo("extension is not a video type")
+            raise NotCharacterVideoError("extension is not a video type")
         if not self._is_under_character_folder(rel):
-            raise NotCharacterVideo(
+            raise NotCharacterVideoError(
                 "path must be under ai_videos/{drama}/characters/{cN_xxx}/"
             )
         resolved = self._resolver.resolve(rel)
         if resolved is None:
-            raise InvalidPath("path failed sandbox resolution")
+            raise InvalidCharacterVideoPathError("path failed sandbox resolution")
         if resolved.is_symlink():
-            raise InvalidPath("symlink is not allowed")
+            raise InvalidCharacterVideoPathError("symlink is not allowed")
         if not resolved.is_file():
-            raise NotFound("file does not exist")
+            raise CharacterVideoNotFoundError("file does not exist")
         return resolved
 
     @staticmethod
@@ -261,7 +263,7 @@ class ShotConcatBuilder:
         shot_md, shot_slug, drama = self._validate_shot_md(rel)
         rows = self._parse_character_table(shot_md.read_text(encoding="utf-8"))
         if not rows:
-            raise NoCharacterTable("no 出场角色 table found in shot md")
+            raise NoCharacterTableError("no 出场角色 table found in shot md")
         used: list[CharacterUsage] = []
         skipped: list[CharacterSkip] = []
         for role, char_file_rel in rows:
@@ -306,33 +308,33 @@ class ShotConcatBuilder:
 
     def _validate_shot_md(self, rel: str) -> tuple[Path, str, str]:
         if not isinstance(rel, str) or rel == "":
-            raise InvalidPath("path is empty")
+            raise InvalidShotMdPathError("path is empty")
         if not self._exposed.is_inside(rel):
-            raise InvalidPath("path outside sandbox")
+            raise InvalidShotMdPathError("path outside sandbox")
         parts = rel.split("/")
         if len(parts) < 4:
-            raise NotShotMd("path is too shallow to be a shot md")
+            raise NotShotMdError("path is too shallow to be a shot md")
         if parts[0] != "ai_videos" or parts[1].startswith("_"):
-            raise NotShotMd("path is not under ai_videos/{drama}/")
+            raise NotShotMdError("path is not under ai_videos/{drama}/")
         if Path(rel).suffix.lower() != ".md":
-            raise NotShotMd("path is not a .md file")
+            raise NotShotMdError("path is not a .md file")
         shot_dir_name = parts[-2]
         file_name = parts[-1]
         if not _SHOT_DIR_RE.match(shot_dir_name):
-            raise NotShotMd("parent folder is not shot{NN}")
+            raise NotShotMdError("parent folder is not shot{NN}")
         md_match = _SHOT_MD_NAME_RE.match(file_name)
         if md_match is None:
-            raise NotShotMd("filename is not shot{NN}.md")
+            raise NotShotMdError("filename is not shot{NN}.md")
         if parts[-3].lower() != "prompts":
-            raise NotShotMd("shot folder is not under prompts/")
+            raise NotShotMdError("shot folder is not under prompts/")
         drama = parts[1]
         resolved = self._resolver.resolve(rel)
         if resolved is None:
-            raise InvalidPath("path failed sandbox resolution")
+            raise InvalidShotMdPathError("path failed sandbox resolution")
         if resolved.is_symlink():
-            raise InvalidPath("symlink is not allowed")
+            raise InvalidShotMdPathError("symlink is not allowed")
         if not resolved.is_file():
-            raise NotFound("file does not exist")
+            raise ShotMdNotFoundError("file does not exist")
         return resolved, md_match.group(1).lower(), drama
 
     @staticmethod
@@ -608,7 +610,7 @@ class ShotConcatBuilder:
         try:
             ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
         except Exception as exc:
-            raise FfmpegMissing(str(exc)) from exc
+            raise FfmpegMissingForCharacterVideoError(str(exc)) from exc
 
         n = len(inputs)
         has_audio = [self._probe_has_audio(ffmpeg, src) for src in inputs]
@@ -672,10 +674,10 @@ class ShotConcatBuilder:
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
-            raise ConcatFailed("ffmpeg_timeout") from exc
+            raise ConcatFailedError("ffmpeg_timeout") from exc
         if completed.returncode != 0 or not out_path.is_file():
             err = completed.stderr.decode("utf-8", errors="replace").strip()[:400]
-            raise ConcatFailed(err or "ffmpeg_failed")
+            raise ConcatFailedError(err or "ffmpeg_failed")
 
     @staticmethod
     def _probe_has_audio(ffmpeg: str, src: Path) -> bool:
@@ -789,13 +791,13 @@ class CharacterViewExtractor:
         try:
             ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
         except Exception as exc:
-            raise FfmpegMissing(str(exc)) from exc
+            raise FfmpegMissingForCharacterVideoError(str(exc)) from exc
         prefix = src.parent.name
         out_dir = src.parent / _VIEWS_SUBDIR
         try:
             out_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise ViewExtractFailed(f"could not create views dir: {exc}") from exc
+            raise ViewExtractFailedError(f"could not create views dir: {exc}") from exc
         self._sweep_outputs(out_dir)
         views: list[ViewResult] = []
         failures: list[tuple[str, str]] = []
@@ -822,7 +824,7 @@ class CharacterViewExtractor:
             failures.append(("audio", err))
         if not views and audio is None:
             joined = "; ".join(f"{tgt}: {e}" for (tgt, e) in failures)
-            raise ViewExtractFailed(joined or "no outputs produced")
+            raise ViewExtractFailedError(joined or "no outputs produced")
         return ViewExtractResult(
             src_rel=self._rel(src),
             views=tuple(views),
@@ -909,23 +911,23 @@ class CharacterViewExtractor:
 
     def _validate_character_video_source(self, rel: str) -> Path:
         if not isinstance(rel, str) or rel == "":
-            raise InvalidPath("path is empty")
+            raise InvalidCharacterVideoPathError("path is empty")
         if not self._exposed.is_inside(rel):
-            raise InvalidPath("path outside sandbox")
+            raise InvalidCharacterVideoPathError("path outside sandbox")
         ext = Path(rel).suffix.lower()
         if ext not in VIDEO_EXTENSIONS:
-            raise NotCharacterVideo("extension is not a video type")
+            raise NotCharacterVideoError("extension is not a video type")
         if not CharacterVideoTruncator._is_under_character_folder(rel):
-            raise NotCharacterVideo(
+            raise NotCharacterVideoError(
                 "path must be under ai_videos/{drama}/characters/{cN_xxx}/"
             )
         resolved = self._resolver.resolve(rel)
         if resolved is None:
-            raise InvalidPath("path failed sandbox resolution")
+            raise InvalidCharacterVideoPathError("path failed sandbox resolution")
         if resolved.is_symlink():
-            raise InvalidPath("symlink is not allowed")
+            raise InvalidCharacterVideoPathError("symlink is not allowed")
         if not resolved.is_file():
-            raise NotFound("file does not exist")
+            raise CharacterVideoNotFoundError("file does not exist")
         return resolved
 
     def _rel(self, p: Path) -> str:

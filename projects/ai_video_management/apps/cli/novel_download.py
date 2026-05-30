@@ -1,8 +1,14 @@
-"""CLI entry: download every canonical novel into novels/{slug}/.
+"""CLI entry: download every canonical novel into downloaded_novels/{category}/{slug}/.
 
-Resumable — re-running picks up where it left off via novels/{slug}/_meta.json.
-Repo root is detected by walking parents until 'novels/' or the repo marker is found,
-or overridden via NOVELS_ROOT env var.
+Resumable — re-running picks up where it left off via
+downloaded_novels/{category}/{slug}/_meta.json.
+Repo root is detected by walking parents until `downloaded_novels/` or the repo
+marker is found, or overridden via NOVELS_ROOT env var (kept under the old name
+for backwards-compatibility; the value points at downloaded_novels/).
+
+Per follow-up 113 the surface formerly known as `novels/` was renamed to
+`downloaded_novels/`, sibling to the new `my_novel/` surface for original
+manuscripts.
 
 Usage:
     python -m apps.cli.novel_download                       # download all, 1 worker (serial, polite)
@@ -25,11 +31,11 @@ def _resolve_novels_root() -> Path:
         return Path(override).resolve()
     here = Path(__file__).resolve()
     for ancestor in here.parents:
-        if (ancestor / "novels").is_dir():
-            return (ancestor / "novels").resolve()
+        if (ancestor / "downloaded_novels").is_dir():
+            return (ancestor / "downloaded_novels").resolve()
         if (ancestor / ".git").exists():
-            return (ancestor / "novels").resolve()
-    return (Path.cwd() / "novels").resolve()
+            return (ancestor / "downloaded_novels").resolve()
+    return (Path.cwd() / "downloaded_novels").resolve()
 
 
 def _on_progress(slug: str, idx: int, total: int) -> None:
@@ -39,7 +45,7 @@ def _on_progress(slug: str, idx: int, total: int) -> None:
 def main(argv: list[str]) -> int:
     novels_root = _resolve_novels_root()
     novels_root.mkdir(parents=True, exist_ok=True)
-    print(f"novels_root: {novels_root}", flush=True)
+    print(f"downloaded_novels_root: {novels_root}", flush=True)
 
     # Default reverted to 1 (serial) per follow-up 106: 5 workers tripped sudugu.org's
     # anti-bot in follow-up 105 and got the IP 302-redirected to google.com. Use

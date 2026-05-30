@@ -21,16 +21,20 @@ _EXCLUDED_DIRS: frozenset[str] = frozenset(
 )
 
 
-_ALLOWED_TOP_LEVEL: frozenset[str] = frozenset({"ai_videos", "novels"})
+_ALLOWED_TOP_LEVEL: frozenset[str] = frozenset({"ai_videos", "downloaded_novels", "my_novel"})
 
 
 class ExposedTree:
-    """The webapp's read/write tree exposes two roots: ai_videos/** and novels/**.
+    """The webapp's read/write tree exposes three roots: ai_videos/**, downloaded_novels/**, my_novel/**.
 
     `novels/` replaced `research/` in follow-up 096: the user consolidated the
-    free-form reference dump into a downloaded-novels surface. Same security
-    controls (extension allowlist, _EXCLUDED_DIRS filter, traversal hardening);
-    only the admitted-first-segment set was updated.
+    free-form reference dump into a downloaded-novels surface.
+    Follow-up 113 split `novels/` into `downloaded_novels/` (the scraped baseline
+    corpus — sudugu/ttkan downloads, organized by category/slug) and `my_novel/`
+    (original manuscripts authored for AI-short-drama production, derived from but
+    distinct in copyright from the downloaded baseline).
+    Same security controls (extension allowlist, _EXCLUDED_DIRS filter, traversal
+    hardening); only the admitted-first-segment set is updated.
     """
 
     def __init__(self, repo_root: Path) -> None:
@@ -46,11 +50,17 @@ class ExposedTree:
             return []
         return sorted(p for p in ai_videos_root.iterdir() if p.is_dir())
 
-    def novel_dirs(self) -> list[Path]:
-        novels_root = self._root / "novels"
-        if not novels_root.is_dir():
+    def downloaded_novel_dirs(self) -> list[Path]:
+        root = self._root / "downloaded_novels"
+        if not root.is_dir():
             return []
-        return sorted(p for p in novels_root.iterdir() if p.is_dir())
+        return sorted(p for p in root.iterdir() if p.is_dir())
+
+    def my_novel_dirs(self) -> list[Path]:
+        root = self._root / "my_novel"
+        if not root.is_dir():
+            return []
+        return sorted(p for p in root.iterdir() if p.is_dir())
 
     def is_inside(self, rel: str) -> bool:
         if not rel or rel.startswith("/") or "\\" in rel or "\x00" in rel:

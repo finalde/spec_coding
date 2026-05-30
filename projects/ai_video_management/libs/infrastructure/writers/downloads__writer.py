@@ -22,13 +22,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from libs.common.exposed_tree import MEDIA_EXTENSIONS, ExposedTree
-from libs.infrastructure.writers.media__writer import DramaNotFound, InvalidDramaPath, MediaRenamer, RenameResult
 from libs.common.safe_resolve import SafeResolver
+from libs.domain.errors.casting__error import DramaNotFoundError, InvalidDramaPathError
+from libs.domain.errors.downloads__error import DownloadsDirMissingError
+from libs.infrastructure.writers.media__writer import MediaRenamer, RenameResult
 
-
-from libs.infrastructure.errors.downloads__error import (  # noqa: F401
-    DownloadsDirMissing,
-)
 NOT_MATCHED_DIR_NAME = "not_matched"
 DEFAULT_TIME_WINDOW_SECONDS = 7 * 24 * 60 * 60
 DOWNLOADS_ENV_VAR = "AI_VIDEO_MGMT_DOWNLOADS_DIR"
@@ -83,7 +81,7 @@ class DownloadsImporter:
     def import_drama(self, rel_drama_path: str) -> ImportResult:
         drama_dir = self._renamer.validate_drama(rel_drama_path)
         if not self._downloads_dir.is_dir():
-            raise DownloadsDirMissing(str(self._downloads_dir))
+            raise DownloadsDirMissingError(str(self._downloads_dir))
         candidates = self._collect_candidates(drama_dir)
         cutoff = time.time() - self._window
         result = ImportResult()
@@ -250,11 +248,8 @@ def ord_seq(s: str) -> int:
 __all__ = [
     "DEFAULT_TIME_WINDOW_SECONDS",
     "DOWNLOADS_ENV_VAR",
-    "DownloadsDirMissing",
     "DownloadsImporter",
-    "DramaNotFound",
     "ImportResult",
-    "InvalidDramaPath",
     "NOT_MATCHED_DIR_NAME",
     "RenameResult",
 ]

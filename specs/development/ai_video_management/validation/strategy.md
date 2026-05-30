@@ -84,6 +84,8 @@ Inputs consumed: `final_specs/spec.md` + 6 parallel level-specialist outputs.
 
 6. **Promotion preservation check** (`validation/general.md` principle 8 + `validation/ai_video.md` move #7). This task does NOT have any `<stage>/promoted.md` sidecars at v1 (the spec_driven webapp wasn't used for any pin operations on the `ai_video_management` task itself). Skipped in v1 strategy. If a future regen runs after pinning, strategy must be re-derived with a `promotion_preservation` level added.
 
+7. **Voice pool — explicit no-HTTP carve-out** (follow-up 115). The voice pool (U8) deliberately has zero outbound-HTTP surface: no Kling-equivalent endpoint, no provider env vars, no JWT, no SSRF vet. Stage-6 implementers must NOT port the actor pool's `_validate_outbound_url` / Kling JWT helper / 429-retry loop into the voice modules. Validators MUST grep-fail if `httpx.AsyncClient` / `urllib.request` / outbound URL literals appear anywhere under `libs/infrastructure/writers/voice__*.py` or `libs/infrastructure/clients/voice_*.py` (the latter file must not exist at all). Cross-cut owner: backend_tests level (U8 row) + security level (SEC-VOICE-* future check group, deferred until U8 lands; v1 audit surface is FR-9v5 multipart upload only).
+
 ## How runtime validation will use this
 
 Stage 6 runtime mode will:
@@ -107,6 +109,7 @@ Stage 6 runtime mode will:
 | U5 frontend ported components | ✓ | ✓ | n/a | n/a | per-component (MarkdownView, QaView, JsonlView, CodeView, ImagePlaceholder, Editor) | ✓ |
 | U6 frontend new ai_video views | ✓ | ✓ | n/a | n/a | per-view (ShotPairView, ShotlistTableView, ImageRefView) | ✓ |
 | U7 Makefile + README + e2e | ✓ | ✓ | n/a | partial (CSP header + bind config) | ✓ (full multi-mode) | ✓ |
+| U8 voice pool (follow-up 115) | ✓ | ✓ | ✓ (voice composition + casting parser; NO outbound-HTTP tests) | ✓ (FR-9v5 multipart audio upload — extension allowlist, 10 MiB cap, sandbox, symlink-reject; NO SSRF / no provider-key surface to vet) | ✓ (VoiceView + VoiceGrid + audio playback; FR-9v5 drop-zone + upload) | ✓ (audio player keyboard accessibility, caption-style `aria-label` on play buttons in grid) |
 | Whole-project final pass | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ + manual walkthrough |
 
 3. **After all 7 units pass automated levels:** parent runs the **whole-project final pass** — re-runs all levels across the full project, including cross-unit drift checks (e.g., a TreeNode shape change in U2 not propagated to a Sidebar.tsx read in U5).

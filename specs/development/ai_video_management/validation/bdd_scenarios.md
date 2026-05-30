@@ -802,3 +802,58 @@ Per spec § Out of scope, the following are NOT covered by stage-5 BDD scenarios
 - Cross-publish manager / English publish translation.
 - Compare-two-projects diff view.
 - Reverse cross-tree link (specs → ai_videos).
+- **AI voice synthesis API calls** (follow-up 115 carve-out) — explicitly never. The voice pool composes prompts locally and stores user-supplied audio samples; no scenario tests outbound TTS / voice-cloning calls.
+
+---
+
+## Feature 10 — Voice pool (follow-up 115)
+
+Mirror of the actor pool features (covered in spec FR-9f / FR-9j / FR-91 / FR-92) for the auditory leg. **Crucial invariant**: zero outbound HTTP.
+
+**Scenario 10.1 — local-only composition.**
+Given a fresh `ai_videos/_voices/` folder,
+When the client `POST`s to `/api/voices/generate` with `{count: 3, archetype: "effeminate_eunuch", gender: "neutral", age_impression: "middle_aged"}`,
+Then the response is 200 with `generated.length === 3` and three `voice_NNNN/voice_NNNN.md` sidecars exist,
+And **no socket** is opened to any non-loopback address during the request (asserted via `socket.socket` patch in test harness).
+*Severity: critical if outbound HTTP occurs — that breaks the FR-9v carve-out and recreates the actor-pool provider-management surface this follow-up was meant to avoid.*
+
+**Scenario 10.2 — archetype overlay produces distinct prompts.**
+Given the same `count + gender + age_impression`,
+When the client generates one voice for each of `effeminate_eunuch`, `mighty_general`, `gentle_palace_mistress`,
+Then each generated prompt contains archetype-specific Chinese descriptors that do NOT appear in the other two,
+And the prompts pairwise differ by ≥ 30% character-level Levenshtein distance.
+*Severity: blocker if the three archetypes produce indistinguishable prompts — the bias overlay is the load-bearing feature distinguishing voices.*
+
+**Scenario 10.3 — refuse-on-assignment delete.**
+Given `voice_0007` is assigned via `POST /api/casting/assign-voice` to `ai_videos/test_drama/` role `c1_zhuren`,
+When the client `POST`s to `/api/voices/delete` with `{voice_id: "voice_0007"}`,
+Then the response is `409 voice_is_assigned` with the assignment listed,
+And the `_voices/voice_0007/` folder is untouched.
+*Severity: critical if the folder moves anyway — that silently breaks the casting link.*
+
+**Scenario 10.4 — audio upload extension + size gates.**
+Given an existing `voice_0001/`,
+When the client `POST`s to `/api/voices/voice_0001/audio` with a multipart `audio` part,
+Then a `.mp3` ≤ 10 MiB lands at `voice_0001.mp3` and the sidecar `audio_sample` row updates atomically,
+And a `.svg` part is rejected with `400 extension_not_allowed`,
+And a `.mp3` > 10 MiB is rejected with `413 body_too_large`,
+And a symlink target is refused before any bytes are written.
+*Severity: critical for the extension allowlist and symlink refusal (path-traversal class); blocker for the size cap.*
+
+**Scenario 10.5 — voice-aware casting upsert.**
+Given a drama with no `casting.md`,
+When the client `POST`s to `/api/casting/assign-voice` with `{path, role: "c1_zhuren", voice_id: "voice_0002"}`,
+Then `casting.md` is created with a `voice_id` column and one row,
+And `characters/c1_zhuren/_cast.md` contains a "🎙 配音" section pointing at the voice sidecar (with embedded `<audio>` markup when a sample exists),
+And subsequent `DELETE /api/casting/assign-voice` clears only the voice cell (an `actor_id` cell on the same row is preserved).
+*Severity: blocker if actor_id is clobbered — many-to-many invariant is broken.*
+
+**Scenario 10.6 — voice grid playback affordance.**
+Given the `/voices` grid is loaded with three voices, two of which have audio samples,
+When the user clicks the ▶ button on a voice tile that has `audio_path != null`,
+Then a single shared `Audio` instance plays the sample,
+And clicking ▶ on a second tile stops the first playback before starting the second,
+And the page does NOT navigate (tile-body click is the navigation surface; ▶-button click `e.stopPropagation()`'s out).
+*Severity: warning for the single-instance / stop-previous behavior; blocker if the navigation override fails (UX regression).*
+
+**Coverage:** maps to FR-9v / FR-9v2 / FR-9v3 / FR-9v4 / FR-9v5 / FR-9v6 / FR-9v7 / FR-9v8 / FR-86v / FR-87v / FR-88v / FR-91v / FR-92v.

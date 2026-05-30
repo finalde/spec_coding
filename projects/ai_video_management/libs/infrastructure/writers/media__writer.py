@@ -15,23 +15,20 @@ from pathlib import Path
 
 from libs.common.exposed_tree import MEDIA_EXTENSIONS, ExposedTree
 from libs.common.safe_resolve import SafeResolver
-
-
-
-from libs.infrastructure.errors.media__error import (  # noqa: F401
-    InvalidPath,
-    NotFound,
-    NotMedia,
-    AlreadyArchived,
-    NotInArchive,
-    AlreadyDeleted,
-    NotInAiVideos,
-    NotInDeleted,
-    TargetExists,
-    MoveFailed,
-    InvalidDramaPath,
-    DramaNotFound,
+from libs.domain.errors.casting__error import DramaNotFoundError, InvalidDramaPathError
+from libs.domain.errors.media__error import (
+    AlreadyArchivedError,
+    AlreadyDeletedError,
+    InvalidMediaPathError,
+    MediaMoveFailedError,
+    MediaNotFoundError,
+    MediaTargetExistsError,
+    NotInArchiveError,
+    NotMediaError,
+    NotUnderAiVideosError,
+    NotUnderDeletedError,
 )
+
 ARCHIVE_DIR_NAME = "archive"
 DELETED_DIR_NAME = "_deleted"
 AI_VIDEOS_ROOT_NAME = "ai_videos"
@@ -68,35 +65,35 @@ class MediaArchiver:
     def archive(self, rel: str) -> MoveResult:
         src = self._validate_media_source(rel)
         if src.parent.name == ARCHIVE_DIR_NAME:
-            raise AlreadyArchived("file is already inside an archive/ folder")
+            raise AlreadyArchivedError("file is already inside an archive/ folder")
         archive_dir = src.parent / ARCHIVE_DIR_NAME
         if archive_dir.exists() and not archive_dir.is_dir():
-            raise MoveFailed(f"{ARCHIVE_DIR_NAME} exists but is not a directory")
+            raise MediaMoveFailedError(f"{ARCHIVE_DIR_NAME} exists but is not a directory")
         try:
             archive_dir.mkdir(exist_ok=True)
         except OSError as exc:
-            raise MoveFailed(str(exc)) from exc
+            raise MediaMoveFailedError(str(exc)) from exc
         dst = _uniquify(archive_dir / src.name)
         try:
             src.rename(dst)
         except OSError as exc:
-            raise MoveFailed(str(exc)) from exc
+            raise MediaMoveFailedError(str(exc)) from exc
         return MoveResult(src_rel=self._rel(src), dst_rel=self._rel(dst))
 
     def unarchive(self, rel: str) -> MoveResult:
         src = self._validate_media_source(rel)
         if src.parent.name != ARCHIVE_DIR_NAME:
-            raise NotInArchive("file is not inside an archive/ folder")
+            raise NotInArchiveError("file is not inside an archive/ folder")
         target_dir = src.parent.parent
         if not target_dir.is_dir():
-            raise MoveFailed("parent of archive/ is missing")
+            raise MediaMoveFailedError("parent of archive/ is missing")
         dst = target_dir / src.name
         if dst.exists():
-            raise TargetExists(self._rel(dst))
+            raise MediaTargetExistsError(self._rel(dst))
         try:
             src.rename(dst)
         except OSError as exc:
-            raise MoveFailed(str(exc)) from exc
+            raise MediaMoveFailedError(str(exc)) from exc
         archive_dir = src.parent
         try:
             if not any(archive_dir.iterdir()):
@@ -110,20 +107,20 @@ class MediaArchiver:
         relative = src.relative_to(self._resolver.root)
         parts = relative.parts
         if not parts or parts[0] != AI_VIDEOS_ROOT_NAME:
-            raise NotInAiVideos("delete only supports ai_videos paths")
+            raise NotUnderAiVideosError("delete only supports ai_videos paths")
         if len(parts) >= 2 and parts[1] == DELETED_DIR_NAME:
-            raise AlreadyDeleted("file is already inside _deleted/")
+            raise AlreadyDeletedError("file is already inside _deleted/")
         rest_parts = parts[1:]
         target = self._resolver.root / AI_VIDEOS_ROOT_NAME / DELETED_DIR_NAME / Path(*rest_parts)
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise MoveFailed(str(exc)) from exc
+            raise MediaMoveFailedError(str(exc)) from exc
         target = _uniquify(target)
         try:
             src.rename(target)
         except OSError as exc:
-            raise MoveFailed(str(exc)) from exc
+            raise MediaMoveFailedError(str(exc)) from exc
         return MoveResult(src_rel=self._rel(src), dst_rel=self._rel(target))
 
     def hard_delete(self, rel: str) -> str:
@@ -131,27 +128,27 @@ class MediaArchiver:
         relative = src.relative_to(self._resolver.root)
         parts = relative.parts
         if len(parts) < 2 or parts[0] != AI_VIDEOS_ROOT_NAME or parts[1] != DELETED_DIR_NAME:
-            raise NotInDeleted("hard_delete only operates inside ai_videos/_deleted/")
+            raise NotUnderDeletedError("hard_delete only operates inside ai_videos/_deleted/")
         rel_str = self._rel(src)
         try:
             src.unlink()
         except OSError as exc:
-            raise MoveFailed(str(exc)) from exc
+            raise MediaMoveFailedError(str(exc)) from exc
         return rel_str
 
     def _validate_media_source(self, rel: str) -> Path:
         if not isinstance(rel, str) or rel == "":
-            raise InvalidPath("path is empty")
+            raise InvalidMediaPathError("path is empty")
         if not self._exposed.is_inside(rel):
-            raise NotFound("path outside sandbox")
+            raise MediaNotFoundError("path outside sandbox")
         ext = Path(rel).suffix.lower()
         if ext not in MEDIA_EXTENSIONS:
-            raise NotMedia("extension is not a media type")
+            raise NotMediaError("extension is not a media type")
         resolved = self._resolver.resolve(rel)
         if resolved is None or not resolved.is_file():
-            raise NotFound("file does not exist")
+            raise MediaNotFoundError("file does not exist")
         if resolved.is_symlink():
-            raise NotFound("symlink is not allowed")
+            raise MediaNotFoundError("symlink is not allowed")
         return resolved
 
     def _rel(self, p: Path) -> str:
@@ -220,16 +217,16 @@ class MediaRenamer:
 
     def _validate_drama(self, rel: str) -> Path:
         if not isinstance(rel, str) or rel == "":
-            raise InvalidDramaPath("path is empty")
+            raise InvalidDramaPathError("path is empty")
         normalized = rel.rstrip("/")
         parts = normalized.split("/")
         if len(parts) != 2 or parts[0] != "ai_videos" or parts[1] == "":
-            raise InvalidDramaPath("path must be 'ai_videos/{drama}'")
+            raise InvalidDramaPathError("path must be 'ai_videos/{drama}'")
         if not self._exposed.is_inside(normalized):
-            raise DramaNotFound("path outside sandbox")
+            raise DramaNotFoundError("path outside sandbox")
         resolved = self._resolver.resolve(normalized)
         if resolved is None or not resolved.is_dir():
-            raise DramaNotFound("drama directory does not exist")
+            raise DramaNotFoundError("drama directory does not exist")
         return resolved
 
     def _iter_folders(self, root: Path, excluded: frozenset[str]) -> list[Path]:

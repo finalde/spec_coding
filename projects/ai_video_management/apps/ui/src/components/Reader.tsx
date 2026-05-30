@@ -9,11 +9,13 @@ import { ShotlistTableView } from "./ShotlistTableView";
 import { ImageRefView } from "./ImageRefView";
 import { CastingView } from "./CastingView";
 import { ActorView } from "./ActorView";
+import { VoiceView } from "./VoiceView";
 import { Renderer } from "../markdown/renderer";
 import { CodeView } from "../markdown/CodeView";
 import { JsonlView } from "../markdown/JsonlView";
 import { SiblingMedia, isCharacterVideoPath } from "./SiblingMedia";
 import { detectShotPair } from "../lib/shotPairing";
+import { extractDramaAssets } from "../lib/dramas";
 import { announceToast } from "../lib/announce";
 import {
   archiveMedia,
@@ -47,6 +49,8 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     const encoded = location.pathname.slice("/file/".length);
     try { return decodeURIComponent(encoded); } catch { return null; }
   }, [location.pathname]);
+
+  const dramaAssets = useMemo(() => extractDramaAssets(tree, path), [tree, path]);
 
   const [file, setFile] = useState<FileResult | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -240,6 +244,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const isImageRef = (isMarkdown && /\/ref_images\/[^/]+_seedream\.md$/.test(path));
   const isCasting = isMarkdown && /^ai_videos\/[^/]+\/casting\.md$/.test(path);
   const isActor = isMarkdown && /^ai_videos\/_actors\/actor_[^/]+\/actor_[^/]+\.md$/.test(path);
+  const isVoice = isMarkdown && /^ai_videos\/_voices\/voice_[^/]+\/voice_[^/]+\.md$/.test(path);
   const isShotMd = isMarkdown && SHOT_MD_RE.test(path);
 
   const filename = path.split("/").pop() ?? path;
@@ -271,7 +276,13 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             {concatBusy ? "⏳ 生成中…" : "🎬 生成角色合辑"}
           </button>
         ) : null}
-        {!isImage && !isVideo && !isAudio ? (
+        {/* Per follow-up 2026-05-30: hide whole-file Edit for ai_videos paths.
+            Users must edit prompts via the per-code-block ✏ Edit affordance
+            inside Renderer / CopyableCode (which opens PromptStructuredEditor).
+            This prevents accidental "整個page edit" when the goal is to edit a
+            single prompt block.  Other markdown files (specs, README, etc.)
+            still get the whole-file editor. */}
+        {!isImage && !isVideo && !isAudio && !path.startsWith("ai_videos/") ? (
           <button type="button" className="reader-edit-toggle"
             onClick={() => setEditing((e) => !e)}
             aria-label={editing ? "Stop editing" : "Edit file"} aria-pressed={editing}>
@@ -364,14 +375,16 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             <CastingView castingPath={path} onChange={onSaved} />
           ) : isActor ? (
             <ActorView primaryFile={file} primaryPath={path} knownPaths={knownPaths} tree={tree} onSaved={onSaved} />
+          ) : isVoice ? (
+            <VoiceView primaryFile={file} primaryPath={path} knownPaths={knownPaths} tree={tree} onSaved={onSaved} />
           ) : isImageRef ? (
             <>
-              <ImageRefView primaryFile={file} primaryPath={path} knownPaths={knownPaths} />
+              <ImageRefView primaryFile={file} primaryPath={path} knownPaths={knownPaths} onSaved={onSaved} />
               <SiblingMedia currentPath={path} knownPaths={knownPaths} onChange={onSaved} />
             </>
           ) : isShotPair ? (
             <>
-              <ShotPairView primaryFile={file} primaryPath={path} knownPaths={knownPaths} />
+              <ShotPairView primaryFile={file} primaryPath={path} knownPaths={knownPaths} onSaved={onSaved} />
               <SiblingMedia currentPath={path} knownPaths={knownPaths} onChange={onSaved} />
             </>
           ) : isShotlistTable ? (
@@ -388,7 +401,16 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             </ParseFallback>
           ) : isMarkdown ? (
             <ParseFallback rawText={file.content} componentName="MarkdownView">
-              <Renderer content={file.content} currentPath={path} knownPaths={knownPaths} />
+              <Renderer
+                content={file.content}
+                currentPath={path}
+                knownPaths={knownPaths}
+                editEnabled={path.startsWith("ai_videos/")}
+                mtimeHttp={file.mtime_http}
+                onSaved={async () => { await load(); onSaved(); }}
+                characterOptions={dramaAssets.characters}
+                sceneOptions={dramaAssets.scenes}
+              />
               <SiblingMedia currentPath={path} knownPaths={knownPaths} onChange={onSaved} />
             </ParseFallback>
           ) : isTxt ? (

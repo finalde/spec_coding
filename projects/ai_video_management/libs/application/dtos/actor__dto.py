@@ -1,13 +1,22 @@
 """Actor-aggregate DTOs: queries' Qdtos + commands' Cdtos.
 
-Consolidates the former `actor__qdto.py` + `actor__cdto.py`. One DTO
-file per aggregate per follow-up 059; the Q/C suffix on each class name
-already disambiguates intent within the file.
+Per follow-up 114: input Cdtos validate themselves in __post_init__ so
+neither the Command nor the Query has to re-run the same `validate_*`
+calls. Constructing a `GenerateActorsInputCdto(**body.model_dump())`
+either yields a valid value or raises a domain error — there is no
+"valid shape but unchecked" state.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+
+from libs.domain.value_objects.actor__valueobject import (
+    ActorAttrs,
+    validate_batch_count,
+    validate_resolution,
+    validate_seeds,
+)
 
 
 # --- Query DTOs -------------------------------------------------------------
@@ -23,10 +32,6 @@ class ActorListRowQdto:
     age_range: str
     look: str
     notes: str
-    # Per follow-up 086: True iff this actor_id appears in any drama's
-    # casting.md row. Set by `ActorQuery.list()` using
-    # `CastingRepository.assigned_actor_ids()` (one bulk scan). Powers the
-    # ActorGrid 分配状态 filter chip (全部 / 已分配 / 未分配).
     is_assigned: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -55,10 +60,7 @@ class ActorListQdto:
 class PreviewPromptQdto:
     seed: int
     prompt: str
-    # Per follow-up 052: optional body-shot prompt rendered alongside face.
     body_prompt: str | None = None
-    # Per follow-up 059 (diverse-mode preview): rolled archetype + attrs the
-    # frontend's confirm path forwards to per-slot `generate_batch` calls.
     archetype: str | None = None
     archetype_label: str | None = None
     attrs: dict[str, Any] | None = None
@@ -107,25 +109,10 @@ class GenerateActorsInputCdto:
     notes: str
     resolution: str
     seeds: list[int] | None
-    # Per follow-up 059: optional archetype slug that diverse-mode confirm
-    # path forwards per slot so each actor's sidecar carries the archetype
-    # row from first write. Standard-mode callers pass None (the sidecar
-    # gets backfilled by `migrate_archetypes()` at next startup).
     archetype: str | None = None
-    # Per follow-up 082: optional batch-coordination fields. When all three
-    # are non-None, the infra-layer pool resolves the 7 face/body pool draws
-    # via `_resolve_batch_picks(batch_seed, batch_size, slot_index, ...)` so
-    # no two slots in the same batch share the same eye / nose / lips / brow
-    # / contour / skin / body descriptor (bias-preferred, exhaust-then-fall-
-    # through). Frontend computes `batch_seed = Date.now()` once per click
-    # and passes `slot_index = i` on each of N parallel count=1 calls.
     batch_seed: int | None = None
     batch_size: int | None = None
     slot_index: int | None = None
-    # Per follow-up 100: optional user-locked feature descriptors. Empty
-    # string / "__random__" → pool sample (existing behaviour). Curated
-    # Chinese string → substituted verbatim into the prompt's 眼睛 / 皮肤 /
-    # 体型 line.
     eyes: str = ""
     nose: str = ""
     lips: str = ""
@@ -134,17 +121,41 @@ class GenerateActorsInputCdto:
     body: str = ""
     qi_zhi: str = ""
 
+    def __post_init__(self) -> None:
+        # Constructing ActorAttrs runs its own __post_init__ validation.
+        ActorAttrs(
+            ethnicity=self.ethnicity,
+            gender=self.gender,
+            age_range=self.age_range,
+            look=self.look,
+            notes=self.notes,
+            eyes=self.eyes,
+            nose=self.nose,
+            lips=self.lips,
+            face=self.face,
+            skin=self.skin,
+            body=self.body,
+            qi_zhi=self.qi_zhi,
+        )
+        validate_batch_count(self.count)
+        validate_resolution(self.resolution)
+        validate_seeds(self.seeds, self.count)
+
 
 @dataclass(frozen=True)
 class GenerateDiverseActorsInputCdto:
-    """Per follow-up 053: diverse mode input — user picks only gender +
-    ethnicity + count + resolution. Backend rolls age_range / look / style /
-    archetype per slot using `_distribute_archetypes` even-distribution."""
+    """Diverse mode input — user picks only gender + ethnicity + count +
+    resolution. Backend rolls age_range / look / style / archetype per slot
+    using `_distribute_archetypes` even-distribution (follow-up 053)."""
 
     count: int
     gender: str
     ethnicity: str
     resolution: str
+
+    def __post_init__(self) -> None:
+        validate_batch_count(self.count)
+        validate_resolution(self.resolution)
 
 
 @dataclass(frozen=True)

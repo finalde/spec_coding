@@ -1,11 +1,4 @@
-"""Actor-aggregate commands: one class, one method per operation.
-
-Per follow-up 060: the previous layout was three separate command classes
-in one file (`GenerateActorsCommand`, `GenerateDiverseActorsCommand`,
-`DeleteActorCommand`). The new convention rolls them into a single
-`ActorCommand` class with three methods (`generate`, `generate_diverse`,
-`delete`). The operation name lives on the method, not the class.
-"""
+"""Actor-aggregate commands: one class, one method per operation."""
 from __future__ import annotations
 
 from libs.application.dtos.actor__dto import (
@@ -15,29 +8,13 @@ from libs.application.dtos.actor__dto import (
     GenerateDiverseActorsInputCdto,
 )
 from libs.application.mappers.actor__mapper import ActorMapper
-from libs.domain.entities.actor__entity import validate_actor_id
 from libs.domain.errors.actor__error import (
     ActorAlreadyAssignedError,
-    ActorNotFoundError,
-    InvalidActorAttributeError,
-    InvalidActorIdError,
+    AssignmentsScanFailedError,
 )
 from libs.domain.repositories.actor__repository import ActorRepository
 from libs.domain.repositories.casting__repository import CastingRepository
-from libs.domain.value_objects.actor__valueobject import (
-    ActorAttrs,
-    validate_batch_count,
-    validate_resolution,
-    validate_seeds,
-)
-from libs.infrastructure.writers.actor__writer import (
-    ActorDeleteFailed,
-    ActorDeleteTargetExists,
-    ActorNotFound,
-    GenerationDirMissing,
-    InvalidAttribute,
-)
-from libs.infrastructure.writers.casting__writer import InvalidActorId
+from libs.domain.value_objects.actor__valueobject import ActorAttrs, validate_actor_id
 
 
 class ActorCommand:
@@ -60,43 +37,26 @@ class ActorCommand:
             body=input_cdto.body,
             qi_zhi=input_cdto.qi_zhi,
         )
-        attrs.validate()
-        validate_batch_count(input_cdto.count)
-        validate_resolution(input_cdto.resolution)
-        validate_seeds(input_cdto.seeds, input_cdto.count)
-        try:
-            result = self._pool.generate_batch(
-                attrs,
-                input_cdto.count,
-                input_cdto.resolution,
-                input_cdto.seeds,
-                archetype=input_cdto.archetype,
-                batch_seed=input_cdto.batch_seed,
-                batch_size=input_cdto.batch_size,
-                slot_index=input_cdto.slot_index,
-            )
-        except InvalidAttribute as exc:
-            raise InvalidActorAttributeError(str(exc)) from exc
-        except GenerationDirMissing:
-            raise
+        result = self._pool.generate_batch(
+            attrs,
+            input_cdto.count,
+            input_cdto.resolution,
+            input_cdto.seeds,
+            archetype=input_cdto.archetype,
+            batch_seed=input_cdto.batch_seed,
+            batch_size=input_cdto.batch_size,
+            slot_index=input_cdto.slot_index,
+        )
         return ActorMapper.generate_to_cdto(result)
 
     def generate_diverse(self, input_cdto: GenerateDiverseActorsInputCdto) -> GenerateActorsResultCdto:
-        """Per follow-up 053: diverse mode rolls per-slot attrs from a
-        10-archetype even-distribution plan."""
-        validate_batch_count(input_cdto.count)
-        validate_resolution(input_cdto.resolution)
-        try:
-            result = self._pool.generate_diverse_batch(
-                input_cdto.gender,
-                input_cdto.ethnicity,
-                input_cdto.count,
-                input_cdto.resolution,
-            )
-        except InvalidAttribute as exc:
-            raise InvalidActorAttributeError(str(exc)) from exc
-        except GenerationDirMissing:
-            raise
+        """Diverse mode rolls per-slot attrs from a 10-archetype even-distribution plan."""
+        result = self._pool.generate_diverse_batch(
+            input_cdto.gender,
+            input_cdto.ethnicity,
+            input_cdto.count,
+            input_cdto.resolution,
+        )
         return ActorMapper.generate_to_cdto(result)
 
     def delete(self, actor_id: str) -> DeleteActorResultCdto:
@@ -105,18 +65,11 @@ class ActorCommand:
         validate_actor_id(actor_id)
         try:
             assignments = self._casting.find_assignments_for_actor(actor_id)
-        except InvalidActorId as exc:
-            raise InvalidActorIdError(str(exc)) from exc
+        except OSError as exc:
+            raise AssignmentsScanFailedError(str(exc)) from exc
         if assignments:
             raise ActorAlreadyAssignedError(actor_id=actor_id, assignments=assignments)
-        try:
-            move = self._pool.delete_actor(actor_id)
-        except InvalidAttribute as exc:
-            raise InvalidActorIdError(str(exc)) from exc
-        except ActorNotFound as exc:
-            raise ActorNotFoundError(str(exc)) from exc
-        except (ActorDeleteTargetExists, ActorDeleteFailed):
-            raise
+        move = self._pool.delete_actor(actor_id)
         return DeleteActorResultCdto(
             src_rel=str(move["from"]),
             dst_rel=str(move["to"]),

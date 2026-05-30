@@ -1,13 +1,17 @@
-"""Novel downloader: scrape canonical novels from sudugu.org into novels/{slug}/.
+"""Novel downloader: scrape canonical novels from sudugu.org into downloaded_novels/{cat}/{slug}/.
 
-Per follow-up 096. State machine per novel:
+Per follow-up 096 (initial design) + 111 (per-chapter file layout) + 113 (folder
+renamed from `novels/` to `downloaded_novels/`; sibling `my_novel/` now holds
+original manuscripts). State machine per novel:
   1. GET /{source_id}/ — parse chapter index (<div id="list" class="dir clear">).
   2. For each chapter <li><a href="/{source_id}/{chapter_id}.html">第N章 标题</a></li>:
      a. Skip if `_meta.json[chapters][idx].done == True`.
      b. Fetch chapter; follow `下一页` pagination until no more pages.
      c. Extract <p> blocks from <div class="con">.
-     d. Append `\n## 第N章 标题\n\n{body}\n` to novels/{slug}/{slug}.md.
-     e. Atomic-write updated _meta.json (tmp → os.replace).
+     d. Write `# 第N章 标题\n\n{body}\n` to downloaded_novels/{cat}/{slug}/chapters/{NNNN}-{safe_title}.md
+        (one file per chapter — pre-111 this appended to a single {slug}.md which the
+        webapp could not load past 1 MiB).
+     e. Atomic-write updated _meta.json (tmp → os.replace); ChapterRecord.file = filename.
   3. `complete: true` IFF every chapter's `done` flag is True.
 
 Resumable: re-running reads _meta.json, skips done chapters, resumes from next gap.
@@ -37,10 +41,10 @@ from libs.domain.value_objects.novel__valueobject import (
     categories,
     find_novel,
 )
-from libs.infrastructure.errors.novel__error import (
-    ChapterIndexParseFailed,
-    DownloadFailed,
-    SourceUnreachable,
+from libs.domain.errors.novel__error import (
+    NovelChapterIndexParseError,
+    NovelDownloadFailedError,
+    NovelSourceUnreachableError,
 )
 
 _USER_AGENT = (
@@ -91,6 +95,25 @@ _TTKAN_CONTENT_BLOCK_RE = re.compile(
 )
 
 
+_FILENAME_FORBIDDEN_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_FILENAME_MAX_TITLE_LEN = 80
+
+
+def _safe_filename_segment(s: str) -> str:
+    """Strip Windows-reserved chars + control chars; trim trailing whitespace/dots; cap length.
+
+    Chinese / full-width punctuation preserved (per follow-up 004 UTF-8 filename allowance).
+    """
+    cleaned = _FILENAME_FORBIDDEN_RE.sub("", s).strip().rstrip(".").strip()
+    if len(cleaned) > _FILENAME_MAX_TITLE_LEN:
+        cleaned = cleaned[:_FILENAME_MAX_TITLE_LEN].rstrip()
+    return cleaned or "untitled"
+
+
+def _build_chapter_filename(idx: int, title: str) -> str:
+    return f"{idx:04d}-{_safe_filename_segment(title)}.md"
+
+
 @dataclass
 class ChapterRecord:
     idx: int
@@ -99,6 +122,7 @@ class ChapterRecord:
     done: bool = False
     hash: str | None = None
     error: str | None = None
+    file: str | None = None
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -108,6 +132,7 @@ class ChapterRecord:
             "done": self.done,
             "hash": self.hash,
             "error": self.error,
+            "file": self.file,
         }
 
     @classmethod
@@ -119,6 +144,7 @@ class ChapterRecord:
             done=bool(data.get("done", False)),
             hash=data.get("hash") if data.get("hash") is not None else None,  # type: ignore[arg-type]
             error=data.get("error") if data.get("error") is not None else None,  # type: ignore[arg-type]
+            file=data.get("file") if data.get("file") is not None else None,  # type: ignore[arg-type]
         )
 
 
@@ -188,7 +214,8 @@ class _NovelState:
     spec: NovelSpec
     meta: NovelMeta
     meta_path: Path
-    body_path: Path
+    chapters_dir: Path
+    readme_path: Path
 
 
 class NovelDownloader:
@@ -323,8 +350,10 @@ class NovelDownloader:
     def _ensure_index(self, spec: NovelSpec) -> "_NovelState":
         novel_dir = self._root / spec.category / spec.slug
         novel_dir.mkdir(parents=True, exist_ok=True)
+        chapters_dir = novel_dir / "chapters"
+        chapters_dir.mkdir(parents=True, exist_ok=True)
         meta_path = novel_dir / "_meta.json"
-        body_path = novel_dir / f"{spec.slug}.md"
+        readme_path = novel_dir / "README.md"
         meta = self._load_or_init_meta(meta_path, spec)
         fresh_index, active = self._fetch_chapter_index(spec)
         source_changed = (
@@ -333,13 +362,14 @@ class NovelDownloader:
         )
         meta.active_source_host = active.host
         meta.active_source_id = active.source_id
+        readme_path.write_text(
+            f"# {spec.title_zh}\n\n作者：{spec.author}\n\n来源：{active.host}/{active.source_id}/\n\n"
+            f"章节存放于 `chapters/` 目录，每章一个 `.md` 文件。\n",
+            encoding="utf-8",
+        )
         if not meta.chapters:
             meta.chapters = fresh_index
             self._write_meta(meta_path, meta)
-            body_path.write_text(
-                f"# {spec.title_zh}\n\n作者：{spec.author}\n\n来源：{active.host}/{active.source_id}/\n\n",
-                encoding="utf-8",
-            )
         elif source_changed:
             # New source — rewrite chapter URLs by `idx`, preserve `done`/`hash`/`error`.
             old_by_idx = {c.idx: c for c in meta.chapters}
@@ -361,7 +391,13 @@ class NovelDownloader:
             len(meta.chapters) > 0 and all(c.done for c in meta.chapters)
         )
         self._write_meta(meta_path, meta)
-        return _NovelState(spec=spec, meta=meta, meta_path=meta_path, body_path=body_path)
+        return _NovelState(
+            spec=spec,
+            meta=meta,
+            meta_path=meta_path,
+            chapters_dir=chapters_dir,
+            readme_path=readme_path,
+        )
 
     def _download_one_chapter(
         self,
@@ -375,12 +411,16 @@ class NovelDownloader:
             chapter.error = f"{type(exc).__name__}: {exc}"
             self._write_meta(state.meta_path, state.meta)
             return False, f"{state.spec.slug} ch{chapter.idx}: {chapter.error}"
-        block = f"\n## {chapter.title}\n\n{body_text}\n"
-        with state.body_path.open("a", encoding="utf-8") as fh:
-            fh.write(block)
+        filename = _build_chapter_filename(chapter.idx, chapter.title)
+        chapter_path = state.chapters_dir / filename
+        chapter_path.write_text(
+            f"# {chapter.title}\n\n{body_text}\n",
+            encoding="utf-8",
+        )
         chapter.done = True
         chapter.error = None
         chapter.hash = hashlib.sha256(body_text.encode("utf-8")).hexdigest()[:16]
+        chapter.file = filename
         state.meta.last_updated_at = time.strftime("%Y-%m-%dT%H:%M:%S")
         self._write_meta(state.meta_path, state.meta)
         if callable(on_progress):
@@ -424,10 +464,10 @@ class NovelDownloader:
             try:
                 chapters = self._fetch_chapter_index_for_source(src)
                 return chapters, src
-            except (ChapterIndexParseFailed, SourceUnreachable) as exc:
+            except (NovelChapterIndexParseError, NovelSourceUnreachableError) as exc:
                 last_exc = exc
                 continue
-        raise ChapterIndexParseFailed(
+        raise NovelChapterIndexParseError(
             f"all {len(spec.sources)} sources failed for {spec.slug}: {last_exc}"
         )
 
@@ -436,7 +476,7 @@ class NovelDownloader:
             return self._fetch_index_via_sudugu(src)
         if src.host == "cn.ttkan.co":
             return self._fetch_index_via_ttkan(src)
-        raise ChapterIndexParseFailed(f"no scraper registered for host {src.host!r}")
+        raise NovelChapterIndexParseError(f"no scraper registered for host {src.host!r}")
 
     def _fetch_index_via_sudugu(self, src: NovelSource) -> list[ChapterRecord]:
         base = f"https://www.{src.host}/{src.source_id}/"
@@ -449,7 +489,7 @@ class NovelDownloader:
             for rel_url, title in self._parse_index_links_sudugu(html, url):
                 all_links.append((rel_url, title))
         if not all_links:
-            raise ChapterIndexParseFailed(f"no chapter links found in index at {base}")
+            raise NovelChapterIndexParseError(f"no chapter links found in index at {base}")
         records: list[ChapterRecord] = []
         seen_urls: set[str] = set()
         for rel_url, title in all_links:
@@ -472,7 +512,7 @@ class NovelDownloader:
         html = self._http_get(url)
         links = _TTKAN_CHAPTER_LINK_RE.findall(html)
         if not links:
-            raise ChapterIndexParseFailed(f"no chapter links found in ttkan index at {url}")
+            raise NovelChapterIndexParseError(f"no chapter links found in ttkan index at {url}")
         records: list[ChapterRecord] = []
         seen_urls: set[str] = set()
         for rel_url, title in links:
@@ -491,7 +531,7 @@ class NovelDownloader:
     def _parse_index_links_sudugu(self, html: str, page_url: str) -> list[tuple[str, str]]:
         m = _INDEX_LIST_RE.search(html)
         if m is None:
-            raise ChapterIndexParseFailed(f"index list block not found at {page_url}")
+            raise NovelChapterIndexParseError(f"index list block not found at {page_url}")
         return _CHAPTER_LINK_RE.findall(m.group(1))
 
     def _discover_index_pages_sudugu(self, first_html: str, src: NovelSource) -> list[str]:
@@ -521,7 +561,7 @@ class NovelDownloader:
             return self._fetch_chapter_via_sudugu(chapter, "sudugu.org")
         if host == "cn.ttkan.co":
             return self._fetch_chapter_via_ttkan(chapter)
-        raise DownloadFailed(f"no chapter fetcher for host {host!r} (url={chapter.url})")
+        raise NovelDownloadFailedError(f"no chapter fetcher for host {host!r} (url={chapter.url})")
 
     @staticmethod
     def _host_of_url(url: str) -> str:
@@ -537,11 +577,11 @@ class NovelDownloader:
                 break
             visited.add(current_url)
             if len(visited) > 30:
-                raise DownloadFailed(f"runaway pagination at {current_url}")
+                raise NovelDownloadFailedError(f"runaway pagination at {current_url}")
             html = self._http_get(current_url)
             cm = _CONTENT_BLOCK_RE.search(html)
             if cm is None:
-                raise DownloadFailed(f"content block not found at {current_url}")
+                raise NovelDownloadFailedError(f"content block not found at {current_url}")
             body_html = cm.group(1)
             parts.append(self._extract_paragraphs(body_html))
             nm = _NEXT_PAGE_RE.search(html)
@@ -555,7 +595,7 @@ class NovelDownloader:
         html = self._http_get(chapter.url)
         cm = _TTKAN_CONTENT_BLOCK_RE.search(html)
         if cm is None:
-            raise DownloadFailed(f"ttkan content block not found at {chapter.url}")
+            raise NovelDownloadFailedError(f"ttkan content block not found at {chapter.url}")
         return self._extract_paragraphs(cm.group(1))
 
     def _extract_paragraphs(self, body_html: str) -> str:
@@ -593,12 +633,12 @@ class NovelDownloader:
             if r.status_code == 200:
                 return r.text
             if r.status_code in (429, 500, 502, 503, 504):
-                last_exc = SourceUnreachable(f"http {r.status_code} at {url}")
+                last_exc = NovelSourceUnreachableError(f"http {r.status_code} at {url}")
                 self._sleep_backoff(attempt)
                 continue
-            raise SourceUnreachable(f"http {r.status_code} at {url}")
+            raise NovelSourceUnreachableError(f"http {r.status_code} at {url}")
         assert last_exc is not None
-        raise SourceUnreachable(f"retries exhausted for {url}: {last_exc}")
+        raise NovelSourceUnreachableError(f"retries exhausted for {url}: {last_exc}")
 
     def _sleep_backoff(self, attempt: int) -> None:
         time.sleep(_BACKOFF_BASE ** attempt)
@@ -621,7 +661,7 @@ class NovelDownloader:
             for r in entries:
                 badge = "✅ 完结" if r.complete else f"⏳ 下载中 ({r.chapters_done}/{r.chapters_total})"
                 lines.append(
-                    f"| {badge} | [{r.title_zh}]({r.category}/{r.slug}/{r.slug}.md) | "
+                    f"| {badge} | [{r.title_zh}]({r.category}/{r.slug}/README.md) | "
                     f"{r.chapters_done}/{r.chapters_total} |"
                 )
             lines.append("")
@@ -634,4 +674,6 @@ __all__ = [
     "NovelDownloader",
     "NovelDownloadResult",
     "NovelMeta",
+    "_build_chapter_filename",
+    "_safe_filename_segment",
 ]

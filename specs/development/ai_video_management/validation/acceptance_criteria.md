@@ -1170,3 +1170,24 @@ And 路径处理在 Windows 上无 \ / 混合错位（ImageRefView 与 ShotPairV
 - **uv 禁用**（development.md 移动 #6）→ U7.1。
 
 任何未在矩阵中出现的 FR 编号 = 文档缺陷，按 `validation/general.md` 原则 6 在 stage-5 sign-off 标记 `critical`。
+
+---
+
+## 追加：U8 配音池 (follow-up 115)
+
+新增 work unit `U8 — 配音池`，承接 spec.md 的 FR-9v / FR-9v2 / FR-9v3 / FR-9v4 / FR-9v5 / FR-9v6 / FR-9v7 / FR-9v8 / FR-86v / FR-87v / FR-88v / FR-91v / FR-92v。验收场景沿用 actor 池 (U3 + U6) 的形态，但**全部禁止任何 outbound HTTP / provider credential 测试**。
+
+| 场景 ID | 来源 FR | 标签 | 摘要 |
+|---|---|---|---|
+| U8.1 | FR-9v / FR-86v | [automated] | `POST /api/voices/generate` count=5 + 闭合枚举 archetype/gender/age_impression — 200 + 五个 `voice_NNNN/voice_NNNN.md` 写入 `ai_videos/_voices/`；每个 sidecar 含中文 metadata 表 + fenced "生成 prompt" 块；**断言 `httpx.AsyncClient` / `requests.` / 字面 `https://` URL 字符串在 `libs/infrastructure/writers/voice__*.py` grep 返回 0 命中**（local-only carve-out）。 |
+| U8.2 | FR-9v2 | [automated] | `POST /api/voices/preview-prompts` 返回 `{prompts: [{seed, prompt}]}` 不写盘；后续以 `seeds=[previewed]` 调 FR-9v 产生 byte-equal prompt（与 FR-9j 的 actor 对照）。 |
+| U8.3 | FR-9v3 | [automated] | `POST /api/voices/generate-diverse count=10` — 跨 10 个 archetype 均匀分布（每种 1 个）；同一 `notes` 文本通过；archetype-bias overlay 让 `effeminate_eunuch` vs `mighty_general` vs `gentle_palace_mistress` 在 prompt 文本上产生**可识别差异**（fixture: 用三个 archetype 各跑一次，断言生成的 prompt 字符串 hamming-distance > 阈值）。 |
+| U8.4 | FR-9v4 | [automated] | `POST /api/voices/delete voice_id=voice_0003`，未分配 → 200 + soft-move 到 `_deleted/_voices/`；已分配（先 FR-9v6 assign）→ **409 voice_is_assigned** + 不动盘 + assignments 列表回传。 |
+| U8.5 | FR-9v5 | [automated] | `POST /api/voices/voice_0001/audio` multipart 上传：(a) 合法 `.mp3` 1MB → 200 + 文件落在 `ai_videos/_voices/voice_0001/voice_0001.mp3` + sidecar `audio_sample` 行更新；(b) `.svg` → 400 `extension_not_allowed`；(c) 12 MiB 包体 → 413 `body_too_large`；(d) 缺失 `voice_id` 文件夹 → 404；(e) symlink 目标 → 400 + 不写盘。 |
+| U8.6 | FR-9v6 | [automated] | `POST /api/casting/assign-voice` 给 `c1_zhuren` 角色绑定 `voice_0002` — `casting.md` 出现 `voice_id` 列 + `characters/c1_zhuren/_cast.md` 出现 "🎙 配音" 段 + 当样本存在时 embed `<audio>` markup；后续 `DELETE` 清除该行 + 删除 `_cast.md` 中的配音段（actor 段保留）。 |
+| U8.7 | FR-9v7 / FR-9v8 | [automated] | `GET /api/voices` 返回完整列表（`audio_path` 为 null 当无样本）；`GET /api/voices/assignments?voice_id=voice_0002` 返回 `{voice_id, assignments: [...]}`；同样 actor_id-shape 校验 → 400 `invalid_voice_id`。 |
+| U8.8 | FR-91v / FR-92v | [automated] | Playwright：访问 `/voices`，看到 archetype/gender/age/emotion 四个 filter dropdown + grid tiles；点击带 audio 样本的 tile 上的 ▶ 按钮触发播放（断言 `HTMLAudioElement.paused === false`，无导航）；点击 tile 本体导航到 `/file/...voice_NNNN.md` 并渲染 VoiceView 三栏布局（含 `<audio controls>` 当样本存在）。 |
+| U8.9 | FR-87v / FR-93 类比 | [automated] | 后端 tree walk：`_voices/voice_NNNN/` 被 collapse 成单 leaf `{type: "voice", path, audio_path, children: []}`；sidebar 不渲染展开三角；`🗑` delete 按钮直接出现在 leaf row。 |
+| U8.M1 | FR-92v / FR-9v5 | [manual_walkthrough_only] | 用户在 VoiceView drop-zone 拖入一个本地 `.mp3` 文件 → 上传成功 → 页面无刷新即出现 `<audio controls>` 并可播放；视觉确认 archetype 的中文 label（陰柔太監音 / 雄壯將軍音 / 柔美宮主音）正确显示。 |
+
+**FR 覆盖增量**：FR-9v / FR-9v2 / FR-9v3 / FR-9v4 / FR-9v5 / FR-9v6 / FR-9v7 / FR-9v8 / FR-86v / FR-87v / FR-88v / FR-91v / FR-92v 全部映射至 U8.* 场景；任何遗漏视为文档缺陷按原则 6 在 U8 sign-off 标记 `critical`。

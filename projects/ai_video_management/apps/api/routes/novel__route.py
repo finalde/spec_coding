@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
 
 from apps.api.container import Container
-from apps.api.routes._helpers import method_not_allowed
 from libs.application.queries.novel__query import NovelQuery
 
 router = APIRouter()
@@ -26,8 +25,3 @@ def list_novels(
         status_code=200,
         content={"items": [q.to_payload() for q in items]},
     )
-
-
-@router.api_route("/api/novels", methods=["POST", "PUT", "PATCH", "DELETE"])
-def novels_method_not_allowed() -> Response:
-    return method_not_allowed("GET")

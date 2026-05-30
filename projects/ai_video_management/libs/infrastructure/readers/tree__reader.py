@@ -13,6 +13,7 @@ _IMAGE_EXTENSIONS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg", ".webp",
 _VIDEO_EXTENSIONS: frozenset[str] = frozenset({".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"})
 _AUDIO_EXTENSIONS: frozenset[str] = frozenset({".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"})
 _ACTOR_FOLDER_RE = re.compile(r"^actor_\d{4,}$")
+_VOICE_FOLDER_RE = re.compile(r"^voice_\d{4,}$")
 
 
 class TreeReader:
@@ -30,7 +31,11 @@ class TreeReader:
             "type": "section",
             "name": "root",
             "path": "",
-            "children": [self._ai_videos_section(), self._novels_section()],
+            "children": [
+                self._ai_videos_section(),
+                self._downloaded_novels_section(),
+                self._my_novel_section(),
+            ],
         }
 
     def _ai_videos_section(self) -> dict[str, Any]:
@@ -57,16 +62,19 @@ class TreeReader:
             "children": children,
         }
 
-    def _novels_section(self) -> dict[str, Any]:
-        novels_root = self._root / "novels"
+    def _downloaded_novels_section(self) -> dict[str, Any]:
+        """Scraped baseline corpus, organized as `downloaded_novels/{category}/{slug}/`.
+        Filters to novels whose `_meta.json.complete == True` (per follow-up 104).
+        """
+        root = self._root / "downloaded_novels"
         children: list[dict[str, Any]] = []
-        if novels_root.is_dir():
+        if root.is_dir():
             category_zh = dict(novel_categories())
             slug_to_title: dict[str, str] = {s.slug: s.title_zh for s in CANONICAL_NOVELS}
             slug_order: dict[str, int] = {s.slug: i for i, s in enumerate(CANONICAL_NOVELS)}
             cat_order: dict[str, int] = {c: i for i, (c, _) in enumerate(novel_categories())}
             for cat_dir in sorted(
-                (p for p in novels_root.iterdir() if p.is_dir() and not p.is_symlink()),
+                (p for p in root.iterdir() if p.is_dir() and not p.is_symlink()),
                 key=lambda p: cat_order.get(p.name, 9999),
             ):
                 if cat_dir.name in self._exposed.excluded_dirs():
@@ -102,14 +110,53 @@ class TreeReader:
                     }
                 )
             for entry in sorted(
-                (p for p in novels_root.iterdir() if p.is_file() and not p.is_symlink()),
+                (p for p in root.iterdir() if p.is_file() and not p.is_symlink()),
                 key=lambda p: p.name.lower(),
             ):
                 if self._is_allowed_leaf(entry):
                     children.append(self._leaf_for(entry))
         return {
             "type": "section",
-            "name": "Novels",
+            "name": "Downloaded Novels",
+            "path": "",
+            "children": children,
+        }
+
+    def _my_novel_section(self) -> dict[str, Any]:
+        """Original manuscripts authored for AI-short-drama production. No
+        canonical-slug ordering and no completeness filter — every subdir of
+        `my_novel/` surfaces verbatim, walked with the same leaf-allowlist as
+        the rest of the tree.
+        """
+        root = self._root / "my_novel"
+        children: list[dict[str, Any]] = []
+        if root.is_dir():
+            for project_dir in sorted(
+                (p for p in root.iterdir() if p.is_dir() and not p.is_symlink()),
+                key=lambda p: p.name.lower(),
+            ):
+                if project_dir.name in self._exposed.excluded_dirs():
+                    continue
+                sub = self._walk_filtered(project_dir, self._is_allowed_leaf)
+                node: dict[str, Any] = {
+                    "type": "directory",
+                    "name": project_dir.name,
+                    "path": self._rel(project_dir),
+                    "children": sub,
+                }
+                zh_title = self._project_zh_title(project_dir)
+                if zh_title:
+                    node["display_name"] = zh_title
+                children.append(node)
+            for entry in sorted(
+                (p for p in root.iterdir() if p.is_file() and not p.is_symlink()),
+                key=lambda p: p.name.lower(),
+            ):
+                if self._is_allowed_leaf(entry):
+                    children.append(self._leaf_for(entry))
+        return {
+            "type": "section",
+            "name": "My Novel",
             "path": "",
             "children": children,
         }
@@ -153,7 +200,8 @@ class TreeReader:
     def _project_zh_title(self, project_dir: Path) -> str | None:
         """Per CLAUDE.md AI video rules: the Chinese title lives in
         `ai_videos/{name}/README.md`. Extract it from the first H1 line —
-        canonical shape `# 《<title>》— AI 视频项目`.
+        canonical shape `# 《<title>》— AI 视频项目`. Also reused by
+        `my_novel/{name}/README.md`, which follows the same convention.
         """
         readme = project_dir / "README.md"
         if not readme.is_file():
@@ -187,6 +235,10 @@ class TreeReader:
                 collapsed = self._collapsed_actor_leaf(entry)
                 if collapsed is not None:
                     children.append(collapsed)
+                    continue
+                voice_collapsed = self._collapsed_voice_leaf(entry)
+                if voice_collapsed is not None:
+                    children.append(voice_collapsed)
                     continue
                 sub = self._walk_filtered(entry, leaf_predicate)
                 if sub:
@@ -235,6 +287,41 @@ class TreeReader:
             if p.is_symlink() or not p.is_file():
                 continue
             if p.suffix.lower() in _IMAGE_EXTENSIONS:
+                return self._rel(p)
+        return None
+
+    def _collapsed_voice_leaf(self, entry: Path) -> dict[str, Any] | None:
+        """Voice profile folders under `ai_videos/_voices/` collapse to a
+        single leaf node (parallel to `_collapsed_actor_leaf` — follow-up 115).
+        """
+        if not _VOICE_FOLDER_RE.match(entry.name):
+            return None
+        try:
+            rel_parts = entry.resolve().relative_to(self._root).parts
+        except (OSError, ValueError):
+            return None
+        if len(rel_parts) != 3 or rel_parts[0] != "ai_videos" or rel_parts[1] != "_voices":
+            return None
+        sidecar = entry / f"{entry.name}.md"
+        if not sidecar.is_file():
+            return None
+        return {
+            "type": "voice",
+            "name": entry.name,
+            "path": self._rel(sidecar),
+            "audio_path": self._first_audio_sample(entry),
+            "children": [],
+        }
+
+    def _first_audio_sample(self, folder: Path) -> str | None:
+        try:
+            entries = sorted(folder.iterdir(), key=lambda p: p.name.lower())
+        except OSError:
+            return None
+        for p in entries:
+            if p.is_symlink() or not p.is_file():
+                continue
+            if p.suffix.lower() in _AUDIO_EXTENSIONS:
                 return self._rel(p)
         return None
 
