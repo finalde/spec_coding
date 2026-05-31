@@ -10,7 +10,7 @@ confidence: high
 
 # ep01 发布信息 · 《焚寿录》第一集 · 落雁渊
 
-> 本文件供运营 / 剪辑后期 / 平台分发使用。所有内容中文 (per ai_video.md 规则 8 + spec FR-11). 字数限制: 标题 ≤ 30 字 / 简介 ≤ 200 字 / 标签 5–10 个. 封面建议指向 shotlist.md 中 `cover_frame: true` 的 shot07 lastframe 静帧 (per NFR-10).
+> 本文件供运营 / 剪辑后期 / 平台分发使用。所有内容中文 (per ai_video.md 规则 8 + spec FR-11). 字数限制: 标题 ≤ 30 字 / 简介 ≤ 200 字 / 标签 5–10 个. 封面建议指向 shotlist.md 中 cliff 帧 shot29 lastframe 静帧 (per NFR-10).
 
 ---
 
@@ -45,13 +45,13 @@ confidence: high
 
 ## 封面建议
 
-**封面静帧来源**: `episodes/ep01/shots/shot07/shot07.md` lastframe (= `cover_frame: true` 标记帧, 满足封面安全区 contract per style_guide §11 + ai_video.md 规则 7).
+**封面静帧来源**: `episodes/ep01/shots/shot29/shot29.md` lastframe (= cliff 帧, 师父正脸闪一帧眉疤后闪黑, 满足封面安全区 contract per style_guide §11 + ai_video.md 规则 7).
 
-**封面内容**: 全黑底 #0a0a0a + 居中楷体大字硬字幕「第二集 即将揭晓」(月白 #f5f5f0 + 寄生紫 #4a1a5a 描边, 48-56pt, y ≈ 600 黄金视觉中心) + 副位宋体小字金字「死过他的人——为何还活着？」(金字 #a8842c + 银边 #f5f5f0, 24-28pt, y ≈ 720).
+**封面内容**: 全黑底 + 居中楷体大字硬字幕「第二集 即将揭晓」(描边, 48-56pt, y ≈ 600 黄金视觉中心) + 副位宋体小字金字「死过他的人——为何还活着？」(金字 + 边, 24-28pt, y ≈ 720).
 
 **封面 1/4 缩略图可辨契约**: 主字幕「第二集」三字在抖音 feed / 红果信息流 1/4 缩略图尺寸下仍可清晰辨认 (style_guide §11 封面安全区 hard 契约).
 
-**备选封面静帧 (A/B 测试)**: shot02 lastframe (戚归砚 内衬深紫一闪定格 + dual-affiliation 视觉伏笔), 或 shot05 lastframe (童子抬眼望渊口 + 胸前罗盘冷光晕未散 + 嘴角血一线). 但默认 cover_frame 锁定 shot07 cliffhanger 帧 (per NFR-10 cover_frame: true 强制).
+**备选封面静帧 (A/B 测试)**: shot01 lastframe (紫黑月夜无寿崖残剑落叶逆吹 · 开场钩), 或 shot19 lastframe (童手触骨惊缩看七岁瘦体 · cover_frame 标记帧). 但默认封面锁定 shot29 cliffhanger 帧 (per NFR-10).
 
 ## 平台备注
 
@@ -71,7 +71,7 @@ confidence: high
 
 - **post tag**: #xianxia #cdrama #shorts #fantasy 主 (英文标签 SEO).
 - **EN 字幕 pass**: 留为 post-v1 follow-up (per spec § Out of scope #4). ep01 ship 中文版本; YouTube Shorts EN 版本 在 ep01 中文版本通过后另起 follow-up 翻译.
-- **特别说明**: YouTube Shorts 算法对开头 3s 抓人能力极敏感 — 渡劫死亡 cold open (shot01 雷劫第三道 + 剑刺穿 + 闪黑) 是 YouTube Shorts 算法友好的开局.
+- **特别说明**: YouTube Shorts 算法对开头 3s 抓人能力极敏感 — 渡劫死亡 cold open (shot01 紫黑月夜悬崖残剑落叶逆吹 → shot04 剑尖穿胸) 是 YouTube Shorts 算法友好的开局.
 
 ---
 

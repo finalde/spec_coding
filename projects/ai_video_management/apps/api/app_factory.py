@@ -50,6 +50,20 @@ from libs.domain.errors.character_video__error import (
     ViewExtractFailedError,
 )
 from libs.domain.errors.downloads__error import DownloadsDirMissingError
+from libs.domain.errors.episode__error import (
+    EpisodeConcatFailedError,
+    EpisodeFfmpegMissingError,
+    EpisodeNotFoundError,
+    InvalidEpisodePathError,
+    NoShotsError,
+    NoShotVideosError,
+    NotEpisodePathError,
+)
+from libs.domain.errors.prompt__error import (
+    InvalidSuggestionRequestError,
+    SuggestionGenerationFailedError,
+    SuggestionProviderUnavailableError,
+)
 from libs.domain.errors.file__error import (
     FileNotInSandboxError,
     FileTooLargeError,
@@ -132,6 +146,14 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     (ConcatFailedError, 500, "concat_failed", True),
     (ViewExtractFailedError, 500, "view_extract_failed", True),
     (AudioExtractFailedError, 500, "audio_extract_failed", True),
+    # episode
+    (InvalidEpisodePathError, 400, "invalid_path", False),
+    (NotEpisodePathError, 400, "not_an_episode", False),
+    (EpisodeNotFoundError, 404, "not_found", False),
+    (NoShotsError, 400, "no_shots", False),
+    (NoShotVideosError, 400, "no_shot_videos", False),
+    (EpisodeFfmpegMissingError, 500, "ffmpeg_missing", True),
+    (EpisodeConcatFailedError, 500, "concat_failed", True),
     # downloads
     # (DownloadsDirMissingError handled specially — payload key is `path`, not `message`.)
     # file
@@ -169,6 +191,10 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     (VoiceMp4MissingError, 400, "mp4_missing", True),
     (VoiceFfmpegMissingError, 500, "ffmpeg_missing", True),
     (VoiceAudioExtractFailedError, 500, "audio_extract_failed", True),
+    # prompt suggestions (follow-up 117)
+    (InvalidSuggestionRequestError, 400, "invalid_suggestion_request", True),
+    (SuggestionProviderUnavailableError, 503, "suggestion_unavailable", True),
+    (SuggestionGenerationFailedError, 502, "suggestion_failed", True),
 )
 
 

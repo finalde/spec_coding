@@ -14,7 +14,7 @@
  * the body is too unstructured for the form (e.g. video prompts with many
  * timed-beat lines under 动作:).
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   dropdownOptions,
   fieldWidget,
@@ -27,6 +27,8 @@ import {
   type FieldDef,
   type ParsedPrompt,
 } from "../lib/promptSchema";
+import { suggestRefinements, type RefinementSuggestion } from "../api";
+import { ApiError } from "../types";
 
 export interface PromptStructuredEditorProps {
   /** Initial code-block body (no fences). */
@@ -48,6 +50,14 @@ export interface PromptStructuredEditorProps {
   characterOptions?: string[];
   /** Scene display names for the 场景 picker (drama-scoped). */
   sceneOptions?: string[];
+  /** Follow-up 117: surrounding shot markdown (小说原文 + Shot context + frames)
+   *  used as context for per-dimension AI refinement suggestions. When present
+   *  AND blockKind === "video", each canonical dimension field gets a ✨ 推荐
+   *  button. */
+  shotContext?: string;
+  /** File path of the shot being edited — drama is derived from it for the
+   *  suggestion request. */
+  currentPath?: string;
 }
 
 type Mode = "structured" | "raw";
@@ -62,6 +72,8 @@ export function PromptStructuredEditor({
   blockKind = null,
   characterOptions = [],
   sceneOptions = [],
+  shotContext,
+  currentPath,
 }: PromptStructuredEditorProps): JSX.Element {
   const initialParsed = useMemo<ParsedPrompt>(
     () => mergeWithCanonical(parsePrompt(initialBody), blockKind),
@@ -70,6 +82,24 @@ export function PromptStructuredEditor({
   const [parsed, setParsed] = useState<ParsedPrompt>(initialParsed);
   const [rawBuffer, setRawBuffer] = useState<string>(initialBody);
   const [mode, setMode] = useState<Mode>(initialParsed.fields.length > 0 ? "structured" : "raw");
+
+  // Follow-up 117: AI refinement is offered only for the video block, and only
+  // when we have the surrounding shot context to feed the model.
+  const refineEnabled = blockKind === "video" && typeof shotContext === "string" && shotContext.trim().length > 0;
+  const drama = useMemo(() => dramaFromPath(currentPath), [currentPath]);
+  const sceneHint = useMemo(() => sceneFromFields(parsed.fields), [parsed.fields]);
+  const refineCtx = useMemo<RefineContext | null>(
+    () =>
+      refineEnabled
+        ? {
+            shotContext: shotContext as string,
+            drama,
+            scene: sceneHint,
+            getPromptBody: () => serializePrompt(parsed),
+          }
+        : null,
+    [refineEnabled, shotContext, drama, sceneHint, parsed],
+  );
 
   const updateField = (order: number, newValue: string): void => {
     setParsed((cur) => ({
@@ -130,6 +160,7 @@ export function PromptStructuredEditor({
           disabled={saving}
           characterOptions={characterOptions}
           sceneOptions={sceneOptions}
+          refineCtx={refineCtx}
         />
       ) : (
         <textarea
@@ -168,12 +199,23 @@ export function PromptStructuredEditor({
   );
 }
 
+/** Follow-up 117: context passed down so each dimension field can request
+ *  AI refinement suggestions. `getPromptBody` is read lazily at click time so
+ *  the request reflects the latest edits to the other fields. */
+interface RefineContext {
+  shotContext: string;
+  drama: string | null;
+  scene: string | null;
+  getPromptBody: () => string;
+}
+
 interface StructuredFormProps {
   parsed: ParsedPrompt;
   onChangeField: (order: number, value: string) => void;
   disabled: boolean;
   characterOptions: string[];
   sceneOptions: string[];
+  refineCtx: RefineContext | null;
 }
 
 function StructuredForm({
@@ -182,7 +224,10 @@ function StructuredForm({
   disabled,
   characterOptions,
   sceneOptions,
+  refineCtx,
 }: StructuredFormProps): JSX.Element {
+  // Only one dimension's suggestion panel is open at a time.
+  const [openOrder, setOpenOrder] = useState<number | null>(null);
   if (parsed.fields.length === 0) {
     return (
       <div className="prompt-editor-no-fields">
@@ -206,6 +251,10 @@ function StructuredForm({
           disabled={disabled}
           characterOptions={characterOptions}
           sceneOptions={sceneOptions}
+          refineCtx={refineCtx && isRefinableDimension(f.label) ? refineCtx : null}
+          refineOpen={openOrder === f.order}
+          onToggleRefine={() => setOpenOrder((cur) => (cur === f.order ? null : f.order))}
+          onCloseRefine={() => setOpenOrder(null)}
         />
       ))}
     </div>
@@ -218,13 +267,58 @@ interface FieldRowProps {
   disabled: boolean;
   characterOptions: string[];
   sceneOptions: string[];
+  refineCtx: RefineContext | null;
+  refineOpen: boolean;
+  onToggleRefine: () => void;
+  onCloseRefine: () => void;
 }
 
-function FieldRow({ field, onChange, disabled, characterOptions, sceneOptions }: FieldRowProps): JSX.Element {
+function FieldRow({
+  field,
+  onChange,
+  disabled,
+  characterOptions,
+  sceneOptions,
+  refineCtx,
+  refineOpen,
+  onToggleRefine,
+  onCloseRefine,
+}: FieldRowProps): JSX.Element {
   const widget = fieldWidget(field.label);
+
+  // Smart merge per follow-up 117: empty field → fill; non-empty → append on
+  // a new line so existing content is preserved.
+  const applySuggestion = (value: string): void => {
+    const cur = field.value;
+    onChange(cur.trim() === "" ? value : `${cur.replace(/\n+$/, "")}\n${value}`);
+    onCloseRefine();
+  };
+
   return (
     <label className="prompt-editor-field">
-      <span className="prompt-editor-field-label">{field.label}</span>
+      <span className="prompt-editor-field-label">
+        {field.label}
+        {refineCtx ? (
+          <button
+            type="button"
+            className={`prompt-refine-btn${refineOpen ? " prompt-refine-btn-active" : ""}`}
+            onClick={onToggleRefine}
+            disabled={disabled}
+            title="让 AI 根据本镜剧情推荐细化选项"
+          >
+            ✨ 推荐
+          </button>
+        ) : null}
+      </span>
+      {refineCtx && refineOpen ? (
+        <RefinePanel
+          dimension={field.label}
+          currentValue={field.value}
+          refineCtx={refineCtx}
+          onApply={applySuggestion}
+          onClose={onCloseRefine}
+        />
+      ) : null}
       {widget === "multiselect" ? (
         <MultiSelectInput value={field.value} options={characterOptions} onChange={onChange} disabled={disabled} />
       ) : widget === "select" ? (
@@ -410,4 +504,157 @@ function DropdownInput({ label, value, onChange, disabled }: DropdownInputProps)
       ) : null}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Follow-up 117: per-dimension AI refinement.
+// ---------------------------------------------------------------------------
+
+/** Dimensions worth refining via the LLM — the descriptive video-prompt
+ *  fields. 人物 / 场景 are picker-backed and 比例 is a fixed enum, so they're
+ *  excluded; 时长 is a plot-beat decision left to the dropdown. */
+const _REFINABLE = new Set([
+  "镜头",
+  "运镜",
+  "动作",
+  "台词/字幕",
+  "光线/色调",
+  "节奏",
+  "渲染样式",
+]);
+
+function isRefinableDimension(label: string): boolean {
+  return _REFINABLE.has(label.replace(/\s+/g, ""));
+}
+
+/** `ai_videos/{drama}/episodes/...` → drama, or null. */
+function dramaFromPath(path: string | undefined): string | null {
+  if (!path) return null;
+  const parts = path.split("/");
+  const i = parts.indexOf("ai_videos");
+  return i >= 0 && parts.length > i + 1 ? parts[i + 1] : null;
+}
+
+/** Pull the current 场景 field value (if any) to hint the suggestion request. */
+function sceneFromFields(fields: FieldDef[]): string | null {
+  const f = fields.find((x) => x.label.replace(/\s+/g, "") === "场景" || x.label.replace(/\s+/g, "") === "場景");
+  const v = f?.value.trim();
+  return v ? v : null;
+}
+
+interface RefinePanelProps {
+  dimension: string;
+  currentValue: string;
+  refineCtx: RefineContext;
+  onApply: (value: string) => void;
+  onClose: () => void;
+}
+
+/** Fetches suggestions for one dimension on open, lists them as selectable
+ *  cards, and applies the chosen one on 确认. */
+function RefinePanel({ dimension, currentValue, refineCtx, onApply, onClose }: RefinePanelProps): JSX.Element {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<RefinementSuggestion[]>([]);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setSelected(null);
+    suggestRefinements({
+      dimension,
+      current_value: currentValue,
+      shot_context: refineCtx.shotContext,
+      prompt_body: refineCtx.getPromptBody(),
+      drama: refineCtx.drama,
+      scene: refineCtx.scene,
+      count: 4,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setSuggestions(res.suggestions);
+        if (res.suggestions.length === 0) setError("模型没有返回可用的建议，请重试。");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(refineErrorMessage(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // reloadKey lets 「重新生成」 re-run; other deps are stable for an open panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dimension, reloadKey]);
+
+  return (
+    <div className="prompt-refine-panel" role="group" aria-label={`${dimension} AI 推荐`}>
+      <div className="prompt-refine-panel-header">
+        <span>✨ AI 推荐 · {dimension}</span>
+        <div className="prompt-refine-panel-tools">
+          <button type="button" className="prompt-refine-link" onClick={() => setReloadKey((k) => k + 1)} disabled={loading}>
+            重新生成
+          </button>
+          <button type="button" className="prompt-refine-link" onClick={onClose}>
+            收起
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="prompt-refine-loading">正在根据本镜剧情生成建议…</div>
+      ) : error ? (
+        <div className="prompt-refine-error" role="alert">{error}</div>
+      ) : (
+        <>
+          <div className="prompt-refine-cards">
+            {suggestions.map((s, i) => (
+              <button
+                type="button"
+                key={i}
+                className={`prompt-refine-card${selected === i ? " prompt-refine-card-selected" : ""}`}
+                onClick={() => setSelected(i)}
+                aria-pressed={selected === i}
+              >
+                <span className="prompt-refine-card-value">{s.value}</span>
+                {s.rationale ? <span className="prompt-refine-card-rationale">{s.rationale}</span> : null}
+              </button>
+            ))}
+          </div>
+          <div className="prompt-refine-actions">
+            <button
+              type="button"
+              className="voice-btn voice-btn-primary"
+              disabled={selected === null}
+              onClick={() => {
+                if (selected !== null) onApply(suggestions[selected].value);
+              }}
+              title={currentValue.trim() === "" ? "填入该字段" : "追加到该字段已有内容之后"}
+            >
+              {currentValue.trim() === "" ? "✓ 填入" : "✓ 追加"}
+            </button>
+            <button type="button" className="voice-btn voice-btn-secondary" onClick={onClose}>
+              取消
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function refineErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    const kind = err.detail?.kind;
+    if (kind === "suggestion_unavailable") return "未配置 ANTHROPIC_API_KEY — 后端无法生成建议。";
+    if (kind === "suggestion_failed") return "AI 生成失败，请重试。";
+    if (kind === "invalid_suggestion_request") return "请求无效。";
+    return `请求失败（${err.status}）。`;
+  }
+  return `请求失败：${err instanceof Error ? err.message : String(err)}`;
 }

@@ -450,6 +450,44 @@ export function rollRandomAttr<K extends keyof typeof ATTR_OPTIONS>(field: K): t
   return opts[Math.floor(Math.random() * opts.length)];
 }
 
+// ============================================================================
+// Prompt refinement suggestions (follow-up 117). Per-dimension AI suggestions
+// for a shot's video prompt: the backend forwards the shot context + clicked
+// dimension to the Anthropic Messages API and returns a few candidate
+// refinements the user picks from.
+// ============================================================================
+
+export interface RefinementSuggestion {
+  value: string;
+  rationale: string;
+}
+
+export interface SuggestRefinementsResult {
+  dimension: string;
+  suggestions: RefinementSuggestion[];
+}
+
+export interface SuggestRefinementsRequest {
+  dimension: string;
+  current_value?: string;
+  shot_context?: string;
+  prompt_body?: string;
+  drama?: string | null;
+  scene?: string | null;
+  count?: number;
+}
+
+export async function suggestRefinements(
+  req: SuggestRefinementsRequest,
+): Promise<SuggestRefinementsResult> {
+  const response = await fetch("/api/prompt/suggest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<SuggestRefinementsResult>(response);
+}
+
 /** Build a same-origin URL for image preview, with mtime cache-buster. */
 export function imageUrl(path: string, mtime: number): string {
   return `/api/file?path=${encodeURIComponent(path)}&mtime=${encodeURIComponent(String(mtime))}`;
@@ -544,6 +582,34 @@ export async function extractCharacterViews(path: string): Promise<ExtractCharac
     body: JSON.stringify({ path }),
   });
   return readJson<ExtractCharacterViewsResult>(response);
+}
+
+export interface EpisodeShotUsed {
+  shot: string;
+  video: string;
+}
+
+export interface EpisodeShotSkipped {
+  shot: string;
+  reason: string;
+}
+
+export interface ConcatEpisodeResult {
+  episode: string;
+  out: string | null;
+  used: EpisodeShotUsed[];
+  skipped: EpisodeShotSkipped[];
+}
+
+/** Stitch each shot's newest renders/ mp4 into one ep{NN}.mp4 in the episode
+ * folder (overwrites). `path` may be any file under the episode folder. */
+export async function concatEpisode(path: string): Promise<ConcatEpisodeResult> {
+  const response = await fetch("/api/concat-episode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ConcatEpisodeResult>(response);
 }
 
 // ============================================================================

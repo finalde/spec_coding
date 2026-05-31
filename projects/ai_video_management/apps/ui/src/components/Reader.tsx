@@ -19,6 +19,7 @@ import { extractDramaAssets } from "../lib/dramas";
 import { announceToast } from "../lib/announce";
 import {
   archiveMedia,
+  concatEpisode,
   concatShotCharacters,
   deleteMedia,
   extractCharacterViews,
@@ -62,6 +63,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [extracting, setExtracting] = useState<boolean>(false);
   const [extractingViews, setExtractingViews] = useState<boolean>(false);
   const [concatBusy, setConcatBusy] = useState<boolean>(false);
+  const [episodeConcatBusy, setEpisodeConcatBusy] = useState<boolean>(false);
 
   const ext = path ? extOf(path) : "";
   const isMediaImage = IMAGE_EXTS.has(ext);
@@ -175,6 +177,29 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     }
   }, [path, onSaved]);
 
+  const onConcatEpisodeClick = useCallback(async () => {
+    if (!path) return;
+    setEpisodeConcatBusy(true);
+    try {
+      const result = await concatEpisode(path);
+      const skippedNames = result.skipped.map((s) => `${s.shot} (${s.reason})`).join(", ");
+      let summary: string;
+      if (result.out) {
+        summary = `已合成 ${result.out.split("/").pop()} — 拼接 ${result.used.length} 个镜头`;
+        if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
+      } else {
+        summary = `未生成 — 没有镜头包含 renders/ mp4`;
+        if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
+      }
+      announceToast(summary);
+      onSaved();
+    } catch (err) {
+      announceToast(`合成本集视频失败: ${archiveErrorKind(err)}`);
+    } finally {
+      setEpisodeConcatBusy(false);
+    }
+  }, [path, onSaved]);
+
   const onExtractFramesClick = useCallback(async () => {
     if (!path) return;
     const name = path.split("/").pop() ?? path;
@@ -241,6 +266,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const shotPair = isMarkdown ? detectShotPair(path) : null;
   const isShotPair = shotPair !== null;
   const isShotlistTable = path.startsWith("ai_videos/") && path.endsWith("/shotlist.md");
+  const isEpisodeShotlist = isShotlistTable && /\/episodes\/ep\d+\/shotlist\.md$/.test(path);
   const isImageRef = (isMarkdown && /\/ref_images\/[^/]+_seedream\.md$/.test(path));
   const isCasting = isMarkdown && /^ai_videos\/[^/]+\/casting\.md$/.test(path);
   const isActor = isMarkdown && /^ai_videos\/_actors\/actor_[^/]+\/actor_[^/]+\.md$/.test(path);
@@ -274,6 +300,14 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             aria-label="Build a character reel by concatenating the first mp4 found in each involved character's folder"
             title="Parse the 出场角色 table, take the alphabetically-first mp4 inside each character folder (skipping only folders that have no mp4), trim each to 2s, and ffmpeg-concat them into <shotNN>_chars.mp4 next to this shot md.">
             {concatBusy ? "⏳ 生成中…" : "🎬 生成角色合辑"}
+          </button>
+        ) : null}
+        {isEpisodeShotlist ? (
+          <button type="button" className="reader-episode-concat-btn"
+            onClick={onConcatEpisodeClick} disabled={episodeConcatBusy}
+            aria-label="Concatenate every shot's newest renders/ mp4 into a single episode mp4"
+            title="扫描本集 shots/shotNN/renders/ 下每个镜头最新的 mp4，按镜头顺序 ffmpeg 拼接成整集 ep{NN}.mp4 放在本集文件夹下（已存在则覆盖）。没有 renders/ mp4 的镜头自动跳过。">
+            {episodeConcatBusy ? "⏳ 合成中…" : "🎬 合成本集视频"}
           </button>
         ) : null}
         {/* Per follow-up 2026-05-30: hide whole-file Edit for ai_videos paths.

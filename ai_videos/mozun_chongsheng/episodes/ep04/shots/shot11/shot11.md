@@ -1,0 +1,45 @@
+---
+worker_id: regen-mozun-ep04-shot11
+stage: 6
+role: worker
+work_unit_id: shot_prompt-ep04-shot11
+status: complete
+blockers: []
+confidence: high
+---
+
+## 小说原文
+
+可就在他抬袖的一瞬，怀中暗藏的那卷丹书铁券残页，一角缓缓自袖内沿口探了出来——半寸宽，淡黄古旧，裂纹斑驳。镜头慢慢推近，又骤然急推到残页表面：朱红印章的一角浮现，篆体两字逐渐对焦清晰——「独尊」。暗血红的朱印与紫金的主光撞作一处，反讽如刀。
+
+---
+
+# ep04 / shot11 · 袖内丹书铁券残页探出，朱印「独尊」对焦（封面帧·H6 撕脸①）
+
+## Shot context
+
+- Summary: 封面帧·H6 撕脸①。方鼎元袖内丹书铁券残页探出，急推残页表面朱印「独尊」对焦，与紫金主光撞作反讽如刀。
+- Characters: c8_方鼎元
+- Scene: s4_金殿密室
+- Duration: 6s
+- Reference uploads: c8_方鼎元 turntable mp4 + s4_金殿密室 场景 ref
+
+## 视频 prompt — 复制下方代码块到视频生成模型
+
+```text
+04集11镜视
+
+参考: c8_方鼎元 turntable mp4 + s4_金殿密室 场景 ref
+角色: 紫金锦缎道袍玄黑绣边，乌发玉簪束顶三缕短须俊朗下颌左侧黑长痣，浅金眸眉横入鬓，右手持太清拂尘。（下颌左侧黑色长痣 + 三缕短须，卧蚕眉平直横入鬓、杏仁眼眼尾微下垂、一字唇唇色平、长脸道貌型）
+情节: 就在他抬袖的一瞬，怀中暗藏的丹书铁券残页一角缓缓自袖内沿口探出——半寸宽，淡黄古旧，裂纹斑驳。镜头慢慢推近又骤然急推到残页表面：朱红印章一角浮现，篆体两字逐渐对焦清晰——「独尊」。暗血红的朱印与紫金的主光撞作一处，反讽如刀。
+场景: 太清门金殿密室，紫金石柱玄黑石地，九宫八卦阵图浮地，穹顶可降冷月
+镜头: 大特写 + 急推镜，急推至残页朱印对焦
+动作: 0-2s 方鼎元抬袖，丹书铁券残页一角自袖内沿口缓缓探出，淡黄古旧裂纹斑驳；2-4s 镜头慢推近残页；4-6s 骤然急推到残页表面，朱红印章一角浮现，篆体「独尊」二字逐渐对焦清晰，暗血红朱印撞紫金主光，定格作封面帧。
+台词 / 字幕: 默剧（无台词，朱印特写静帧）——本镜采三选一之默剧契约，不出字幕。
+光线 / 色调: 论道金殿，紫金主光，残页淡黄古旧，暗血红朱印为焦点强色，护黄金主光与暗血红反讽撞色，整体冷沉反讽。
+节奏: fast-cut，慢推转急推，朱印对焦定格。
+渲染样式: 影视级真人写实 / cinematic / photorealistic / live-action / 4K HDR / 8K / 仙侠古装真人剧造型 / 实拍剧照风 / 真实布料质感 / 真实皮肤纹理 / RAW 摄影质感 / 大画幅相机 / 85mm 人像镜头 / 16K 大画幅
+比例: 9:16
+时长: 6s
+负向: anime / cartoon / illustration / chibi / manga / 国漫 / 插画 / 工笔 / 水墨写意 / 二次元 / CGI 3D render / 塑料皮肤 / 玩偶感 / 低多边形 / painterly stylization / 卡通色 / 荧光色 / 不要 AI 生成同质化脸 / 不要 AI 通用脸 / 不要 模板化俊男靓女 / 不要 千篇一律的丹凤眼锥子脸 / 不要 西方审美面孔 / 不要 欧美选角风 / 不要 浓眉大眼欧化 / 不要 同款脸 / 不要 跨角色面孔重复 / 不要 网红脸 / 不要 整容脸模板 / 不要 anime style face / 不要 manga style / 不要 cartoon style / 不要 illustration / 不要 stylized / 不要 over-smoothed skin / 不要 plastic skin / 不要 doll-like face / 不要 wax figure / 不要 AI-generated face / 不要 AI artifact / 不要 generic AI face / 不要 same-face syndrome / 不要 模糊轮廓 / 不要 缺乏皮肤细节 / 不要 over-airbrushed
+```

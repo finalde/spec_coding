@@ -106,7 +106,7 @@ ai_videos/feng_shou_lu/
 
 ## 风格关键词
 
-水墨灰青 · 月白 · 寄生紫 `#4a1a5a` · 寿元红 `#a82c2c` · 9:16 · cinematic · 4K HDR · DSLR 85mm · ARRI · photorealism · 真人写实 · 亚洲俊男靓女 · 寿命计数器过 (本剧专属转场) · 5s 寄生升级 motif (系统提示 1.5s → 寄生 aura 2s 顿挫 → 寿命流失 1.5s)
+水墨灰青 · 月白 · 寄生紫 · 寿元红 · 9:16 · cinematic · 4K HDR · DSLR 85mm · ARRI · photorealism · 真人写实 · 亚洲俊男靓女 · 寿命计数器过 (本剧专属转场) · 5s 寄生升级 motif (系统提示 1.5s → 寄生 aura 2s 顿挫 → 寿命流失 1.5s)
 
 ---
 

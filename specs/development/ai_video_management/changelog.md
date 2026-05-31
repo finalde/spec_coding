@@ -3686,3 +3686,29 @@ Auto-updated:
 No conflicts found in: VoiceView (voice md schema 当前单 prompt, replaceFirstFencedCode 仍正确; 多 prompt 演化时按 ActorView 模式上升) / ParseFallback / Editor (全文件 textarea 编辑器, 用于 frontmatter/标题/负向段非 prompt 编辑场景) / api.ts (复用现有 putFile + ApiError) / 后端 routes/file__route.py (PUT contract 未变) / casting / actor 分配 / 删除 / 媒体抽帧 等所有其他功能 (改动仅集中在 renderer + 4 个 view 的 prompt section).
 
 Known follow-up: Reader.tsx 的 SHOT_MD_RE 仍引用  旧路径 (xianxia_new/011 后应为 shots/shot\d+/shot\d+.md), 需单独 follow-up 修复, 否则 shotNN.md 在 isShotMd 分支可能 mismatch.
+
+
+## Follow-up 117 — 2026-05-31 17:33:58
+Source: user_input/follow_ups/117-20260531-173358-prompt-skeleton-plus-ai-dimension-refine.md
+Summary: shot 视频 prompt 改为两段式 —— stage-6 自动生成「基础骨架版」(rule #12.4 全字段在、描述性维度只留 stub)，再在 ai_video_management webapp 里逐栏目用 ✨ 推荐 (后端实时调 Anthropic) 细化、智能合并落盘。建议来源 = 后端实时 LLM；范围 = 仅 shot 视频 prompt；SDK = 官方 anthropic；合并 = 空填入/非空追加。
+
+Auto-updated:
+- .claude/agent_refs/project/ai_video.md — rule #12.4 加 2026-05-31 amendment：basic skeleton 生成契约 (substantive-at-generation 字段 vs refine-later stub 字段；据此放宽 stage-6 validator；仅 shot 视频 prompt body)。[common surface — 适用所有 ai_video 项目]
+- specs/.../final_specs/spec.md — 新增 §「Per-dimension AI prompt refinement (follow-up 117)」FR-96..FR-100 (骨架生成契约 / POST /api/prompt/suggest / 错误映射 / PromptStructuredEditor ✨ 细化 + 智能合并 / 优雅降级)。注意：FR-86..FR-95 已被 actor/voice follow-up 占用，故从 FR-96 起编号。
+- specs/.../validation/security.md — 覆盖矩阵加 FR-97/FR-98 → SEC-OUTBOUND-ANTHROPIC；新增 carve-out #9 (第二个 outbound-HTTP 端点 / 只读不写文件 / env key 不入 EXPOSED_TREE / 优雅降级 / 数据 egress 提示)。
+- specs/.../validation/acceptance_criteria.md — 覆盖矩阵加 FR-96..FR-100 → U9.*；新增 U9 work unit (5 场景：骨架生成内容校验 / suggest 端点 / 错误路径 / ✨ 组件行为+智能合并 / 优雅降级)。
+- projects/ai_video_management/ 源码 (stage-6 执行)：新增 read-only prompt aggregate (anthropic__client + prompt__error/dto/mapper/query + prompt__route + container/app_factory/routes 接线) + 前端 api.ts suggestRefinements + PromptStructuredEditor ✨ RefinePanel + renderer 透传 shotContext/currentPath + styles.css .prompt-refine-*；anthropic>=0.40 入 requirements/pyproject。
+
+No conflicts found in: interview/qa.md (2026-05-05 早期访谈，按 surgical-patch policy 不回填) / findings/dossier.md + angle-*.md (stage-3 研究产物，本功能为 stage-4+ 增量，无上游冲突) / validation/{strategy.md, bdd_scenarios.md, e2e.md, backend_tests.md, accessibility_and_manual.md} (既有断言仍适用；U9 自动化场景已在 acceptance_criteria.md 落点，深化 BDD/e2e 待用户触发 stage-5 重生成) / 现有 routes/endpoints (prompt aggregate 为净新增，未修改任何既有路由) / root pyproject.toml (不镜像 ai_video_management 专属依赖，照现状不动)。
+
+
+## Follow-up 118 — 2026-05-31 19:42:55
+Source: user_input/follow_ups/118-20260531-194255-episode-concat-shots-into-one-mp4.md
+Summary: 新增 episode 级「合成本集视频」按钮 — 扫描本集每个 shot 的 renders/ 子文件夹取最新 mp4，按镜头顺序 ffmpeg 拼接成整集 ep{NN}.mp4 放本集文件夹（覆盖既有），无 renders/ mp4 的镜头跳过。扫描范围经用户确认为「仅 renders/ 子文件夹」以避开 2 秒角色合辑 shot{NN}_chars.mp4。
+
+Auto-updated:
+- specs/.../user_input/revised_prompt.md — 追加 Follow-up draft 118 块 (User words + What landed)。
+- specs/.../final_specs/spec.md — 新增 §「Episode concat (follow-up 118)」FR-101..FR-104 (按钮锚点 / POST /api/concat-episode 选片契约 / ffmpeg concat-filter 输出契约 / 7 个错误映射)。FR-96..FR-100 已被 follow-up 117 占用，故从 FR-101 起编号。
+- projects/ai_video_management/ 源码 (stage-6 执行)：新增 write-side episode aggregate — domain/errors/episode__error.py + infrastructure/writers/episode__writer.py (EpisodeConcatBuilder) + application/{dtos,mappers,commands}/episode__* + apps/api/routes/episode__route.py；container (episode_concat_builder Singleton + episode_command Factory) + routes/__init__ + app_factory 错误映射接线。前端 api.ts concatEpisode + Reader.tsx 按钮/handler/isEpisodeShotlist + styles.css .reader-episode-concat-btn。README.md ai_video-specific UX 加一条。tests/test_episode_concat.py 新增 (4 用例, stub ffmpeg)。
+
+No conflicts found in: interview/qa.md + findings/* (stage-2/3 早期产物，本功能为 stage-4+ 净增量) / validation/* (既有断言仍适用；episode aggregate 为净新增端点，未改既有路由；深化 BDD/e2e/security 覆盖待用户触发 stage-5 重生成) / 既有 character_video 角色合辑 (per-shot, trim 2s) 与 frame/media/actor/voice/prompt 等所有其他功能 (episode 拼接为独立 aggregate，未触碰) / root pyproject.toml (无新依赖；ffmpeg 经已有 imageio-ffmpeg 提供)。

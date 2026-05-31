@@ -14,6 +14,15 @@ Cross-cutting rules about the outputs of every ai_video-task project (`ai_videos
 
 *(Per follow-up `mozun_chongsheng/002` 与 `ai_video_management/004`：现代 Windows + git 已能稳定处理 UTF-8 路径；ai_video_management webapp `is_inside` / `safe_resolve` / 前端 Sidebar 已支持 UTF-8 中文路径段；放宽限制以提升内容文件可识别性。)*
 
+### 1b. No hex color codes / hex-bound color annotations in outputs
+
+- **任何 `ai_videos/{name}/` 输出文件都不得含十六进制色码** (`#` + 6 hex digits, e.g. `#a87838`)，无论是否包裹反引号。色码对目标 AI 视频/图像模型 (Kling / Seedance / Seedream / ...) 不可解析，只是噪声。
+- **色码 + 与之绑定的颜色名共同删除**：形如 `色名 #hex`（`月夜紫黑 #2a0a3a`）或 `(#hex 色名)`（`(#a87838 冷金挑光)`）的「颜色提示」整体去掉颜色部分——保留它所修饰的物件名 (`青灰长袍 #7a8a8a` → `长袍`；`骨白碎冰刃 #e8d8c0` → `碎冰刃`)；纯色/情绪短语 (`月夜紫黑 #2a0a3a + 残血暗 #5a1a14`) 整段移除。颜色仅以自然中文描述存在于行文里，不再设专门「配色 hex」字段或 `色名 #hex` 标注。
+- **本规则覆盖各模板里残留的 hex 字段标签**：rule 12.8 锁定描述符 `瞳色（hex）`/`服装 / 主色（hex）`/`配色 hex（主/辅/点缀/高光）`、rule 12.3 场景档 `配色 hex（主/辅/点缀）`、rule 12.4 视频 prompt `色调对齐主/辅/点缀 hex` —— 一律不带 hex，直接用中文色彩描述；style_guide 调色表里的色码列清空（保留命名/用途列）。
+- 色温 (`5500K`/`4500K`)、尺寸、机位等非色码信息**保留**——它们不是颜色提示。
+
+*(Per follow-up：用户要求去掉所有 prompt 里的颜色提示（如 `(#a87838 冷金挑光)`）。既有三项目 `feng_shou_lu` / `mozun_chongsheng` / `nvdi_tuihun_houhuile` 已全量清理 (696 处 / 126 文件 → 0 hex)。)*
+
 ### 2. Output layout — `sub_type=novel` (v3, post follow-up xianxia_new/009 — split reader vs production)
 
 **Reader-side `my_novel/{name}/`** (matches downloaded_novels schema per follow-up 111; pure novel format users read like 起点/番茄/晋江):
@@ -152,7 +161,13 @@ The shot's `动作:` timed beats and `台词 / 字幕:` time windows MUST sum to
 
 **Kling 2.1 Pro cap (10 s) note:** when a shot's `时长:` > 10 s is rendered via Kling, the user splits the render into back-to-back Kling calls (each ≤ 10 s) and uses the shot's own `shot{NN}_lastframe.png` mid-seam as input to the second call. The shot prompt itself is always written for whatever duration the beat needs — the Kling split is a user-side rendering step, not a schema concern. Seedance accepts ≤ 15 s directly in a single call.
 
+**Per-episode total duration — 180–195 s (3:00–3:15).** Each episode (novel) / short MUST assemble to a total runtime of **180–195 秒**. The episode total is the binding target; per-shot durations are still chosen per beat (above), but the author writes **enough beats** that the `时长` column of `shotlist.md` sums into `[180, 195]`. `shotlist.md` carries an explicit `时长合计` line proving the sum is in range (stage-6 validator greps it).
+
+**Fast-cut default + 15 s hard cap.** Default episode pacing is **fast-cut: 名义 5–8 s/shot, ~25–35 shots/episode** (国内短剧 cut rhythm). **No shot exceeds 15 s** — 15 s is a hard rendering cap (Kling/Seedance), not just a dramatic ceiling. Because every shot is now ≤ 15 s, the legacy ">15 s beat split with seam frame" carve-out is retired: a beat that would run long is authored as multiple consecutive ≤15 s shots, not one over-length shot. The 3–15 s per-beat heuristic table still governs individual shot sizing within the fast-cut budget.
+
 *(rev — follow-up "flexible per-shot duration" — 2026-05-21: reversed the earlier "15 s is the target, fill the full budget" stance because user empirical review found forced-15 s shots dilute fast beats and let the model invent uninstructed filler. The earlier policy originated from a "Seedance single-generation budget" optimization that turned out to favor model uptime over dramatic pacing. New policy: duration follows the beat, with 15 s as ceiling only.)*
+
+*(rev — follow-up "每集 3 分钟 + fast-cut + 15s 硬上限": added per-episode total 180–195 s, fast-cut 5–8 s default (~25–35 shots/ep), and a hard 15 s/shot cap (Kling/Seedance render limit). Per-shot beat sizing unchanged; episode now assembled to total. All 7 existing episodes regenerated under this rule.)*
 
 ### 7. Aspect ratio
 
@@ -234,12 +249,25 @@ AI-video generators (Kling 2.1 Pro, Seedance 1.0 Pro) cap individual clips at ~1
 >
 > Reinforce in the `动作:` beats (在画人物「全程闭口、无说话口型」) and, in shots that still carry a `负向:` line (起始帧/结束帧 frames), add `不要 给<在画人物>配口型`. **内心独白 / V.O. is the same contract** — the speaker's own mouth must not move (`V.O. 内心 OS 无嘴动`); `shot06` / `shot14` are the reference good-pattern. On-screen (on-camera) dialogue instead names the visible speaker in the 台词 label as normal. Stage-6 validators SHOULD flag any OS / 画外 / V.O. 台词 line whose shot has ≥1 on-screen character but no `在画人物口型` (or equivalent `无嘴动`) directive. Existing nvdi shots fixed: shot02 (full), shot04 + shot11 (OS 余音 over on-screen 陈国公).
 
+> **⚠ 2026-05-30 amendment — shot 块首行 ID 改用紧凑中文标签 `{NN}集{NN}镜{视|始|末}` (适配 Kling 9-字符文件名截断 + 导入匹配).** Per follow-up "kling 用前 9 个字符作为 video/picture 名字": Kling names a downloaded render after the **first 9 characters** of the pasted prompt. The old ASCII first line `epNN_shotNN_{视频|起始帧|结束帧}` truncates to `ep01_shot` at 9 chars — losing the shot number AND block type, so every render in an episode collided on `ep01_shot…` and the import matcher could not route them. **Each shot block's first line is now a compact Chinese tag** `{NN}集{NN}镜{视|始|末}` (集 = episode, 镜 = shot; 视 = 视频 / 始 = 起始帧 / 末 = 结束帧). Example ep01·shot02: 视频 `01集02镜视`, 起始帧 `01集02镜始`, 结束帧 `01集02镜末` — 7 chars, fully inside the 9-char window, and distinct per block (so a shot's two frame PNGs never collide). The import matcher (`downloads__writer.py::_collect_candidates`) adds the `{NN}集{NN}镜` core as a shot-folder token (alongside the retained `epNN_shotNN` / `shotNN` ASCII tokens, so older downloads still match) and routes the file into `shots/shot{NN}/renders/`. Future shot prompts MUST start each fenced block with this Chinese tag. Migrated 213 first-lines across all 3 dramas via a one-time sweep.
+
 > **⚠ 2026-05-27 amendment — `场景视角锚:` and `角色 (一句话锁定...):` body fields ABOLISHED in shot prompts.** Per follow-up "把 shot prompt裏所有 场景视角锚 都去掉" + "把角色這一段也去掉": both fields duplicate information already carried by the reference-line header at the top of every shot code block (added 2026-05-24 per rule 12.4-F — `<char>請參考: <drama>_<char>` lines and `<scene>:<drama>_<scene>` line). Body-level repetition is废话 and bloats the prompt.
 > - `场景视角锚:` (a paragraph describing which scene-mp4 dwell to anchor to + per-dwell ban list) — REMOVED. The reference-line header already names the scene handle; the model derives the anchor from the rendered scene mp4 + the `镜头:` framing description.
 > - `角色 (N 一句话锁定, byte-identical 复制自 character bibles 第 10 行):` block + its indented child rows — REMOVED. The reference-line header already names every character (visible AND voice-only OS, per rule 12.4-F contract #4); the per-character 一句话锁定 in the body just re-prints the same character handle.
 > - Single-line `角色: <one-line descriptor>` lines that immediately followed the shot-title line — also REMOVED for the same reason.
 > 
 > Existing shot prompts migrated via `tools/strip_redundant_fields.py` (20 files / 47 lines across nvdi_tuihun_houhuile + feng_shou_lu; mozun_chongsheng shots are still on the pre-2026-05-24 `{ref_*}` placeholder format and were untouched — they get the new reference header + redundant-field strip together when the user requests the mozun migration). Future shot prompts MUST NOT include either field; stage-6 validators MUST reject a `场景视角锚:` or body-level `角色:` line inside a shot code block.
+
+> **⚠ 2026-05-31 amendment — stage-6 生成 shot 视频 prompt 默认输出「基础骨架版 (basic skeleton)」，描述性维度交由 webapp 逐栏目细化。** Per follow-up (ai_video_management 117) "自動生成的prompt顯示一個very basic version + UI 上逐欄目細化": shot **视频 prompt** 在 stage-6 自动生成时不再一次写满每个维度的导演级细节，而是先落一个可直接复制、但刻意精简的骨架，留给用户在 ai_video_management webapp 里逐维度用 ✨ 推荐 (LLM-backed) 细化。契约：
+> - **骨架仍含 rule #12.4 的全部必填字段**（顺序不变，缺字段照旧 = validation 失败）—— skeleton ≠ 删字段，而是「字段在、内容精简」。
+> - **生成时必须实质填写**（substantive-at-generation）：`场景:` / `镜头:`（景别 + 运动 一行）/ `动作:`（至少 `0–{时长}s …` 一拍，写清主体在该镜做什么）/ `台词 / 字幕:`（三选一 + 台词原文）/ `比例:` / `时长:`。这些是该镜的剧情骨干，缺了无法判断镜头。
+> - **允许留精简 stub**（refine-later）：`镜头:` 的逐拍运动细节、`动作:` 的多拍 timed-beat 展开、`运镜:`、`光线 / 色调:` 的光位/层次细描、`节奏:`、`渲染样式:` 的完整关键词组合 —— 生成时给一行概括即可，由用户在 webapp 逐栏目 ✨ 推荐里补足。
+> - **字数**：骨架天然远低于 rule #12.4 v4 的 2000 字 soft-limit；不得为「凑骨架」而堆砌。
+> - **Stage-6 validators 据此放宽**：只校验「必填字段在场 + substantive 字段非空 + 无被废止字段(负向/场景视角锚/body 角色)」，**不得**因描述性维度只有一行 stub 而判 warning/blocker（即不要求生成时就有逐拍 beat / 完整光线层次）。多拍 `动作:` 之和 = 时长 的校验仅在该字段已被展开成多拍时适用；单拍 `0–{时长}s …` 骨架合法。
+> - **适用范围**：仅 shot **视频 prompt** body。起始帧/结束帧静帧、角色档、场景档、actor/voice 不受影响，照旧生成完整内容。
+> - regen 语义不变（rule #10 / CLAUDE.md regen 表）：重生成 shot 时仍 delete-then-write 整个 shot，写出的就是新的骨架版。
+
+> **⚠ 2026-05-31 amendment — shot 视频 prompt body 内的重复「shot 标题行」`ep{NN} / shot{NN} · {summary} [— {时长}]` ABOLISHED.** Per follow-up "在 shot prompt 裏，類似這句話是完全多餘的：`ep01 / shot06 · 陈凡 内心独白 + reveal motif checkpoint #1 — 6s`，把這類的語句全刪掉": 部分 drama（feng_shou_lu / nvdi_tuihun_houhuile）在 `视频 prompt` 的 ```text 块里、紧跟 reference 头之后，重复写了一行自由文本式的镜头标题（`ep{NN} / shot{NN} · 概述 — 时长`）。这一行**完全多餘**——它重复了文件的 `# ep{NN} / shot{NN} · …` H1 标题，也重复了块内 `场景:` / `时长:` 字段携带的信息，视频模型从中得不到任何 actionable 信号，只是占字数。**未来 shot 视频 prompt 的 ```text body MUST NOT 含这一行**；body 的合法首行仍是紧凑中文标签 `{NN}集{NN}镜{视|始|末}`（2026-05-30 amendment），其后直接是 reference 头与各字段。文件级 `# ep{NN} / shot{NN} · …` H1 标题（带 `# ` 前缀、在 code block 之外）是文件可导航标题，**保留不动**。Stage-6 validators MUST reject 任何出现在 shot 视频 prompt code block 内、形如 `ep{NN} / shot{NN} ·` 的行。Existing prompts migrated via `tools/strip_redundant_shot_title.py`（21 行 / 21 文件，feng_shou_lu 7 + nvdi_tuihun_houhuile 14；mozun_chongsheng 从未使用此行，0 命中）。
 
 > **⚠ 2026-05-27 amendment — shot prompts now carry THREE code blocks: 起始帧 + 结束帧 + video prompt.** Per follow-up "shots 裏要有3個prompt 一個start 一個end 一個 video": every `shotNN.md` must have, in source order:
 > 1. `## 起始帧 (shot 起始 0s 时画面状态 — 描述 t=0 静帧, 不含运动)` followed by a `text` fence containing `角色姿态: / 位置/构图: / 表情: / 道具:` field rows.
@@ -454,6 +482,7 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 |---|---|:---:|
 | 1  | `[参考图]` (`input_image_urls`) | conditional — 仅当目标模型支持 image-to-video 且参考图已生成 |
 | 2  | `角色:` | ✅（按 12.4-A 展开） |
+| 2b | `情节:` (该 shot 对应的小说正文，verbatim 取自 shot 文件顶部 `## 小说原文` / `## Chapter excerpt` 段；置于 `参考`/`角色` 之后、`场景` 之前) | ✅ |
 | 3  | `场景:` (场景档一句话锁定 或 inline) | ✅ |
 | 4  | `镜头:` (景别 + 运动) | ✅ |
 | 5  | `动作:` (timed beats) | ✅ |
@@ -486,6 +515,9 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 - **Soft limit: 每 shot prompt body（fenced ```text 内文）≤ 2000 字**（中文字符 + ASCII 一律按 1 计）。Stage-6 validator 警告 if exceed。
 - **Hard limit: ≤ 2500 字**（极端 multi-character cover-frame shot 可例外但必有 explicit 注释 in Shot context Summary 说明 "本 shot 为 cover-frame / 全员同框，prompt 长度上限放宽"）。Hard limit 超 = blocker。
 - 字数计 fenced ```text 内文（不含 ``` 标记 + 不含 Shot context / Reference placeholders 段 + 不含 Seam-frame still prompts 段）。
+- **`情节:` 字段（field 2b）不计入 字数上限**：它是给模型的叙事上下文（小说正文 verbatim），非视觉指令；视觉指令字数预算（soft 2000 / hard 2500）只统计除 `情节:` 块之外的 prompt body 文字。
+
+*(Per follow-up：用户要求把每个 shot 对应的小说正文也放进视频 prompt，置于 参考/角色 之后、场景 之前，字段名 `情节:`。三项目既有 shot 已全量回填。)*
 
 **渲染样式 / 负向 字数 trim 政策（rule #12.4 v4）**：
 

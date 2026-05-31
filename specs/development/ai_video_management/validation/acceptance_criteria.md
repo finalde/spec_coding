@@ -1151,6 +1151,11 @@ And 路径处理在 Windows 上无 \ / 混合错位（ImageRefView 与 ShotPairV
 | FR-83 | U3.11 |
 | FR-84 | U6.6 |
 | FR-85 | U7.2 |
+| FR-96 | U9.1 (内容/生成契约 — skeleton 生成，stage-6 内容校验) |
+| FR-97 | U9.2 |
+| FR-98 | U9.3 |
+| FR-99 | U9.4 |
+| FR-100 | U9.5 |
 | NFR-1 | U4.1, U7.1 |
 | NFR-2 | U2.1 (含 200 ms 预算断言), U6.1 (300 ms 预算) |
 | NFR-3 | U5.5 (localStorage namespace), U3.2 (8765 拒) |
@@ -1191,3 +1196,17 @@ And 路径处理在 Windows 上无 \ / 混合错位（ImageRefView 与 ShotPairV
 | U8.M1 | FR-92v / FR-9v5 | [manual_walkthrough_only] | 用户在 VoiceView drop-zone 拖入一个本地 `.mp3` 文件 → 上传成功 → 页面无刷新即出现 `<audio controls>` 并可播放；视觉确认 archetype 的中文 label（陰柔太監音 / 雄壯將軍音 / 柔美宮主音）正确显示。 |
 
 **FR 覆盖增量**：FR-9v / FR-9v2 / FR-9v3 / FR-9v4 / FR-9v5 / FR-9v6 / FR-9v7 / FR-9v8 / FR-86v / FR-87v / FR-88v / FR-91v / FR-92v 全部映射至 U8.* 场景；任何遗漏视为文档缺陷按原则 6 在 U8 sign-off 标记 `critical`。
+
+## 追加：U9 逐栏目 AI prompt 细化 (follow-up 117)
+
+新增 work unit `U9 — prompt 细化建议`，承接 spec.md 的 FR-96 / FR-97 / FR-98 / FR-99 / FR-100。后端是第二个 outbound-HTTP 端点（Anthropic），验收沿用 actor 池的 outbound 形态但**只读、不写文件**（落盘仍走 FR-15 PUT）。
+
+| 场景 | 来源 FR | 类型 | 验收 |
+|---|---|---|---|
+| U9.1 | FR-96 | [content/generation] | stage-6 生成或重生成一个 shot 视频 prompt：rule #12.4 全部必填字段在场；场景/镜头/动作(≥1 拍)/台词/比例/时长 非空且实质；描述性维度（运镜/光线·色调/节奏/渲染样式/多拍动作）允许只有一行 stub —— 校验器**不得**因 stub 判 warning/blocker。骨架字数远低于 2000 字 soft-limit。 |
+| U9.2 | FR-97 | [automated] | `POST /api/prompt/suggest` body `{dimension:"镜头", shot_context:"…", prompt_body:"…"}`，mock AnthropicClient 返回固定 JSON 数组 → 200 + `{dimension, suggestions:[{value, rationale}]}`；断言 system 块带 `cache_control: ephemeral`；断言 mapper 解析能剥离 ```json 围栏 + 丢弃缺 value 的项。 |
+| U9.3 | FR-98 | [automated] | 三个错误路径：无 `ANTHROPIC_API_KEY`（client=None）→ 503 `suggestion_unavailable`；`dimension:""` → 400 `invalid_suggestion_request`；client 抛 AnthropicRequestError / 解析失败 → 502 `suggestion_failed`。端点**不写任何文件**（断言无 PUT 副作用）。 |
+| U9.4 | FR-99 | [automated/component] | PromptStructuredEditor blockKind=video + 传入 shotContext：可细化维度字段旁出现 `✨ 推荐`；点击 → 调 suggestRefinements → 渲染卡片 → 选中 + 确认 → 智能合并（空字段直接填入；非空字段换行追加，原内容保留）→ 调用方 onSave 收到合并后的 body。非 video block / 无 shotContext → 不渲染 ✨。 |
+| U9.5 | FR-100 | [automated/component] + [manual_walkthrough] | 无 key 时 ✨ 面板显示「未配置 ANTHROPIC_API_KEY」且其余编辑/保存不受影响；起始帧/结束帧、actor/scene/character 结构化编辑不出现 ✨。手动走查：配好 key 后点 ✨ 实际拉到贴合本镜剧情的中文建议并成功落盘。 |
+
+**FR 覆盖增量**：FR-96 / FR-97 / FR-98 / FR-99 / FR-100 全部映射至 U9.* 场景；任何遗漏视为文档缺陷按原则 6 在 U9 sign-off 标记 `critical`。

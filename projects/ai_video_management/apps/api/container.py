@@ -21,6 +21,7 @@ from libs.application.commands.actor__command import ActorCommand
 from libs.application.commands.casting__command import CastingCommand
 from libs.application.commands.character_video__command import CharacterVideoCommand
 from libs.application.commands.downloads__command import DownloadsCommand
+from libs.application.commands.episode__command import EpisodeCommand
 from libs.application.commands.file__command import FileCommand
 from libs.application.commands.frame__command import FrameCommand
 from libs.application.commands.media__command import MediaCommand
@@ -31,11 +32,13 @@ from libs.application.queries.casting__query import CastingQuery
 from libs.application.queries.file__query import FileQuery
 from libs.application.queries.media__query import MediaQuery
 from libs.application.queries.novel__query import NovelQuery
+from libs.application.queries.prompt__query import PromptQuery
 from libs.application.queries.tree__query import TreeQuery
 from libs.application.queries.voice__query import VoiceQuery
 from libs.common.exposed_tree import ExposedTree
 from libs.common.origin import BoundOrigin
 from libs.common.safe_resolve import SafeResolver
+from libs.infrastructure.clients.anthropic__client import AnthropicClient
 from libs.infrastructure.readers.file__reader import FileReader
 from libs.infrastructure.readers.tree__reader import TreeReader
 from libs.infrastructure.writers.actor__writer import ActorPool
@@ -46,6 +49,7 @@ from libs.infrastructure.writers.character_video__writer import (
     ShotConcatBuilder,
 )
 from libs.infrastructure.writers.downloads__writer import DownloadsImporter
+from libs.infrastructure.writers.episode__writer import EpisodeConcatBuilder
 from libs.infrastructure.writers.file__writer import FileWriter
 from libs.infrastructure.writers.frame__writer import FrameExtractor
 from libs.infrastructure.writers.media__writer import MediaArchiver, MediaRenamer
@@ -114,6 +118,9 @@ class Container(containers.DeclarativeContainer):
     character_view_extractor: providers.Singleton[CharacterViewExtractor] = providers.Singleton(
         CharacterViewExtractor, exposed=exposed_tree, resolver=safe_resolver
     )
+    episode_concat_builder: providers.Singleton[EpisodeConcatBuilder] = providers.Singleton(
+        EpisodeConcatBuilder, exposed=exposed_tree, resolver=safe_resolver
+    )
     downloaded_novels_root: providers.Singleton[Path] = providers.Singleton(
         lambda root: root / "downloaded_novels", repo_root_path
     )
@@ -122,6 +129,11 @@ class Container(containers.DeclarativeContainer):
     )
     novel_downloader: providers.Singleton[NovelDownloader] = providers.Singleton(
         NovelDownloader, novels_root=downloaded_novels_root
+    )
+    # follow-up 117: from_env() returns None when ANTHROPIC_API_KEY is unset,
+    # so the container builds whether or not LLM suggestions are configured.
+    anthropic_client: providers.Singleton[AnthropicClient | None] = providers.Singleton(
+        AnthropicClient.from_env
     )
 
     # --- Application-layer factories: one per aggregate Q/C -----------------
@@ -148,6 +160,9 @@ class Container(containers.DeclarativeContainer):
         truncator=character_video_truncator,
         builder=shot_concat_builder,
         extractor=character_view_extractor,
+    )
+    episode_command: providers.Factory[EpisodeCommand] = providers.Factory(
+        EpisodeCommand, builder=episode_concat_builder
     )
 
     actor_query: providers.Factory[ActorQuery] = providers.Factory(
@@ -176,4 +191,7 @@ class Container(containers.DeclarativeContainer):
     )
     novel_query: providers.Factory[NovelQuery] = providers.Factory(
         NovelQuery, novels_root=downloaded_novels_root
+    )
+    prompt_query: providers.Factory[PromptQuery] = providers.Factory(
+        PromptQuery, client=anthropic_client
     )

@@ -15,8 +15,8 @@
 
 抖音封面建议:
 
-- 取帧: shot06 末帧（双美学同框 — 沧冥半倚乌玉龙椅 / 白月清单膝跪地）
-- 主体位置: y ≈ 300-500（沧冥赤瞳 + 白月清玉冠两个视觉锚点对角线分布）
+- 取帧: shot16 末帧（越肩绕背 — 白月清背面暗紫阴影沿袍下摆爬升 · 伪君子撕脸雏形）
+- 主体位置: y ≈ 300-500（白月清背影 + 暗紫阴影视觉锚点）
 - 大字标题（8-12 字）: "当年他跪过我"
 - 标题位置: y ≈ 800-950（黑底银白字 + 黑色描边）
 - 文字安全带: y ∈ [160, 1050]
@@ -52,7 +52,7 @@ Flashback to the first night: a young Sect Master Bai Yueqing knelt before Demon
 
 ## Cover-frame shot id
 
-cover-frame: shot06_lastframe（双美学同框爽点峰值帧 — 沧冥乌玉龙椅 / 白月清单膝跪地）
+cover-frame: shot16_lastframe（越肩绕背帧 — 白月清背面暗紫阴影沿袍下摆爬升 · 伪君子撕脸雏形）
 
 ## 发布节奏
 

@@ -70,6 +70,32 @@ def test_legacy_prompts_folder_still_accepted(tmp_path: Path) -> None:
     assert (shot_dir / "renders" / "ep01_shot01.png").is_file()
 
 
+def test_chinese_tag_filename_matches_right_shot(tmp_path: Path) -> None:
+    """Kling names a render after the first 9 chars of the prompt, i.e. the
+    shot block's `{NN}集{NN}镜{视|始|末}` tag. The importer must route those
+    into the correct shot's renders/ and NOT confuse shot02 with shot12."""
+    root = tmp_path / "repo"
+    base = root / "ai_videos" / "td" / "episodes" / "ep01" / "shots"
+    (base / "shot02").mkdir(parents=True)
+    (base / "shot12").mkdir(parents=True)
+    downloads = tmp_path / "Downloads"
+    _touch(downloads / "01集02镜视.mp4")   # video → shot02
+    _touch(downloads / "01集02镜始.png")   # start frame → shot02
+    _touch(downloads / "01集12镜末.png")   # end frame → shot12
+
+    result = _make_importer(root, downloads).import_drama("ai_videos/td")
+
+    assert {e["kind"] for e in result.moved} == {"shot"}, result.moved
+    assert result.unmatched == []
+    assert (base / "shot02" / "renders" / "01集02镜视.mp4").is_file()
+    assert (base / "shot02" / "renders" / "01集02镜始.png").is_file()
+    assert (base / "shot12" / "renders" / "01集12镜末.png").is_file()
+    # shot02's files did NOT leak into shot12 and vice-versa.
+    assert not (base / "shot12" / "renders").exists() or not list(
+        (base / "shot12" / "renders").glob("01集02*")
+    )
+
+
 def test_unrelated_file_lands_in_not_matched(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     (root / "ai_videos" / "td" / "episodes" / "ep01" / "shots" / "shot01").mkdir(parents=True)

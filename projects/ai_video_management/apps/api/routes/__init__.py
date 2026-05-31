@@ -14,10 +14,12 @@ from apps.api.routes.actor__route import router as _actor_router
 from apps.api.routes.casting__route import router as _casting_router
 from apps.api.routes.character_video__route import router as _character_video_router
 from apps.api.routes.downloads__route import router as _downloads_router
+from apps.api.routes.episode__route import router as _episode_router
 from apps.api.routes.file__route import router as _file_router
 from apps.api.routes.frame__route import router as _frame_router
 from apps.api.routes.media__route import router as _media_router
 from apps.api.routes.novel__route import router as _novel_router
+from apps.api.routes.prompt__route import router as _prompt_router
 from apps.api.routes.tree__route import router as _tree_router
 from apps.api.routes.voice__route import router as _voice_router
 
@@ -30,5 +32,7 @@ router.include_router(_downloads_router)
 router.include_router(_actor_router)
 router.include_router(_casting_router)
 router.include_router(_character_video_router)
+router.include_router(_episode_router)
 router.include_router(_novel_router)
 router.include_router(_voice_router)
+router.include_router(_prompt_router)

@@ -161,6 +161,16 @@ class DownloadsImporter:
                     if ep_name:
                         extra.append(f"{ep_name}_{shot.name}".lower())
                         extra.append(ep_name.lower())
+                    # Compact Chinese tag `{NN}集{NN}镜` — matches the filename
+                    # Kling derives from the shot block's first line
+                    # `{NN}集{NN}镜{视|始|末}` (ai_video rule 12.4). The ASCII
+                    # `epNN_shotNN` first line truncated to Kling's 9-char window
+                    # as `ep01_shot` (shot number lost → every episode render
+                    # collided); the Chinese tag fits ep+shot inside 9 chars.
+                    ep_digits = re.sub(r"\D", "", ep_name)
+                    shot_digits = re.sub(r"\D", "", shot.name)
+                    if ep_digits and shot_digits:
+                        extra.append(f"{ep_digits}集{shot_digits}镜")
                     tokens = tuple(dict.fromkeys((*tokens, *extra)))
                     # Shot media goes into the shot's renders/ subfolder so the
                     # start/end/video outputs coexist with original names and

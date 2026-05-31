@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { Children, createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
@@ -139,6 +139,41 @@ function renderHighlightedLines(text: string): ReactNode {
   });
 }
 
+/** Highlight novel-prose quotes: dialogue (「…」 or "…") and inner monologue
+ * (『…』, added during the prose-marking sweep). Applied to <p> text only, so
+ * it hits 小说原文 / Chapter excerpt paragraphs + my_novel chapters but NOT
+ * shot-context <li> metadata or fenced prompt blocks. Per follow-up
+ * "把小说原文的对话和内心独白都标注出来".
+ */
+const PROSE_QUOTE_RE = /「[^」]*」|『[^』]*』|"[^"]*"/g;
+
+function highlightProseString(text: string, keyPrefix: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  const re = new RegExp(PROSE_QUOTE_RE.source, "g");
+  let last = 0;
+  let i = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const seg = m[0];
+    const cls = seg.charAt(0) === "『" ? "prose-monologue" : "prose-dialogue";
+    out.push(
+      <span key={`${keyPrefix}-${i++}`} className={cls}>
+        {seg}
+      </span>,
+    );
+    last = m.index + seg.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function highlightProseChildren(children: ReactNode): ReactNode {
+  return Children.map(children, (child, idx) =>
+    typeof child === "string" ? highlightProseString(child, `pq${idx}`) : child,
+  );
+}
+
 interface EditPromptContextValue {
   editEnabled: boolean;
   currentPath: string;
@@ -258,6 +293,8 @@ function CopyableCode({ children }: CopyableCodeProps): JSX.Element {
           blockKind={kind}
           characterOptions={ctx?.characterOptions ?? []}
           sceneOptions={ctx?.sceneOptions ?? []}
+          shotContext={ctx?.fileContent}
+          currentPath={ctx?.currentPath}
         />
       </div>
     );
@@ -361,6 +398,7 @@ export function Renderer({
               return <BrokenLink href={resolved.href} title={resolved.title}>{children}</BrokenLink>;
             },
             pre: ({ children }) => <CopyableCode>{children}</CopyableCode>,
+            p: ({ children, ...rest }) => <p {...rest}>{highlightProseChildren(children)}</p>,
           }}
         >
           {processed}

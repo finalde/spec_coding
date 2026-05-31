@@ -9813,3 +9813,49 @@ inline edit prompt 模式从只覆盖第一个 fenced code block 升级到覆盖
 - styles.css: .code-block-actions 容器 + 蓝色 Edit / 绿色 Save / 蓝边编辑态 / 编辑 textarea + error banner.
 
 Known follow-up: Reader.tsx SHOT_MD_RE 仍引用旧 prompts/ 路径 (xianxia_new/011 已重命名为 shots/), 需单独 follow-up 修复.
+
+
+
+# Follow-up draft 117 — 2026-05-31
+
+## Source
+
+user_input/follow_ups/117-20260531-173358-prompt-skeleton-plus-ai-dimension-refine.md
+
+## User words
+
+> 我們改一下每一個prompt的結構，自動生成的prompt顯示一個very basic version，然後在ui頁面上有一堆欄目選項，都是不同維度的prompt細化共我選擇，我點擊一個欄目的時候，你直接根據當前的場景，當前欄目，推薦給我幾個細化prompt的選擇，我選擇個點擊確認之後，你就把這個細節加入到prompt裏面
+
+User chose: 建议来源 = 后端实时调用 LLM；basic version = 改自动生成 (stage 6)；适用范围 = 只 shot 视频 prompt；LLM 集成 = 官方 anthropic SDK；合并方式 = 智能 (空则填入，非空则追加)。
+
+## What landed
+
+shot 视频 prompt 改为两段式：stage-6 自动生成「基础骨架版」(rule #12.4 全字段在、描述性维度只留 stub)，再在 ai_video_management webapp 里逐栏目 AI 细化。
+
+- ai_video.md rule #12.4 加 2026-05-31 amendment：basic skeleton 生成契约 (substantive-at-generation 字段 vs refine-later stub 字段 + 据此放宽 stage-6 validator)。仅 shot 视频 prompt body 受影响。
+- 后端新增 read-only `prompt` aggregate：AnthropicClient.from_env (官方 anthropic SDK + prompt caching) → PromptQuery.suggest_refinements → POST /api/prompt/suggest。anthropic_client Singleton + prompt_query Factory + 3 个 domain error (400/503/502) 接线。anthropic>=0.40 入 requirements/pyproject；ANTHROPIC_API_KEY 放 apps/api/.env。
+- 前端 PromptStructuredEditor：blockKind=video + shotContext 时，可细化维度字段旁出 ✨ 推荐按钮 → RefinePanel 拉取 3-5 条建议卡片 → 选中确认 → 智能合并 (空填入/非空换行追加) → 走现有 per-block Save。renderer 透传 fileContent 作 shotContext + currentPath。api.ts 加 suggestRefinements；styles.css 加 .prompt-refine-*。
+- 无 ANTHROPIC_API_KEY 时 503 + 前端提示，其余功能优雅降级不受影响。
+
+# Follow-up draft 118 — 2026-05-31
+
+## Source
+
+user_input/follow_ups/118-20260531-194255-episode-concat-shots-into-one-mp4.md
+
+## User words
+
+> 在ai videos 裏，幫我加一個新功能，在episode裏有一個button 我點了之後，自動去掃當前episode下面所有shot裏的MP4，并把他們粘在一起，形成一個episode的大MP4，放在episode folder下面，如果已經有了就直接覆蓋，如果shot下面有多個MP4，就選最新的那一個，如果沒有，就直接跳過當前shot
+
+User chose: 扫描范围 = 只扫每个 shot 的 `renders/` 子文件夹 (而非递归整个 shot 文件夹)，从而避免误选 2 秒角色合辑 `shot{NN}_chars.mp4`。
+
+## What landed
+
+新增 episode 级「合成本集视频」按钮：扫描本集每个镜头的最新成片渲染并拼接成整集 mp4。
+
+- 按钮锚定在本集 `shotlist.md` (`episodes/ep{NN}/shotlist.md`) 的 reader 工具栏，紧邻既有 per-shot 🎬「生成角色合辑」按钮。
+- 后端新增 `episode` aggregate（DDD 全套）：`episode__{route,command,dto,mapper}` + `infrastructure/writers/episode__writer.py` (`EpisodeConcatBuilder`) + `domain/errors/episode__error.py`；端点 `POST /api/concat-episode`；container（episode_concat_builder Singleton + episode_command Factory）+ routes/__init__ + app_factory 7 个 domain error 映射接线。
+- 选片契约：按 `shots/shot*/` 字典序，每镜头取其 `renders/` 子文件夹内 mtime 最新的 `.mp4`（`archive/` 排除；直接放在 shot 根目录的 `shot{NN}_chars.mp4` 派生件忽略）；无 `renders/` mp4 的镜头跳过并在结果里报告。
+- ffmpeg concat *filter* 路线（无 trim，整段全长播放）→ 统一 720×1280 9:16 H.264+AAC，输出 `ep{NN}.mp4` 落在本集文件夹（不在 `shots/` 下，重跑不会自吞），已存在则覆盖。无音轨输入补 anullsrc 静音轨。
+- 前端：api.ts `concatEpisode()` + Reader.tsx 按钮/handler/`isEpisodeShotlist` 判定 + styles.css `.reader-episode-concat-btn`。
+- 测试：tests/test_episode_concat.py（选最新/跳过空/排除 archive+_chars/覆盖既有/非 episode 路径拒绝，stub ffmpeg）；真实 ffmpeg 对 nvdi_tuihun_houhuile/ep01 验证产出 25s 合法 mp4。

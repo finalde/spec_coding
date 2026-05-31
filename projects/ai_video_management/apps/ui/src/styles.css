@@ -282,6 +282,13 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .reader-edit-toggle[aria-pressed="true"] { background: var(--bg-active); border-color: var(--border-strong); }
 .reader-shot-concat-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .reader-shot-concat-btn:disabled { cursor: progress; opacity: 0.55; }
+.reader-episode-concat-btn {
+  background: var(--bg-toolbar); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 4px 12px;
+  cursor: pointer; font-family: inherit;
+}
+.reader-episode-concat-btn:hover:not(:disabled) { background: var(--bg-hover); }
+.reader-episode-concat-btn:disabled { cursor: progress; opacity: 0.55; }
 .reader-body { padding: 8px 0; }
 
 .text-view {
@@ -332,6 +339,23 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   overflow-x: hidden;
 }
 .markdown-view pre code { background: transparent; padding: 0; color: inherit; }
+
+/* Novel-prose semantic highlight (per follow-up "对话+内心独白标注"):
+   dialogue (「」/"") = warm amber; inner monologue (『』) = cool blue + italic.
+   Semi-transparent so it reads on both light and dark page backgrounds. */
+.markdown-view .prose-dialogue {
+  background: rgba(230, 162, 23, 0.18);
+  box-shadow: inset 0 -1px 0 rgba(230, 162, 23, 0.55);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.markdown-view .prose-monologue {
+  background: rgba(99, 132, 255, 0.16);
+  box-shadow: inset 0 -1px 0 rgba(99, 132, 255, 0.55);
+  border-radius: 3px;
+  padding: 0 1px;
+  font-style: italic;
+}
 
 /* Copy-button-enabled code block wrapper (per follow-up 010) */
 .markdown-view .code-block-wrapper {
@@ -3124,11 +3148,98 @@ details[open] > .prompt-preview-toggle::before {
   gap: 4px;
 }
 .prompt-editor-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
   letter-spacing: 0.02em;
 }
+
+/* Follow-up 117: per-dimension AI refinement */
+.prompt-refine-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.prompt-refine-btn:hover:not(:disabled) { background: rgba(99, 102, 241, 0.22); }
+.prompt-refine-btn:disabled { opacity: 0.5; cursor: default; }
+.prompt-refine-btn-active {
+  background: #6366f1;
+  color: #fff;
+  border-color: #4f46e5;
+}
+
+.prompt-refine-panel {
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.06);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.prompt-refine-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #4f46e5;
+}
+.prompt-refine-panel-tools { display: flex; gap: 10px; }
+.prompt-refine-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+.prompt-refine-link:disabled { opacity: 0.5; cursor: default; }
+.prompt-refine-loading { font-size: 12px; color: var(--text-muted, #888); padding: 4px 2px; }
+.prompt-refine-error {
+  font-size: 12px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+.prompt-refine-cards { display: flex; flex-direction: column; gap: 6px; }
+.prompt-refine-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.prompt-refine-card:hover { border-color: rgba(99, 102, 241, 0.6); }
+.prompt-refine-card-selected {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+  background: rgba(99, 102, 241, 0.08);
+}
+.prompt-refine-card-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.prompt-refine-card-rationale { font-size: 11px; color: var(--text-muted, #888); }
+.prompt-refine-actions { display: flex; gap: 8px; }
 .prompt-editor-field-input,
 .prompt-editor-field-textarea,
 .prompt-editor-field-select {
