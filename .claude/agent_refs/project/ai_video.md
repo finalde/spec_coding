@@ -129,10 +129,10 @@ Seedance prompt is text-to-video (it doesn't take character refs in the same way
 Every shot ships with **one** `shotNN.md` self-contained file. **v3 schema (3 sections, post-follow-up xianxia_new/007 2026-05-24)**:
 
 ① **Per-shot novel prose** (NEW per follow-up 007; scope widened 2026-05-30) — a 200-400 字 中文 passage of the corresponding novel prose at the **very top** of `shotNN.md`, kept in 小说形态 (flowing narrative — 叙述 + 内心 OS + 感官 + 必要对白), placed before the `# epNN / shotNN` H1 and separated from it by a `---` rule. Two cases:
->   - **Reader-side novel exists** (`my_novel/{name}/chapters/…`): heading `## Chapter excerpt (from chapter.md §N {section})`, a **verbatim** blockquote of the most directly-corresponding chapter prose (e.g. `feng_shou_lu`).
->   - **No reader-side novel** (script-first / novel-less dramas, e.g. `mozun_chongsheng`, `nvdi_tuihun_houhuile`): heading `## 小说原文`, a passage **authored from that shot's own script + Shot-context** (Summary / 动作 / 台词 / Scene / Characters), written so consecutive shots read as one continuous chapter. Pure prose — no `>` blockquote, no reference-handle (`…請參考:@…`) lines, no field labels.
+>   - **Reader-side novel exists** (`my_novel/{name}/chapters/…`): heading `## Chapter excerpt (from chapter.md §N {section})`, a **verbatim** blockquote of the most directly-corresponding chapter prose (e.g. `feng_shou_lu`, `nvdi_tuihun_houhuile` post-follow-up 006 — migrated from novel-less to chapter-first).
+>   - **No reader-side novel** (script-first / novel-less dramas, e.g. `mozun_chongsheng`): heading `## 小说原文`, a passage **authored from that shot's own script + Shot-context** (Summary / 动作 / 台词 / Scene / Characters), written so consecutive shots read as one continuous chapter. Pure prose — no `>` blockquote, no reference-handle (`…請參考:@…`) lines, no field labels.
 >
->   Either way the prose lives **outside** the ```text``` fenced blocks (it is NOT a prompt; the structured editor and stage-6 prompt validators ignore it) and gives the model + human reviewer the surrounding mood / 内心 OS / 感官 anchor. Exactly **one** such section per shot — do not duplicate it with a second prose heading (`## 小说文本 / Novel prose` and the like were consolidated into `## 小说原文` per follow-up 2026-05-30).
+>   Either way the prose lives **outside** the ```text``` fenced blocks (it is NOT a prompt; the structured editor and stage-6 prompt validators ignore it) and gives the model + human reviewer the surrounding mood / 内心 OS / 感官 anchor. **出场角色名高亮约定 (per follow-up nvdi 005):** 在 `## Chapter excerpt` / `## 小说原文` 段内，本 shot 出场的角色名以 markdown **粗体** 标注（如 **陈凡** / **陈国公**），便于与 Shot context `Characters:` 行交叉核对出场角色完整性。粗体仅为显示层 — 去除 `**` 标记后与 chapter 正文 / 原 prose **byte-identical**；代码块内 `情节:` 字段保持纯文本（不加粗，避免污染复制到模型的 prompt）。Exactly **one** such section per shot — do not duplicate it with a second prose heading (`## 小说文本 / Novel prose` and the like were consolidated into `## 小说原文` per follow-up 2026-05-30).
 
 ② **Shot context** (rule 5 v2 retained) — Summary / Characters / Scene / Duration / Reference uploads checklist.
 
@@ -472,6 +472,8 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 | 光影剪影 / 背影 / 远景 / 不具名 | ❌ 无须 | 「仅光影剪影出现」 |
 | 物件 / 法宝（角色专属道具） | ❌ 无须 | 「仅道具出现，无人形」 |
 
+> **注（follow-up nvdi 008）**：上表「turntable 是否必需」与「是否列入 `参考`」是两件独立的事。背影 / 远景 / 剪影出场 turntable 可 ❌ 无须，但**仍须列入 `参考` 占位**（用户要 attach 背影 / 远景 ref 图）。只有纯 OS / 画外（完全不入画）才既不列 `参考` 也无 turntable。
+
 静帧 seam-frame prompt 文件头（**ABOLISHED per follow-up xianxia_new/003 — 2026-05-24**）:
 
 ~~`# ep{NN} / shot{NN} · seedream {start|last}frame`~~ — 不再生成。
@@ -480,11 +482,13 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 
 | # | 字段 | 视频 shot |
 |---|---|:---:|
+| 0  | `参考:` (reference 占位行) | ✅ — 见下「参考行格式」 |
 | 1  | `[参考图]` (`input_image_urls`) | conditional — 仅当目标模型支持 image-to-video 且参考图已生成 |
 | 2  | `角色:` | ✅（按 12.4-A 展开） |
 | 2b | `情节:` (该 shot 对应的小说正文，verbatim 取自 shot 文件顶部 `## 小说原文` / `## Chapter excerpt` 段；置于 `参考`/`角色` 之后、`场景` 之前) | ✅ |
 | 3  | `场景:` (场景档一句话锁定 或 inline) | ✅ |
 | 4  | `镜头:` (景别 + 运动) | ✅ |
+| 4b | `走位:` (在画人物站位 + 朝向 + 相对位置, per follow-up nvdi 010) | ✅ |
 | 5  | `动作:` (timed beats) | ✅ |
 | 6  | `台词 / 字幕:` (三选一，见下) | ✅ |
 | 7  | `光线 / 色调:` | ✅ |
@@ -495,6 +499,36 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 | 12 | `负向:` (re-paste `style_guide.md § 负向锁定`) | ✅ |
 
 (字段 6 主体定义 + 字段 7 姿态 frozen instant 仅 seam-frame 使用, 一并 abolished 随 rule #11 / rule #5 v2.)
+
+**参考行格式（field 0，prompt body 首行）**：`参考:` 行把**本 shot 出场的每个人物 + 每个场景**列成占位清单，供用户逐个替换为实际 reference（角色 turntable mp4 / 场景 ref）：
+
+```
+参考: {人物1}：place_holder, {人物2}：place_holder, {场景}：place_holder
+```
+
+- 人物名 + 场景名取自本 shot 的 `角色:` 行 / Shot context `Characters` + `Scene`；人物在前、场景在后，全角冒号 `：`，逗号分隔。
+- 占位值统一为字面 `place_holder`，用户生成时手动替换为该模型的 reference 标记。
+- 多人物 shot 列出全部出场人物；多场景同理。
+- **背影 / 远景 / 剪影出场也必须列入 `参考`（per follow-up nvdi 008）**：只要人物在该镜画面内（哪怕仅背影 / 远景 / 侧影），就要在 `参考` 给出 `{名}：place_holder` 占位，以便用户 attach 背影 / 远景 reference 图。turntable 是否必需仍按「出场角色 checklist 派生规则」表（背影 / 远景可 ❌ 无须），但「turntable 无须」**≠**「`参考` 可省」。仅当人物完全不在画面内（纯 OS / 画外音）才不列入 `参考`（视觉占位）——但若其有台词，仍须给声音占位，见下条。
+- **AI-fed 字段用具体角色名、禁关系称谓（per follow-up nvdi 021）**：每个 shot 对生成模型是**独立 context**，模型无跨镜记忆，无法解析「父子 / 父亲 / 儿子 / 二人」等关系/相对称谓指向谁。故凡进入生成的字段（`参考:` / `走位:` / `角色:` / `情节:` / `动作:` 等 ```text``` 块内字段，及 Shot context 的 `Characters`）一律用**具体角色名**（如 `陈国公`、`陈凡`），不用关系称谓。**例外**：`台词:` 内角色口语中的称呼（如儿子唤「父亲」、太监称「令郎」）是自然对白，保留；`## Chapter excerpt` 引用块（`>` 小说原文，不喂模型）保留原文。尤其 `走位:`（决定谁在画面内/何处）出现关系称谓是 blocker —— 模型会无法定位人物。配合上一/下一条：`走位:` 既要用具体名，也要把每个**入画**人物（含背影/前景/远景）列入 `参考:`，每个**不入画**者显式标 `画外/不入画/离去`。
+- **人物 placeholder 化 + 生成块无英文（per follow-up nvdi 023，可选·按项目）**：当项目要求 shot prompt 完全自包含、零歧义时，可把 ```text``` 生成块内**所有人物指代**（人名 + 代词「他/他们/其/二人」+ 称谓「老臣/纨绔/父亲/令郎/老奴」+ 台词内人名）统一换成 **`{人物拼音}_place_holder`** 单一 token（如 `taijian_place_holder` / `chenguogong_place_holder` / `chenfan_place_holder`），`参考:` 行的人物条目亦收拢为该 token（`{名}：place_holder` → `{拼音}_place_holder`）。配套：生成块内**除 placeholder 外不留英文单词**——`cinematic`→电影感、`photorealism`→照片级写实、`4K HDR`→超高清高动态范围、`OS/V.O.`→画外音/旁白、`fast-cut`→快切、`mm/cm/s`→毫米/厘米/秒、`reveal/motif`→反转/母题 等全译中文。**例外（保留）**：① **一切「对白」不 placeholder 化（per follow-up nvdi 024 + 025）**——凡是会**被读出 / 显示成字幕**的对白文字（placeholder 会被当字幕渲染出来），一律用**自然人名**（太监 / 陈凡 / 陈国公）+ **保留口语代词与称呼**（他 / 其 / 父亲 / 令郎 / 老奴 / 老臣 / 凡儿 等，按需）。范围**不止 `台词:` 字段**——还包括**嵌在 `情节:` / `动作:` 等字段里、引号内（“…” / 《…》 / 「…」 / "…"）的对白**（同一句台词在叙述里被引用时也算对白）。判定：**引号内（对白）= 自然人名/代词；引号外（叙述/描述）= placeholder**。说话人标签 + 口型注亦用自然人名。②形容/比喻用法的称谓（`老臣沉稳` / `老练阴柔` 是气质描述，非指代）③成语（`判若两人`）④指物的「二物/二者」⑤场景背景 plate 代码（`bg1_朝北_长案主位`，是引用标识非英文词）⑥地名 `陈国公府`（含「陈国公」但是府邸名，不 token 化）⑦Shot context / frontmatter / 标题 等**模板脚手架**（不粘贴进模型，非「prompt」本体）。注意把人名 token 化时须**保护地名**（先挡 `陈国公府` 再换 `陈国公`）并避开 `他人/其他/国公府`；token 化时**跳过 `台词:` 行**。
+- **隐含人群的场景须定员 + 负向禁群众（per follow-up nvdi 022）**：宣旨 / 接旨 / 朝会 / 升堂 / 早朝 / 婚宴 / 法事 / 战阵 等**语义上隐含一堂人**的场景，视频 / 图像模型 (Kling / 即梦等) 会按训练数据惯例**凭空补一堆群众 / 群臣 / 围观**（例：太监「今解除朕…钦此」宣旨 + 跪礼区 → Kling 把空厅填满跪伏百官）。即便 `情节` 写了「空旷正厅」也压不住。须双管齐下：① `走位:` **正向定员**——写明「仅本镜入画人物 / 别无他人」并点出场所性质（如「国公府私宅正厅, 非朝堂金殿」）；② `负向:` 加 `不要 群臣 / 大臣 / 百官 / 群众 / 围观人群 / 跪伏群臣 / 侍从随从 / 多余人物 / 凭空增添人物`。台词里的帝王措辞 (`朕` / `钦此`) 是剧情必需不删，靠定员+负向反制其人群联想。
+- **画外 OS 说话人的声音参考（per follow-up nvdi 009）**：当某句台词由**不入镜**的角色说出（画外 / OS / V.O.），该角色虽不在画、无视觉 turntable，`参考` 行仍须给出其**声音**参考占位，格式 `{角色}(画外 OS·声音请参考)：place_holder`，供用户 attach 配音参考（与视觉 reference 占位区分）。
+- **场景背景图系统（per follow-up nvdi 011 + 013）**：仅标注 scene 名不足以保证背景一致。每个 scene 须**成体系生成多张不同面相 / 方位的背景图**（朝向 北/南/东/西 + 俯瞰 + 案前虚化 等）。**folder-per-朝向 结构**（rule 12.9 folder-per-asset 同源）：每个朝向一个子 folder `scenes/{scene}/{plate_id}/`，folder 内放该朝向的 prompt md `{plate_id}.md`，生成的 PNG 存回该 folder `{plate_id}/{plate_id}.png`。scene 主档「背景图系统」段只放 流程 + 索引表 + 命名约定（不再内联各朝向 prompt）。
+  - **生成流程 video-first**：先用 scene 主档「场景 reference video prompt」(15s walk-through，最全面，覆盖全朝向) 生成 `{scene}.mp4` 存于 scene 根 folder → 上传该 mp4 作参考 → 各朝向 md 的 image prompt 据此 mp4 生成本朝向静帧。
+  - **命名 / 导入约定（per follow-up nvdi 015 — 修正 014）**：朝向 folder 命名 **必须** `bg{N}_{方位}_{描述}`，其中**方位段**（`朝北`/`朝南`/`朝东`/`朝西`/`高位俯瞰`/`案前` 等）是导入路由键，且**必须出现在 image prompt 的 `主体:` 行开头**。`DownloadsImporter` 把匹配到 scene 的文件提取**方位段**（`bg\d+_` 之后第一段）做子串匹配，归位到对应 plate folder，再按父 folder 名重命名为 `{plate_id}.png`；含 `{scene}` 但无方位词的文件（如 walk-through `.mp4`）留在 scene 根。**只匹配方位段、不匹配描述段**——描述词（`厅门`/`东侧`…）会作为相机走位词散落在别朝向文件名里造成串档。
+  - shot 的 `参考:` 行场景占位必须指明**具体哪一张**：`{场景名}·背景图 {plate_id}：place_holder`（而非泛泛的 `{场景名}：place_holder`）。用哪张依本 shot 相机朝向（相机看向哪面 → 用对应方位的 plate），由 scene「站位 / 走位锚」推导。
+  - **方位段必须进 `主体:` 行开头（per follow-up nvdi 015 — supersedes 014「首行写 key」）**：实测 jimeng / 即梦等出图工具**不**用 prompt 首行做下载文件名，而是取 `主体:` 行前段（如 `陈国公府正厅 朝北视角，相机自南厅门方向…`）。故归位**不能**靠「首行 = plate_id key」；改为保证每个朝向的方位词出现在 `主体:` 行开头（`{scene} {方位}视角 — …`），让方位段必落入下载文件名供路由。首行仍可留 plate_id（无害、便于人读），但它**不是**归位键。
+  - **质感 / 美术方向（per follow-up nvdi 014 + 016）**：场景背景图 / 视频 prompt 须强调**真实材质质感（木纹包浆 / 石材纹理 / 漆面微裂 / 金属氧化 / 织物 / 斜光浮尘）+ 制作精良置景美感 + 空间纵深**，且 `负向` 始终强禁 `卡通 / 动画感 / anime / cartoon / 国漫 / 塑料质感 / 扁平光 / 廉价置景`（防卡通化、扁平、廉价）。在此真实质感打底之上，**美术方向是 per-project 选择**，scene prompt 的 `风格:` / `负向:` 行跟随项目美术方向：
+    - **默认 = 影视级真人实拍写实**：加 `超写实 photorealism`，`负向` 额外强禁 `CG 渲染感 / 3D 游戏场景`。
+    - **唯美古风（opt-in）= 电影级唯美打底真实**：真实材质打底 + 叠加唯美元素（鎏金描金 / 云雾 / 飞花 / 纱幔 / 烛火宫灯 / 琉璃 / 丁达尔光束 / 暖金 bokeh）+ 寶石色调。⚠️ **重要失败模式（per follow-up nvdi 019）**：此方向若**同时**①放宽反 CG ②挂游戏参考锚（剑网3 / 逆水寒）或《阴阳师》等 CG/奇幻片 ③堆光效粒子（暖金 bokeh / 浮尘流光 / 飞花 / 金箔流光 / 光尘），生成图会**卡通化 / 动画片 / 出现星点闪光 / 色彩过饱和**——即便上传的参考 video 是写实的，prompt 的 `风格:`+`负向:` 仍主导输出。故唯美方向**高风险**；只在用户明确要奇幻梦幻感时用，且须收住粒子量。
+    - **「无比真实 / 照片级写实」配方（per follow-up nvdi 019，默认推荐）**：要真实就必须反向操作——① `风格:` 用「影视级真人实拍写实 · 超写实 photorealism · 照片级真实 · 真实自然光 · 自然不过饱和不偏色」；② 参考锚用**真人实拍 / 实景搭建**（《妖猫传》唐风实景 / 《长安十二时辰》/《清平乐》/《梦华录》/ 故宫·山西古建实拍 / 专业建筑摄影），**严禁游戏锚与 CG/奇幻片锚**；③ `负向:` 强写 `不要 动画片 / 动画感 / CG 渲染感 / 游戏画面 / 3D 游戏场景 / 渲染感 / 星星 / 星光 / 闪光粒子 / 漂浮光点光斑 / 梦幻光效 / 过度光晕 / 过曝 / 过饱和 / 偏色`；④ 光线写**真实自然窗光 + 极淡自然浮尘（写实非闪光）+ 自然柔和反光（非镜面发光）**，去掉一切粒子光效。雍容华贵的陈设/建筑/书画**内容照旧保留**，只换渲染风格层即可两全。项目选定后在 `specs/{type}/{name}/` 记 divergence 并全场景统一（nvdi 现采此「照片级写实 + 唐宋雍容华贵内容」方向）。
+    - **场景陈设完整性 + 朝代定位（per follow-up nvdi 017）**：雍容华贵 / 唯美向场景，prompt 须显式描述**室内陈设细节**而非只给空间骨架——至少覆盖 ① **墙上花纹**（障壁画 / 织锦壁衣 / 墙裙纹样，非默认素壁）② **地面**（明确方砖墁地 vs 地毯 vs 二者并存，给纹样）③ **陈设书画**（书画立轴 / 屏风 / 架格陈设器物）④ **雕刻 / 图案 / 彩画 / 顶部藻井**。并须**明确朝代定位**（如唐宋 / 明清），prompt 内家具 / 彩画 / 器物 / 纹样**不得跨朝代穿越**（例：定唐宋则禁 太师椅 / 博古架多宝格 / 景泰蓝掐丝珐琅 / 和玺旋子彩画 / 抱柱楹联——这些是明清元素；改用 宋式高背官帽椅·壸门券口 / 紫檀架格 / 唐三彩·宋青瓷 / 碾玉装·五彩遍装彩画 / 障壁画屏风）。朝代定位写入 scene prompt `风格:` 行并在 `specs/{type}/{name}/` 记录。
+    - **`负向` 字段可按项目从生成块移除（per follow-up nvdi 026）**：prompt ```text``` 块里的 `负向:` / `[负向]` 字段**不是必须**——项目可选择整体移除（反向约束改放平台独立的「反向提示词」输入框，或干脆不用）。本 ref 里各处「`负向` 应含 X」（反卡通 / 反群众 / 反星点 / 平台合规等）规则**仍定义"要抑制什么"**，只是承载位置可从生成块挪到平台的反向输入。nvdi 现已移除全部 prompt（28 shot + 6 朝向 plate + walk-through 视频 + 立绘 + scene 主档 `## 负向` 段）的 `负向` 字段。
+    - **平台内容审核合规（per follow-up nvdi 020 — 即梦/Seedance/Dreamina 等）**：喂给国内 AI 出图/视频平台的 prompt（plate / walk-through / 立绘 的 ```text``` 块）会过内容审核，违规报「prompt 不符合平台规则」直接生成失败。必须规避：① **显性 + 隐性 IP**：prompt 内**禁止出现任何 影视剧名 / 画作名 / 景点名 / 游戏名 / 真人(导演/演员/作者)名**（如《妖猫传》《长安十二时辰》《清平乐》《梦华录》《捣练图》《韩熙载夜宴图》故宫 / 剑网3 / 逆水寒 / 阴阳师 / 郭敬明）——参考锚改为**不点名的通用描述**（「质感对标真实电影实景搭建的古装厅堂 / 真实唐宋古建筑实景照片 / 专业建筑摄影」）。② **画面文字**：prompt 内**不写引号待渲染文字**（如匾额「勤政」、圣旨「奉天承运」）——改「素面无字匾额」，并在 `负向` 写「不要在画面渲染任何文字」（平台对文字+冒号、引号文字敏感）。③ **敏感政治/帝王词**：弱化 圣旨 / 诏书 / 奉天承运 / 朝堂 / 接旨 / 女帝 / 退婚 等（生成块改 古典厅堂 / 礼仪空地 / 案面陈设简洁；剧情设定保留在 `specs/` 与 scene **metadata**，不进 ```text``` 生成块）。④ 平台**真人素材参考能力**可能被暂停，人脸/人声属敏感个人信息——角色一致性靠**纯文字描述 + 自有参考图**，勿在 prompt 提真人。**生成块力求"只描述画面、不点名、不含待渲染文字、不涉政治"。**
+    - **建筑木作 + 朝代措辞 + 参考锚（per follow-up nvdi 018）**：① 「屋内细节不够」时补**建筑营造层**（非只陈设）——梁架 (月梁/阑额普拍枋/铺作斗栱/叉手托脚) + 顶棚 (斗八藻井/平棊/平闇) + 门窗 (唐宋直棂窗/破子棂窗/毬文格子门，非明清雕花窗) + 台基 (须弥座/勾栏望柱) + 柱础 (覆莲)；唐宋可标「营造法式」。② 朝代穿越检查须含**道具措辞 / 文字**：定唐宋则禁「奉天承运」圣旨开头 (明初朱元璋始创，明清专属)。③ **per-shot 剧情道具不烤入静态背景**：场景背景 plate / walk-through 是跨 shot / 跨集复用的「纯背景」，接旨诏书一类**随 shot 变化的剧情道具**应由 shot (太监展开) 提供，不写进 scene 静态背景 prompt；scene 的「一句话锁定」LOOK 串亦不含 transient 道具。④ 细节密度不足时，prompt `风格:` 行可挂**游戏级唐宋场景参考锚**（《剑网3》唐风家园厅堂 / 《逆水寒》宋构汴京·《营造法式》体系）以拉高精雕密度。
+
+*(Per follow-up：用户要求 `参考:` 行把本 shot 全部人物与场景列成 `{名}：place_holder` 清单。三项目既有 203 shot 已全量改写。)*
 
 **12.4-A 角色字段展开规则**（v3 per follow-up 013 — supersedes earlier "无参考图必须 inline 展开" hardcode）：
 
@@ -528,12 +562,16 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 
 **Markdown-style 视觉渲染契约（rule #12.4 v4 + rule #12.6 v3 amend per follow-up 013）：**
 
-- Webapp 渲染 ```text fenced code blocks 时，对 prompt body 内 field labels (`角色:` / `场景:` / `镜头:` / `动作:` / `台词 / 字幕:` / `节奏:` / `光线 / 色调:` / `渲染样式:` / `比例:` / `时长:` / `负向:`) 应用 CSS field-label highlight (推荐 暖橙色粗体)。
+- Webapp 渲染 ```text fenced code blocks 时，对 prompt body 内 field labels (`角色:` / `场景:` / `镜头:` / `走位:` / `动作:` / `台词 / 字幕:` / `节奏:` / `光线 / 色调:` / `渲染样式:` / `比例:` / `时长:` / `负向:`) 应用 CSS field-label highlight (推荐 暖橙色粗体)。
 - Implementation: ReactMarkdown `pre` component override (`CopyableCode`) parse children → split by line → 行首匹配 field label 时 wrap label 在 `<span className="field-label">` 内；rest of line 原样。
 - innerText / clipboard 行为保持纯文本（user click copy 复制纯文本，无 HTML markup 损失）。
 - 视觉效果：prompt body 看起来像结构化 markdown 文档（field-value layout），而非 plain monospace 块。
 
 **镜头取词契约**：景别 / 运动必须出自 `style_guide.md § 镜头语言关键词字典`（每个项目须维护至少景别 + 运动两张表）；`镜头:` 行格式 = `{景别} + {运动}（一句运动节奏描述）`。静帧 seam 行格式 = `{景别}` 单独。
+
+**走位 / 站位契约（per follow-up nvdi 010）**：每个 shot prompt 必须含 `走位:` 字段（置于 `镜头:` 之后、`动作:` 之前），描述本镜**每个在画人物**的 ① 在场景中的位置（锚定 scene 方位 / 区域，如「长案前」「跪礼区」「厅门内」）② 朝向（面向谁 / 面向哪个方位，如「面向南侧的父子」）③ 与其他在画人物的相对位置（如「太监在父子正北、下首南北相对」）。**单人镜也必须写**该人物相对场景的位置与朝向（如「陈国公跪于跪礼区东侧、面向北朝太监，侧脸向西窗光」）。方位锚与默认站位由 scene 档「站位 / 走位锚」段提供，shot 级 `走位:` 从其派生、byte-stable 复用；用**世界坐标系（东/南/西/北 + 面向对象）**描述，**不用随相机翻转的「画面左/右」**（相机角度由 `镜头:` 负责）。画外 OS 说话人若有明确方位（如太监 OS 在画外北侧）也可注明，帮助模型摆正在画人物的视线朝向。
+
+**眼神 reveal / 锐光表达契约（per follow-up nvdi 012）**：人物「眼神转锐 / 冷光 / 锋芒 / reveal」类 motif 必须用**眼神 / 神态**语言表达——瞳孔微缩、眼睑收紧、目光如刃 / 冷冽 / 凌厉、眼神一凛、神色转厉、眉峰收紧 + gaze 方向——**严禁写成「眼睛发光 / 放光 / 锐光 / 眼内光效 / 冷金锐光」等会被生成模型当作字面发光 / 超能力光效渲染的措辞**（`情节:` 小说正文里的文学化「锐光」可保留, 但 `动作:` 视觉指令必须用神态语言并加注「纯眼神 / 神态, 非发光」）。`负向:` 必须含 `不要 眼睛发光 / 不要 瞳孔发光 / 不要 眼内光效 / 不要 超能力发光特效`。根因: Kling 等模型把「光」字面渲染成眼睛射光, 人物看起来像有超能力 — 表达措辞直接决定成片。
 
 **动作 timing 契约**：
 
@@ -549,6 +587,10 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 2. **后期软字幕** — prompt body 不含任何字幕 token；台词记录在文件末尾 `### 后期字幕（不入 prompt）` 块，剪辑期叠字幕。
    行格式：`台词 / 字幕: 后期软字幕 "{台词原文}" — {字体调性}`
 3. **默剧 / 无台词** — `台词 / 字幕: 无台词 / 默剧`，prompt body 不得出现任何 dialogue token。
+
+**在画人物口型契约（per follow-up nvdi 007 — 防 Kling 自动加口型 / 乱口型 / 鸟语）**：凡在画人物在该镜中**不出声**的情形——默剧 / 静默 reaction / 仅环境音（脚步、衣袂、叩案、烛火等）/ V.O. 内心独白（画外配音，角色在画但不现场说话）/ 听者方（台词系他人 OS）——`台词 / 字幕:` 行必须显式追加子句 `· 在画人物口型: {在画角色}全程闭口、嘴唇不动、无说话口型`；V.O. 须注明「内心独白 OS 为画外配音 / 字幕、非现场出声，严禁把 OS 台词对到该角色嘴上」；听者方须注明「台词系 {说话人} OS（不入画），严禁对到听者嘴上」。同时 `负向:` 行必须含 `不要 说话 / 不要 嘴部开合 / 不要 说话口型 / 不要 lip sync / 不要 自动配音`。**根因**：Kling / Seedance 等模型默认给在画人脸自动叠加说话口型，弱表述（如「(静默, 无台词)」）不足以抑制，必须 `台词` 显式闭口指令 + `负向` 反向词双重锁定。（与 rule 5 v3 行 247-248 的 OS `在画人物口型:` 子项同源，此处扩展到全部「在画不出声」镜并强制 `负向` 反向词。）**内心独白镜「闭口但表情演内心」（per follow-up nvdi 027）**：嘴唇不动 **≠** 面无表情/呆滞——V.O. 内心独白镜里，角色须用**面部表情 / 眼神 / 神态**（眼神由倦转锐、微表情、唇线收紧或微扬、瞳孔变化、神色冷峻等）把内心独白的所想所感**演绎出来**，嘴不动但内心情绪外显。故 `在画人物口型:` 注除「全程闭口、嘴唇不动、无说话口型」外，须追加「**但内心所想靠表情 / 眼神 / 神态演出来，不靠开口、不对口型**」，并在 `动作:` 节奏里给出对应的神态变化 beat。
+
+**每 shot 自带台词 + 跨 shot 连贯（per follow-up nvdi 009）**：① 每个 shot 携带**自己的** `台词`（哪怕该句由画外 OS 角色说出）；当一段连续对白 / 旁白跨多个 shot 时，须拆成**不重叠的连续片段**，每 shot 只放本镜对应的那一段，跨 shot 读下来连贯且**不重复**（反例：相邻两镜都塞整句同一台词 → 字幕/配音重复）。② **shot prompt 正文严禁跨 shot 引用**——不得在 prompt body（`镜头` / `动作` / `台词` 等任何字段）写「承 shotNN」「续于 shotNN」「本镜不重复…见 shotNN」「下一镜」之类；生成时每个 shot 独立喂入模型，跨 shot 引用纯属噪声且会误导生成。每个 shot prompt 必须**自包含、只描述本镜**。
 
 字幕样式默认遵循 `style_guide.md § 字幕规范`；该项目无字幕规范段时，stage-2 interview 须补齐。
 

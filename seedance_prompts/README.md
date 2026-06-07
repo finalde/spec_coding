@@ -36,6 +36,7 @@
 - [UGC / 自拍 Vlog ugc.md](ugc.md)
 - [商業廣告 ads.md](ads.md)
 - [動作 / VFX action_vfx.md](action_vfx.md)
+- [長視頻工作流（1分鐘+，多段+拼接） long_form/](long_form/README.md)
 
 ## 延伸資源
 

@@ -266,7 +266,11 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const shotPair = isMarkdown ? detectShotPair(path) : null;
   const isShotPair = shotPair !== null;
   const isShotlistTable = path.startsWith("ai_videos/") && path.endsWith("/shotlist.md");
-  const isEpisodeShotlist = isShotlistTable && /\/episodes\/ep\d+\/shotlist\.md$/.test(path);
+  // Any markdown file sitting directly in an episode folder (episode.md /
+  // shotlist.md / script.md / dialogue.md / publish.md) — NOT the per-shot
+  // shots/shotNN/shotNN.md (extra path segment). Anchors the episode-concat button
+  // so it's reachable from anywhere "inside the episode".
+  const isEpisodeFile = isMarkdown && /^ai_videos\/[^_][^/]+\/episodes\/ep\d+\/[^/]+\.md$/.test(path);
   const isImageRef = (isMarkdown && /\/ref_images\/[^/]+_seedream\.md$/.test(path));
   const isCasting = isMarkdown && /^ai_videos\/[^/]+\/casting\.md$/.test(path);
   const isActor = isMarkdown && /^ai_videos\/_actors\/actor_[^/]+\/actor_[^/]+\.md$/.test(path);
@@ -302,7 +306,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             {concatBusy ? "⏳ 生成中…" : "🎬 生成角色合辑"}
           </button>
         ) : null}
-        {isEpisodeShotlist ? (
+        {isEpisodeFile ? (
           <button type="button" className="reader-episode-concat-btn"
             onClick={onConcatEpisodeClick} disabled={episodeConcatBusy}
             aria-label="Concatenate every shot's newest renders/ mp4 into a single episode mp4"

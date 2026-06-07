@@ -3712,3 +3712,28 @@ Auto-updated:
 - projects/ai_video_management/ 源码 (stage-6 执行)：新增 write-side episode aggregate — domain/errors/episode__error.py + infrastructure/writers/episode__writer.py (EpisodeConcatBuilder) + application/{dtos,mappers,commands}/episode__* + apps/api/routes/episode__route.py；container (episode_concat_builder Singleton + episode_command Factory) + routes/__init__ + app_factory 错误映射接线。前端 api.ts concatEpisode + Reader.tsx 按钮/handler/isEpisodeShotlist + styles.css .reader-episode-concat-btn。README.md ai_video-specific UX 加一条。tests/test_episode_concat.py 新增 (4 用例, stub ffmpeg)。
 
 No conflicts found in: interview/qa.md + findings/* (stage-2/3 早期产物，本功能为 stage-4+ 净增量) / validation/* (既有断言仍适用；episode aggregate 为净新增端点，未改既有路由；深化 BDD/e2e/security 覆盖待用户触发 stage-5 重生成) / 既有 character_video 角色合辑 (per-shot, trim 2s) 与 frame/media/actor/voice/prompt 等所有其他功能 (episode 拼接为独立 aggregate，未触碰) / root pyproject.toml (无新依赖；ffmpeg 经已有 imageio-ffmpeg 提供)。
+
+## Follow-up 119 — 2026-06-01 14:40:18
+Source: user_input/follow_ups/119-20260601-144018-import-route-scene-orientation-plates.md
+Summary: DownloadsImporter 支持把场景背景图归位到「朝向 plate 子 folder」(`scenes/{scene}/bg{N}_{方位}_{描述}/`)，按下载文件名里的**方位词**路由。根因：jimeng/即梦下载命名取 prompt `主体:` 行正文 (含方位词、不含完整 plate_id)，旧导入只匹配到 scene 根，朝向图无法归位。
+
+Auto-updated:
+- projects/ai_video_management/libs/infrastructure/writers/downloads__writer.py — 新增 `_PLATE_PREFIX` / `_PLATE_NON_DEST` 常量 + `_plate_orientation_token` (取 `bg\d+_` 后第一段=方位) + `_match_scene_plate` (scene 命中后按方位段子串匹配下沉到 plate folder)；`import_drama` 在 `chosen.kind=="scene"` 时调用，kind 记 `scene_plate`；模块 docstring 补述 scene-plate 路由。**只匹配方位段、不匹配描述段** (描述词会作相机走位词散落别朝向文件名→串档)。纯增量，不改 character/shot/scene-根 既有语义；仅当 scene 下存在 `bg\d+_*` 子 folder 时触发。
+
+验证: 实跑 `import_drama("ai_videos/nvdi_tuihun_houhuile")` — 6 张背景 PNG 全部归位 bg1–bg6 + 自动重命名 (复用既有 rename_drama)，moved 全为 `scene_plate`，0 unmatched / 0 error。
+
+No conflicts found in: media__writer (rename 步骤无需改) / 既有 character/shot/scene-根 路由 / spec.md (FR 待用户触发 stage-4 重生成时补登；本条为 stage-6 净增量) / validation/* (既有断言仍适用)。
+
+## Follow-up 120 — 2026-06-02 13:19:16
+Source: user_input/follow_ups/120-20260602-131920-downloads-scene-plate-overwrite-on-reimport.md
+Summary: re-import 场景朝向图不 work —— 已有 `{plate_id}.png` 的 plate folder 再导入会生成 `{plate}1/{plate}2.png` 编号重复而非覆盖。fix 为 scene-plate 覆盖语义。
+
+根因: `import_drama` move-then-rename 两步; plate folder 已有 `{plate_id}.png` 时新文件 move 进来变 2 个 png → `MediaRenamer._plan_folder` 多文件分支编号 (`{plate}1/2.png`), 不覆盖 (Windows rename 到已存在目标亦失败) → 累积重复。
+
+Auto-updated:
+- projects/ai_video_management/libs/infrastructure/writers/downloads__writer.py — 新增 `_clear_folder_media(folder)` (删顶层 media, 保留子目录/.md/非media/symlink); `import_drama` 在 `kind=="scene_plate"` 时 move 前先清空 plate folder 旧图+编号 junk (覆盖语义) → 之后单文件 rename 产出干净 `{plate_id}.png`; 通用同名 `dst` 由「报 target_exists 跳过」改为「unlink 覆盖」; docstring 补述。仅对 scene_plate 清空, 不动 character/scene-根/shot-renders 多文件共存。
+- projects/ai_video_management/tests/test_downloads_import_shots.py — 新增 `test_scene_plate_routes_by_orientation_token` (补 follow-up 015 方位段路由回归, 此前无测试) + `test_scene_plate_reimport_overwrites_and_clears_numbered` (覆盖+清编号+.md 存活); pytest 6 passed。
+
+验证: 实跑 `import_drama("ai_videos/nvdi_tuihun_houhuile")` —— 6 张新图归位 bg1-bg6, 旧 `{plate}1/2.png` junk 清除, 每 folder 恰 1 张 `{plate_id}.png`=新图, 0 unmatched/0 error。
+
+No conflicts found in: media__writer (renamer 未改, scene_plate 清空后只剩单文件故不触发其多文件编号); character/scene-根/shot-renders 路由 (clear 仅 scene_plate); spec.md/validation/* (stage-6 行为修正, 净增量); 导入路由方位段逻辑 (follow-up 015 未动)。

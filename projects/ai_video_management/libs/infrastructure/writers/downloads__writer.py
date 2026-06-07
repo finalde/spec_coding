@@ -7,7 +7,15 @@ a destination. Shot-matched media lands in the shot's `renders/` subfolder
 (`shots/shot{NN}/renders/`) with its ORIGINAL filename preserved — so the
 start-frame / end-frame / video outputs of one shot coexist without colliding
 and stay distinguishable; character/scene media still lands directly in the
-asset folder. Unmatched files land in `<drama>/not_matched/` for manual
+asset folder. Scene-matched media is refined one level deeper when the
+filename carries a background-plate 方位 token: a scene's `bg{N}_{方位}_{描述}/`
+orientation sub-folders are matched on their 方位 segment (the out-of-image
+tool names the download from the prompt's `主体:` line, which opens with that
+方位 word), so each orientation PNG lands in its own plate folder while the
+walk-through `.mp4` (no 方位 token) stays at scene root. A scene-plate folder
+holds exactly one canonical image, so re-importing OVERWRITES it: existing
+media in the plate folder (including stale `{plate}1/{plate}2` numbered
+leftovers) is cleared before the new download is moved in. Unmatched files land in `<drama>/not_matched/` for manual
 triage. (Shot folders were renamed `prompts/` → `shots/` per ai_video rule
 2 v3; the legacy `prompts/` name is still accepted for unmigrated trees.) Only Downloads' immediate children are scanned, restricted to media
 extensions with mtime within the last 7 days; symlinks are skipped.
@@ -37,6 +45,16 @@ RENDERS_DIR_NAME = "renders"
 DEFAULT_TIME_WINDOW_SECONDS = 7 * 24 * 60 * 60
 DOWNLOADS_ENV_VAR = "AI_VIDEO_MGMT_DOWNLOADS_DIR"
 _BASENAME_INVALID = re.compile(r"[\x00-\x1f/\\:*?\"<>|]")
+# Scene background plates live in orientation sub-folders named
+# `bg{N}_{方位}_{描述}` (per ai_video scene-plate convention). The 方位
+# segment — the FIRST `_`-part after the `bg{N}_` prefix — is the routing key:
+# out-of-image tools (jimeng/即梦) name the download from the prompt's `主体:`
+# line, which opens with that 方位 word, so it reliably lands in the filename.
+# The 描述 segment is NOT used: descriptive words (`厅门`, `东侧`, …) also appear
+# as camera-walk references inside OTHER orientations' filenames and would
+# cross-match; the 方位 words are mutually exclusive.
+_PLATE_PREFIX = re.compile(r"^bg\d+_")
+_PLATE_NON_DEST = frozenset({NOT_MATCHED_DIR_NAME, RENDERS_DIR_NAME, "frames", "archive"})
 
 
 @dataclass(frozen=True)
@@ -102,15 +120,29 @@ class DownloadsImporter:
                 kind = "unmatched"
             else:
                 dst_folder, kind = chosen.folder, chosen.kind
+                if chosen.kind == "scene":
+                    plate = self._match_scene_plate(src.name, chosen.folder)
+                    if plate is not None:
+                        dst_folder, kind = plate, "scene_plate"
             try:
                 dst_folder.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
                 result.errors.append({"path": self._display_src(src), "message": f"mkdir_failed: {exc}"})
                 continue
+            # Overwrite semantics: a scene-plate folder holds exactly ONE
+            # canonical image ({plate_id}.ext). On re-import, clear any existing
+            # image(s) first — including stale {plate}1/{plate}2 numbered
+            # leftovers from a prior move-then-rename collision — so the new
+            # download replaces rather than accumulating duplicates.
+            if kind == "scene_plate":
+                self._clear_folder_media(dst_folder)
             dst = dst_folder / src.name
             if dst.exists():
-                result.errors.append({"path": self._display_src(src), "message": f"target_exists: {self._rel(dst)}"})
-                continue
+                try:
+                    dst.unlink()
+                except OSError as exc:
+                    result.errors.append({"path": self._display_src(src), "message": f"overwrite_failed: {exc}"})
+                    continue
             try:
                 shutil.move(str(src), str(dst))
             except OSError as exc:
@@ -211,6 +243,55 @@ class DownloadsImporter:
             if best is None or key > best[:3]:
                 best = (*key, cand)
         return best[3] if best is not None else None
+
+    @staticmethod
+    def _clear_folder_media(folder: Path) -> None:
+        """Delete top-level media files in a folder (overwrite support for
+        single-image scene-plate folders). Subfolders, non-media, and symlinks
+        are left untouched."""
+        try:
+            entries = list(folder.iterdir())
+        except OSError:
+            return
+        for child in entries:
+            try:
+                if child.is_file() and not child.is_symlink() and child.suffix.lower() in MEDIA_EXTENSIONS:
+                    child.unlink()
+            except OSError:
+                pass
+
+    @staticmethod
+    def _plate_orientation_token(folder_name: str) -> str | None:
+        """The 方位 routing token of a `bg{N}_{方位}_{描述}` plate folder:
+        the first `_`-segment after the `bg{N}_` prefix. Returns None for
+        folders that don't follow the plate convention."""
+        m = _PLATE_PREFIX.match(folder_name)
+        if m is None:
+            return None
+        token = folder_name[m.end():].split("_", 1)[0].strip().lower()
+        return token or None
+
+    @classmethod
+    def _match_scene_plate(cls, filename: str, scene_folder: Path) -> Path | None:
+        """When a file matched a scene, route it deeper into the orientation
+        plate sub-folder whose 方位 token appears in the filename. Files with
+        no 方位 token (e.g. the scene walk-through `.mp4`) stay at scene root."""
+        name = filename.lower()
+        best: tuple[int, str, Path] | None = None
+        try:
+            children = sorted(scene_folder.iterdir(), key=lambda p: p.name)
+        except OSError:
+            return None
+        for child in children:
+            if not child.is_dir() or child.is_symlink() or child.name in _PLATE_NON_DEST:
+                continue
+            token = cls._plate_orientation_token(child.name)
+            if token is None or token not in name:
+                continue
+            key = (len(token), child.name)
+            if best is None or key > best[:2]:
+                best = (len(token), child.name, child)
+        return best[2] if best is not None else None
 
     def _iter_downloads(self, cutoff: float) -> list[Path]:
         out: list[Path] = []
