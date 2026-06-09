@@ -17,7 +17,7 @@ Two intertwined items from the same conversation turn:
 
 User-stated rule:
 
-> 我上傳的演員照片是沒有化妝，帶過假髮的，短劇任務需要根據角色需要裝扮，化妝，戴假髮，不要完全按找演員照片來。
+> 我上传的演员照片是没有化妆，带过假发的，短剧任务需要根据角色需要装扮，化妆，戴假发，不要完全按找演员照片来。
 
 **Abstracted intent** (this becomes a common-level rule, applies to every ai_video project, not just nvdi_tuihun_houhuile):
 

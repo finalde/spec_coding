@@ -1,0 +1,30 @@
+# 复制为 config.yaml 后, 把所有 TODO 按 Kling 实际页面填好 (F12 inspect)。
+create_url: "https://app.klingai.com/cn/text-to-video/new"   # TODO 你的创建页 URL
+user_data_dir: "C:/kling_profile"                            # 持久化登录目录; 首次手动登录一次, 之后复用
+aspect_ratio: "9:16"
+duration: "5s"                                               # TODO Kling 时长选项的可见文案
+
+# TODO 全部按真实 DOM 填; 下面只是占位示例
+selectors:
+  prompt_input: "textarea[placeholder*='提示词']"
+  mention_dropdown: "[class*='mention'] [class*='option-list']"
+  mention_option: "[class*='mention'] [class*='option']"
+  aspect_control: "[class*='aspect-ratio']"
+  duration_control: "[class*='duration']"
+  generate_button: "button:has-text('生成')"
+  result_ready: "[class*='result'] video"
+  download_button: "button:has-text('下载')"
+
+# name = 提示词里 @ 后面的字; search = 敲 @ 后再输入的过滤词; label = 下拉项可见文字
+# 三者用简体, 且必须和提示词正文一字不差 (繁简一致才不会断指代)
+elements:
+  - {name: "太监", search: "太监", label: "太监"}
+  - {name: "陈凡", search: "陈凡", label: "陈凡"}
+  - {name: "陈国公", search: "陈国公", label: "陈国公"}
+  - {name: "厅朝北", search: "厅朝北", label: "厅朝北"}
+
+timing:
+  type_delay_ms: 25            # 逐字输入间隔 (拟人 + 防限流)
+  dropdown_timeout_ms: 8000    # 等 @ 下拉出现
+  result_timeout_ms: 300000    # 等生成完成 (5 分钟)
+  between_actions_ms: 400      # 每段之间停顿

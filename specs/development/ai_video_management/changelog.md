@@ -3737,3 +3737,35 @@ Auto-updated:
 验证: 实跑 `import_drama("ai_videos/nvdi_tuihun_houhuile")` —— 6 张新图归位 bg1-bg6, 旧 `{plate}1/2.png` junk 清除, 每 folder 恰 1 张 `{plate_id}.png`=新图, 0 unmatched/0 error。
 
 No conflicts found in: media__writer (renamer 未改, scene_plate 清空后只剩单文件故不触发其多文件编号); character/scene-根/shot-renders 路由 (clear 仅 scene_plate); spec.md/validation/* (stage-6 行为修正, 净增量); 导入路由方位段逻辑 (follow-up 015 未动)。
+
+## Follow-up 121 — 2026-06-07 06:03:22
+Source: user_input/follow_ups/121-20260607-060322-prompt-edit-default-raw-text.md
+Summary: 每个 prompt 给一个可直接改文字的 edit mode。现状已有 per-block ✏ Edit + raw/结构化双模式, 但默认进结构化表单; 改为默认 raw 文本编辑。
+
+根因/现状: `ai_videos/` 下每个 ```text``` prompt 块右上角已有 ✏ Edit (renderer.tsx CopyableCode, editEnabled=path.startsWith("ai_videos/")) → 打开 PromptStructuredEditor (已含 📝 原文 raw textarea + 🪜 结构化表单 + 切换)。但 shot prompt 有可解析字段时默认进结构化表单, 非「直接改文字」。
+
+Auto-updated:
+- projects/ai_video_management/apps/ui/src/components/PromptStructuredEditor.tsx — 默认 `mode` 由 `initialParsed.fields.length>0 ? "structured" : "raw"` 改为恒 `"raw"`: 点 ✏ Edit 立即显示该 prompt 的可编辑文本框, 直接改字即存; 🪜 结构化逐字段表单仍可一键切回。
+- projects/ai_video_management/apps/ui/src/markdown/renderer.tsx — 编辑提示文案改为「点它直接编辑该 prompt 的文字 (默认原文文本框, 改完即存; 也可切结构化表单)」。
+
+机制 (已存在未改): raw textarea 编辑整块 body → 保存走既有 `replaceFencedCodeAt` + `putFile(..., ifUnmodifiedSince=mtimeHttp)` 单块替换 + 409 并发守卫, 不影响文件其他段落。
+
+验证: `tsc --noEmit` 通过 (改动为字面量+注释+文案); 无 UI 测试断言旧默认; editEnabled 对 ai_videos/ 全开 → nvdi 所有 shot/scene prompt 均有此 edit mode (点 Edit 即可直接改文字)。
+
+No conflicts found in: 保存机制/并发守卫 (复用未改); 结构化表单 (保留为可切换模式); 全文 Editor (✎ Edit 全文编辑器, 与本 per-block 编辑并存未动)。
+
+## Follow-up 122 — 2026-06-07 06:16:39
+Source: user_input/follow_ups/122-20260607-061639-edit-button-hidden-crlf-blockindex.md
+Summary: md page 上 prompt 的 ✏ Edit 按钮根本不显示 (非 121 默认模式问题, 是按钮被隐藏)。根因: CRLF 行尾致 blockIndex 匹配失败。
+
+根因: `CopyableCode.canEdit = editEnabled && blockIndex>=0 && mtimeHttp!==undefined`; `bodyToIndex` key 由源文件块体 (含 `\r\n`) 构造, 但 ReactMarkdown 渲染块体被规范化为 `\n` (LF), `trimmedBody` 是 LF → key 不匹配 → blockIndex=−1 → 按钮静默隐藏。nvdi 全部 .md 是 CRLF (本会话早先 Python `open(...,"w")` 写文件把 LF→CRLF; 仓库标准 LF, feng_shou_lu 即 LF)。
+
+Auto-updated:
+- ai_videos/nvdi_tuihun_houhuile/**/*.md (35 文件) — CRLF→LF (二进制 `\r\n`→`\n`), 块匹配立即对上 → 按钮出现 (无需 rebuild, 刷新页面即可)。
+- projects/ai_video_management/apps/ui/src/markdown/renderer.tsx — `bodyToIndex` key + `trimmedBody` 均先 `.replace(/\r\n/g,"\n")` 再 trim, 即使源是 CRLF 也匹配 (防呆, 需 rebuild 生效)。
+
+过程教训: Python 批改 ai_videos/ 下 .md 须保留 LF (`open(f,"wb")` 二进制写 或 `newline="\n"`, 勿默认 text 模式)。mozun_chongsheng 亦 CRLF (非本会话所致), 代码防呆对其也生效 (待 rebuild); 数据层 LF 转换本轮仅 nvdi。
+
+验证: nvdi .md 残留 CRLF=0; tsc --noEmit 通过。
+
+No conflicts found in: 121 默认 raw 模式 (本轮是按钮可见性的不同 bug); 保存机制; 其他项目内容。

@@ -206,7 +206,11 @@ function CopyableCode({ children }: CopyableCodeProps): JSX.Element {
   // (per rule #12.4 v4 / follow-up 013). Copy uses the raw `trimmedBody` below
   // (NOT innerText), so the copied prompt keeps whitespace/newlines verbatim.
   const plain = useMemo(() => extractText(children), [children]);
-  const trimmedBody = useMemo(() => plain.replace(/\n+$/, ""), [plain]);
+  // Normalize CRLF→LF before keying: ReactMarkdown renders the code block with
+  // LF newlines, but a Windows-authored source file may carry CRLF, so the raw
+  // bodyToIndex key (built from source) would never match → blockIndex −1 →
+  // Edit button silently hidden. Normalize both sides.
+  const trimmedBody = useMemo(() => plain.replace(/\r\n/g, "\n").replace(/\n+$/, ""), [plain]);
   const highlighted = useMemo(() => renderHighlightedLines(plain), [plain]);
 
   const ctx = useContext(EditPromptContext);
@@ -347,7 +351,7 @@ export function Renderer({
   const bodyToIndex = useMemo(() => {
     const m = new Map<string, number>();
     blocks.forEach((b, i) => {
-      const key = b.body.replace(/\n+$/, "");
+      const key = b.body.replace(/\r\n/g, "\n").replace(/\n+$/, "");
       if (!m.has(key)) m.set(key, i);
     });
     return m;
@@ -377,8 +381,8 @@ export function Renderer({
         <div className="renderer-edit-hint" role="status">
           <strong>💡 编辑 prompt：</strong>
           每个 <code>```text</code> 代码块右上角都有一个 <span className="renderer-edit-hint-chip">✏ Edit</span> 按钮。
-          点它进入<strong>结构化表单编辑</strong>（仅修改该 prompt 块，不影响其他段落）。
-          整篇 markdown 的「编辑全文」按钮已隐藏，避免误开 page-level edit。
+          点它<strong>直接编辑该 prompt 的文字</strong>（默认打开「📝 原文」文本框，改完即存；也可切「🪜 结构化」逐字段表单）。
+          只改该 prompt 块，不影响其他段落。整篇 markdown 的「编辑全文」按钮已隐藏，避免误开 page-level edit。
         </div>
       ) : null}
       <EditPromptContext.Provider value={ctxValue}>

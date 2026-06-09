@@ -81,7 +81,11 @@ export function PromptStructuredEditor({
   );
   const [parsed, setParsed] = useState<ParsedPrompt>(initialParsed);
   const [rawBuffer, setRawBuffer] = useState<string>(initialBody);
-  const [mode, setMode] = useState<Mode>(initialParsed.fields.length > 0 ? "structured" : "raw");
+  // Default to RAW (direct text) editing for every prompt — clicking ✏ Edit
+  // immediately shows the prompt's text in an editable textarea so users can
+  // tweak the wording directly. The 🪜 结构化 toggle remains for per-field form
+  // editing. (Per follow-up: "每个 prompt 给我一个 edit mode, 直接修改里面的文字".)
+  const [mode, setMode] = useState<Mode>("raw");
 
   // Follow-up 117: AI refinement is offered only for the video block, and only
   // when we have the surrounding shot context to feed the model.
