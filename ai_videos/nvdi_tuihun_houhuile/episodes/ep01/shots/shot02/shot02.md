@@ -36,7 +36,7 @@ confidence: high
 镜头: `全景 + 缓慢推近, 反打视角自taijian_place_holder位置朝南极缓推向跪礼区 (taijian_place_holder不入画), 收纳chenguogong_place_holder和chenfan_place_holder正面跪礼; 强化「被宣旨」的压抑`
 走位: `chenfan_place_holder与chenguogong_place_holder并跪于案前跪礼区 (taijian_place_holder正南、下首), chenguogong_place_holder和chenfan_place_holder面向北 (朝taijian_place_holder与长案); chenguogong_place_holder居东、chenfan_place_holder居西。taijian_place_holder立于chenguogong_place_holder和chenfan_place_holder正北方画外 (反打视角 自taijian_place_holder位置朝南拍, taijian_place_holder不入画)。 厅内系国公府私宅正厅 (非朝堂金殿), 本镜入镜人物仅 chenfan_place_holder、chenguogong_place_holder (二人正面跪礼接旨; taijian_place_holder 为画外音、不入镜); 别无他人, 不得增添任何其他人物 (无群臣 / 侍从 / 围观人群 / 路人)。`
 动作: `0.0-1.5秒 chenguogong_place_holder和chenfan_place_holder跪于跪礼区后方 3 步含胸垂首; 1.5-3.0秒 chenfan_place_holder身板不弓头部仍可见, 装废慵懒姿; 3.0-4.0秒 taijian_place_holder 画外音 续宣旨声中, chenguogong_place_holder和chenfan_place_holder跪姿不变`
-台词 / 字幕: `太监(画外音 宣旨, 不入画):"陈国公府三公子陈凡，" · 在画人物口型: 陈凡与陈国公全程闭口、嘴唇不动、无说话口型 (陈国公和陈凡为听旨方, 台词系太监画外音, 严禁把台词对到陈国公和陈凡嘴上)`
+台词: `太监(画外音 宣旨, 不入画):"陈国公府三公子陈凡，" · 在画人物口型: 陈凡与陈国公全程闭口、嘴唇不动、无说话口型 (陈国公和陈凡为听旨方, 台词系太监画外音, 严禁把台词对到陈国公和陈凡嘴上)`
 光线 / 色调: `日间顶左斜光 偏冷金黄, 透高窗格栏漏入落地砖方块光斑; 跪礼区光位明亮; 主色 沉香木 辅灰青 点朱红 高光暖白`
 节奏: `快切`
 渲染样式: `影视级真人写实 · 电影感 · 超高清高动态范围 · 真实毛孔细节 · 真人皮肤真实质感 · 亚洲俊男靓女 · 三庭五眼东方面孔 · 古装仙侠剧主演级颜值 · 照片级写实感 强化`

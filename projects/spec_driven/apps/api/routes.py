@@ -12,9 +12,16 @@ from pydantic import BaseModel, Field
 from apps.api.container import Container
 from libs.application.add_promotion__command import AddPromotionCommand
 from libs.application.build_regen_prompt__query import BuildRegenPromptQuery
+from libs.application.create_prompt_lab_file__command import CreatePromptLabFileCommand
 from libs.application.delete_project__command import DeleteProjectCommand
+from libs.application.delete_prompt_lab_file__command import DeletePromptLabFileCommand
 from libs.application.get_stages__query import GetStagesQuery
 from libs.application.get_tree__query import GetTreeQuery
+from libs.application.list_prompt_lab__query import ListPromptLabQuery
+from libs.application.prompt_lab__cdto import (
+    CreatePromptLabFileCdto,
+    DeletePromptLabFileCdto,
+)
 from libs.application.promotion__cdto import AddPromotionCdto, RemovePromotionCdto
 from libs.application.read_file__query import ReadFileQuery
 from libs.application.remove_promotion__command import RemovePromotionCommand
@@ -26,8 +33,17 @@ from libs.domain.project__error import (
     SelfDeleteRefused,
     UnsupportedTaskType,
 )
+from libs.domain.prompt_lab__error import (
+    PromptLabAlreadyRunning,
+    PromptLabExecUnavailable,
+    PromptLabFileExists,
+    PromptLabFileNotFound,
+    PromptLabPathRejected,
+)
 from libs.domain.promotion__error import PromotionPathRejected, StageFolderRejected
 from libs.domain.regen_prompt__error import PromptTooLarge
+from libs.infrastructure.prompt_lab__executor import PromptLabExecutor
+from libs.infrastructure.prompt_lab__writer import PromptLabFileTooLarge
 from libs.infrastructure.file__reader import (
     FileReader,
     FileTooLarge as ReadFileTooLarge,
@@ -76,6 +92,20 @@ class RegenPromptBody(BaseModel):
 class ProjectDeleteBody(BaseModel):
     project_type: str
     project_name: str
+
+
+class PromptLabCreateBody(BaseModel):
+    category: str
+    filename: str
+    content: str
+
+
+class PromptLabDeleteBody(BaseModel):
+    path: str
+
+
+class PromptLabExecuteBody(BaseModel):
+    path: str
 
 
 router = APIRouter()
@@ -254,6 +284,101 @@ def delete_project(
     except ProjectNotFound:
         return JSONResponse(status_code=404, content={"detail": {"kind": "not_found"}})
     return JSONResponse(status_code=200, content=cdto.to_payload())
+
+
+@router.get("/api/prompt-lab")
+@inject
+def get_prompt_lab(
+    query: ListPromptLabQuery = Depends(Provide[Container.list_prompt_lab_query]),
+) -> dict[str, Any]:
+    return query.execute().to_payload()
+
+
+@router.post("/api/prompt-lab/file")
+@inject
+def post_prompt_lab_file(
+    body: PromptLabCreateBody,
+    command: CreatePromptLabFileCommand = Depends(Provide[Container.create_prompt_lab_file_command]),
+) -> Response:
+    try:
+        cdto = command.execute(
+            CreatePromptLabFileCdto(
+                category=body.category,
+                filename=body.filename,
+                content=body.content,
+            )
+        )
+    except PromptLabFileExists:
+        return JSONResponse(status_code=409, content={"detail": {"kind": "already_exists"}})
+    except PromptLabFileTooLarge:
+        return JSONResponse(status_code=413, content={"detail": {"kind": "too_large"}})
+    except PromptLabPathRejected:
+        return JSONResponse(status_code=400, content={"detail": {"kind": "path_rejected"}})
+    return JSONResponse(status_code=200, content=cdto.to_payload())
+
+
+@router.delete("/api/prompt-lab/file")
+@inject
+def delete_prompt_lab_file(
+    body: PromptLabDeleteBody,
+    command: DeletePromptLabFileCommand = Depends(Provide[Container.delete_prompt_lab_file_command]),
+) -> Response:
+    try:
+        cdto = command.execute(DeletePromptLabFileCdto(path=body.path))
+    except PromptLabFileNotFound:
+        return JSONResponse(status_code=404, content={"detail": {"kind": "not_found"}})
+    except PromptLabPathRejected:
+        return JSONResponse(status_code=400, content={"detail": {"kind": "path_rejected"}})
+    return JSONResponse(status_code=200, content=cdto.to_payload())
+
+
+@router.post("/api/prompt-lab/execute")
+@inject
+def post_prompt_lab_execute(
+    body: PromptLabExecuteBody,
+    executor: PromptLabExecutor = Depends(Provide[Container.prompt_lab_executor]),
+) -> Response:
+    try:
+        result = executor.execute(body.path)
+    except PromptLabAlreadyRunning:
+        return JSONResponse(status_code=409, content={"detail": {"kind": "already_running"}})
+    except PromptLabExecUnavailable:
+        return JSONResponse(status_code=503, content={"detail": {"kind": "exec_unavailable"}})
+    except PromptLabFileNotFound:
+        return JSONResponse(status_code=404, content={"detail": {"kind": "not_found"}})
+    except PromptLabPathRejected:
+        return JSONResponse(status_code=400, content={"detail": {"kind": "path_rejected"}})
+    return JSONResponse(status_code=200, content=result)
+
+
+@router.get("/api/prompt-lab/run")
+@inject
+def get_prompt_lab_run(
+    path: str = Query(...),
+    executor: PromptLabExecutor = Depends(Provide[Container.prompt_lab_executor]),
+) -> Response:
+    try:
+        result = executor.status(path)
+    except PromptLabFileNotFound:
+        return JSONResponse(status_code=404, content={"detail": {"kind": "not_found"}})
+    except PromptLabPathRejected:
+        return JSONResponse(status_code=400, content={"detail": {"kind": "path_rejected"}})
+    return JSONResponse(status_code=200, content=result)
+
+
+@router.post("/api/prompt-lab/stop")
+@inject
+def post_prompt_lab_stop(
+    body: PromptLabExecuteBody,
+    executor: PromptLabExecutor = Depends(Provide[Container.prompt_lab_executor]),
+) -> Response:
+    try:
+        result = executor.stop(body.path)
+    except PromptLabFileNotFound:
+        return JSONResponse(status_code=404, content={"detail": {"kind": "not_found"}})
+    except PromptLabPathRejected:
+        return JSONResponse(status_code=400, content={"detail": {"kind": "path_rejected"}})
+    return JSONResponse(status_code=200, content=result)
 
 
 def create_app(container: Container, serve_static: bool = True) -> FastAPI:

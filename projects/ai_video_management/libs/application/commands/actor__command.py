@@ -49,6 +49,37 @@ class ActorCommand:
         )
         return ActorMapper.generate_to_cdto(result)
 
+    def create_prompts(self, input_cdto: GenerateActorsInputCdto) -> GenerateActorsResultCdto:
+        """Per follow-up 124: prompt-only mode — allocate actor folders + write
+        id-tagged-prompt sidecars without any Kling call. Same input shape as
+        `generate`; the result's `generated` entries carry `pending_import` +
+        the tagged `face_prompt` / `body_prompt` instead of image paths."""
+        attrs = ActorAttrs(
+            ethnicity=input_cdto.ethnicity,
+            gender=input_cdto.gender,
+            age_range=input_cdto.age_range,
+            look=input_cdto.look,
+            notes=input_cdto.notes,
+            eyes=input_cdto.eyes,
+            nose=input_cdto.nose,
+            lips=input_cdto.lips,
+            face=input_cdto.face,
+            skin=input_cdto.skin,
+            body=input_cdto.body,
+            qi_zhi=input_cdto.qi_zhi,
+        )
+        result = self._pool.create_prompts_batch(
+            attrs,
+            input_cdto.count,
+            input_cdto.resolution,
+            input_cdto.seeds,
+            archetype=input_cdto.archetype,
+            batch_seed=input_cdto.batch_seed,
+            batch_size=input_cdto.batch_size,
+            slot_index=input_cdto.slot_index,
+        )
+        return ActorMapper.generate_to_cdto(result)
+
     def generate_diverse(self, input_cdto: GenerateDiverseActorsInputCdto) -> GenerateActorsResultCdto:
         """Diverse mode rolls per-slot attrs from a 10-archetype even-distribution plan."""
         result = self._pool.generate_diverse_batch(

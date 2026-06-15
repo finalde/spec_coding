@@ -17,9 +17,14 @@ from apps.api.routes.downloads__route import router as _downloads_router
 from apps.api.routes.episode__route import router as _episode_router
 from apps.api.routes.file__route import router as _file_router
 from apps.api.routes.frame__route import router as _frame_router
+from apps.api.routes.scene_plate__route import router as _scene_plate_router
 from apps.api.routes.media__route import router as _media_router
 from apps.api.routes.novel__route import router as _novel_router
+from apps.api.routes.perf_check__route import router as _perf_check_router
+from apps.api.routes.perf_score__route import router as _perf_score_router
 from apps.api.routes.prompt__route import router as _prompt_router
+from apps.api.routes.shot_regen__route import router as _shot_regen_router
+from apps.api.routes.subtitle__route import router as _subtitle_router
 from apps.api.routes.tree__route import router as _tree_router
 from apps.api.routes.voice__route import router as _voice_router
 
@@ -28,6 +33,7 @@ router.include_router(_tree_router)
 router.include_router(_file_router)
 router.include_router(_media_router)
 router.include_router(_frame_router)
+router.include_router(_scene_plate_router)
 router.include_router(_downloads_router)
 router.include_router(_actor_router)
 router.include_router(_casting_router)
@@ -36,3 +42,7 @@ router.include_router(_episode_router)
 router.include_router(_novel_router)
 router.include_router(_voice_router)
 router.include_router(_prompt_router)
+router.include_router(_perf_score_router)
+router.include_router(_perf_check_router)
+router.include_router(_shot_regen_router)
+router.include_router(_subtitle_router)

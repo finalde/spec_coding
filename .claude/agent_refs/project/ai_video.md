@@ -57,7 +57,8 @@ ai_videos/{name}/
         ├── dialogue.md         # 纯对白 derived from chapter (rule 12.6-B; format: `角色名: "台词" (语气情感注释)` 每行)
         ├── shotlist.md         # 镜头清单, 每镜≤15s
         ├── shots/              # per rule 2 v3 (post follow-up xianxia_new/011): renamed from `prompts/` for naming clarity
-        │   └── shotNN.md       # per rule #5 v3 (3-section: chapter excerpt + shot context + 视频 prompt)
+        │   └── shotNN/         # ⚠ folder-per-shot per rule #12.9 (NOT a flat shotNN.md). Folder holds prompt .md + subtitles.md + renders/ media.
+        │       └── shotNN.md   # per rule #5 v3 (3-section: chapter excerpt + shot context + 视频 prompt)
         └── publish.md          # 发布信息: 标题/简介/标签/封面建议
 ```
 
@@ -67,7 +68,7 @@ ai_videos/{name}/
 2. **production-side script**: `ai_videos/{name}/episodes/epNN/script.md` — screenplay derived from chapter.
 3. **dialogue**: `ai_videos/{name}/episodes/epNN/dialogue.md` — 纯对白 derived from chapter (per rule 12.6-B). 配音/TTS/字幕团队的轻量入口, 比 script.md 更简洁(只保留说话角色+台词+语气情感注释)。
 4. **shotlist**: `ai_videos/{name}/episodes/epNN/shotlist.md` — derived from script.
-5. **shot prompts**: `ai_videos/{name}/episodes/epNN/shots/shotNN.md` — derived from shotlist + script + chapter excerpt.
+5. **shot prompts**: `ai_videos/{name}/episodes/epNN/shots/shotNN/shotNN.md` — derived from shotlist + script + chapter excerpt. **⚠ folder-per-shot (rule #12.9): each shot is a same-named folder `shots/shotNN/` containing `shotNN.md` (+ `subtitles.md` + `renders/` media), NEVER a flat `shots/shotNN.md`.** The webapp display + render-import (`renders/` routing) + 台词 burn-in (`subtitles.md`) contracts all depend on this folder. A flat `shotNN.md` is a stage-6 structural blocker.
 
 Chapter excerpt section (rule 5 v3, follow-up 007) 在每个 shotNN.md 的最顶部 quote 200-400 字 chapter prose, 跨 folder cross-reference: `../../my_novel/{name}/chapters/{NNNN}-XXX.md`.
 
@@ -169,6 +170,8 @@ The shot's `动作:` timed beats and `台词 / 字幕:` time windows MUST sum to
 
 *(rev — follow-up "每集 3 分钟 + fast-cut + 15s 硬上限": added per-episode total 180–195 s, fast-cut 5–8 s default (~25–35 shots/ep), and a hard 15 s/shot cap (Kling/Seedance render limit). Per-shot beat sizing unchanged; episode now assembled to total. All 7 existing episodes regenerated under this rule.)*
 
+**Overflow cascades to the next episode — never trim dialogue or cram (per follow-up wushen_juexing/022 — 2026-06-14).** When a drama declares a per-episode duration target (whether the 180–195 s default above or a per-project divergence such as wushen_juexing's ~90 s), and an episode's content (especially dialogue-dense 对峙 scenes) exceeds that target, the author **splits at the nearest scene/beat boundary near the target and pushes the surplus shots into the next episode** — re-numbering the moved shots (folder `shotNN/`, compact tag `{NN}集{NN}镜…`, H1, frontmatter `work_unit_id`) to the new episode. Do **NOT** compress shots, delete dialogue, or pad to hit the bound. The overflow episode may temporarily run short (fewer than the min shot count / under the min seconds) — mark its `shotlist.md` with `溢出段·待补` and exempt it from the S-DUR bounds until that episode's own beats fill it back to target. Rationale: dialogue density and episode length are independent levers; cap length by cascading, not by gutting the script.
+
 ### 7. Aspect ratio
 
 9:16 default for both sub-types. 16:9 / 1:1 only on explicit per-project spec override (with a divergence note).
@@ -180,6 +183,20 @@ Every episode (novel) and every short ships with `publish.md` containing: hook t
 ### 9. README required, in Chinese
 
 Every `ai_videos/{name}/README.md` ships with: 项目概要, 使用说明 (how to take these files into Seedream + Kling + Seedance), 角色清单, 风格关键词. Updated alongside any feature change per `CLAUDE.md`'s general project rule.
+
+### 9b. 引用表演演技库（`ai_videos/_performances/`）— 标注 + 按剧情融入
+
+短剧 shot 需要某种演技效果时，**引用**共享表演演技库（`_performances/{emotion}/perf_NNNN/`）的条目，按本镜剧情**融入**，**不照抄**整段（契约 = performance_library FR-10 v2）：
+
+1. **标注**：shot.md 的 `## Shot context` 加一行（可多条）
+   `表演库参考: perf_NNNN (情绪·强度·风格·载体) — 用于 <角色> <剧情 beat>`。
+   shot 代码块顶部可选 reference-handle 头 `表演参考: perf_NNNN`。
+2. **融入（非照抄）**：把被引 entry `## 锁定文本块` 的**物理动作要点**改写进 shot 的 `动作:` / `表情:` 字段——保留"写物理动作不写情绪名"的内核与关键肌肉动作（泪膜成形不落 / 眨眼抑制 / 上下脸冲突 等），但按本 shot 的**角色 / 机位 / 时长 / 剧情语境重新措辞**（替换通用主体为本剧角色、按本镜时长拆 timed beats、并入本镜走位与台词）。严禁把 entry 的检验视频 prompt 整段粘进 shot。
+3. **可重生成**：`表演库参考:` 标注让"更新表演库后一键重生成本 shot prompt"可机检——webapp shot 页面的「🎭 按表演库重生成」按钮据此组装重生成 prompt（`POST /api/regen-shot-prompt`），重读被引 entry 的最新锁定块、重新融入本 shot。
+
+样例见 `ai_videos/_performances/_reference_usage.md`。表演库条目永远 generic（无剧目专名）；剧目专名只出现在 shot 里、不回灌库。
+
+*(Originated from follow-up performance_library/007 — 引用表演库按剧情融入而非照抄 + shot 标注被引 entry。)*
 
 ### 10. Stage-6 regeneration scope
 
@@ -228,6 +245,23 @@ AI-video generators (Kling 2.1 Pro, Seedance 1.0 Pro) cap individual clips at ~1
 
 *(Field-level strict 模板见 rule #12.4 v2 (post-003)；seam-frame 列已删除。)*
 
+### 11c. 台词烧录 — 每 shot `subtitles.md` 时间轴 + webapp 一键烧字幕
+
+渲染完成后把台词（含内心独白 OS）按时间烧进 shot mp4 的 render-side 后期步骤。**与 prompt 层解耦**：shot 视频 prompt 里的 `台词 / 字幕:` 字段（rule 12.4 三选一契约）不变，本规则只新增一个「渲染产物 → 带字幕渲染产物」的后处理。
+
+- **每 shot 一个 `shots/shot{NN}/subtitles.md`**（与 `shot{NN}.md` 同级，是 `renders/` 的父目录），所有 take 共用。文件名 English/pinyin（结构性文件），内容 Chinese。
+- **格式**：fenced ```text 块内，每行 `起-止(秒) 台词文本`；`#` / 空行 / ``` fence 行忽略。内心独白(OS)写法相同——**不单独区分字幕样式**（统一底部居中硬字幕，仅时间窗不同）。解析正则 `^(\d+(?:\.\d+)?)\s*[-–~至]\s*(\d+(?:\.\d+)?)\s*[|｜:：]?\s*(\S.*)$`；`end<=start` 或空文本的行跳过。
+  ```text
+  0-3      老天爷，竟真让我重活一回。
+  3-5.5    （内心）这一世，我裴知秋绝不再忍。
+  5.5-8    你们，都等着。
+  ```
+- **ai_video_management webapp**：每个 render mp4 卡片（`shots/shot{NN}/` 下视频）有两个按钮——「📝 生成台词」(`POST /api/scaffold-subtitles`，从 `shot{NN}.md` 的 `台词 / 字幕:` + `时长:` 均分生成 `subtitles.md` 初值，已存在非空则拒绝) 与「💬 烧录台词」(`POST /api/burn-subtitles`，把 `subtitles.md` 渲成 ASS 字幕、ffmpeg `subtitles` 滤镜 + libx264 烧进视频，输出同目录 `{stem}_subtitled.mp4`，**原 render 保留**)。
+- **样式固定**：9:16 1080×1920 画布、微软雅黑、底部居中、白字黑描边；libass 按实际分辨率缩放。无 UI 调节控件。
+- ffmpeg 由 `imageio-ffmpeg` wheel 提供（无需系统安装）。后端实现镜像 frame-extract 特性（`subtitle__writer.py` / `subtitle__command.py` / `subtitle__route.py`），DDD 分层一致。
+
+*(Originated from follow-up "每个 shot 一个台词时间轴文件 + UI 一键把台词按时间烧进 shot mp4" — 2026-06-14.)*
+
 ### 12. Prompt 模板（导演 + prompt master 视角）
 
 四类 prompt-emitting 文件的强制 schema。Claude 同时以 **导演**（timing / framing / blocking）与 **prompt master**（locked vocabulary, byte-stable descriptors）的身份生成。模板字段顺序固定；缺字段 = stage-6 validation 失败。
@@ -269,12 +303,11 @@ AI-video generators (Kling 2.1 Pro, Seedance 1.0 Pro) cap individual clips at ~1
 
 > **⚠ 2026-05-31 amendment — shot 视频 prompt body 内的重复「shot 标题行」`ep{NN} / shot{NN} · {summary} [— {时长}]` ABOLISHED.** Per follow-up "在 shot prompt 里，类似这句话是完全多余的：`ep01 / shot06 · 陈凡 内心独白 + reveal motif checkpoint #1 — 6s`，把这类的语句全删掉": 部分 drama（feng_shou_lu / nvdi_tuihun_houhuile）在 `视频 prompt` 的 ```text 块里、紧跟 reference 头之后，重复写了一行自由文本式的镜头标题（`ep{NN} / shot{NN} · 概述 — 时长`）。这一行**完全多余**——它重复了文件的 `# ep{NN} / shot{NN} · …` H1 标题，也重复了块内 `场景:` / `时长:` 字段携带的信息，视频模型从中得不到任何 actionable 信号，只是占字数。**未来 shot 视频 prompt 的 ```text body MUST NOT 含这一行**；body 的合法首行仍是紧凑中文标签 `{NN}集{NN}镜{视|始|末}`（2026-05-30 amendment），其后直接是 reference 头与各字段。文件级 `# ep{NN} / shot{NN} · …` H1 标题（带 `# ` 前缀、在 code block 之外）是文件可导航标题，**保留不动**。Stage-6 validators MUST reject 任何出现在 shot 视频 prompt code block 内、形如 `ep{NN} / shot{NN} ·` 的行。Existing prompts migrated via `tools/strip_redundant_shot_title.py`（21 行 / 21 文件，feng_shou_lu 7 + nvdi_tuihun_houhuile 14；mozun_chongsheng 从未使用此行，0 命中）。
 
-> **⚠ 2026-05-27 amendment — shot prompts now carry THREE code blocks: 起始帧 + 结束帧 + video prompt.** Per follow-up "shots 里要有3个prompt 一个start 一个end 一个 video": every `shotNN.md` must have, in source order:
-> 1. `## 起始帧 (shot 起始 0s 时画面状态 — 描述 t=0 静帧, 不含运动)` followed by a `text` fence containing `角色姿态: / 位置/构图: / 表情: / 道具:` field rows.
-> 2. `## 结束帧 (shot 结束 {N}s 时画面状态 — 描述末帧静态落点)` followed by a `text` fence with the same 4 fields. `{N}s` is auto-derived from the video block's `时长:` value.
-> 3. `## 视频 prompt — 复制下方代码块到视频生成模型` followed by the existing video shot prompt (镜头 / 动作 / 台词 / etc.) — unchanged from prior rules.
+> **⚠ 2026-05-27 amendment — shot prompts now carry THREE code blocks: 起始帧 + 结束帧 + video prompt. — ABOLISHED per follow-up 2026-06-14 (canonical shot template unification).**
 >
-> Start / end blocks help image-to-video models latch the opening / closing visual anchor and let downstream shots stitch cleanly. Existing shots migrated via `tools/add_shot_start_end_blocks.py` (71 files across all 3 dramas; auto-populates each start/end's `角色姿态:` row from the first and last timed-beat in the existing `动作:` section, leaves 位置/构图 / 表情 / 道具 as `(待填写 ...)` placeholders for the author to fill via the structured editor). Stage-6 validators MUST reject shot files missing either `## 起始帧` or `## 结束帧` heading.
+> **Status: ARCHIVED.** Per follow-up "武帝觉醒 shot prompt 和 nvdi 差太多 + 统一标准 → 取消起始/结束帧": the `## 起始帧` / `## 结束帧` static-frame blocks are **no longer part of the shot template** and validators MUST NOT require (or reject for missing) them. The canonical shot now carries exactly: ① the 小说原文 / Chapter excerpt prose, ② `## Shot context`, ③ `## 视频 prompt` (single copy-paste block), and ④ `## 台词配音 prompt` for speaking shots (rule 12.4-H below). Reason: the gold-standard drama (nvdi) never adopted the two frame blocks; cross-shot anchoring is carried by description-layer continuity (byte-identical 角色/场景 locks + 走位 world-coords) + the scene-mp4 / turntable reference uploads, same as the seam-frame pipeline (rule 11) it superseded. The historical text below is retained for context only; stage-6 generation MUST NOT emit 起始帧/结束帧 blocks and existing shots may have them stripped on regen.
+>
+> *(Historical:)* every `shotNN.md` had, in source order: 1. `## 起始帧` (t=0 静帧: `角色姿态 / 位置/构图 / 表情 / 道具`); 2. `## 结束帧` (末帧静态落点, same 4 fields); 3. `## 视频 prompt`. Migrated in via `tools/add_shot_start_end_blocks.py` (71 files).
 
 > **⚠ 2026-05-27 amendment — Webapp ✏ Edit now renders a structured form instead of a raw textarea.** Same follow-up: when the user clicks ✏ Edit on any prompt code block under `ai_videos/`, the webapp (`apps/ui/src/components/PromptStructuredEditor.tsx`) parses the body's `label: value` lines and renders each as:
 > - **dropdown** for enum-typed fields (`时长` / `比例` / `节奏`)
@@ -290,12 +323,36 @@ AI-video generators (Kling 2.1 Pro, Seedance 1.0 Pro) cap individual clips at ~1
 >
 > **This re-introduces a `人物:` line into the 视频 prompt body**, narrowing the 2026-05-27 "`角色:` body field ABOLISHED" amendment above: characters are again first-class *inside the copy-paste code block* (the user pastes 人物 to the model), in addition to the reference-handle header. The editor writes `人物:` on the first structured save; no bulk migration of existing shots is performed. Implementation: `promptSchema.ts` (`BlockKind`, `_CANONICAL`, `blockKindFromHeading`, `mergeWithCanonical`, `splitMulti`/`joinMulti`, `multiselect`/`select` widgets), `PromptStructuredEditor.tsx` (`blockKind`/`characterOptions`/`sceneOptions` props + `MultiSelectInput`/`SelectInput`), `renderer.tsx` (per-block kind via nearest preceding `## ` heading), `Reader.tsx` (supplies options). Stage-6 validators MUST NOT reject a `人物:` line inside a shot 视频 code block.
 
+> **⚠ 2026-06-14 amendment — 统一 canonical shot 模板 + 台词配音(TTS)层升级为通用标准 + 面部辨识特征.** Per follow-up "武帝觉醒 shot prompt 和 nvdi 差太多 + 我之前的要求没 update 进 refs": nvdi 通过 follow-up 009/010/034 发展出的「导演级 + TTS-解耦」shot 模板此前**只在 nvdi 项目级**（034 明确「不改通用契约」），从未升级进本 ref —— 导致新剧 (wushen_juexing) 生成时丢了整层。现正式升级为**所有 ai_video 剧通用标准**：
+>
+> **(A) Canonical `shotNN.md` 结构（顺序固定，缺段 = stage-6 失败）：**
+> 1. **YAML envelope**（`worker_id / stage / role / work_unit_id / status / blockers / confidence`）—— 每个 shot 文件顶部。
+> 2. **`## 小说原文`**（novel-less 剧）或 **`## Chapter excerpt (from chapters/…)`**（reader-side 小说存在时，verbatim blockquote）—— 出场角色名 markdown 粗体（rule 5 ① + follow-up nvdi 005）。
+> 3. **`# epNN / shotNN · {summary}`** H1。
+> 4. **`## Shot context`** —— `Summary / Characters / Scene / Duration / Reference uploads` 五项。
+> 5. **`## 视频 prompt — 复制下方代码块到视频生成模型`** —— 单个 ```text 块，字段顺序: 紧凑中文标签 `{NN}集{NN}镜视` / `参考:` (reference-handle 头, rule 12.4-F) / `角色:` (锁定描述符 + **`面部辨识特征:`** 子句) / `情节:` (该镜对应小说原文, 与第 2 段同源) / `场景:` (场景 handle + 一句话锁定) / `镜头:` / `走位:` (rule 走位契约, 世界坐标系) / `动作:` (timed beats) / `台词:` (正常台词 / 内心独白 二标注 + 口型, 无字幕信息, rule 12.4 v2) / `光线 / 色调:` / `节奏:` / `渲染样式:` / `比例: 9:16` / `时长:`。**不含** `起始帧`/`结束帧`/`负向`/`场景视角锚`/body 重复 `角色:` 行。
+> 6. **`## 台词配音 prompt`**（见 (C)）—— 仅有台词的 shot；默剧/静默镜省略。
+>
+> **(B) `面部辨识特征:`** —— 角色锁定行末尾追加一句**可机检的辨识锚**（如「左脸颊一颗淡褐痣 0.3 厘米」/「眉骨一道旧疤」），byte-identical 复制自角色 bible；用于跨镜同一演员脸的核对。无显著特征的角色可省略该子句。
+>
+> **(C) 台词配音(TTS)层 —— 升级为通用，推翻旧「v1 不生成 TTS / visuals-only」契约。** 每个有台词的 shot 末尾加独立 `## 台词配音 prompt` 段（一个可复制 ```text 块），字段: `角色 / 音色(锁定·全剧复用 voice_id) / 情绪 / 语速 / 类型(在画对白·画外音对白·内心独白OS·默剧) / 台词(纯文本) / 时长目标`。规则:
+>   - **音色一致性铁律**：同一角色全剧/跨集复用**同一 `voice_id`**（如 `TJ-eunuch-01`），不同镜只改情绪/语速、**不换音色**（= 视觉一致性圣经的音频版）。voice_id 锁定在角色 bible / casting.md。
+>   - **台词文本**：从该镜 `台词 / 字幕:` 行 + 角色 bible 声线派生；**阿拉伯数字改口语中文**（5→五）。
+>   - **音画解耦**：视频**不烧自动字幕、不依赖视频自带 TTS**；台词 MP3 单独生成，后期用 **`tools/mux_av.py`** 把 video MP4 + 台词 MP3 +（可选）BGM 合成成片（视频流 copy 不重编码；BGM 可 sidechain duck 让位人声）。注意这与 rule 11c 的「render-side 字幕烧录」是**两条独立路径**（11c=硬字幕；本层=配音音轨），同剧可二选一或并用。
+>   - **默剧/静默镜**：`## 台词配音 prompt` 省略，或标「无台词」并注明属 SFX 的环境音。
+>
+> **(D) Regen 持久性**：因本层现已进通用 schema，stage-6 regen 重生成 shot 时 **MUST 保留/重生成** 这两层（配音 block + 面部辨识特征），不再像 034-时代那样因「不在模板内」而丢失。
+>
+> CLAUDE.md「Dialogue… visuals-only applies to audio synthesis (no TTS)」一句同步收窄（见 CLAUDE.md AI-video 节）。rule 12.1 角色档 `## 配音参考` 段不再标「v1 不生成 TTS」—— 它现在就是 voice_id + 声线锁定的权威源，喂给本层。
+
+> **⚠ 2026-06-14 amendment — shot prompt `台词:` 字段废止字幕三选一，改「正常台词 / 内心独白」二标注.** Per follow-up "在 shot prompt 里，不要提及有关字幕的任何细节，我到时候会自己加字幕，你只需要把台词放上去，标明是正常台词还是内心独白，内心独白嘴是不能动的": shot 视频 prompt 的 dialogue 字段 **label 由 `台词 / 字幕:` 改为 `台词:`**，且**字段内严禁任何字幕信息**（「内嵌硬字幕 / 后期软字幕 / 软字幕 / 硬字幕 / 字幕样式 / 鎏金字幕 / 字体调性（方正粗黑 白底黑边…） / 字幕窗时间 / 不上字幕 / 登场字幕位」全删）。字幕由用户后期自加。字段只保留：① 说话人 + 台词原文；② 类型二标注 `正常台词`（口型随台词开合）或 `内心独白`（**嘴唇不动、不对口型**，靠表情 / 眼神演内心，per nvdi 027）；③ 在画人物口型指令。完整契约见 §12.4「台词契约（v2）」。Stage-6 validators MUST reject 任何 shot 视频 prompt 里仍含字幕字样 / 字体调性 / `台词 / 字幕:` 旧 label 的行。rule 11c 的 render-side 字幕烧录（`subtitles.md` + webapp 一键烧字幕）是**用户后期自加字幕的工具**，与本条不冲突 —— 它读 `台词:` 文本但不要求 prompt 里写字幕样式。
+
 **跨模板不变量：**
 
 - 角色 / 场景的「一句话锁定」字符串在所有引用它的 prompt 中 byte-identical（contract 同 rule #4），且与目标 AI 模型无关。
 - 比例默认 9:16；项目级 spec 覆盖时记 divergence note。
 - 景别 / 运动 / 光影 / 负向词典统一来自 `style_guide.md`；模板只 re-paste，shot 级别**不新造词**。
-- 「台词」按 v1 visual-only 契约处理：永远不下发为 audio prompt；仅以字幕形式落帧（详见 12.4 「台词 / 字幕」契约）。
+- 「台词」字段（`台词:`）只写 说话人 + 台词原文 + 类型（正常台词 / 内心独白）+ 口型指令；**prompt 内不含任何字幕信息**（字幕用户后期自加），台词音轨由 12.4-H 配音(TTS)层单独生成（详见 12.4「台词契约（v2）」）。
 - 「动作」必须以 timed beats 写成（如 `0–3s ... / 3–6s ... / 6–8s ...`），且最后一拍 frozen 状态 = 该 shot 的 `lastframe` 静帧 seam-frame 的「主体定义 / 姿态」描述。
 - **模板 model-agnostic**：rule #12.4 schema 不区分目标 AI 模型（Kling / Seedance / Sora / Veo / Seedream / Midjourney / ...）。文件命名 `shotNN_{model}.md` 仅用于区分输出目标，不影响字段定义。
 
@@ -337,8 +394,8 @@ AI-video generators (Kling 2.1 Pro, Seedance 1.0 Pro) cap individual clips at ~1
 ## 标志能力或动作
 表格（段位 | 能力名 | 视觉关键词）。修真 / 能力题材填段位列；现代题材改填「关键场景动作」列。
 
-## 配音参考（planning-only，v1 不生成 TTS）
-声线 / 语速 / 口音 / 参考演员或角色。仅作未来 TTS 接入元数据，本期不下发。
+## 配音参考（voice_id 锁定 · 喂台词配音层）
+`voice_id`（全剧/跨集复用的锁定音色 id，如 `TJ-eunuch-01`）/ 声线 / 语速 / 口音 / 参考演员或角色。**这是 rule 12.4-H 台词配音(TTS)层的权威源**：每个有台词的 shot 的 `## 台词配音 prompt` 块从此处取 voice_id + 声线，同一角色不同镜只改情绪/语速、不换 voice_id。（2026-06-14：撤销旧「v1 不生成 TTS / 本期不下发」—— TTS 配音层已升级为通用标准。）
 
 ## 负向
 re-paste `style_guide.md § 负向锁定`，可附 1–2 条角色专属（如「不要看起来超过三十岁」）。
@@ -383,7 +440,20 @@ re-paste `style_guide.md § 负向锁定` + 角色专属补充。
 
 #### 12.3 场景档 + 场景立绘（v2 per follow-up xianxia_new/003）— `scenes/{scene}.md` 单文件
 
-**v2 schema (2026-05-24)**: 每场景 1 个且仅 1 个 `scenes/{scene}.md` 文件. Seedream 立绘 prompt 作为 `---` 分隔的第二段嵌入同一文件 (mirror rule 12.5 v3 character 单文件 pattern). `scenes/ref_images/{scene}_seedream.md` 子目录路径 **abolished**.
+> **⚠ v3 canonical scene template — video-first 多方位背景板系统（per follow-up wushen_juexing/024 — 2026-06-14）。所有场景（现有 + 未来）必须用同一套结构，逐节对齐。** The v2 single-立绘 schema below is SUPERSEDED — kept for archive. The canonical reference实体 is `scenes/s1_裴王府正厅/`. Every `scenes/s{N}_{名}/s{N}_{名}.md` MUST have, in this exact order:
+> 1. `# {场景名}`
+> 2. `## 场景定位`
+> 3. `## 锁定描述符（跨集 byte-identical，自然色名无 hex）` — 8-row table (field 8 = 一句话锁定 ≤30字)
+> 4. `## 关键变化态`
+> 5. `## 出现镜头`
+> 6. `---` → `# 步骤一 · 背景图 seed prompt（Seedream 立绘）— {场景名}` (生成流程三步 `>` note + `参考:` + `画幅:` + `## Prompt` + ```text``` block; 高清4K + 精准机位)
+> 7. `---` → `# 步骤二 · 场景 walk-through video prompt — {场景名}（15s 环视，逐秒方位）` (逐秒方位时间轴 `>` note 5段 + `参考:` + `画幅:` + `## Prompt` + ```text``` block, 时长 15s)
+> 8. `---` → `# 背景图系统 index（方位 ↔ 视频秒段 ↔ 截帧时点 ↔ plate folder）` (5-row table + 两条 `>` note)
+> 9. **folder-per-plate**: each index row → `scenes/s{N}_{名}/{plate}/{plate}.md` (per-direction static-frame Seedream prompt; PNG rendered into same folder, gitignored). 截帧时点固定 1.5/4.5/7.5/10.5/13.5s.
+>
+> 适用范围**无例外**：回忆 / 室内单间 / 室外 vista 一律用此结构（室外 vista 的「方位」可改为「角度/framing」，但表结构与节次不变）。**理由**：场景档若各长各样，shot 的场景 reference 就无统一来源、背景跨镜漂移、webapp 截帧路由失配。**任一场景缺 步骤一/步骤二/背景图系统 index 任一节，或 plate 文件夹名≠内层 md 名 = stage-6 blocker。** 单角度场景仍出 5 个 plate（多余朝向留作机动），保证格式一致。
+
+**v2 schema (2026-05-24, SUPERSEDED by v3 above)**: 每场景 1 个且仅 1 个 `scenes/{scene}.md` 文件. Seedream 立绘 prompt 作为 `---` 分隔的第二段嵌入同一文件 (mirror rule 12.5 v3 character 单文件 pattern). `scenes/ref_images/{scene}_seedream.md` 子目录路径 **abolished**.
 
 当 ≥ 2 shots 复用同一地点时，把该地点 lock down 为单一文件，shot prompts 的 `场景:` 行 byte-identical 引用「一句话锁定」。仅出现一次的地点不立档，直接在 shot 级别 inline 描述。
 
@@ -490,7 +560,7 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 | 4  | `镜头:` (景别 + 运动) | ✅ |
 | 4b | `走位:` (在画人物站位 + 朝向 + 相对位置, per follow-up nvdi 010) | ✅ |
 | 5  | `动作:` (timed beats) | ✅ |
-| 6  | `台词 / 字幕:` (三选一，见下) | ✅ |
+| 6  | `台词:` (正常台词 / 内心独白 二标注 + 口型，见下；**无字幕信息**) | ✅ |
 | 7  | `光线 / 色调:` | ✅ |
 | 8  | `节奏:` (visual-only) | ✅ |
 | 9  | `渲染样式:` (re-paste `style_guide.md § 正向关键词`) | ✅ |
@@ -518,6 +588,11 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 - **场景背景参考 = 单 token（per follow-up nvdi 029）**：`参考:` 里的场景背景条目要**和人物参考一样**用单个 `{xxx}_place_holder` token，**不写** verbose 的 `{场景名}·背景图 {plate}：place_holder`。token 用该 shot 的背景 plate 做名（`{plate}_place_holder`，如 `bg2_朝南_厅门_place_holder`，保留朝向信息让用户知道 attach 哪张朝向图）；且 shot 内**所有该场地的引用**（`参考:` + `场景:` 字段的场景名）都用同一个 token。
 - **每个 structured 字段值用反引号包裹（per follow-up nvdi 029）**：shot prompt ```text``` 块里每个 `{label}: {value}` 字段的**值用反引号 `` ` `` 抱起来**——`` 镜头: `中近景 + 缓慢推近…` `` ——帮视频模型（Kling）清晰分辨各结构段的边界。所有字段（参考/角色/情节/场景/镜头/走位/动作/台词/光线/节奏/渲染样式/比例/时长）一致处理。
 - **`镜头:` 用动态运镜增强关键瞬间（per follow-up nvdi 030）**：`镜头:` 不必一律「锁机位 / 完全静止机位」——**关键情绪 / 反转 / 眼神瞬间**（如「眼神骤然一锐即敛」、冷金锐光凝定、reaction 微表情、阴笑威胁）用**缓慢推近（slow push-in）至面部 / 眼睛特写**来放大视觉冲击；其余镜按情绪 beat 配合适运镜（推 / 拉 / 升降 / 跟）。运镜要**缓、控速、稳、不抖**（避免破坏 Kling 稳定性）；保留景别（中景/中近景/特写）+ 9:16 等信息。
+- **每个 shot 必须有场景——含回忆 / 一次性 / 室外镜（per follow-up wushen_juexing/023 — 2026-06-14）**：`参考:` 行「每个场景」的要求**无例外**。回忆镜、闪回、室外、过场等**不复用主场景**的镜，**不得只列人物、省掉场景**——必须为其**建一个（轻量·单角度即可）scene 资产** `scenes/s{N}_{名}/s{N}_{名}.md`（含「步骤一 · 背景图 seed prompt」，声明高清 4K + 精准机位 + 该镜色调，回忆镜统一暖黄泛旧做旧颗粒），并在该 shot 的 `参考:`（`{scene}_bg`）与 `场景:`（`{scene} · 一句话锁定`）双双引用。根因：回忆镜被当成「无背景板」生成时 `参考:` 只剩人物，背景全靠模型即兴、跨镜漂移。**任何 shot 的 `参考:` 缺场景条目 = blocker。** 单角度回忆场景无须 rule 12 的多朝向 plate 系统，一张 bg 背景板足矣。
+- **人物近景 / 特写 → 背景浅景深虚化（per follow-up wushen_juexing/023 — 2026-06-14）**：当 `镜头:` 景别为 **特写 / 大特写 / 中近景** 等人物近景时，`镜头:` 行须显式注明 **「人物近景/特写时背景浅景深虚化柔焦、主体清晰」**——把背景柔焦虚化、突出人物，既加强电影质感、也降低背景穿帮 / 漂移风险。中景 / 全景等需要交代环境的镜不虚化（背景须清晰可辨）。该注与 `渲染样式:` 的「浅景深特写」一致、是其在近景镜的显式落地。
+- **「系统流」金手指 = 在画对话框（per follow-up wushen_juexing/025 — 2026-06-14）**：系统流 / 金手指类剧的「系统」一切交互（绑定 / 提示 / 选择 / 发奖）应表现为**直接出现在画面中的悬浮 UI 对话框 / 面板**（网文系统流游戏既视感）——半透明描边圆角框、框内字（系统流多用鎏金描边）、选项分行可带【】按钮高亮，主角与观众都看得见框内字；系统文字是**在画对话框内嵌字 + 提示音**（非纯画外音 / 后期软字幕）。**发奖要「送大礼」仪式感**：弹「恭喜宿主获得：X」贺词框 + 礼花光效 + 光门 / 礼匣自框炸开把奖励加身——而非平淡兑现。`情节:`/`走位:`/`台词:`/`光线:` 各字段都要点明对话框的位置与框内字，让视频模型把它当画面元素渲染。
+- **shot 视频不烧任何字幕 / 文字（per follow-up wushen_juexing/033 — 2026-06-15）**：shot `视频 prompt` **不得指示模型在画面里烧入台词字幕 / 硬字幕 / 文字**——`台词:` 字段**只保留**说话人 + 台词原文 + 语气 + `口型归X` / OS 画外注（供模型对口型与后期配音），**删去**「内嵌硬字幕 / 硬字幕 / 白底黑边 / 字幕」等任何「把台词显示在画面上」的措辞；并在 `渲染样式:` 末尾加 `· 画面不烧任何字幕文字（台词后期另加）`。字幕由作者后期叠加。**例外（保留，属画面元素而非字幕）**：系统流的「系统对话框 / UI 面板内嵌字」（rule 12.4 系统流条）、剧情中本就存在的牌匾 / 信件 / 告示等 diegetic 文字。转场「下一集」等卡字也后期叠加（prompt 只留黑屏转场、不写字）。
+- **`台词:` 字段排版标准（per follow-up wushen_juexing/034 — 2026-06-15）**：多说话人 / 系统 + OS 混排的 `台词:` 若挤成一行、且台词用 `"…"` 包裹又内嵌 `『』「」` 等引号，会让视频模型（Kling）分不清「哪段是台词、哪段是注释、谁说的」而渲染混乱。**标准结构**——`台词:` 行先写一句说明 `（画面不显示文字、仅供口型与配音参考；逐条↓）`，随后**每个发声单元各占一行**，格式 `· {说话人}〔{类型·口型注}〕：{台词正文}`：类型用 在画对白 / 内心独白 / 系统提示音(对话框UI字·不对口型) / 旁白；正文**纯文本、不加任何引号**（`"" 『』 「」` 全免，杜绝嵌套）；系统名等专名直接写（不加 `『』`）。一行一句、tag 与正文以 `：` 分隔，模型一眼可辨。系统二选一等含内部 `；：` 的台词照写正文即可（不再被外层分隔符歧义）。
 - **场景背景图系统（per follow-up nvdi 011 + 013）**：仅标注 scene 名不足以保证背景一致。每个 scene 须**成体系生成多张不同面相 / 方位的背景图**（朝向 北/南/东/西 + 俯瞰 + 案前虚化 等）。**folder-per-朝向 结构**（rule 12.9 folder-per-asset 同源）：每个朝向一个子 folder `scenes/{scene}/{plate_id}/`，folder 内放该朝向的 prompt md `{plate_id}.md`，生成的 PNG 存回该 folder `{plate_id}/{plate_id}.png`。scene 主档「背景图系统」段只放 流程 + 索引表 + 命名约定（不再内联各朝向 prompt）。
   - **生成流程 video-first**：先用 scene 主档「场景 reference video prompt」(15s walk-through，最全面，覆盖全朝向) 生成 `{scene}.mp4` 存于 scene 根 folder → 上传该 mp4 作参考 → 各朝向 md 的 image prompt 据此 mp4 生成本朝向静帧。
   - **命名 / 导入约定（per follow-up nvdi 015 — 修正 014）**：朝向 folder 命名 **必须** `bg{N}_{方位}_{描述}`，其中**方位段**（`朝北`/`朝南`/`朝东`/`朝西`/`高位俯瞰`/`案前` 等）是导入路由键，且**必须出现在 image prompt 的 `主体:` 行开头**。`DownloadsImporter` 把匹配到 scene 的文件提取**方位段**（`bg\d+_` 之后第一段）做子串匹配，归位到对应 plate folder，再按父 folder 名重命名为 `{plate_id}.png`；含 `{scene}` 但无方位词的文件（如 walk-through `.mp4`）留在 scene 根。**只匹配方位段、不匹配描述段**——描述词（`厅门`/`东侧`…）会作为相机走位词散落在别朝向文件名里造成串档。
@@ -583,16 +658,22 @@ re-paste `style_guide.md § 负向锁定` + 场景专属（如「不要现代建
 - 最后一拍 frozen 状态 = 该 shot 的 `shotNN_lastframe_seedream.md` 中 `主体定义` + `姿态（frozen instant）` 描述。两文件同时改、同时保（regen 时一起删一起写）。
 - 中间拍可省略（一拍到底），但必须显式写「`0–{时长}s ...`」，避免 stage-6 validator 误判 missing。
 
-**台词 / 字幕契约（v1 visual-only）**：三选一，由 `script.md` 决定，shot prompt 透传：
+**台词契约（v2 — 2026-06-14，废止字幕三选一）**：字段 label 为 `台词:`（不再叫「台词 / 字幕:」）。**shot prompt 内严禁出现任何字幕信息**——字体 / 字号 / 位置 / 颜色 / 描边 / 字幕窗时间 / 「内嵌硬字幕」「后期软字幕」「软字幕」「硬字幕」「字幕样式」「鎏金字幕」「不上字幕 / 不烧字」「登场字幕位」等一律不写。**字幕由用户在后期自行添加**，prompt 不碰。`台词:` 字段只携带三样东西：
 
-1. **内嵌硬字幕** — 写入 prompt body 让生成器把字幕烙进帧。
-   行格式：`台词 / 字幕: 内嵌硬字幕 "{台词原文}" — {字体调性}`
-   示例：`台词 / 字幕: 内嵌硬字幕 "当年你们怎么对我，今日我便十倍奉还" — 方正粗黑 白底黑边`
-2. **后期软字幕** — prompt body 不含任何字幕 token；台词记录在文件末尾 `### 后期字幕（不入 prompt）` 块，剪辑期叠字幕。
-   行格式：`台词 / 字幕: 后期软字幕 "{台词原文}" — {字体调性}`
-3. **默剧 / 无台词** — `台词 / 字幕: 无台词 / 默剧`，prompt body 不得出现任何 dialogue token。
+1. **说话人 + 台词原文**（引号内）。
+2. **类型二选一标注**：
+   - `正常台词` —— 在画 / 在镜说话，**口型随台词开合**。
+   - `内心独白` —— OS / 画外心声，**嘴唇不动、不对口型**（在画人物全程闭口，仅靠表情 / 眼神 / 神态把内心演出来，per nvdi 027）。
+3. **口型指令**（rule 12.4 在画人物口型契约，保留）：正常台词 → `口型对{说话人}`；内心独白 / 画外 OS / 听者方 → `{在画人物}全程闭口、嘴唇不动、不对口型`，且画外 OS 须注「台词系 {说话人} 画外，严禁对到在画人物嘴上」。
 
-**`台词` 字段只留跟视频有关的信息、不含字幕排版（per follow-up nvdi 028）**：喂给视频生成器（Kling / Seedance）的 `台词:` 字段**只保留**①对白内容（说话人 + 台词原文 / 内心独白）②`· 在画人物口型:` 口型指令（跟画面里嘴动不动有关，保留）。**必须移除**字幕排版 / 后期制作信息——字体（思源宋体 / 思源宋体斜体）、字号、位置（画面下 1/6 居中）、颜色（白色描边黑）、字幕窗时间（约 6 秒-9 秒）、前缀（「画外音:」）、「三选一字幕契约取后期软字幕」/「视频不烧字」/「不烧字」/「默剧处理无字幕」等。**根因**：这些是后期剪辑的字幕排版，不是画面内容，混在 prompt 里会**扰乱 Kling 生成视频**；prompt 须「只跟视频有关、简洁清晰」。字幕排版按需记在文件末尾 `### 后期字幕（不入 prompt）` 块。
+行格式：
+- `台词: {说话人}（正常台词·{语气}）"{台词原文}"；口型对{说话人}。`
+- `台词: {说话人}（内心独白·{语气}）"{台词原文}"；嘴唇不动、不对口型，{在画人物}全程闭口、仅靠表情 / 眼神演绎内心。`
+- 默剧 / 无台词镜：`台词: 无台词 / 默剧（在画人物唇闭不动）`，不写任何字幕。
+
+（旧 v1「内嵌硬字幕 / 后期软字幕 / 默剧」三选一契约已 **ABOLISHED**；stage-6 validators MUST reject 任何 shot 视频 prompt 里出现字幕字样 / 字体调性 / `台词 / 字幕:` 旧 label 的行。台词文本仍由 `script.md` / `dialogue.md` 决定，shot prompt 透传。）
+
+**`台词` 字段只留跟视频有关的信息、不含字幕排版（per follow-up nvdi 028，v2 强化）**：喂给视频生成器（Kling / Seedance）的 `台词:` 字段**只保留**①对白内容（说话人 + 台词原文 / 内心独白）②`· 在画人物口型:` 口型指令（跟画面里嘴动不动有关，保留）。**必须移除**字幕排版 / 后期制作信息——字体（思源宋体 / 思源宋体斜体）、字号、位置（画面下 1/6 居中）、颜色（白色描边黑）、字幕窗时间（约 6 秒-9 秒）、前缀（「画外音:」）、「三选一字幕契约取后期软字幕」/「视频不烧字」/「不烧字」/「默剧处理无字幕」等。**根因**：这些是后期剪辑的字幕排版，不是画面内容，混在 prompt 里会**扰乱 Kling 生成视频**；prompt 须「只跟视频有关、简洁清晰」。字幕排版按需记在文件末尾 `### 后期字幕（不入 prompt）` 块。
 
 **在画人物口型契约（per follow-up nvdi 007 — 防 Kling 自动加口型 / 乱口型 / 鸟语）**：凡在画人物在该镜中**不出声**的情形——默剧 / 静默 reaction / 仅环境音（脚步、衣袂、叩案、烛火等）/ V.O. 内心独白（画外配音，角色在画但不现场说话）/ 听者方（台词系他人 OS）——`台词 / 字幕:` 行必须显式追加子句 `· 在画人物口型: {在画角色}全程闭口、嘴唇不动、无说话口型`；V.O. 须注明「内心独白 OS 为画外配音 / 字幕、非现场出声，严禁把 OS 台词对到该角色嘴上」；听者方须注明「台词系 {说话人} OS（不入画），严禁对到听者嘴上」。同时 `负向:` 行必须含 `不要 说话 / 不要 嘴部开合 / 不要 说话口型 / 不要 lip sync / 不要 自动配音`。**根因**：Kling / Seedance 等模型默认给在画人脸自动叠加说话口型，弱表述（如「(静默, 无台词)」）不足以抑制，必须 `台词` 显式闭口指令 + `负向` 反向词双重锁定。（与 rule 5 v3 行 247-248 的 OS `在画人物口型:` 子项同源，此处扩展到全部「在画不出声」镜并强制 `负向` 反向词。）**内心独白镜「闭口但表情演内心」（per follow-up nvdi 027）**：嘴唇不动 **≠** 面无表情/呆滞——V.O. 内心独白镜里，角色须用**面部表情 / 眼神 / 神态**（眼神由倦转锐、微表情、唇线收紧或微扬、瞳孔变化、神色冷峻等）把内心独白的所想所感**演绎出来**，嘴不动但内心情绪外显。故 `在画人物口型:` 注除「全程闭口、嘴唇不动、无说话口型」外，须追加「**但内心所想靠表情 / 眼神 / 神态演出来，不靠开口、不对口型**」，并在 `动作:` 节奏里给出对应的神态变化 beat。
 
@@ -790,6 +871,8 @@ Four contracts:
 #### 12.5 角色 reference 单 prompt 文件（character video-reference template）
 
 每个角色一份「视频 reference」文件，**同文件内一段 copy-paste-ready 文字生视频 reference prompt** + 一张 3 句数字计数台词（"1, 2, 3"）配音对照表。该文件 supersedes 旧的「立绘单 prompt」格式（rule #12.2 完全），把 character pipeline 从「PNG 单参考」升级为「360° turntable 视频 + 标准声线 reference 一站到位」。
+
+> **合规优先（per wushen_juexing follow-up 014 — 2026-06-14）：turntable 生成块（```text``` 段）受 §563(nvdi 020) 平台审核合规约束，凌驾于 §12.7 的「演员锚点」要求。生成块内严禁出现任何真人演员/导演名（Kling 实测对 e.g. 罗云熙 / 王鹤棣 等真人名直接以「违反社区规范」拒绝生成），亦不写「演员照片 / 演员素颜 / 照抄演员参考照片 / 现成短假发」等真人素材引用（人脸属敏感个人信息）。演员类比锚点仅留在 planning 层（角色 bible 顶部 `配音参考` / `specs/`），不进生成块；生成块的真实感靠 §593 推荐的纯风格词（影视级真人写实 / 真人皮肤毛孔 / 亚洲俊男靓女 / 三庭五眼东方面孔 / photorealism）+ 文字外貌描述。§12.7 的「1-2 名 specific 演员类比」改读作「写在 planning 层」。**
 
 **为什么单 prompt 即够：**
 

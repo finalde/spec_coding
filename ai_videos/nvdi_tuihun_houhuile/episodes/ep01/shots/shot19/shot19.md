@@ -36,7 +36,7 @@ confidence: high
 镜头: `全景起、随chenguogong_place_holder跨入厅门撞见挺拔的chenfan_place_holder, 微推近其骇然失声; 朱漆门处chenguogong_place_holder + 厅中chenfan_place_holder同框, 9:16 竖屏`
 走位: `chenguogong_place_holder自南侧厅门跨入、立于门内 (南), 面向北 (朝厅中的chenfan_place_holder); chenfan_place_holder立于厅中/长案前 (北)、侧背向南门 (chenguogong_place_holder先见chenfan_place_holder挺拔侧背/身形)。chenguogong_place_holder和chenfan_place_holder南北相对。 厅内系国公府私宅正厅 (非朝堂金殿), 本镜入镜人物仅 chenfan_place_holder 与 chenguogong_place_holder (二人南北相对); 别无他人, 不得增添任何其他人物 (无群臣 / 侍从 / 围观人群 / 路人)。`
 动作: `0-3秒 chenguogong_place_holder自厅门跨入、抬眼; 3-6秒 撞见挺拔的chenfan_place_holder、脚步僵住、长须抖动; 6-9秒 骇然后仰半步、口型出声`
-台词 / 字幕: `陈国公（老臣沉稳低音, 骇然）:"凡……儿？你这是……"`
+台词: `陈国公（老臣沉稳低音, 骇然）:"凡……儿？你这是……"`
 光线 / 色调: `日间偏冷金黄顶左斜光透高窗格栏, 厅门处逆光勾chenguogong_place_holder轮廓, 厅中chenfan_place_holder入明光显挺拔, 灰青地砖方块光斑; 骇然张力`
 节奏: `快切, 由静撞惊, 失声为情绪落点`
 渲染样式: `影视级真人写实 电影感 超高清高动态范围 真实毛孔细节 真人皮肤真实质感 亚洲俊男靓女 三庭五眼东方面孔 古装仙侠剧主演级颜值 照片级写实感 强化`

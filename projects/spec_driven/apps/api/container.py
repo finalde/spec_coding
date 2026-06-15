@@ -8,7 +8,10 @@ from libs.application.add_promotion__command import AddPromotionCommand
 from libs.application.build_regen_prompt__query import BuildRegenPromptQuery
 from libs.application.delete_project__command import DeleteProjectCommand
 from libs.application.get_stages__query import GetStagesQuery
+from libs.application.create_prompt_lab_file__command import CreatePromptLabFileCommand
+from libs.application.delete_prompt_lab_file__command import DeletePromptLabFileCommand
 from libs.application.get_tree__query import GetTreeQuery
+from libs.application.list_prompt_lab__query import ListPromptLabQuery
 from libs.application.read_file__query import ReadFileQuery
 from libs.application.remove_promotion__command import RemovePromotionCommand
 from libs.application.write_file__command import WriteFileCommand
@@ -20,6 +23,9 @@ from libs.infrastructure.file__reader import FileReader
 from libs.infrastructure.file__writer import FileWriter
 from libs.infrastructure.origin_host__middleware import BoundOrigin
 from libs.infrastructure.project_directory__writer import ProjectDirectoryWriter
+from libs.infrastructure.prompt_lab__executor import PromptLabExecutor
+from libs.infrastructure.prompt_lab__reader import PromptLabReader
+from libs.infrastructure.prompt_lab__writer import PromptLabWriter
 from libs.infrastructure.promotion__writer import PromotionWriter
 from libs.infrastructure.tree__reader import TreeReader
 
@@ -49,6 +55,15 @@ class Container(containers.DeclarativeContainer):
     promotion_writer: providers.Singleton[PromotionWriter] = providers.Singleton(
         PromotionWriter, exposed=exposed_tree, resolver=safe_resolver
     )
+    prompt_lab_reader: providers.Singleton[PromptLabReader] = providers.Singleton(
+        PromptLabReader, exposed=exposed_tree
+    )
+    prompt_lab_writer: providers.Singleton[PromptLabWriter] = providers.Singleton(
+        PromptLabWriter, exposed=exposed_tree, resolver=safe_resolver
+    )
+    prompt_lab_executor: providers.Singleton[PromptLabExecutor] = providers.Singleton(
+        PromptLabExecutor, exposed=exposed_tree, resolver=safe_resolver
+    )
     project_directory_writer: providers.Singleton[ProjectDirectoryWriter] = providers.Singleton(
         ProjectDirectoryWriter, repo_root=repo_root_path
     )
@@ -77,4 +92,13 @@ class Container(containers.DeclarativeContainer):
     )
     delete_project_command: providers.Factory[DeleteProjectCommand] = providers.Factory(
         DeleteProjectCommand, writer=project_directory_writer, audit=audit_writer
+    )
+    list_prompt_lab_query: providers.Factory[ListPromptLabQuery] = providers.Factory(
+        ListPromptLabQuery, reader=prompt_lab_reader
+    )
+    create_prompt_lab_file_command: providers.Factory[CreatePromptLabFileCommand] = providers.Factory(
+        CreatePromptLabFileCommand, writer=prompt_lab_writer
+    )
+    delete_prompt_lab_file_command: providers.Factory[DeletePromptLabFileCommand] = providers.Factory(
+        DeletePromptLabFileCommand, writer=prompt_lab_writer
     )

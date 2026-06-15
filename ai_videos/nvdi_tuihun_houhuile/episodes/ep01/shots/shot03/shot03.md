@@ -36,7 +36,7 @@ confidence: high
 镜头: `中景 + 缓慢推近 (随宣旨语势极缓推向taijian_place_holder, 强化居高临下), 腰部以上`
 走位: `taijian_place_holder立于厅中长案前、面向南续宣旨; chenguogong_place_holder和chenfan_place_holder跪于taijian_place_holder南侧跪礼区、面向北 (chenguogong_place_holder和chenfan_place_holder位于镜头前景下方, 背影/未露正脸, 本镜聚焦taijian_place_holder)。 厅内系国公府私宅正厅 (非朝堂金殿), 本镜入镜人物仅 taijian_place_holder (正面)、chenguogong_place_holder (前景下方背影: 深紫一品朝服 / 紫金冠 / 银白长须 / 年长体态) 与 chenfan_place_holder (前景下方背影: 玉白锦袍 / 黑色长发披肩 / 白玉冠 / 年轻挺拔); 两道背影衣色与发型迥异、须各按其参考分别渲染, 严禁两道背影雷同或都渲染成 chenfan_place_holder; 别无他人, 不得增添任何其他人物 (无群臣 / 侍从 / 围观人群 / 路人)。`
 动作: `0.0-2.5秒 taijian_place_holder双手举诏书续宣"纨绔放荡"; 2.5-5.0秒 阴柔尖细中音陈数"不学无术"目光斜向跪礼区; 5.0-8.0秒 念至"得不配位", 拂尘微动 神色居高临下`
-台词 / 字幕: `太监(续宣):"纨绔放荡, 不学无术, 得不配位。"`
+台词: `太监(续宣):"纨绔放荡, 不学无术, 得不配位。"`
 光线 / 色调: `日间顶左斜光 偏冷金黄, 透高窗格栏漏入落地砖方块光斑; 主色 沉香木 辅灰青 点朱红 高光暖白`
 节奏: `快切`
 渲染样式: `影视级真人写实 · 电影感 · 超高清高动态范围 · 真实毛孔细节 · 真人皮肤真实质感 · 亚洲俊男靓女 · 三庭五眼东方面孔 · 古装仙侠剧主演级颜值 · 照片级写实感 强化`

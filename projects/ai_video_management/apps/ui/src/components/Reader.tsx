@@ -10,6 +10,8 @@ import { ImageRefView } from "./ImageRefView";
 import { CastingView } from "./CastingView";
 import { ActorView } from "./ActorView";
 import { VoiceView } from "./VoiceView";
+import { PerfScorePanel } from "./PerfScorePanel";
+import { ShotRegenButton } from "./ShotRegenButton";
 import { Renderer } from "../markdown/renderer";
 import { CodeView } from "../markdown/CodeView";
 import { JsonlView } from "../markdown/JsonlView";
@@ -66,6 +68,8 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [episodeConcatBusy, setEpisodeConcatBusy] = useState<boolean>(false);
 
   const ext = path ? extOf(path) : "";
+  const isPerfEntry = path ? /_performances\/[^/]+\/perf_\d{4}\/perf_\d{4}\.md$/.test(path) : false;
+  const isShotEntry = path ? /\/shots\/[^/]+\/shot[^/]*\.md$/.test(path) : false;
   const isMediaImage = IMAGE_EXTS.has(ext);
   const isMediaVideo = VIDEO_EXTS.has(ext);
   const isMediaAudio = AUDIO_EXTS.has(ext);
@@ -439,6 +443,10 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             </ParseFallback>
           ) : isMarkdown ? (
             <ParseFallback rawText={file.content} componentName="MarkdownView">
+              {isPerfEntry ? (
+                <PerfScorePanel path={path} content={file.content} onScored={async () => { await load(); onSaved(); }} />
+              ) : null}
+              {isShotEntry ? <ShotRegenButton path={path} content={file.content} /> : null}
               <Renderer
                 content={file.content}
                 currentPath={path}

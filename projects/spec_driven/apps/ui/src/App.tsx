@@ -5,6 +5,7 @@ import { Reader } from "./components/Reader";
 import { Home } from "./components/Home";
 import { ProjectPage } from "./components/ProjectPage";
 import { StagePage } from "./components/StagePage";
+import { PromptLabPage } from "./components/PromptLabPage";
 import { fetchTree } from "./api";
 import { collectFilePaths } from "./lib/linkResolver";
 import {
@@ -128,6 +129,7 @@ export default function App(): JSX.Element {
   };
 
   const isLanding = location.pathname === "/";
+  const isPromptLab = location.pathname === "/prompt-lab";
 
   if (isLanding) {
     return (
@@ -136,10 +138,19 @@ export default function App(): JSX.Element {
           Skip to main content
         </a>
         <main id="main" className="picker-pane" aria-label="Main content">
-          <Home tree={tree} loadError={error} onPick={onPickProject} />
+          <Home
+            tree={tree}
+            loadError={error}
+            onPick={onPickProject}
+            onOpenPromptLab={() => navigate("/prompt-lab")}
+          />
         </main>
       </div>
     );
+  }
+
+  if (isPromptLab) {
+    return <PromptLabPage />;
   }
 
   return (

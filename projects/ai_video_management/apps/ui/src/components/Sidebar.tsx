@@ -275,6 +275,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
           const isDrama = isAiVideoChild && !isSystemFolder;
           const isActorsRoot = isAiVideoChild && dramaPathParts[1] === "_actors";
           const isVoicesRoot = isAiVideoChild && dramaPathParts[1] === "_voices";
+          const isPerformancesRoot = isAiVideoChild && dramaPathParts[1] === "_performances";
           const isDeletedRoot = isAiVideoChild && dramaPathParts[1] === "_deleted";
           const isActorEntry =
             item.node.type === "actor" &&
@@ -327,6 +328,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
               {item.node.type === "voice" ? <span aria-hidden="true" className="tree-icon">🎙</span> : null}
               {isActorsRoot ? <span aria-hidden="true" className="tree-icon">🎭</span> : null}
               {isVoicesRoot ? <span aria-hidden="true" className="tree-icon">🎙</span> : null}
+              {isPerformancesRoot ? <span aria-hidden="true" className="tree-icon">🎬</span> : null}
               <span className="tree-label">{item.node.display_name || item.node.name}</span>
               {subType ? (
                 <span className={`subtype-badge subtype-${subType}`}
@@ -346,6 +348,18 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                   {isRenamingThis ? "导入并重命名中…" : "📥 导入 + 重命名"}
                 </button>
               ) : null}
+              {isPerformancesRoot ? (
+                <button
+                  type="button"
+                  className="drama-rename-btn"
+                  aria-label="从 Downloads 导入近 7 天的演技库检验视频，按 演{编号}{克|即|始} tag 归位到对应 perf 文件夹"
+                  disabled={renamingPath !== null}
+                  title="从 Downloads 按 演{编号}{克|即|始} tag 导入近 7 天的检验视频/起始帧，归位到 perf 文件夹并重命名为规范名"
+                  onClick={(e) => onRenameClick(e, item.node.path)}
+                >
+                  {isRenamingThis ? "导入中…" : "📥 导入检验视频"}
+                </button>
+              ) : null}
               {isActorsRoot ? (
                 <>
                   <button
@@ -356,6 +370,16 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                     onClick={(e) => { e.stopPropagation(); setGeneratorOpen(true); }}
                   >
                     🎭 生成演员
+                  </button>
+                  <button
+                    type="button"
+                    className="drama-rename-btn"
+                    aria-label="从 Downloads 导入近 7 天的外部出图，按 id{编号}{f|b} tag 归位到对应 actor 文件夹"
+                    disabled={renamingPath !== null}
+                    title="prompt-only 出图后用：从 Downloads 按 id{编号}{f|b} tag 导入近 7 天的人脸/全身图，转码为规范名归位到 actor 文件夹"
+                    onClick={(e) => onRenameClick(e, item.node.path)}
+                  >
+                    {isRenamingThis ? "导入中…" : "📥 导入演员"}
                   </button>
                   <button
                     type="button"

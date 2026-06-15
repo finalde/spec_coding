@@ -96,6 +96,30 @@ def test_chinese_tag_filename_matches_right_shot(tmp_path: Path) -> None:
     )
 
 
+def test_shot_tag_wins_over_embedded_scene_name(tmp_path: Path) -> None:
+    """Regression (follow-up wushen_juexing/026): a shot's `参考:` line embeds the
+    scene-plate handle it references, so the scene folder name appears in the
+    render filename. The shot's compact `{NN}集{NN}镜` tag must still route the
+    render into the shot's renders/ — NOT be out-scored by the longer scene token
+    and misrouted into scenes/."""
+    root = tmp_path / "repo"
+    drama = root / "ai_videos" / "td"
+    (drama / "episodes" / "ep01" / "shots" / "shot12").mkdir(parents=True)
+    (drama / "scenes" / "s4_回忆庭院").mkdir(parents=True)
+    downloads = tmp_path / "Downloads"
+    # Real-world jimeng name: tag `01集12镜视` followed by the 参考 line which
+    # contains the scene handle `s4_回忆庭院·bg1_朝北_正房廊`.
+    fname = "jimeng-2026-06-14-4252-01集12镜视 参考_ `裴知秋, 黑衣人(配), s4_回忆庭院·bg1_朝北_正房廊.mp4"
+    _touch(downloads / fname)
+
+    result = _make_importer(root, downloads).import_drama("ai_videos/td")
+
+    assert [e["kind"] for e in result.moved] == ["shot"], result.moved
+    assert (drama / "episodes" / "ep01" / "shots" / "shot12" / "renders" / fname).is_file()
+    # Did NOT leak into the scene folder.
+    assert not list((drama / "scenes" / "s4_回忆庭院").rglob("*.mp4"))
+
+
 def test_scene_plate_routes_by_orientation_token(tmp_path: Path) -> None:
     """Scene background plates live in `scenes/{scene}/bg{N}_{方位}_{desc}/`.
     The out-of-image tool names the download from the prompt's 主体 line, which

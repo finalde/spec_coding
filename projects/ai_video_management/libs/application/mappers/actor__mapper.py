@@ -24,6 +24,7 @@ class ActorMapper:
             look=info.attrs.look,
             notes=info.attrs.notes,
             is_assigned=is_assigned,
+            pending_import=info.pending_import,
         )
 
     @staticmethod

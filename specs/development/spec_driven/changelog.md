@@ -359,3 +359,113 @@ Verification covered in this run:
 Pending manual verification (per accessibility.md A11Y-17 + system_tests.md manual-walkthrough trigger): visual hierarchy of QaView Q/A tints, focus-visibility under real keyboard, motion/animation perceptibility, NVDA screen-reader sanity, forced-colors mode, 200% zoom, prefers-reduced-motion. Run `make e2e` to execute the Playwright suite.
 
 `0.0.0.0` audit (SEC-20): zero hits across `projects/spec_driven/` — main.py + Makefile + README + libs all use 127.0.0.1 wording without the LAN-bind literal.
+
+## Follow-up 016 — 2026-06-13 00:00:00
+Source: user_input/follow_ups/016-20260613-000000-prompt-lab-section.md
+Summary: Add a Prompt Lab webapp section surfacing the repo-root prompt_lab/ library — overview of all md, simple CRUD, prompt highlight + click-to-edit, source/expected-result links in md + UI.
+
+Auto-updated:
+- user_input/revised_prompt.md — header bump (016 clause) + new "Prompt Lab section" body subsection.
+- final_specs/spec.md — new FR-43 (Prompt Lab surface: sandbox root, overview/create/delete endpoints, UI cards, prompt highlight + click-to-edit).
+
+Code (stage-6 surgical implementation, this turn):
+- projects/spec_driven/libs/common/{safe_resolve.py,exposed_tree.py} — prompt_lab added as an allowed sandbox top-level.
+- projects/spec_driven/libs/infrastructure/{prompt_lab__reader.py,prompt_lab__writer.py} — overview parse + create/delete (prompt_lab-scoped).
+- projects/spec_driven/libs/application/{prompt_lab__qdto.py,prompt_lab__cdto.py,list_prompt_lab__query.py,create_prompt_lab_file__command.py,delete_prompt_lab_file__command.py} — CQRS wiring.
+- projects/spec_driven/libs/domain/prompt_lab__error.py — PromptLabPathRejected / FileExists / FileNotFound.
+- projects/spec_driven/apps/api/{container.py,routes.py} — DI wiring + GET /api/prompt-lab, POST/DELETE /api/prompt-lab/file.
+- projects/spec_driven/apps/ui/src/{components/PromptLabPage.tsx,components/Reader.tsx,components/Home.tsx,markdown/renderer.tsx,App.tsx,api.ts,types.ts,styles.css} — overview page, CRUD, prompt highlight + click-to-edit, landing entry.
+- prompt_lab/**/*.md + README.md — added parseable Source + Expected-result links to all 21 task files.
+
+No conflicts found in: interview/qa.md, findings/, validation/* (additive feature; existing routes + JSON shapes unchanged; new endpoints are net-new).
+
+## Follow-up 017 — 2026-06-14 00:00:00
+Source: user_input/follow_ups/017-20260614-000000-prompt-lab-nav-main-layout.md
+Summary: Prompt Lab page restructured from a full-width tile grid into the app's standard left-nav + main-section layout (matching ai_video_management's Sidebar + main-pane pattern).
+
+Auto-updated:
+- user_input/revised_prompt.md — header bump (017 clause).
+- final_specs/spec.md — FR-43 UI bullet amended (tile grid → left-nav + main detail).
+
+Code (stage-6 surgical implementation, this turn):
+- projects/spec_driven/apps/ui/src/components/PromptLabPage.tsx — rewritten as app-root (.sidebar category/task nav + .main-pane detail); page-local selection; CRUD + highlighted click-to-edit prompt preserved.
+- projects/spec_driven/apps/ui/src/App.tsx — /prompt-lab branch renders PromptLabPage's own two-column root.
+- projects/spec_driven/apps/ui/src/styles.css — promptlab nav/main/detail styles (reuses .sidebar/.main-pane chrome).
+
+No conflicts found in: interview/qa.md, findings/, validation/* (UI-only refinement; routes + JSON shapes unchanged).
+
+## Follow-up 018 — 2026-06-14 01:00:00
+Source: user_input/follow_ups/018-20260614-010000-prompt-copy-button-and-3section.md
+Summary: Prompt Lab gains a one-click Copy button on the highlighted prompt block, and all task md files adopt a fixed 3-section structure (Expectation → How to run → Source & references).
+
+Auto-updated:
+- user_input/revised_prompt.md — header bump (018 clause).
+- final_specs/spec.md — FR-43 amended (Copy button on prompt block; new 3-section task structure bullet).
+
+Code (stage-6 surgical implementation, this turn):
+- projects/spec_driven/apps/ui/src/markdown/renderer.tsx — PromptBlock component with Copy button (reads innerText; stopPropagation vs click-to-edit).
+- projects/spec_driven/apps/ui/src/components/PromptLabPage.tsx — new-file template seeds the 3-section structure (detail pane already had Copy).
+- projects/spec_driven/apps/ui/src/styles.css — .prompt-block-hint flex row + .prompt-block-copy button.
+- prompt_lab/**/*.md (21 files) + README.md — restructured into ✨ Expectation / ▶️ How to run / 🔗 Source & references; prompt blocks + metadata preserved verbatim (parser output unchanged).
+
+No conflicts found in: interview/qa.md, findings/, validation/* (UI + library-content refinement; routes + JSON shapes unchanged).
+
+## Follow-up 019 — 2026-06-14 02:00:00
+Source: user_input/follow_ups/019-20260614-020000-prompt-lab-inline-edit.md
+Summary: Fix — Prompt Lab now views/edits tasks inline within its own nav+main, instead of navigating to the global /file route (which swapped in the spec project's sidebar / wrong layout).
+
+Auto-updated:
+- user_input/revised_prompt.md — header bump (019 clause).
+- final_specs/spec.md — FR-43 UI bullet amended (inline view/edit; no navigation to /file).
+
+Code (stage-6 surgical implementation, this turn):
+- projects/spec_driven/apps/ui/src/components/PromptLabPage.tsx — selecting a task fetches its content and renders via Renderer in the main pane; ✎ Edit swaps to the inline Editor (PUT /api/file + If-Unmodified-Since 409 handling); create opens inline; removed all navigate('/file/...') calls and the tile/card PromptDetail.
+- projects/spec_driven/apps/ui/src/styles.css — .promptlab-detail-toolbar.
+
+No conflicts found in: interview/qa.md, findings/, validation/* (UI bug fix; routes + JSON shapes unchanged).
+
+## Refinement — 2026-06-14 03:00:00 (prompt_lab Expectation sections)
+Source: user chat ("elaborate the expectation section — what to expect, why cool, use cases").
+Summary: Enriched the ✨ Expectation section of all 21 prompt_lab task files to cover what-to-expect + a **Why it's cool** line + a **Use cases** line (2–4 concrete applicable uses). Library content only; structure, metadata, and prompt blocks preserved (parser output unchanged).
+
+Auto-updated:
+- prompt_lab/**/*.md (21 files) — Expectation bodies expanded.
+- prompt_lab/README.md — convention note updated.
+- projects/spec_driven/apps/ui/src/components/PromptLabPage.tsx — new-file template Expectation hint adds Why-it's-cool + Use-cases scaffolding.
+
+## Refinement — 2026-06-14 04:00:00 (prompt_lab section 3 → real prior art)
+Source: user chat ("last section should link where this came from — github / website").
+Summary: Clarified that the prompts are original (not copied), and replaced the section-3 Source links with real, verified prior-art repos/sites (18 GitHub repos + natureofcode.com / tylerxhobbs.com / shadertoy.com). Section renamed "Reference & prior art". Parser/UI unchanged (still keys on **Source:** / **Expected result:**).
+
+Auto-updated:
+- prompt_lab/**/*.md (21 files) — section 3 relabeled + Source → verified prior-art repo/site.
+- prompt_lab/README.md — convention note updated.
+- projects/spec_driven/apps/ui/src/components/PromptLabPage.tsx — new-file template section-3 relabeled.
+
+## Refinement — 2026-06-14 05:00:00 (more GitHub-anchored prompt_lab content)
+Source: user chat ("find more prompt lab content from GitHub, high stars, copy-pastable; create more categories").
+Summary: Added 3 new categories / 9 tasks, each anchored to a verified high-star GitHub repo as prior art.
+- classic_games: game_2048 (gabrielecirulli/2048), wordle_clone (cwackerfuss/react-wordle).
+- dev_tools: json_visualizer (AykutSarac/jsoncrack.com), mock_api_server (typicode/json-server), slides_from_markdown (hakimel/reveal.js), regex_playground (ziishaned/learn-regex).
+- browser_ml: image_classifier_browser + sentiment_analyzer_browser (huggingface/transformers.js), pose_webcam (tensorflow/tfjs-models MoveNet).
+Library now 10 categories / 30 tasks. New categories auto-appear via the overview API (no backend change).
+
+## Follow-up 020 — 2026-06-14 06:00:00
+Source: user_input/follow_ups/020-20260614-060000-prompt-lab-autonomous-execute.md
+Summary: Prompt Lab items become per-item workspace folders; an Execute button spawns a fully-autonomous headless `claude` session that auto-decides + logs decisions, with run status/decisions/output/files surfaced on the UI.
+
+Auto-updated:
+- user_input/revised_prompt.md — header bump (020 clause).
+- final_specs/spec.md — new FR-44 (per-item workspaces + execute/run/stop endpoints + run portal).
+
+Code (stage-6 implementation, this turn):
+- prompt_lab restructured: all 30 items moved to prompt_lab/{cat}/{task}/prompt.md.
+- libs/infrastructure/prompt_lab__reader.py — walk {cat}/*/prompt.md; entry name=folder; run_state from status.json.
+- libs/infrastructure/prompt_lab__writer.py — create makes {cat}/{slug}/prompt.md; delete removes item folder; valid_prompt_path() distinguishes 404 vs 400.
+- libs/infrastructure/prompt_lab__executor.py (new) — spawn headless `claude --print --permission-mode bypassPermissions` in workspace/, status.json/output.txt, decisions.jsonl, pid-liveness, stop.
+- libs/domain/prompt_lab__error.py — PromptLabAlreadyRunning, PromptLabExecUnavailable.
+- apps/api/{container.py,routes.py} — executor wiring + POST execute, GET run, POST stop.
+- apps/ui/src/{components/PromptLabPage.tsx,api.ts,types.ts,styles.css} — Execute/Stop button, run polling, decisions + output + files panel.
+- tests/unit/test_prompt_lab.py — updated for folder layout + execute/run endpoint tests (11 pass). Verified end-to-end: a trivial item ran autonomously, logged a decision, produced its file, reported succeeded.
+
+No conflicts found in: interview/qa.md, findings/, validation/* (additive feature; new endpoints; existing routes/JSON shapes unchanged).

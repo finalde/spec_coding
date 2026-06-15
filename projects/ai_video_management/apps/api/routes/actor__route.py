@@ -66,6 +66,18 @@ def actors_generate(
     return JSONResponse(status_code=200, content=cdto.to_payload())
 
 
+@router.post("/api/actors/create-prompts")
+@inject
+def actors_create_prompts(
+    body: GenerateActorsBody,
+    command: ActorCommand = Depends(Provide[Container.actor_command]),
+) -> Response:
+    """Per follow-up 124: prompt-only mode — allocate actor folders + write
+    id-tagged-prompt sidecars without any Kling call."""
+    cdto = command.create_prompts(GenerateActorsInputCdto(**body.model_dump()))
+    return JSONResponse(status_code=200, content=cdto.to_payload())
+
+
 @router.post("/api/actors/generate-diverse")
 @inject
 def actors_generate_diverse(
@@ -99,8 +111,15 @@ def actors_preview_diverse(
 
 @router.get("/api/actors")
 @inject
-def actors_list(query: ActorQuery = Depends(Provide[Container.actor_query])) -> Response:
-    return JSONResponse(status_code=200, content=query.list().to_payload())
+def actors_list(
+    include_pending: bool = False,
+    query: ActorQuery = Depends(Provide[Container.actor_query]),
+) -> Response:
+    # include_pending=true also returns prompt-only actors (no jpg yet) so the
+    # grid can filter "仅 prompt 无图" and bulk-delete them.
+    return JSONResponse(
+        status_code=200, content=query.list(include_pending=include_pending).to_payload()
+    )
 
 
 @router.post("/api/actors/delete")

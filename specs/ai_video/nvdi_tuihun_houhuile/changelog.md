@@ -563,3 +563,14 @@ Auto-updated:
 tradeoff (记录): 新 section 不在 rule 12.4 通用模板内 → 若经 webapp/stage-6 regen 重生成 shot 会丢失。项目级决定, 暂不升级通用 schema。
 
 No conflicts found in: 视频 prompt 块 (解耦, 未动); 台词/字幕 既有行 (保留, 新段从其派生); 其余 spec 工件。
+
+## Follow-up 035 — 2026-06-14 21:00:00
+Source: user_input/follow_ups/035-20260614-210000-no-subtitle-detail-in-shot-prompt.md
+Summary: shot prompt 台词字段去字幕化（common-level 规则，详见 ai_video.md §12.4 v2 + CLAUDE.md）。nvdi 本就无字幕排版，仅做 label 改名 + 去「/ 字幕」。
+
+Auto-updated:
+- ai_videos/nvdi_tuihun_houhuile/episodes/ep01/shots/* (28 文件) — 台词字段 label `台词 / 字幕:`→`台词:`；内心独白 OS 行「为画外配音 / 字幕」→「为画外配音」
+（common-level 规则文件 .claude/agent_refs/project/ai_video.md §12.4 v2 + CLAUDE.md 已由 wushen follow-up 022 同批更新）
+
+校验：nvdi shot model-fed 字段零字幕 token；台词原文 + 在画人物口型契约 verbatim 未改。nvdi 既有 `画外音/朗声 + 口型` 标注表达正常/内心独白之分，未强改二元标签（gold-standard 保持）。
+No conflicts found in: 角色档/world/arc/style_guide。

@@ -101,6 +101,17 @@ Severity:
 
 The master's output is a per-shot inline patch list, NOT free-form prose review: each failure cites the shot, the failing line, the criterion, and the proposed rewrite. The parent applies the patches surgically and re-runs the level until 0 blockers + ≤ 2 warnings remain.
 
+### 10. Folder-per-shot structural integrity (per follow-up wushen_juexing/021 — 2026-06-14)
+
+Every shot MUST be a same-named folder `episodes/epNN/shots/shotNN/` containing `shotNN.md` (+ optional `subtitles.md` + `renders/` media), per `agent_refs/project/ai_video.md` rule #12.9. A **flat `episodes/epNN/shots/shotNN.md`** (prompt file sitting directly under `shots/` with no enclosing `shotNN/` folder) is non-conformant — it breaks the webapp display contract, the render-import routing into `shots/shotNN/renders/`, and 台词 burn-in (`subtitles.md` lives beside the prompt). This must be uniform across ALL dramas in the repo (the inconsistency that surfaced this rule: `nvdi_tuihun_houhuile` used folders, `wushen_juexing` used flat files).
+
+Validator pseudo-rule:
+- `find episodes/epNN/shots -maxdepth 1 -name 'shot*.md'` MUST return 0 (no flat shot md directly under `shots/`).
+- For each `shotNN/` folder, `shotNN/shotNN.md` MUST exist (folder + filename byte-identical).
+- `shotlist.md` (episode-level) correctly stays flat under `episodes/epNN/` — it is NOT a shot.
+
+Severity: any flat `shots/shotNN.md`, or a `shotNN/` folder whose inner md name ≠ folder name = `blocker`.
+
 ## Severity escalations specific to ai_video
 
 | Issue class | Severity | Reason |
@@ -116,6 +127,7 @@ The master's output is a per-shot inline patch list, NOT free-form prose review:
 | Continuity token between adjacent shots missing when state should carry over | `warning` | Often invisible until rendered; flag for manual walkthrough. |
 | Missing `shotNN_lastframe_seedream.md` for any shot | `blocker` | Without the seam-frame still, Kling has no `input_image_urls` end-frame anchor and the next shot has no start-frame anchor — visible drift across clip boundaries when stitched. Per `agent_refs/project/ai_video.md` rule #11. |
 | Missing `shot01_startframe_seedream.md` on the first shot of a video / episode | `blocker` | Without the absolute opening frame, Kling shot 01 image-to-video has no start-frame anchor — character / scene / lighting drift in the very first 15 seconds. Per rule #11. |
+| Flat `shots/shotNN.md` instead of folder-per-shot `shots/shotNN/shotNN.md` | `blocker` | Breaks webapp display + render-import (`renders/`) + 台词 burn-in (`subtitles.md`) contracts. Per rule #12.9 / validation move #10. |
 
 ## Update protocol
 

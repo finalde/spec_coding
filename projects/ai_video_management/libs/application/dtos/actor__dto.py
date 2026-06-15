@@ -33,6 +33,7 @@ class ActorListRowQdto:
     look: str
     notes: str
     is_assigned: bool = False
+    pending_import: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +46,7 @@ class ActorListRowQdto:
             "look": self.look,
             "notes": self.notes,
             "is_assigned": self.is_assigned,
+            "pending_import": self.pending_import,
         }
 
 

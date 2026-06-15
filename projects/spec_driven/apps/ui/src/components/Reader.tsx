@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Breadcrumb } from "./Breadcrumb";
 import { QaView } from "./QaView";
 import { QaErrorBoundary } from "./QaErrorBoundary";
@@ -26,6 +26,7 @@ interface ProjectInfo {
 
 export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
   const location = useLocation();
+  const navigate = useNavigate();
   const path = useMemo<string | null>(() => {
     if (!location.pathname.startsWith("/file/")) return null;
     const encoded = location.pathname.slice("/file/".length);
@@ -138,6 +139,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
 
   const filename = path.split("/").pop() ?? path;
   const editDisabled = activeBlockOpen;
+  const isPromptLab = path.startsWith("prompt_lab/");
 
   const showRegenPanel =
     projectInfo !== null && projectInfo.stage !== null && !isImage;
@@ -218,6 +220,16 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
   return (
     <div className="reader">
       <div className="reader-toolbar" role="toolbar" aria-label="File toolbar">
+        {isPromptLab ? (
+          <button
+            type="button"
+            className="sidebar-back"
+            onClick={() => navigate("/prompt-lab")}
+            aria-label="Back to Prompt Lab"
+          >
+            ← Prompt Lab
+          </button>
+        ) : null}
         <Breadcrumb path={path} />
         {!isImage ? (
           <button
@@ -288,6 +300,7 @@ export function Reader({ knownPaths, onSaved }: ReaderProps): JSX.Element {
                 currentPath={path}
                 knownPaths={knownPaths}
                 pinContext={pinContext}
+                promptMode={isPromptLab ? { onEditPrompt: () => setEditing(true) } : null}
               />
             </ParseFallback>
           ) : isTxt ? (

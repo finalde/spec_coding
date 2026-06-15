@@ -36,7 +36,7 @@ confidence: high
 镜头: `中景 + 缓慢推近, 随taijian_place_holder拂尘轻甩、语速放缓催促极缓推近, 腰部以上`
 走位: `taijian_place_holder立于厅中长案前、面向南 (朝chenguogong_place_holder和chenfan_place_holder) 甩拂尘催促; chenguogong_place_holder和chenfan_place_holder跪于taijian_place_holder南侧跪礼区、面向北 (chenguogong_place_holder和chenfan_place_holder位于镜头前景下方, 背影/未露正脸, 本镜聚焦taijian_place_holder)。 厅内系国公府私宅正厅 (非朝堂金殿), 本镜入镜人物仅 taijian_place_holder (正面)、chenguogong_place_holder (前景下方背影: 深紫一品朝服 / 紫金冠 / 银白长须 / 年长体态) 与 chenfan_place_holder (前景下方背影: 玉白锦袍 / 黑色长发披肩 / 白玉冠 / 年轻挺拔); 两道背影衣色与发型迥异、须各按其参考分别渲染, 严禁两道背影雷同或都渲染成 chenfan_place_holder; 别无他人, 不得增添任何其他人物 (无群臣 / 侍从 / 围观人群 / 路人)。`
 动作: `0.0-1.5秒 taijian_place_holder拂尘轻甩一记; 1.5-3.0秒 沉色语速放缓, 目光落跪礼区催促; 3.0-4.0秒 拂尘收身侧, 居高临下等候`
-台词 / 字幕: `太监(沉色带催促):"陈凡, 接旨吧。"`
+台词: `太监(沉色带催促):"陈凡, 接旨吧。"`
 光线 / 色调: `日间顶左斜光 偏冷金黄, 透高窗格栏漏入; 主色 沉香木 辅灰青 点朱红 高光暖白`
 节奏: `快切`
 渲染样式: `影视级真人写实 · 电影感 · 超高清高动态范围 · 真实毛孔细节 · 真人皮肤真实质感 · 亚洲俊男靓女 · 三庭五眼东方面孔 · 古装仙侠剧主演级颜值 · 照片级写实感 强化`

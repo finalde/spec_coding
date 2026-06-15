@@ -5,7 +5,7 @@ import { resolve } from "path";
 
 export default defineConfig({
   plugins: [react()],
-  build: { outDir: resolve(__dirname, "..", "backend", "static"), emptyOutDir: true, sourcemap: true },
+  build: { outDir: resolve(__dirname, "..", "api", "static"), emptyOutDir: true, sourcemap: true },
   server: {
     host: "127.0.0.1",
     port: 5173,

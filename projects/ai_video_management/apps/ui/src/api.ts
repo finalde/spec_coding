@@ -21,9 +21,13 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchTree(): Promise<TreeNode> {
+  // `no-store`: after a delete/rename the left-nav tree must reflect the
+  // current filesystem. Without it the browser can serve a cached /api/tree
+  // and the deleted actor keeps showing in the sidebar.
   const response = await fetch("/api/tree", {
     method: "GET",
     headers: { Accept: "application/json" },
+    cache: "no-store",
   });
   return readJson<TreeNode>(response);
 }
@@ -143,6 +147,118 @@ export async function extractFrames(path: string): Promise<ExtractFramesResult> 
   return readJson<ExtractFramesResult>(response);
 }
 
+export interface ScenePlate {
+  folder: string;
+  direction: string;
+  timestamp: number;
+  path: string;
+}
+
+export interface ExtractScenePlatesResult {
+  src: string;
+  plates: ScenePlate[];
+  skipped: string[];
+  failures: { folder: string; error: string }[];
+}
+
+/** Extract per-direction background plates from a scene walk-through mp4 at the
+ * canonical 方位 timepoints (北1.5s/东4.5s/南7.5s/西10.5s/中13.5s) into the
+ * sibling bg{N}_{方位}_ folders. */
+export async function extractScenePlates(path: string): Promise<ExtractScenePlatesResult> {
+  const response = await fetch("/api/extract-scene-plates", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ExtractScenePlatesResult>(response);
+}
+
+export interface BurnSubtitlesResult {
+  src: string;
+  out: string;
+  cues: number;
+}
+
+export async function burnSubtitles(path: string): Promise<BurnSubtitlesResult> {
+  const response = await fetch("/api/burn-subtitles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<BurnSubtitlesResult>(response);
+}
+
+export interface ScaffoldSubtitlesResult {
+  path: string;
+  cues: number;
+  created: boolean;
+}
+
+export async function scaffoldSubtitles(path: string): Promise<ScaffoldSubtitlesResult> {
+  const response = await fetch("/api/scaffold-subtitles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ScaffoldSubtitlesResult>(response);
+}
+
+export interface PerfScoreResult {
+  path: string;
+  validation_status: string;
+  decision: string;
+  verdict: string;
+}
+
+export interface RegenShotPromptResult {
+  prompt: string;
+  refs: string[];
+  message: string;
+}
+
+export async function regenShotPrompt(path: string): Promise<RegenShotPromptResult> {
+  const response = await fetch("/api/regen-shot-prompt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<RegenShotPromptResult>(response);
+}
+
+export interface PerfCheckPromptResult {
+  ok: boolean;
+  kind: "ok" | "no_mp4" | "multiple_mp4";
+  message: string;
+  prompt: string;
+  mp4: string;
+  candidates: string[];
+}
+
+export async function perfCheckPrompt(path: string): Promise<PerfCheckPromptResult> {
+  const response = await fetch("/api/perf-check-prompt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<PerfCheckPromptResult>(response);
+}
+
+export async function perfScore(input: {
+  path: string;
+  who: string;
+  da_yi: number | null;
+  qing_xu: number | null;
+  guo_huo: number | null;
+  note: string;
+}): Promise<PerfScoreResult> {
+  const response = await fetch("/api/perf-score", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson<PerfScoreResult>(response);
+}
+
 export interface ImportFromDownloadsResult {
   moved: { from: string; to: string; kind: string }[];
   unmatched: { from: string; to: string; kind: string }[];
@@ -180,11 +296,16 @@ export interface ActorAttrs {
 
 export interface ActorInfo extends ActorAttrs {
   id: string;
+  /** "" for prompt-only actors that have no rendered jpg yet. */
   image_path: string;
   mtime: number;
   /** Per follow-up 086: true iff this actor appears in any drama's
    * casting.md. Powers the ActorGrid 分配状态 filter chip. */
   is_assigned?: boolean;
+  /** True iff this actor has a sidecar prompt but no image yet. Only
+   * returned when listActors(includePending=true) is called. Powers the
+   * ActorGrid 图片状态 filter so imageless actors can be bulk-deleted. */
+  pending_import?: boolean;
 }
 
 export interface GenerateActorsResult {
@@ -245,6 +366,34 @@ export async function generateActors(req: GenerateActorsRequest): Promise<Genera
   return readJson<GenerateActorsResult>(response);
 }
 
+/** Per follow-up 124: a prompt-only actor — its folder + sidecar were created
+ * but NO Kling call fired. The user copies `face_prompt` / `body_prompt` into
+ * Kling/Seedance, then imports the downloads (📥 导入演员) which routes each
+ * file back by its `id{NNNN}{f|b}` tag prefix. */
+export interface ActorPromptSlot {
+  id: string;
+  attrs: ActorAttrs;
+  seed: number;
+  resolution: string;
+  pending_import: boolean;
+  face_prompt: string;
+  body_prompt: string;
+}
+
+export interface CreateActorPromptsResult {
+  generated: ActorPromptSlot[];
+  errors: { requested_id: string; message: string }[];
+}
+
+export async function createActorPrompts(req: GenerateActorsRequest): Promise<CreateActorPromptsResult> {
+  const response = await fetch("/api/actors/create-prompts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<CreateActorPromptsResult>(response);
+}
+
 export interface DeleteActorResult {
   from: string;
   to: string;
@@ -260,10 +409,13 @@ export async function deleteActor(actorId: string): Promise<DeleteActorResult> {
   return readJson<DeleteActorResult>(response);
 }
 
-export async function listActors(): Promise<{ actors: ActorInfo[] }> {
-  const response = await fetch("/api/actors", {
+export async function listActors(includePending = false): Promise<{ actors: ActorInfo[] }> {
+  // no-store: after generate/delete the grid must reflect the current pool.
+  const qs = includePending ? "?include_pending=true" : "";
+  const response = await fetch(`/api/actors${qs}`, {
     method: "GET",
     headers: { Accept: "application/json" },
+    cache: "no-store",
   });
   return readJson<{ actors: ActorInfo[] }>(response);
 }

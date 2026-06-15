@@ -219,6 +219,30 @@ class TreeReader:
             return None
         return None
 
+    def _sidecar_zh_label(self, directory: Path) -> str | None:
+        """Chinese display label for a nested directory that carries a naming
+        sidecar. Performance-library emotion folders (`_performances/{emotion}/`)
+        use pinyin folder names but hold the Chinese name in `_emotion.md`'s H1
+        (`# 压抑隐忍（yayi_yinren）`). Return the Chinese head, dropping the
+        trailing `（pinyin）` / `(pinyin)` annotation. None when no sidecar.
+        """
+        sidecar = directory / "_emotion.md"
+        if not sidecar.is_file():
+            return None
+        try:
+            with sidecar.open(encoding="utf-8") as fh:
+                for line in fh:
+                    stripped = line.strip()
+                    if stripped.startswith("# "):
+                        title = stripped[2:].strip()
+                        head = re.split(r"[（(]", title, maxsplit=1)[0].strip()
+                        return head or None
+                    if stripped:
+                        return None
+        except OSError:
+            return None
+        return None
+
     def _walk_filtered(self, directory: Path, leaf_predicate: Any) -> list[dict[str, Any]]:
         children: list[dict[str, Any]] = []
         excluded = self._exposed.excluded_dirs()
@@ -242,14 +266,16 @@ class TreeReader:
                     continue
                 sub = self._walk_filtered(entry, leaf_predicate)
                 if sub:
-                    children.append(
-                        {
-                            "type": "directory",
-                            "name": entry.name,
-                            "path": self._rel(entry),
-                            "children": sub,
-                        }
-                    )
+                    dir_node: dict[str, Any] = {
+                        "type": "directory",
+                        "name": entry.name,
+                        "path": self._rel(entry),
+                        "children": sub,
+                    }
+                    zh_label = self._sidecar_zh_label(entry)
+                    if zh_label:
+                        dir_node["display_name"] = zh_label
+                    children.append(dir_node)
             elif entry.is_file():
                 if leaf_predicate(entry):
                     children.append(self._leaf_for(entry))

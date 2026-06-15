@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import rehypeHighlight from "rehype-highlight";
@@ -16,11 +16,16 @@ export interface PinContext {
   onUnpin: (itemId: string) => void;
 }
 
+export interface PromptMode {
+  onEditPrompt: () => void;
+}
+
 export interface RendererProps {
   content: string;
   currentPath: string;
   knownPaths: string[];
   pinContext?: PinContext | null;
+  promptMode?: PromptMode | null;
 }
 
 const PIN_MARKER = /^(FR|NFR|AC|SYS|OQ)-(\d+[a-z]?)\.?$/;
@@ -64,11 +69,74 @@ function PinButton({
   );
 }
 
-export function Renderer({ content, currentPath, knownPaths, pinContext }: RendererProps): JSX.Element {
+function PromptBlock({
+  onEdit,
+  preProps,
+  children,
+}: {
+  onEdit: () => void;
+  preProps: Record<string, unknown>;
+  children: React.ReactNode;
+}): JSX.Element {
+  const preRef = useRef<HTMLPreElement>(null);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const copy = async (e: React.MouseEvent): Promise<void> => {
+    e.stopPropagation();
+    const text = preRef.current?.innerText ?? "";
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  return (
+    <div
+      className="prompt-block"
+      role="button"
+      tabIndex={0}
+      title="Click to edit this prompt"
+      onClick={onEdit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
+    >
+      <div className="prompt-block-hint">
+        <span aria-hidden="true">📋 copy-paste prompt · ✎ click to edit</span>
+        <button
+          type="button"
+          className="prompt-block-copy"
+          onClick={(e) => void copy(e)}
+          aria-label="Copy prompt to clipboard"
+        >
+          {copied ? "Copied ✓" : "Copy"}
+        </button>
+      </div>
+      <pre {...(preProps as React.HTMLAttributes<HTMLPreElement>)} ref={preRef}>
+        {children}
+      </pre>
+    </div>
+  );
+}
+
+export function Renderer({
+  content,
+  currentPath,
+  knownPaths,
+  pinContext,
+  promptMode,
+}: RendererProps): JSX.Element {
   const navigate = useNavigate();
   const known = useMemo(() => new Set(knownPaths), [knownPaths]);
   const isKnown = (p: string): boolean => known.has(p);
   const ctx = pinContext ?? null;
+  const prompt = promptMode ?? null;
 
   return (
     <div className="markdown-view">
@@ -76,6 +144,14 @@ export function Renderer({ content, currentPath, knownPaths, pinContext }: Rende
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeSanitize, rehypeHighlight]}
         components={{
+          pre: ({ children, ...rest }) => {
+            if (!prompt) return <pre {...rest}>{children}</pre>;
+            return (
+              <PromptBlock onEdit={prompt.onEditPrompt} preProps={rest}>
+                {children}
+              </PromptBlock>
+            );
+          },
           a: ({ href, children, ...rest }) => {
             if (typeof href !== "string") {
               return <span>{children}</span>;

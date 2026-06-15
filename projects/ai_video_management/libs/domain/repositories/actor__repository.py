@@ -26,7 +26,7 @@ class ActorRepository(Protocol):
 
     def actor_exists(self, actor_id: str) -> bool: ...
 
-    def list_actors(self) -> "list[ActorInfo]": ...
+    def list_actors(self, include_pending: bool = False) -> "list[ActorInfo]": ...
 
     def actor_face_filename(self, actor_id: str) -> str | None: ...
 
@@ -35,6 +35,18 @@ class ActorRepository(Protocol):
     def delete_actor(self, actor_id: str) -> dict[str, str]: ...
 
     def generate_batch(
+        self,
+        attrs: ActorAttrs,
+        count: int,
+        resolution: str,
+        seeds: list[int] | None,
+        archetype: str | None = None,
+        batch_seed: int | None = None,
+        batch_size: int | None = None,
+        slot_index: int | None = None,
+    ) -> object: ...
+
+    def create_prompts_batch(
         self,
         attrs: ActorAttrs,
         count: int,

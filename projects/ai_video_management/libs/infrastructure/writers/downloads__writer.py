@@ -32,16 +32,42 @@ import re
 import shutil
 import time
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 from libs.common.exposed_tree import MEDIA_EXTENSIONS, ExposedTree
 from libs.common.safe_resolve import SafeResolver
 from libs.domain.errors.casting__error import DramaNotFoundError, InvalidDramaPathError
 from libs.domain.errors.downloads__error import DownloadsDirMissingError
+from libs.infrastructure.writers.actor__writer import (
+    ACTORS_DIR_NAME,
+    ActorPool,
+    _ACTOR_DIR_RE,
+    _ACTOR_IMPORT_TAG,
+    _attrs_to_body_filename,
+    _attrs_to_filename,
+)
 from libs.infrastructure.writers.media__writer import MediaRenamer, RenameResult
 
+ACTOR_NOT_MATCHED_DIR_NAME = "_not_matched"
+
 NOT_MATCHED_DIR_NAME = "not_matched"
+PERF_NOT_MATCHED_DIR_NAME = "_not_matched"
 RENDERS_DIR_NAME = "renders"
+PERF_LIBRARY_DIR_NAME = "_performances"
+# Performance-library import tag, written as the first line of every render
+# prompt block (per `_performances/_testrig.md`). The library uses ONE generic,
+# model-agnostic prompt per entry (the user renders it on any model with their
+# own uploaded actor), so the tag carries no model marker:
+#   `演{NNNN}`   = the generic test video → `perf_{NNNN}/renders/` (original
+#                  name kept, so multiple models' renders coexist).
+#   `演{NNNN}始`  = the start-frame still → `perf_{NNNN}__startframe.{ext}`.
+# Kling names a download from the prompt's first ~9 chars, so this 5–6-char tag
+# lands in the filename and routes the file.
+_PERF_TAG = re.compile(r"演(\d{4})(始)?")
+_PERF_FOLDER_RE = re.compile(r"^perf_(\d{4})$")
 DEFAULT_TIME_WINDOW_SECONDS = 7 * 24 * 60 * 60
 DOWNLOADS_ENV_VAR = "AI_VIDEO_MGMT_DOWNLOADS_DIR"
 _BASENAME_INVALID = re.compile(r"[\x00-\x1f/\\:*?\"<>|]")
@@ -160,6 +186,194 @@ class DownloadsImporter:
         result.rename = rename_result.to_payload()
         return result
 
+    def import_performances(self, rel_path: str) -> ImportResult:
+        """One-click import for the performance library (`ai_videos/_performances`).
+
+        Unlike `import_drama` (which routes by drama character/scene/shot folder
+        names), this routes by the `演{NNNN}{克|即|始}` import tag carried in the
+        download filename (Kling/Seedance name the file from the prompt's first
+        chars, where the tag lives). The file lands in `{emotion}/perf_{NNNN}/`
+        renamed to its canonical name (`perf_{NNNN}__kling.mp4` /
+        `__seedance.mp4` / `__startframe.png`). Unmatched files go to
+        `_performances/_not_matched/`. No folder-name rename pass — perf folders
+        are ID-named and stable.
+        """
+        perf_root = self._renamer.validate_drama(rel_path)
+        if not self._downloads_dir.is_dir():
+            raise DownloadsDirMissingError(str(self._downloads_dir))
+        perf_folders = self._collect_perf_folders(perf_root)
+        cutoff = time.time() - self._window
+        result = ImportResult()
+        not_matched_dir = perf_root / PERF_NOT_MATCHED_DIR_NAME
+        for src in self._iter_downloads(cutoff):
+            if not self._is_safe_basename(src.name):
+                result.errors.append({"path": self._display_src(src), "message": "invalid_basename"})
+                continue
+            tag = _PERF_TAG.search(src.name)
+            matched = tag is not None and tag.group(1) in perf_folders
+            if matched:
+                num, is_startframe = tag.group(1), tag.group(2) == "始"
+                perf_dir = perf_folders[num]
+                if is_startframe:
+                    # single canonical reference frame
+                    dst_folder = perf_dir
+                    dst = perf_dir / f"perf_{num}__startframe{src.suffix.lower()}"
+                    kind = "performance_startframe"
+                else:
+                    # generic test video → renders/ keeping the original name so
+                    # multiple models' renders for the same entry coexist.
+                    dst_folder = perf_dir / RENDERS_DIR_NAME
+                    dst = dst_folder / src.name
+                    kind = "performance_video"
+            else:
+                dst_folder = not_matched_dir
+                dst = not_matched_dir / src.name
+                kind = "unmatched"
+            try:
+                dst_folder.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                result.errors.append({"path": self._display_src(src), "message": f"mkdir_failed: {exc}"})
+                continue
+            if dst.exists():
+                # Re-render of the same (perf, role): overwrite the canonical file.
+                try:
+                    dst.unlink()
+                except OSError as exc:
+                    result.errors.append({"path": self._display_src(src), "message": f"overwrite_failed: {exc}"})
+                    continue
+            try:
+                shutil.move(str(src), str(dst))
+            except OSError as exc:
+                result.errors.append({"path": self._display_src(src), "message": f"move_failed: {exc}"})
+                continue
+            entry = {"from": self._display_src(src), "to": self._rel(dst), "kind": kind}
+            if matched:
+                result.moved.append(entry)
+            else:
+                result.unmatched.append(entry)
+        return result
+
+    def import_actors(self, rel_path: str) -> ImportResult:
+        """One-click import for the actor pool (`ai_videos/_actors`), follow-up 124.
+
+        Counterpart to prompt-only generation: each prompt-only actor's face /
+        body prompt was prefixed with an `id{NNNN}{f|b}` tag, which Kling /
+        Seedance carry into the downloaded filename (named from the prompt's
+        first chars). This routes each download back to its `actor_{NNNN}/`
+        folder by that tag, re-encodes it to the actor's canonical
+        `{ethnicity}__{gender}__{age_range}.jpg` (face) or `...__body.jpg`
+        (body) — the names `_find_actor_jpg` / `list_actors` look for — so an
+        externally-rendered actor surfaces in the pool exactly like a
+        Kling-generated one. Unmatched files go to `_actors/_not_matched/`.
+        No folder-name rename pass: actor folders are ID-named and stable.
+        """
+        actors_root = (self._exposed.root / "ai_videos" / ACTORS_DIR_NAME).resolve()
+        if not self._downloads_dir.is_dir():
+            raise DownloadsDirMissingError(str(self._downloads_dir))
+        actor_folders = self._collect_actor_folders(actors_root)
+        cutoff = time.time() - self._window
+        result = ImportResult()
+        not_matched_dir = actors_root / ACTOR_NOT_MATCHED_DIR_NAME
+        for src in self._iter_downloads(cutoff):
+            if not self._is_safe_basename(src.name):
+                result.errors.append({"path": self._display_src(src), "message": "invalid_basename"})
+                continue
+            tag = _ACTOR_IMPORT_TAG.search(src.name)
+            num = int(tag.group(1)) if tag is not None else None
+            matched = num is not None and num in actor_folders
+            if matched:
+                is_body = tag.group(2).lower() == "b"
+                actor_dir = actor_folders[num]
+                attrs = ActorPool._parse_sidecar(actor_dir / f"{actor_dir.name}.md")
+                if attrs is None:
+                    result.errors.append({"path": self._display_src(src), "message": "sidecar_unreadable"})
+                    continue
+                fname = _attrs_to_body_filename(attrs) if is_body else _attrs_to_filename(attrs)
+                dst = actor_dir / fname
+                kind = "actor_body" if is_body else "actor_face"
+                try:
+                    self._reencode_to_jpeg(src, dst)
+                except (OSError, ValueError) as exc:
+                    result.errors.append({"path": self._display_src(src), "message": f"convert_failed: {exc}"})
+                    continue
+                result.moved.append({"from": self._display_src(src), "to": self._rel(dst), "kind": kind})
+            else:
+                try:
+                    not_matched_dir.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    result.errors.append({"path": self._display_src(src), "message": f"mkdir_failed: {exc}"})
+                    continue
+                dst = not_matched_dir / src.name
+                if dst.exists():
+                    try:
+                        dst.unlink()
+                    except OSError as exc:
+                        result.errors.append({"path": self._display_src(src), "message": f"overwrite_failed: {exc}"})
+                        continue
+                try:
+                    shutil.move(str(src), str(dst))
+                except OSError as exc:
+                    result.errors.append({"path": self._display_src(src), "message": f"move_failed: {exc}"})
+                    continue
+                result.unmatched.append({"from": self._display_src(src), "to": self._rel(dst), "kind": "unmatched"})
+        return result
+
+    @staticmethod
+    def _collect_actor_folders(actors_root: Path) -> dict[int, Path]:
+        """Map each actor's numeric id to its `actor_{NNNN}/` folder."""
+        folders: dict[int, Path] = {}
+        try:
+            entries = sorted(actors_root.iterdir(), key=lambda p: p.name)
+        except OSError:
+            return folders
+        for entry in entries:
+            if not entry.is_dir() or entry.is_symlink():
+                continue
+            m = _ACTOR_DIR_RE.match(entry.name)
+            if m:
+                folders[int(m.group(1))] = entry
+        return folders
+
+    @staticmethod
+    def _reencode_to_jpeg(src: Path, dst: Path) -> None:
+        """Transcode a downloaded image to JPEG at `dst` (overwriting any
+        existing canonical jpg), then delete the source. Actor lookup keys off
+        a `.jpg` canonical name, so a downloaded png/webp must be re-encoded,
+        not merely moved — and re-encoding a same-name jpg is harmless."""
+        with Image.open(src) as im:
+            buf = BytesIO()
+            im.convert("RGB").save(buf, format="JPEG", quality=92)
+        dst.write_bytes(buf.getvalue())
+        try:
+            src.unlink()
+        except OSError:
+            pass
+
+    @staticmethod
+    def _collect_perf_folders(perf_root: Path) -> dict[str, Path]:
+        """Map each 4-digit perf number to its `{emotion}/perf_{NNNN}/` folder."""
+        folders: dict[str, Path] = {}
+        try:
+            emotion_dirs = sorted(perf_root.iterdir(), key=lambda p: p.name)
+        except OSError:
+            return folders
+        for emotion_dir in emotion_dirs:
+            if not emotion_dir.is_dir() or emotion_dir.is_symlink():
+                continue
+            if emotion_dir.name.startswith("_"):
+                continue
+            try:
+                perf_dirs = sorted(emotion_dir.iterdir(), key=lambda p: p.name)
+            except OSError:
+                continue
+            for perf_dir in perf_dirs:
+                if not perf_dir.is_dir() or perf_dir.is_symlink():
+                    continue
+                m = _PERF_FOLDER_RE.match(perf_dir.name)
+                if m:
+                    folders[m.group(1)] = perf_dir
+        return folders
+
     def _collect_candidates(self, drama_dir: Path) -> list[_Candidate]:
         out: list[_Candidate] = []
         characters_dir = drama_dir / "characters"
@@ -229,6 +443,21 @@ class DownloadsImporter:
     @staticmethod
     def _classify(filename: str, candidates: list[_Candidate]) -> _Candidate | None:
         name = filename.lower()
+        # The compact shot tag `{NN}集{NN}镜` is the AUTHORITATIVE routing key for
+        # a shot render: Kling/jimeng name the download from the shot block's
+        # first line `{NN}集{NN}镜{视|始|末}` (ai_video rule 12.4 / 2026-05-30), so
+        # its presence unambiguously identifies the owning shot. It MUST win
+        # outright over length-based scoring — a shot's `参考:` line now embeds
+        # the scene-plate handle it references (e.g. `s4_回忆庭院·bg1_…`), so the
+        # scene name appears in the render filename and, being a longer token,
+        # would otherwise out-score the shot tag and misroute the render into the
+        # scene folder (follow-up wushen_juexing/026).
+        tag_m = re.search(r"(\d+)集(\d+)镜", filename)
+        if tag_m is not None:
+            tag = f"{tag_m.group(1)}集{tag_m.group(2)}镜"
+            for cand in candidates:
+                if cand.kind == "shot" and tag in cand.tokens:
+                    return cand
         kind_priority = {"shot": 3, "scene": 2, "character": 1}
         best: tuple[int, int, str, _Candidate] | None = None  # (score, kind_rank, folder_name_lex, candidate)
         for cand in candidates:

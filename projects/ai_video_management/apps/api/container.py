@@ -24,12 +24,17 @@ from libs.application.commands.downloads__command import DownloadsCommand
 from libs.application.commands.episode__command import EpisodeCommand
 from libs.application.commands.file__command import FileCommand
 from libs.application.commands.frame__command import FrameCommand
+from libs.application.commands.scene_plate__command import ScenePlateCommand
 from libs.application.commands.media__command import MediaCommand
 from libs.application.commands.novel__command import NovelCommand
+from libs.application.commands.perf_score__command import PerfScoreCommand
+from libs.application.commands.subtitle__command import SubtitleCommand
 from libs.application.commands.voice__command import VoiceCommand
 from libs.application.queries.actor__query import ActorQuery
 from libs.application.queries.casting__query import CastingQuery
 from libs.application.queries.file__query import FileQuery
+from libs.application.queries.perf_check__query import PerfCheckPromptQuery
+from libs.application.queries.shot_regen__query import ShotRegenPromptQuery
 from libs.application.queries.media__query import MediaQuery
 from libs.application.queries.novel__query import NovelQuery
 from libs.application.queries.prompt__query import PromptQuery
@@ -40,6 +45,8 @@ from libs.common.origin import BoundOrigin
 from libs.common.safe_resolve import SafeResolver
 from libs.infrastructure.clients.anthropic__client import AnthropicClient
 from libs.infrastructure.readers.file__reader import FileReader
+from libs.infrastructure.readers.perf_check__reader import PerfCheckPromptReader
+from libs.infrastructure.readers.shot_regen__reader import ShotRegenPromptReader
 from libs.infrastructure.readers.tree__reader import TreeReader
 from libs.infrastructure.writers.actor__writer import ActorPool
 from libs.infrastructure.writers.casting__writer import Casting
@@ -52,8 +59,11 @@ from libs.infrastructure.writers.downloads__writer import DownloadsImporter
 from libs.infrastructure.writers.episode__writer import EpisodeConcatBuilder
 from libs.infrastructure.writers.file__writer import FileWriter
 from libs.infrastructure.writers.frame__writer import FrameExtractor
+from libs.infrastructure.writers.scene_plate__writer import ScenePlateExtractor
+from libs.infrastructure.writers.subtitle__writer import SubtitleBurner
 from libs.infrastructure.writers.media__writer import MediaArchiver, MediaRenamer
 from libs.infrastructure.writers.novel__writer import NovelDownloader
+from libs.infrastructure.writers.perf_score__writer import PerfScorer
 from libs.infrastructure.writers.voice__writer import VoicePool
 
 
@@ -88,6 +98,21 @@ class Container(containers.DeclarativeContainer):
     )
     frame_extractor: providers.Singleton[FrameExtractor] = providers.Singleton(
         FrameExtractor, exposed=exposed_tree, resolver=safe_resolver
+    )
+    scene_plate_extractor: providers.Singleton[ScenePlateExtractor] = providers.Singleton(
+        ScenePlateExtractor, exposed=exposed_tree, resolver=safe_resolver
+    )
+    subtitle_burner: providers.Singleton[SubtitleBurner] = providers.Singleton(
+        SubtitleBurner, exposed=exposed_tree, resolver=safe_resolver
+    )
+    perf_scorer: providers.Singleton[PerfScorer] = providers.Singleton(
+        PerfScorer, exposed=exposed_tree, resolver=safe_resolver
+    )
+    shot_regen_reader: providers.Singleton[ShotRegenPromptReader] = providers.Singleton(
+        ShotRegenPromptReader, exposed=exposed_tree, resolver=safe_resolver
+    )
+    perf_check_reader: providers.Singleton[PerfCheckPromptReader] = providers.Singleton(
+        PerfCheckPromptReader, exposed=exposed_tree, resolver=safe_resolver
     )
     downloads_importer: providers.Singleton[DownloadsImporter] = providers.Singleton(
         DownloadsImporter,
@@ -151,6 +176,21 @@ class Container(containers.DeclarativeContainer):
     )
     frame_command: providers.Factory[FrameCommand] = providers.Factory(
         FrameCommand, extractor=frame_extractor
+    )
+    scene_plate_command: providers.Factory[ScenePlateCommand] = providers.Factory(
+        ScenePlateCommand, extractor=scene_plate_extractor
+    )
+    subtitle_command: providers.Factory[SubtitleCommand] = providers.Factory(
+        SubtitleCommand, burner=subtitle_burner
+    )
+    perf_score_command: providers.Factory[PerfScoreCommand] = providers.Factory(
+        PerfScoreCommand, scorer=perf_scorer
+    )
+    shot_regen_query: providers.Factory[ShotRegenPromptQuery] = providers.Factory(
+        ShotRegenPromptQuery, reader=shot_regen_reader
+    )
+    perf_check_query: providers.Factory[PerfCheckPromptQuery] = providers.Factory(
+        PerfCheckPromptQuery, reader=perf_check_reader
     )
     downloads_command: providers.Factory[DownloadsCommand] = providers.Factory(
         DownloadsCommand, importer=downloads_importer

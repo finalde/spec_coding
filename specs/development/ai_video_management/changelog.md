@@ -3769,3 +3769,40 @@ Auto-updated:
 验证: nvdi .md 残留 CRLF=0; tsc --noEmit 通过。
 
 No conflicts found in: 121 默认 raw 模式 (本轮是按钮可见性的不同 bug); 保存机制; 其他项目内容。
+
+## Follow-up 123 — 2026-06-13 17:03:59
+Source: user_input/follow_ups/123-20260613-170359-perf-check-downloaded-mp4-and-score.md
+Summary: 表演评分面板新增「让 Claude 检查已下载 MP4 并打分」按钮——定位 perf 条目 renders/ 下的成片，0 个/多个报错，恰好 1 个时组装 copy-paste prompt 让 Claude 抽帧打分。
+
+Auto-updated (stage-6 generated outputs under projects/ai_video_management/):
+- libs/infrastructure/readers/perf_check__reader.py — 新增 PerfCheckPromptReader：扫描 `_performances/<情绪>/perf_NNNN/renders/` 直接 .mp4 子文件，0→no_mp4 / >1→multiple_mp4 / 1→组装 prompt（含 ffmpeg 抽帧 + curl POST /api/perf-score who=Claude）。
+- libs/application/queries/perf_check__query.py — 新增 PerfCheckPromptQuery（读侧，跳过 domain 层，与 shot_regen 同构）。
+- apps/api/routes/perf_check__route.py — 新增 POST /api/perf-check-prompt（body {path}）。
+- apps/api/container.py — perf_check_reader Singleton + perf_check_query Factory + 两条 import。
+- apps/api/routes/__init__.py — 注册 _perf_check_router。
+- apps/ui/src/api.ts — perfCheckPrompt() + PerfCheckPromptResult 接口。
+- apps/ui/src/components/PerfScorePanel.tsx — 「🎬 让 Claude 检查 MP4 并打分」按钮 + handler/状态 + 只读 prompt 框 + 📋 复制（浅色主题真实变量）。
+
+验证: python 导入 routes ok（/api/perf-check-prompt 已挂载）; tsc --noEmit 通过; reader 四分支冒烟（0/1/多/非法路径）全部正确。
+
+No conflicts found in (downstream walk): interview/qa.md, findings/, final_specs/spec.md, validation/* — 表演库 / perf-score / shot-regen 子系统本就未进入 spec.md 与 validation 覆盖（这些 UI 微特性历来直接落代码），故无既有章节可作外科补丁；不在本轮 retro-spec 整个表演库（属 wholesale 反模式）。仅持久化 follow-up 草案 + 本 changelog + 代码。
+
+## Follow-up 124 — 2026-06-13 18:38:59
+Source: user_input/follow_ups/124-20260613-183859-actor-prompt-only-mode-and-downloads-import.md
+Summary: 演员生成新增「只生成 prompt（默认）」模式——不调用 Kling，落地 actor 文件夹+sidecar，prompt 以 idNNNN[f|b] tag 打头；新增「📥 导入演员」一键扫 Downloads 按 tag 归位 face/body 图。
+
+Auto-updated (stage-6 generated outputs under projects/ai_video_management/):
+- libs/infrastructure/writers/actor__writer.py — 新增 ActorPool.create_prompts_batch（只写 tagged-prompt sidecar，无 Kling）；_reap_incomplete_folders 跳过含 sidecar 的待导入文件夹；_build_sidecar 加 pending_import；新增 _ACTOR_IMPORT_TAG + _actor_import_tag()。
+- libs/infrastructure/writers/downloads__writer.py — 新增 DownloadsImporter.import_actors（镜像 import_performances，按 idNNNN[f|b] tag 路由，下载图经 _reencode_to_jpeg 转 JPEG 归位 face/body；无 sidecar 回填——body jpg 凭文件名后缀被 _find_actor_body_jpg 发现）+ _collect_actor_folders/_reencode_to_jpeg 辅助。
+- libs/application/commands/actor__command.py — 新增 ActorCommand.create_prompts。
+- libs/application/commands/downloads__command.py — DownloadsCommand.import_drama 增加 drama_name=="_actors" → import_actors 分流（与 _performances 同构；未新增 command 方法/路由）。
+- libs/domain/repositories/actor__repository.py — 协议补 create_prompts_batch。
+- apps/api/routes/actor__route.py — 新增 POST /api/actors/create-prompts。
+- apps/ui/src/api.ts — createActorPrompts() + ActorPromptSlot/CreateActorPromptsResult 类型（导入复用既有 importFromDownloads）。
+- apps/ui/src/components/ActorPoolGenerator.tsx — 模式切换（prompt-only 默认）+ 创建后的 prompt 面板（每 actor id + face/body 复制按钮）。
+- apps/ui/src/components/Sidebar.tsx — actors 根新增「📥 导入演员」常驻按钮（复用 onRenameClick → importFromDownloads("ai_videos/_actors")）。
+- tests/test_actor_prompt_only_roundtrip.py — 新增 create_prompts_batch → import_actors 往返测试 + 未匹配归 _not_matched。
+
+判断点: 导入 tag 用 idNNNN[f|b]（ASCII + 显式 f/b）而非裸 0009，避免与文件名时间戳冲突并区分 face/body（沿用 perf 库 演NNNN tag 的防冲突教训）。
+
+No conflicts found in (downstream walk): interview/qa.md, findings/, final_specs/spec.md, validation/* — 演员池生成器/出图历来直接落代码，未进入 spec.md 与 validation 覆盖，故无既有章节可作外科补丁；不在本轮 retro-spec 整个演员子系统（wholesale 反模式）。仅持久化 follow-up 草案 + 本 changelog + 代码。

@@ -36,7 +36,7 @@ confidence: high
 镜头: `中景 + 缓慢推近 (随诏书前举、念毕「钦此」的语势极缓推近taijian_place_holder), 腰部以上`
 走位: `taijian_place_holder立于厅中长案前、面向南宣「今解除…钦此」; chenguogong_place_holder和chenfan_place_holder跪于taijian_place_holder南侧跪礼区、面向北 (chenguogong_place_holder和chenfan_place_holder位于镜头前景下方, 背影/未露正脸, 本镜聚焦taijian_place_holder)。 厅内系国公府私宅正厅 (非朝堂金殿), 本镜入镜人物仅 taijian_place_holder (正面)、chenguogong_place_holder (前景下方背影: 深紫一品朝服 / 紫金冠 / 银白长须 / 年长体态) 与 chenfan_place_holder (前景下方背影: 玉白锦袍 / 黑色长发披肩 / 白玉冠 / 年轻挺拔); 两道背影衣色与发型迥异、须各按其参考分别渲染, 严禁两道背影雷同或都渲染成 chenfan_place_holder; 别无他人, 不得增添任何其他人物 (无群臣 / 侍从 / 围观人群 / 路人)。`
 动作: `0.0-2.5秒 taijian_place_holder双手将黄绫诏书前举, 朗声"今解除朕与其之婚约"; 2.5-4.5秒 诏书举定, 阴柔中音; 4.5-6.0秒 念毕"钦此", 拂尘轻甩收势`
-台词 / 字幕: `太监(宣):"今解除朕与其之婚约。钦此。"`
+台词: `太监(宣):"今解除朕与其之婚约。钦此。"`
 光线 / 色调: `日间顶左斜光 偏冷金黄, 透高窗格栏漏入; 诏书举处烫金光泽; 主色 沉香木 辅灰青 点朱红 高光暖白`
 节奏: `快切`
 渲染样式: `影视级真人写实 · 电影感 · 超高清高动态范围 · 真实毛孔细节 · 真人皮肤真实质感 · 亚洲俊男靓女 · 三庭五眼东方面孔 · 古装仙侠剧主演级颜值 · 照片级写实感 强化`

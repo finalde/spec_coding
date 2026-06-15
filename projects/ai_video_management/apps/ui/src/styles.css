@@ -657,7 +657,9 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 
 /* Per-file archive + extract buttons (per follow-up 008 / scene-frame-extract) */
 .sibling-media-archive-btn,
-.sibling-media-extract-btn {
+.sibling-media-extract-btn,
+.sibling-media-scaffold-btn,
+.sibling-media-burn-btn {
   align-self: flex-end;
   margin-top: 6px;
   padding: 3px 8px;
@@ -671,12 +673,16 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   letter-spacing: 0.02em;
 }
 .sibling-media-archive-btn:hover:not(:disabled),
-.sibling-media-extract-btn:hover:not(:disabled) {
+.sibling-media-extract-btn:hover:not(:disabled),
+.sibling-media-scaffold-btn:hover:not(:disabled),
+.sibling-media-burn-btn:hover:not(:disabled) {
   color: var(--text);
   background: var(--bg);
 }
 .sibling-media-archive-btn:disabled,
-.sibling-media-extract-btn:disabled {
+.sibling-media-extract-btn:disabled,
+.sibling-media-scaffold-btn:disabled,
+.sibling-media-burn-btn:disabled {
   cursor: progress;
   opacity: 0.55;
 }
@@ -688,7 +694,9 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   margin-top: 6px;
 }
 .sibling-media-actions .sibling-media-archive-btn,
-.sibling-media-actions .sibling-media-extract-btn {
+.sibling-media-actions .sibling-media-extract-btn,
+.sibling-media-actions .sibling-media-scaffold-btn,
+.sibling-media-actions .sibling-media-burn-btn {
   align-self: stretch;
   margin-top: 0;
   text-align: center;
@@ -1612,6 +1620,27 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   object-fit: cover;
   display: block;
 }
+/* Prompt-only actor (no rendered image yet) — placeholder in the tile so the
+   user can still see + select + bulk-delete it via the 图片状态 filter. */
+.actor-tile-pending {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-muted, #888);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--bg-toolbar),
+    var(--bg-toolbar) 10px,
+    rgba(128, 128, 128, 0.08) 10px,
+    rgba(128, 128, 128, 0.08) 20px
+  );
+}
+.actor-tile-pending-icon { font-size: 28px; }
+.actor-tile-pending-text { font-size: 12px; }
 .actor-tile-zoom {
   position: absolute;
   top: 6px;

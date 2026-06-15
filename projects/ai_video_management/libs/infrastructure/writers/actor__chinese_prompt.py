@@ -291,12 +291,24 @@ def _pick(rng: random.Random, pool: tuple[str, ...]) -> str:
     return rng.choice(pool)
 
 
+def _is_character_look(look: str) -> bool:
+    """True for the 5 character-archetype looks that carry a curated feature
+    bias (`_LOOK_FEATURE_BIAS_ZH`): righteous / sinister / seductive / cunning /
+    innocent. For these, unselected features are pinned to the archetype subset
+    — NO wild-card escape to contradictory descriptors (e.g. `look=sinister`
+    must never draw `圆眼, 童真清澈`). The 8 physical-appearance looks carry no
+    bias and keep the prior uniform-with-archetype-body behaviour byte-identical.
+    """
+    return look in _LOOK_FEATURE_BIAS_ZH
+
+
 def _pick_biased(
     rng: random.Random,
     pool: tuple[str, ...],
     bias_indices: tuple[int, ...] | None,
+    wild_prob: float = _BIAS_WILD_PROB,
 ) -> str:
-    if bias_indices and rng.random() >= _BIAS_WILD_PROB:
+    if bias_indices and rng.random() >= wild_prob:
         candidates = [pool[i] for i in bias_indices if 0 <= i < len(pool)]
         if candidates:
             return rng.choice(candidates)
@@ -358,10 +370,17 @@ def _batch_sample_pool(
     bias_indices: tuple[int, ...] | None,
     count: int,
     wild_prob: float = _BIAS_WILD_PROB,
+    strict: bool = False,
 ) -> list[int]:
     """Per follow-up 082: deterministic batch-coordinated sampler that returns
     `count` POOL INDICES with no within-batch repeats unless the pool is
     genuinely exhausted (count > pool_len).
+
+    `strict=True` (character-archetype look): never leave the curated bias
+    subset — no wild-card slots and no fall-through to the full pool. Picks stay
+    unique while the subset lasts, then repeat WITHIN the subset (archetype
+    coherence outranks no-repeat). This is what stops a `look=sinister` batch
+    from leaking `圆眼, 童真清澈` once the small subset is exhausted.
 
     Algorithm: bias-preferred + exhaust-then-fall-through + 074 wild-card
     retained at the batch level (~`wild_prob` of slots free-roam the full
@@ -370,9 +389,16 @@ def _batch_sample_pool(
     `count=1` call seeded with the same `batch_seed` recomputes the same
     list and picks its own `slot_index`.
     """
+    bias_pool = [i for i in (bias_indices or ()) if 0 <= i < pool_len]
+    if strict and bias_pool:
+        batch_rng.shuffle(bias_pool)
+        picks = list(bias_pool[:count])
+        while len(picks) < count:
+            picks.append(batch_rng.choice(bias_pool))
+        batch_rng.shuffle(picks)
+        return picks[:count]
     wild_count = sum(1 for _ in range(count) if batch_rng.random() < wild_prob)
     bias_count = count - wild_count
-    bias_pool = [i for i in (bias_indices or ()) if 0 <= i < pool_len]
     batch_rng.shuffle(bias_pool)
     full_pool = list(range(pool_len))
     batch_rng.shuffle(full_pool)
@@ -417,18 +443,24 @@ def _resolve_batch_picks(
     batch_rng = random.Random(batch_seed)
     look_bias = _LOOK_FEATURE_BIAS_ZH.get(look, {})
     body_bias = look_bias.get("body") or _BODY_BIAS_BY_ARCHETYPE.get(archetype or "")
-    plan: list[tuple[str, tuple[str, ...], tuple[int, ...] | None]] = [
-        ("eyes",    _EYES_ZH,    look_bias.get("eyes")),
-        ("nose",    _NOSE_ZH,    look_bias.get("nose")),
-        ("lips",    _LIPS_ZH,    look_bias.get("lips")),
-        ("contour", _CONTOUR_ZH, look_bias.get("contour")),
-        ("skin",    _SKIN_ZH,    None),  # skin stays unbiased (074 decision)
-        ("body",    _BODY_ZH,    body_bias),
+    # Character-archetype looks pin every biased feature to its curated subset
+    # (no contradictory wild-cards / fall-through). The 8 physical looks have no
+    # look bias → strict has no effect (body keeps its archetype-bias + wild).
+    strict = _is_character_look(look)
+    plan: list[tuple[str, tuple[str, ...], tuple[int, ...] | None, bool]] = [
+        ("eyes",    _EYES_ZH,    look_bias.get("eyes"),    strict),
+        ("nose",    _NOSE_ZH,    look_bias.get("nose"),    strict),
+        ("lips",    _LIPS_ZH,    look_bias.get("lips"),    strict),
+        ("contour", _CONTOUR_ZH, look_bias.get("contour"), strict),
+        ("skin",    _SKIN_ZH,    None,                     False),  # skin stays unbiased (074)
+        ("body",    _BODY_ZH,    body_bias,                strict),
     ]
     picks: dict[str, str] = {}
-    for key, pool, bias in plan:
+    for key, pool, bias, pool_strict in plan:
         filtered_pool, filtered_bias = _filter_pool_by_gender(pool, bias, gender_slug)
-        indices = _batch_sample_pool(batch_rng, len(filtered_pool), filtered_bias, batch_size)
+        indices = _batch_sample_pool(
+            batch_rng, len(filtered_pool), filtered_bias, batch_size, strict=pool_strict
+        )
         picks[key] = filtered_pool[indices[slot_index]]
     return picks
 
@@ -485,6 +517,13 @@ _NEGATIVE_PROMPT_ZH: str = (
     "宽松衣物, T 恤, 长裤, 长裙, 大衣, 厚外套, 多层服装, "
     # glamour drift (was in old _NEGATIVES_ZH 080 addition)
     "故意性感姿势, 媚态, 内衣广告, glamour pose, "
+    # hairstyle lock — enforce the uniform 寸头 buzz cut (user req 2026-06-14);
+    # ban every long / styled / face-obscuring hair variant the positive
+    # 发型 line is trying to suppress.
+    "长发, 披肩发, 中长发, 刘海, 盘发, 编发, 丸子头, 马尾, 卷发, 头发遮挡面部, 头发遮挡额头, "
+    # no scars / disfiguring marks (user req 2026-06-14) — keep faces clean for
+    # fair comparison.
+    "伤疤, 疤痕, 刀疤, 烧伤痕迹, 纹身, "
     # generic image quality fallbacks
     "blurry, low quality, deformed, extra limbs, wrong proportions"
 )
@@ -546,6 +585,17 @@ _WARDROBE_REVEALING_ZH: str = (
     "大腿内外侧线条, 胸型大小, 腰臀比例, 肩宽"
 )
 
+# Hairstyle cue — uniform buzz cut for EVERY actor regardless of gender (user
+# req 2026-06-14). Hair is the single biggest confound when comparing faces in
+# a casting pool: long / styled hair reframes the face shape and hides the
+# hairline + ears. Forcing 寸头 on both men and women makes the comparison
+# purely about the face. Reinforced by the long-hair / bangs bans in
+# `_NEGATIVE_PROMPT_ZH`.
+_HAIRSTYLE_BUZZCUT_ZH: str = (
+    "发型：寸头（均匀贴头皮的极短板寸超短发）, 男女一律相同发型, "
+    "完整露出额头、发际线、耳朵与整张脸轮廓, 头发不遮挡面部, 便于公平比对五官"
+)
+
 
 def _structured_lines(
     rng: random.Random,
@@ -580,12 +630,16 @@ def _structured_lines(
     skin_locked = attrs.get("skin", "")
     body_locked = attrs.get("body", "")
     qi_zhi_locked = attrs.get("qi_zhi", "")
-    eyes_value = eyes_locked if not _is_random(eyes_locked) else _pick_biased(rng, eyes_pool, eyes_bias)
-    nose_value = nose_locked if not _is_random(nose_locked) else _pick_biased(rng, nose_pool, nose_bias)
-    lips_value = lips_locked if not _is_random(lips_locked) else _pick_biased(rng, lips_pool, lips_bias)
-    face_value = face_locked if not _is_random(face_locked) else _pick_biased(rng, contour_pool, contour_bias)
+    # Character-archetype looks pin features to the curated subset (wild_prob=0);
+    # physical looks keep the 25% wild-card. Body uses the same wild_prob so a
+    # character look can't wander, while an archetype-only body keeps its variety.
+    wp = 0.0 if _is_character_look(look) else _BIAS_WILD_PROB
+    eyes_value = eyes_locked if not _is_random(eyes_locked) else _pick_biased(rng, eyes_pool, eyes_bias, wp)
+    nose_value = nose_locked if not _is_random(nose_locked) else _pick_biased(rng, nose_pool, nose_bias, wp)
+    lips_value = lips_locked if not _is_random(lips_locked) else _pick_biased(rng, lips_pool, lips_bias, wp)
+    face_value = face_locked if not _is_random(face_locked) else _pick_biased(rng, contour_pool, contour_bias, wp)
     skin_value = skin_locked if not _is_random(skin_locked) else _pick(rng, skin_pool)
-    body_value = body_locked if not _is_random(body_locked) else _pick_biased(rng, body_pool, body_bias_f)
+    body_value = body_locked if not _is_random(body_locked) else _pick_biased(rng, body_pool, body_bias_f, wp)
     qi_zhi_value = qi_zhi_locked if not _is_random(qi_zhi_locked) else _qi_zhi_for(look, archetype)
     # `look` is intentionally NOT included here — its richer Chinese overlay
     # surfaces once via the 气质 line below (per user's "each aspect mentioned
@@ -598,6 +652,7 @@ def _structured_lines(
         f"鼻子：{nose_value}",
         f"嘴巴：{lips_value}",
         f"脸型：{face_value}",
+        _HAIRSTYLE_BUZZCUT_ZH,
         f"体型：{body_value}",
         f"皮肤：{skin_value}",
         f"气质：{qi_zhi_value}",
@@ -690,6 +745,7 @@ def _build_with_picks_lines(
         f"鼻子：{nose_value}",
         f"嘴巴：{lips_value}",
         f"脸型：{face_value}",
+        _HAIRSTYLE_BUZZCUT_ZH,
         f"体型：{body_value}",
         f"皮肤：{skin_value}",
         f"气质：{qi_zhi_value}",
@@ -722,3 +778,159 @@ def build_body_prompt_with_picks(
     `build_body_prompt`."""
     _rng, body_lines, _gender = _build_with_picks_lines(attrs, seed, archetype, picks)
     return "\n".join([f"{_HEADER_BODY}，{body_lines[0]}", *body_lines[1:]])
+
+
+# ============================================================================
+# Combined single prompt (face + body in one)  (user req 2026-06-14)
+# ============================================================================
+#
+# 用户要求：每个 actor 只出 1 条 prompt，同图同时描述「面部 + 全身」；先按用户
+# 所选 (下拉 / bias) 的五官体型，再在其上叠加「更丰富的面部纹理细节」，且每个
+# actor 的这些细节要独特、随机（seed 决定，可复现）。
+#
+# 结构（在 `_structured_lines` 之上插入一行 `面部细节：…`）：
+#   {合并 header（全身 + 面部清晰）}，{民族性别, 年龄}
+#   风格 / 眼睛 / 鼻子 / 嘴巴 / 脸型 / 体型 / 皮肤 / 气质     ← 跟随用户所选
+#   面部细节：{k 条 unique-random 纹理细节}                   ← 叠加的独特随机细节
+#   {服装（展示全身形体轮廓）}
+
+_HEADER_COMBINED: str = (
+    "全身定妆照（试镜照）, 一张图同时呈现完整全身形体与清晰面部, "
+    "头顶到脚趾完整入画, 面部五官清晰可辨、面部细节高清"
+)
+
+# 面部纹理 / 细节池 — 写实级、性别中立（不含 _FEMALE_ONLY/_MALE_ONLY 标记，
+# 男女皆可用）。每个 actor 随机抽 k 条（seed 决定）形成独一无二的脸。
+_FACE_DETAIL_ZH: tuple[str, ...] = (
+    "鼻翼两侧自然细密毛孔",
+    "眼下卧蚕清晰、细微泪沟",
+    "唇部纵向细纹、唇色自然过渡",
+    "眉峰处几根未修饰的杂乱眉毛、真实感",
+    "颧骨高光处淡淡皮脂油光",
+    "下颌线边缘细小绒毛",
+    "鼻尖细微毛孔与轻微高光",
+    "眼角细纹随表情自然浮现",
+    "左脸颊一颗浅淡小痣",
+    "鼻梁侧淡淡几点雀斑",
+    "睫毛根根分明、长短自然不齐",
+    "虹膜纹理清晰、眼神湿润有高光",
+    "皮肤表面真实细纹与微小瑕疵",
+    "嘴角一侧浅浅梨涡",
+    "额头淡淡抬头纹、自然不夸张",
+    "耳廓轮廓清晰、耳垂厚实",
+    "发际线边缘细碎绒毛、不完美的真实感",
+    "面部左右轻微不对称、真实人脸感",
+    "鼻头与脸颊交界处毛孔粗细不均",
+    "下唇中央一道自然唇珠",
+    "双眼皮褶皱深浅自然",
+    "脸颊一抹自然的健康红晕",
+    "鼻梁微微反光、皮肤真实通透感",
+)
+
+_FACE_DETAIL_COUNT: int = 5
+"""每个 actor 叠加的随机面部细节条数。5 条足够拉开个体差异又不淹没所选特征。"""
+
+
+# 角色原型 → 面部「神态」细节池（可观测的表情/神色细节，非情绪名词；与五官 bias
+# 同向，进一步压实"选了阴邪就阴邪"）。仅 5 个 character-archetype look 有；其余
+# look 走纯写实纹理池，与改动前 byte-identical。用户 req 2026-06-14：补充 prompt
+# 细节时按角色原型添加。
+_LOOK_FACE_DETAIL_ZH: dict[str, tuple[str, ...]] = {
+    "sinister": (
+        "眉宇间凝着一缕挥之不去的阴鸷",
+        "嘴角噙着一抹似笑非笑的冷意",
+        "眼神深处暗藏锋芒、深不见底",
+        "颧骨投下冷硬的阴影",
+        "眼尾微微下压、透出几分狠戾",
+        "下颌线绷紧、隐隐透着压迫感",
+    ),
+    "seductive": (
+        "眼尾上挑、眼波似能勾人",
+        "唇角噙着若有若无的笑意",
+        "眼神慵懒、含着三分春意",
+        "下唇微抿、欲语还休",
+        "目光流转间尽是风情",
+        "微微侧脸、颈线慵懒妩媚",
+    ),
+    "righteous": (
+        "目光坦荡清正、不闪不避",
+        "眉宇间一身浩然正气",
+        "下颌线刚毅、神色端方",
+        "眼神明亮坚定、不怒自威",
+        "唇线端正、神情磊落",
+        "脊背挺直、气度凛然",
+    ),
+    "cunning": (
+        "眼珠微转、似在暗自盘算",
+        "嘴角挂着一抹狡黠的弧度",
+        "眼神精明、藏着算计",
+        "眉梢轻挑、心思难测",
+        "似笑非笑间透出几分算计",
+        "目光斜睨、不动声色",
+    ),
+    "innocent": (
+        "眼神清澈见底、不谙世事",
+        "嘴角天真无邪、漾着浅浅梨涡",
+        "脸颊柔软、带着孩子气的圆润",
+        "目光纯净、像未被世事沾染",
+        "笑意干净、眉眼弯弯",
+        "神情懵懂、惹人怜爱",
+    ),
+}
+
+_LOOK_FACE_DETAIL_COUNT: int = 2
+"""character-archetype look 时，面部细节里先放 N 条原型神态细节，其余补写实纹理。"""
+
+
+def _sample_face_details(
+    rng: random.Random, look: str = "", k: int = _FACE_DETAIL_COUNT
+) -> list[str]:
+    """Draw `k` distinct face details. For a character-archetype `look`, the
+    first `_LOOK_FACE_DETAIL_COUNT` come from that archetype's 神态 pool (so the
+    extra detail reinforces the 原型 instead of diluting it) and the rest from
+    the realism-texture pool. Non-character looks → byte-identical to before
+    (`k` from the texture pool). Deterministic in the rng state."""
+    k = min(k, len(_FACE_DETAIL_ZH))
+    look_pool = _LOOK_FACE_DETAIL_ZH.get(look)
+    if not look_pool:
+        return rng.sample(_FACE_DETAIL_ZH, k)
+    n_look = min(_LOOK_FACE_DETAIL_COUNT, len(look_pool), k)
+    flavored = rng.sample(list(look_pool), n_look)
+    generic = rng.sample(_FACE_DETAIL_ZH, k - n_look)
+    return flavored + generic
+
+
+def _compose_combined(header: str, body_lines: list[str], detail_line: str) -> str:
+    """Assemble: header+desc / selected feature lines / 面部细节 / 服装.
+    `body_lines` = output of `_structured_lines` (desc, 风格, 眼…气, 服装);
+    the 面部细节 line is inserted just before the closing 服装 line so the
+    prompt reads 用户所选 → 叠加细节 → 全身服装."""
+    head = body_lines[:-1]
+    wardrobe = body_lines[-1]
+    return "\n".join([f"{header}，{head[0]}", *head[1:], detail_line, wardrobe])
+
+
+def build_combined_prompt(attrs: dict[str, str], seed: int, archetype: str | None) -> str:
+    """单条「面部 + 全身」合并 prompt（用户 2026-06-14 需求）。
+
+    先按用户所选 / archetype-bias 抽出五官体型（`_structured_lines`），再叠加
+    `_FACE_DETAIL_COUNT` 条 unique-random 面部纹理细节。纯确定性 —
+    `(seed, archetype, attrs)` 复现同一结果。"""
+    rng = random.Random(seed)
+    body_lines = _structured_lines(rng, attrs, archetype)
+    detail_line = "面部细节：" + "，".join(_sample_face_details(rng, attrs.get("look", "")))
+    return _compose_combined(_HEADER_COMBINED, body_lines, detail_line)
+
+
+def build_combined_prompt_with_picks(
+    attrs: dict[str, str],
+    seed: int,
+    archetype: str | None,
+    picks: dict[str, str],
+) -> str:
+    """Batch-coordinated variant of `build_combined_prompt` — five structured
+    pool draws come from `picks` (no within-batch repeats), the 面部细节 line
+    is still per-actor unique-random off `seed`."""
+    rng, body_lines, _gender = _build_with_picks_lines(attrs, seed, archetype, picks)
+    detail_line = "面部细节：" + "，".join(_sample_face_details(rng, attrs.get("look", "")))
+    return _compose_combined(_HEADER_COMBINED, body_lines, detail_line)

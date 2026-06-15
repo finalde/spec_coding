@@ -39,6 +39,9 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
   // Per follow-up 086: filter by whether actor is already assigned to a role.
   // "all" (default) / "assigned" (in any casting.md) / "unassigned" (free).
   const [filterAssigned, setFilterAssigned] = useState<"all" | "assigned" | "unassigned">("all");
+  // 图片状态: all / with (有图) / pending (仅 prompt 无图). Lets the user isolate
+  // prompt-only actors that were generated without an image, to bulk-delete.
+  const [filterImage, setFilterImage] = useState<"all" | "with" | "pending">("all");
   // Zoom lightbox: holds the actor whose full-size image is being viewed.
   // Null = closed. Set via the per-tile 🔍 overlay button.
   const [zoomActor, setZoomActor] = useState<ActorInfo | null>(null);
@@ -49,7 +52,9 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
     setError(null);
     void (async () => {
       try {
-        const result = await listActors();
+        // include pending (prompt-only, no image yet) so they can be
+        // filtered + bulk-deleted from the grid.
+        const result = await listActors(true);
         if (!cancelled) setActors(result.actors);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)));
@@ -69,9 +74,11 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
       if (filterLook !== FILTER_ALL && a.look !== filterLook) return false;
       if (filterAssigned === "assigned" && !a.is_assigned) return false;
       if (filterAssigned === "unassigned" && a.is_assigned) return false;
+      if (filterImage === "with" && a.pending_import) return false;
+      if (filterImage === "pending" && !a.pending_import) return false;
       return true;
     });
-  }, [actors, filterEthnicity, filterGender, filterAgeRange, filterLook, filterAssigned]);
+  }, [actors, filterEthnicity, filterGender, filterAgeRange, filterLook, filterAssigned, filterImage]);
 
   const totalPages = useMemo(() => {
     if (filteredActors.length === 0) return 1;
@@ -81,7 +88,7 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
   // Reset page when filters change so user starts from page 1 of filtered set.
   useEffect(() => {
     setPage(0);
-  }, [filterEthnicity, filterGender, filterAgeRange, filterLook, filterAssigned]);
+  }, [filterEthnicity, filterGender, filterAgeRange, filterLook, filterAssigned, filterImage]);
 
   useEffect(() => {
     if (page >= totalPages) setPage(Math.max(0, totalPages - 1));
@@ -255,6 +262,17 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
               <option value="unassigned">⚪ 未分配</option>
             </select>
           </label>
+          <label>
+            图片状态
+            <select
+              value={filterImage}
+              onChange={(e) => setFilterImage(e.target.value as "all" | "with" | "pending")}
+            >
+              <option value="all">全部</option>
+              <option value="with">🖼 有图</option>
+              <option value="pending">📝 仅 prompt 无图</option>
+            </select>
+          </label>
         </div>
         {totalPages > 1 ? (
           <div className="actor-grid-pagination" role="navigation" aria-label="演员池分页">
@@ -283,32 +301,41 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
                 <span className="actor-grid-checkbox" aria-hidden="true">{selected ? "✓" : "○"}</span>
               ) : null}
               <div className="actor-tile-image-wrapper">
-                <img
-                  className="actor-tile-image"
-                  src={mediaUrl(actor.image_path, actor.mtime)}
-                  alt={actor.id}
-                  loading="lazy"
-                />
-                <span
-                  className="actor-tile-zoom"
-                  role="button"
-                  tabIndex={0}
-                  title="放大查看"
-                  aria-label={`放大查看 ${actor.id}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setZoomActor(actor);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setZoomActor(actor);
-                    }
-                  }}
-                >
-                  🔍
-                </span>
+                {actor.pending_import || !actor.image_path ? (
+                  <div className="actor-tile-pending" aria-label={`${actor.id} 仅 prompt，无图片`}>
+                    <span className="actor-tile-pending-icon" aria-hidden="true">📝</span>
+                    <span className="actor-tile-pending-text">仅 prompt · 无图</span>
+                  </div>
+                ) : (
+                  <>
+                    <img
+                      className="actor-tile-image"
+                      src={mediaUrl(actor.image_path, actor.mtime)}
+                      alt={actor.id}
+                      loading="lazy"
+                    />
+                    <span
+                      className="actor-tile-zoom"
+                      role="button"
+                      tabIndex={0}
+                      title="放大查看"
+                      aria-label={`放大查看 ${actor.id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setZoomActor(actor);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setZoomActor(actor);
+                        }
+                      }}
+                    >
+                      🔍
+                    </span>
+                  </>
+                )}
               </div>
               <div className="actor-tile-meta">
                 <div className="actor-tile-id">

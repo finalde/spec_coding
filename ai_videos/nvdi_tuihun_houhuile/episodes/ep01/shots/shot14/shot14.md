@@ -36,7 +36,7 @@ confidence: high
 镜头: `全景 + 跟镜, 机位跟随taijian_place_holder转身朝厅门退去, 末尾微落幅留chenguogong_place_holder和chenfan_place_holder于跪礼区`
 走位: `taijian_place_holder自厅中长案前转身、朝南向厅门方向退去 (由面南转为背对镜头走向南门); chenguogong_place_holder和chenfan_place_holder仍跪于跪礼区 (taijian_place_holder行进路线之南侧)、面向北。 厅内系国公府私宅正厅 (非朝堂金殿), 本镜入镜人物仅 taijian_place_holder (转身背对镜头退场)、chenfan_place_holder 与 chenguogong_place_holder (跪、面向北); 别无他人, 不得增添任何其他人物 (无群臣 / 侍从 / 围观人群 / 路人)。`
 动作: `0.0-1.5秒 taijian_place_holder颔首; 1.5-3.0秒 拂尘一甩转身; 3.0-5.0秒 朝南向朱漆双扇木门方向退去, chenguogong_place_holder和chenfan_place_holder留跪礼区`
-台词 / 字幕: `(脚步声 + 拂尘声, 无台词) · 在画人物口型: 全程闭口、嘴唇不动、无任何说话口型 (默剧——纯面部表情与肢体动作演出, 不开口/不念词/不出声; 严禁自动配音或对口型)`
+台词: `(脚步声 + 拂尘声, 无台词) · 在画人物口型: 全程闭口、嘴唇不动、无任何说话口型 (默剧——纯面部表情与肢体动作演出, 不开口/不念词/不出声; 严禁自动配音或对口型)`
 光线 / 色调: `日间顶左斜光 偏冷金黄, 透高窗格栏漏入落地砖方块光斑; 主色 沉香木 辅灰青 点朱红 高光暖白`
 节奏: `快切`
 渲染样式: `影视级真人写实 · 电影感 · 超高清高动态范围 · 真实毛孔细节 · 真人皮肤真实质感 · 亚洲俊男靓女 · 三庭五眼东方面孔 · 古装仙侠剧主演级颜值 · 照片级写实感 强化`

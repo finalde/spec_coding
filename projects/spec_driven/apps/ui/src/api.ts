@@ -6,6 +6,12 @@ import {
   type ProjectDeleteResult,
   type PromoteRequest,
   type PromoteResult,
+  type PromptLabCreateRequest,
+  type PromptLabDeleteResult,
+  type PromptLabExecuteResult,
+  type PromptLabFileResult,
+  type PromptLabOverview,
+  type PromptLabRun,
   type RegenRequest,
   type RegenResult,
   type Stage,
@@ -113,6 +119,61 @@ export async function deletePromote(req: UnpromoteRequest): Promise<PromoteResul
     body: JSON.stringify(req),
   });
   return readJson<PromoteResult>(response);
+}
+
+/** Per follow-up 016: Prompt Lab overview + CRUD. */
+export async function fetchPromptLab(): Promise<PromptLabOverview> {
+  const response = await fetch("/api/prompt-lab", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<PromptLabOverview>(response);
+}
+
+export async function createPromptLabFile(
+  req: PromptLabCreateRequest,
+): Promise<PromptLabFileResult> {
+  const response = await fetch("/api/prompt-lab/file", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<PromptLabFileResult>(response);
+}
+
+export async function deletePromptLabFile(path: string): Promise<PromptLabDeleteResult> {
+  const response = await fetch("/api/prompt-lab/file", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<PromptLabDeleteResult>(response);
+}
+
+export async function executePromptLab(path: string): Promise<PromptLabExecuteResult> {
+  const response = await fetch("/api/prompt-lab/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<PromptLabExecuteResult>(response);
+}
+
+export async function getPromptLabRun(path: string): Promise<PromptLabRun> {
+  const response = await fetch(`/api/prompt-lab/run?path=${encodeURIComponent(path)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<PromptLabRun>(response);
+}
+
+export async function stopPromptLab(path: string): Promise<{ state: string }> {
+  const response = await fetch("/api/prompt-lab/stop", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<{ state: string }>(response);
 }
 
 /** Per follow-up 010: delete an entire ai_video project (specs trail + ai_videos output). */

@@ -48,7 +48,6 @@ from libs.common.safe_resolve import SafeResolver
 from libs.domain.errors.actor__error import (
     ActorAlreadyDeletedError,
     ActorDeleteFailedError,
-    ActorDeleteTargetExistsError,
     ActorGenerationDirMissingError,
     ActorNotFoundError,
     InvalidActorAttributeError,
@@ -116,6 +115,22 @@ _ACTOR_DIR_RE = re.compile(r"^actor_(\d{4,})$")
 _ACTOR_ID_RE = re.compile(r"^actor_\d{4,}$")
 _NEW_FILENAME_RE = re.compile(r"^[^/\\]+__[^/\\]+__[^/\\]+\.jpg$")
 _BODY_SUFFIX_RE = re.compile(r"__body\.[a-zA-Z0-9]+$")
+
+# Per follow-up 124: prompt-only mode tags each prompt with the actor's id so
+# the file the user downloads from Kling/Seedance (named after the prompt's
+# leading chars, same mechanism the perf library relies on, follow-up 119) can
+# be routed back to the right `actor_NNNN/` folder. The tag leads with an ASCII
+# `id` marker + 4+ digits + an explicit face/body letter (`f`/`b`): a bare
+# `0009` would collide with timestamps elsewhere in a download filename — the
+# perf library uses a CJK `演` marker for exactly this reason — and the `f`/`b`
+# letter keeps the two shots of one actor disjoint.
+_ACTOR_IMPORT_TAG = re.compile(r"id(\d{4,})([fb])", re.IGNORECASE)
+
+
+def _actor_import_tag(actor_id_num: int, is_body: bool) -> str:
+    """`id{NNNN}{f|b}` routing prefix for a prompt-only actor's face/body
+    prompt (follow-up 124). Padded to 4 digits to match `actor_{NNNN}`."""
+    return f"id{actor_id_num:04d}{'b' if is_body else 'f'}"
 
 
 def _attrs_to_filename(attrs: "ActorAttrs") -> str:
@@ -824,6 +839,10 @@ class ActorInfo:
     image_path: str
     mtime: float
     archetype: str | None = None
+    # Prompt-only actor: has a sidecar .md but no rendered jpg yet (user has
+    # not generated/imported the image). image_path is "" for these. Only
+    # surfaced when list_actors(include_pending=True) is called.
+    pending_import: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -831,6 +850,7 @@ class ActorInfo:
             "image_path": self.image_path,
             "mtime": self.mtime,
             "archetype": self.archetype,
+            "pending_import": self.pending_import,
             **asdict(self.attrs),
         }
 
@@ -1684,7 +1704,9 @@ class ActorPool:
                         body_path = None
                 md_path.write_text(
                     self._build_sidecar(
-                        actor_id, attrs, face_prompt, body_prompt, seed, resolution,
+                        actor_id, attrs,
+                        self._build_combined_prompt(attrs, seed, effective_archetype),
+                        seed, resolution,
                         body_filename=body_path.name if body_path is not None else None,
                         archetype=effective_archetype,
                     ),
@@ -1706,6 +1728,103 @@ class ActorPool:
                     "seed": seed,
                     "resolution": resolution,
                     "archetype": archetype,
+                }
+            )
+        return result
+
+    def create_prompts_batch(
+        self,
+        attrs: ActorAttrs,
+        count: int,
+        resolution: str = DEFAULT_RESOLUTION,
+        seeds: list[int] | None = None,
+        archetype: str | None = None,
+        batch_seed: int | None = None,
+        batch_size: int | None = None,
+        slot_index: int | None = None,
+    ) -> GenerateResult:
+        """Per follow-up 124: prompt-only generation — allocate the actor
+        folder + write its sidecar `.md`, but make NO Kling call and write NO
+        jpg. Each slot's face / body prompt is prefixed with its
+        `id{NNNN}{f|b}` import tag so the file the user downloads after pasting
+        the prompt into Kling/Seedance carries the actor id and can be routed
+        back by `DownloadsImporter.import_actors`. The prompt body is otherwise
+        byte-equal to what `generate_batch` would build for the same
+        (attrs, seed), so the user reviews and ships the exact same prompt.
+
+        The resulting folder has a sidecar but no jpg; `_reap_incomplete_folders`
+        skips sidecar-bearing folders so these pending-import actors survive
+        until their image is imported.
+        """
+        self._validate_attrs(attrs)
+        if not MIN_BATCH_COUNT <= count <= MAX_BATCH_COUNT:
+            raise InvalidActorAttributeError(
+                f"count must be between {MIN_BATCH_COUNT} and {MAX_BATCH_COUNT}, got {count}"
+            )
+        if resolution not in RESOLUTION_OPTIONS:
+            raise InvalidActorAttributeError(
+                f"resolution={resolution!r} not in {sorted(RESOLUTION_OPTIONS)}"
+            )
+        if seeds is not None:
+            if not isinstance(seeds, list) or len(seeds) != count:
+                raise InvalidActorAttributeError(
+                    f"seeds must be a list of length {count}, got {seeds!r}"
+                )
+            for s in seeds:
+                if not isinstance(s, int):
+                    raise InvalidActorAttributeError(f"seeds must be all int, got {seeds!r}")
+        actors_dir = self.actors_dir()
+        try:
+            actors_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ActorGenerationDirMissingError(str(exc))
+
+        effective_archetype = archetype or _classify_actor_attrs(attrs)
+        result = GenerateResult()
+        base_seed = int(time.time() * 1000)
+        self._reap_incomplete_folders(actors_dir)
+        for i in range(count):
+            seed = seeds[i] if seeds is not None else base_seed + i
+            try:
+                actor_id, actor_folder = self._allocate_actor_id(actors_dir)
+            except ActorGenerationDirMissingError as exc:
+                result.errors.append({"requested_id": f"slot_{i}", "message": f"alloc_failed: {exc}"})
+                continue
+            id_num = int(actor_id.rsplit("_", 1)[1])
+            effective_slot = slot_index if (slot_index is not None and count == 1) else (i if batch_size is not None else None)
+            combined_prompt = self._combined_for_slot(
+                attrs, seed, effective_archetype,
+                batch_seed=batch_seed,
+                batch_size=batch_size,
+                slot_index=effective_slot,
+            )
+            tagged_combined = f"{_actor_import_tag(id_num, is_body=False)}, {combined_prompt}"
+            md_path = actor_folder / f"{actor_id}.md"
+            try:
+                md_path.write_text(
+                    self._build_sidecar(
+                        actor_id, attrs, tagged_combined, seed, resolution,
+                        body_filename=None,
+                        archetype=effective_archetype,
+                        pending_import=True,
+                    ),
+                    encoding="utf-8",
+                )
+            except OSError as exc:
+                result.errors.append({"requested_id": actor_id, "message": f"write_failed: {exc}"})
+                self._cleanup_empty_folder(actor_folder)
+                continue
+            result.generated.append(
+                {
+                    "id": actor_id,
+                    "image_path": None,
+                    "body_path": None,
+                    "attrs": asdict(attrs),
+                    "seed": seed,
+                    "resolution": resolution,
+                    "archetype": effective_archetype,
+                    "pending_import": True,
+                    "prompt": tagged_combined,
                 }
             )
         return result
@@ -1839,7 +1958,9 @@ class ActorPool:
                         body_path = None
                 md_path.write_text(
                     self._build_sidecar(
-                        actor_id, attrs, face_prompt, body_prompt, seed, resolution,
+                        actor_id, attrs,
+                        self._build_combined_prompt(attrs, seed, spec.slug),
+                        seed, resolution,
                         body_filename=body_path.name if body_path is not None else None,
                         archetype=spec.slug,
                     ),
@@ -1956,7 +2077,11 @@ class ActorPool:
         new_row = f"| archetype | {slug} |"
         return "\n".join(lines[: last_row_idx + 1] + [new_row] + lines[last_row_idx + 1 :])
 
-    def list_actors(self) -> list[ActorInfo]:
+    def list_actors(self, include_pending: bool = False) -> list[ActorInfo]:
+        """List image-bearing actors. When `include_pending=True`, also include
+        prompt-only actors (sidecar .md present but no rendered jpg yet) so the
+        UI can surface + bulk-delete them; those rows carry `pending_import=True`
+        and `image_path=""`. Default stays image-only (backward compatible)."""
         actors_dir = self.actors_dir()
         if not actors_dir.is_dir():
             return []
@@ -1971,13 +2096,23 @@ class ActorPool:
             md_path = child / f"{actor_id}.md"
             if not md_path.is_file():
                 continue
-            jpg_path = _find_actor_jpg(child)
-            if jpg_path is None:
-                continue
             parsed = self._parse_sidecar_full(md_path)
             if parsed is None:
                 continue
             attrs, archetype = parsed
+            jpg_path = _find_actor_jpg(child)
+            if jpg_path is None:
+                if not include_pending:
+                    continue
+                try:
+                    mtime = md_path.stat().st_mtime
+                except OSError:
+                    continue
+                out.append(ActorInfo(
+                    id=actor_id, attrs=attrs, image_path="",
+                    mtime=mtime, archetype=archetype, pending_import=True,
+                ))
+                continue
             try:
                 mtime = jpg_path.stat().st_mtime
             except OSError:
@@ -2080,15 +2215,26 @@ class ActorPool:
         folder granularity. Atomic Path.rename. Casting cleanup is the
         caller's responsibility (the endpoint runs Casting.unassign_actor_everywhere
         before this rename so dangling references never persist).
+
+        Trash-collision handling: actor ids are reused after a delete →
+        regenerate cycle (`_next_actor_id_num` scans only the live `_actors/`
+        dir, not the trash), so a previously-deleted `actor_NNNN` may already
+        occupy the recycle-bin slot. A recycle bin must never refuse a delete
+        because it already holds a same-named entry — when the slot is taken we
+        disambiguate the target with a `__N` suffix instead of raising. The old
+        copy is preserved untouched.
         """
         if not _ACTOR_ID_RE.match(actor_id):
             raise InvalidActorAttributeError(f"actor_id={actor_id!r} does not match shape")
         src = self.actors_dir() / actor_id
         if not src.is_dir() or src.is_symlink():
             raise ActorNotFoundError(f"actor folder not found: {actor_id}")
-        target = self._resolver.root / "ai_videos" / "_deleted" / ACTORS_DIR_NAME / actor_id
-        if target.exists():
-            raise ActorDeleteTargetExistsError(self._rel(target))
+        deleted_dir = self._resolver.root / "ai_videos" / "_deleted" / ACTORS_DIR_NAME
+        target = deleted_dir / actor_id
+        suffix = 2
+        while target.exists():
+            target = deleted_dir / f"{actor_id}__{suffix}"
+            suffix += 1
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -2182,6 +2328,42 @@ class ActorPool:
         from libs.infrastructure.writers.actor__chinese_prompt import build_body_prompt
         return build_body_prompt(asdict(attrs), seed, archetype)
 
+    @staticmethod
+    def _build_combined_prompt(attrs: ActorAttrs, seed: int, archetype: str | None) -> str:
+        """User req 2026-06-14: single combined「面部+全身」prompt per actor.
+        Delegates to `actor__chinese_prompt.build_combined_prompt` (selected
+        features first, then per-actor unique-random face-texture details)."""
+        from libs.infrastructure.writers.actor__chinese_prompt import build_combined_prompt
+        return build_combined_prompt(asdict(attrs), seed, archetype)
+
+    @staticmethod
+    def _combined_for_slot(
+        attrs: ActorAttrs,
+        seed: int,
+        archetype: str | None,
+        batch_seed: int | None,
+        batch_size: int | None,
+        slot_index: int | None,
+    ) -> str:
+        """Batch-coordinated combined prompt when all three batch fields are
+        supplied (no within-batch structured-pool repeats), else per-slot.
+        Mirrors `_build_prompts_for_slot` dispatch."""
+        if batch_seed is not None and batch_size is not None and slot_index is not None:
+            from libs.infrastructure.writers.actor__chinese_prompt import (
+                _resolve_batch_picks,
+                build_combined_prompt_with_picks,
+            )
+            picks = _resolve_batch_picks(
+                batch_seed=batch_seed,
+                batch_size=batch_size,
+                slot_index=slot_index,
+                look=attrs.look,
+                archetype=archetype,
+                gender_slug=attrs.gender,
+            )
+            return build_combined_prompt_with_picks(asdict(attrs), seed, archetype, picks)
+        return ActorPool._build_combined_prompt(attrs, seed, archetype)
+
     def _allocate_actor_id(self, actors_dir: Path) -> tuple[str, Path]:
         """Atomically claim the next free actor_NNNN id via mkdir(exist_ok=False).
 
@@ -2242,6 +2424,12 @@ class ActorPool:
                 continue
             if _find_actor_jpg(entry) is not None:
                 continue
+            # Per follow-up 124: a folder with a sidecar `.md` but no jpg is a
+            # prompt-only actor awaiting its imported image — NOT a killed-batch
+            # leftover (those die during the Kling wait, before any sidecar is
+            # written). Never reap it.
+            if (entry / f"{entry.name}.md").is_file():
+                continue
             try:
                 if entry.stat().st_mtime > cutoff:
                     continue  # in-flight (or very recently allocated) — skip
@@ -2286,29 +2474,46 @@ class ActorPool:
     def _build_sidecar(
         actor_id: str,
         attrs: ActorAttrs,
-        face_prompt: str,
-        body_prompt: str,
+        prompt: str,
         seed: int,
         resolution: str = DEFAULT_RESOLUTION,
         body_filename: str | None = None,
         archetype: str | None = None,
+        pending_import: bool = False,
     ) -> str:
-        """Per follow-up 052: sidecar md now records BOTH the face prompt and
-        the body prompt + the body image filename (when body gen succeeded).
+        """Sidecar md records ONE combined prompt (face + body in a single
+        image) — user req 2026-06-14 (was two blocks: face shot + body shot).
+        The single `## 生成 prompt` block is what the user copies into Kling
+        to generate one image showing both the detailed face and the full body.
+
         Per follow-up 053: optional `archetype` slug recorded in the attr
-        table for diverse-mode generated actors (and back-filled into legacy
-        sidecars by `migrate_archetypes()`).
-        Face / body share the same seed + variance — both prompts let users
-        reproduce either image independently."""
+        table for diverse-mode generated actors (back-filled by
+        `migrate_archetypes()`).
+        Per follow-up 124 (updated): `pending_import=True` marks a prompt-only
+        actor (no Kling call yet) — `body_image` reads "待导入" and a hint block
+        explains the copy → generate → 一键导入 round-trip. The single prompt
+        carries its `id{NNNN}f` import tag so the downloaded image routes back."""
         notes_display = attrs.notes if attrs.notes else "—"
-        body_image_display = body_filename if body_filename else "— (body gen failed)"
+        if pending_import:
+            body_image_display = "— (待导入)"
+        else:
+            body_image_display = body_filename if body_filename else "— (单图含全身)"
         archetype_row = f"| archetype | {archetype} |\n" if archetype else ""
+        pending_note = (
+            "**仅生成 prompt（待导入）**：把下面这条 prompt 复制到 Kling 或 "
+            "Seedance 出图（同图含面部+全身），下载后用「📥 导入演员」一键归位。"
+            "下载文件名会带 "
+            f"`{_actor_import_tag(int(actor_id.rsplit('_', 1)[1]), is_body=False)}` "
+            "前缀，导入据此路由。\n\n"
+            if pending_import else ""
+        )
         return (
             f"# {actor_id}\n"
             f"\n"
-            f"AI-generated actor face + body for casting (Kling text-to-image,\n"
-            f"follow-up 025 + 029 + 052 + 053).\n"
+            f"AI-generated actor (face + body in one image) for casting\n"
+            f"(Kling text-to-image, single-prompt per actor).\n"
             f"\n"
+            f"{pending_note}"
             f"| 字段 | 值 |\n"
             f"|---|---|\n"
             f"| ethnicity | {attrs.ethnicity} |\n"
@@ -2322,16 +2527,10 @@ class ActorPool:
             f"| body_resolution | normal |\n"
             f"{archetype_row}"
             f"\n"
-            f"## 生成 prompt (face shot)\n"
+            f"## 生成 prompt\n"
             f"\n"
             f"```\n"
-            f"{face_prompt}\n"
-            f"```\n"
-            f"\n"
-            f"## 生成 prompt (body shot)\n"
-            f"\n"
-            f"```\n"
-            f"{body_prompt}\n"
+            f"{prompt}\n"
             f"```\n"
         )
 

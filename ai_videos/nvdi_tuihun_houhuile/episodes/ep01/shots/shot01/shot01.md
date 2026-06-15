@@ -36,7 +36,7 @@ confidence: high
 镜头: `中近景 + 极缓慢推近, 随taijian_place_holder朗声起手宣旨的语势从中景极缓推向其面部 (强化立威压迫); taijian_place_holder居画面正中、正面朝阶下跪礼方向 (二人不入画, 仅以taijian_place_holder朝向暗示其在画外); 背景正厅中轴对称端正、横平竖直不偏斜`
 走位: `taijian_place_holder立于厅中沉香木长案前、居中正位, 面向南 (朝厅门方向、即画外南侧跪礼的chenguogong_place_holder和chenfan_place_holder); 背靠北墙长案。chenguogong_place_holder和chenfan_place_holder位于taijian_place_holder正南方画外 (本镜不入画)。 厅内系国公府私宅正厅 (非朝堂金殿), 本镜入镜人物仅 taijian_place_holder (正面、唯一入镜); 别无他人, 不得增添任何其他人物 (无群臣 / 侍从 / 围观人群 / 路人)。`
 动作: `0.0-2.0秒 taijian_place_holder居正厅长案前居中站定, 右手持拂尘垂于身侧, 左手托已摊开的黄绫诏书平举胸前 (诏书自始至终已展开, 无展卷动作), 身姿端正; 2.0-5.0秒 taijian_place_holder目光平视朝画面外阶下跪礼的chenguogong_place_holder和chenfan_place_holder方向, 朗声起手宣旨 (chenguogong_place_holder和chenfan_place_holder不入画), 机位固定, 背景正厅中轴对称端正不偏`
-台词 / 字幕: `太监(朗声宣旨, 阴柔尖细中音):"奉天承运, 女帝诏曰:"`
+台词: `太监(朗声宣旨, 阴柔尖细中音):"奉天承运, 女帝诏曰:"`
 光线 / 色调: `日间顶左斜光 偏冷金黄, 透高窗格栏漏入落地砖方块光斑; 诏书跪礼区光位最亮显朱砂颗粒与烫金光泽; 主色 沉香木 辅灰青 点朱红 高光暖白`
 节奏: `快切`
 渲染样式: `影视级真人写实 · 电影感 · 超高清高动态范围 · 真实毛孔细节 · 真人皮肤真实质感 · 亚洲俊男靓女 · 三庭五眼东方面孔 · 古装仙侠剧主演级颜值 · 照片级写实感 强化`

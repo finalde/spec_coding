@@ -99,9 +99,88 @@ export interface RegenRequest {
   autonomous: boolean;
 }
 
-/** Per follow-up 010: parent-level project delete (ai_video task_type only). */
+/** Per follow-up 016: Prompt Lab overview + CRUD. */
+export interface PromptLabLink {
+  label: string;
+  url: string;
+}
+
+export interface PromptLabEntry {
+  path: string;
+  name: string;
+  title: string;
+  meta: string;
+  source: PromptLabLink | null;
+  expected: PromptLabLink | null;
+  prompt: string;
+}
+
+export interface PromptLabCategory {
+  name: string;
+  entries: PromptLabEntry[];
+}
+
+export interface PromptLabOverview {
+  categories: PromptLabCategory[];
+}
+
+export interface PromptLabCreateRequest {
+  category: string;
+  filename: string;
+  content: string;
+}
+
+export interface PromptLabFileResult {
+  path: string;
+  bytes: number;
+  mtime: number;
+  mtime_http: string;
+}
+
+export interface PromptLabDeleteResult {
+  path: string;
+  deleted: boolean;
+}
+
+export type PromptLabRunState =
+  | "idle"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "stopped";
+
+export interface PromptLabDecision {
+  ts?: string;
+  question?: string;
+  decision?: string;
+  why?: string;
+}
+
+export interface PromptLabRunFile {
+  name: string;
+  bytes: number;
+}
+
+export interface PromptLabRun {
+  state: PromptLabRunState;
+  run_id: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  exit_code: number | null;
+  output: string;
+  decisions: PromptLabDecision[];
+  files: PromptLabRunFile[];
+}
+
+export interface PromptLabExecuteResult {
+  state: string;
+  run_id: string;
+  path: string;
+}
+
+/** Per follow-up 010: parent-level project delete. Widened to development by follow-up 011. */
 export interface ProjectDeleteRequest {
-  project_type: "ai_video";
+  project_type: "ai_video" | "development";
   project_name: string;
 }
 

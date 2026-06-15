@@ -89,6 +89,11 @@ class ExposedTree:
                 if seg in _EXCLUDED_DIRS:
                     return False
             return True
+        if first == "prompt_lab":
+            for seg in parts:
+                if seg in _EXCLUDED_DIRS:
+                    return False
+            return True
         return False
 
     def excluded_dirs(self) -> frozenset[str]:

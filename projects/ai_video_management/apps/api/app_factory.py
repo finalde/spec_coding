@@ -79,6 +79,12 @@ from libs.domain.errors.frame__error import (
     NotVideoError,
     VideoNotFoundError,
 )
+from libs.domain.errors.subtitle__error import (
+    BurnFailedError,
+    EmptySubtitlesError,
+    SubtitleAlreadyExistsError,
+    SubtitleFileMissingError,
+)
 from libs.domain.errors.media__error import (
     AlreadyArchivedError,
     AlreadyDeletedError,
@@ -168,6 +174,11 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     (VideoNotFoundError, 404, "not_found", False),
     (FfmpegMissingError, 500, "ffmpeg_missing", True),
     (FrameExtractFailedError, 500, "extract_failed", True),
+    # subtitle
+    (SubtitleFileMissingError, 404, "subtitle_file_missing", True),
+    (EmptySubtitlesError, 400, "empty_subtitles", True),
+    (SubtitleAlreadyExistsError, 409, "subtitles_already_exist", True),
+    (BurnFailedError, 500, "burn_failed", True),
     # media
     (InvalidMediaPathError, 400, "invalid_path", False),
     (NotMediaError, 400, "extension_not_allowed", False),

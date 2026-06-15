@@ -12,14 +12,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ATTR_LABELS_ZH,
   ATTR_OPTIONS,
+  createActorPrompts,
   generateActors,
   previewPrompts,
   RANDOM_SENTINEL,
   rollRandomAttr,
+  type ActorPromptSlot,
   type PromptPreviewResult,
   type PromptPreviewSlot,
 } from "../api";
 import { ApiError } from "../types";
+
+/** follow-up 124: prompt-only (default) creates the actor folders + id-tagged
+ * prompts WITHOUT any Kling call — the user renders externally on Kling/Seedance
+ * and re-imports via 📥 导入演员. "kling" is the legacy direct-fire flow. */
+type GenMode = "prompt_only" | "kling";
 
 export interface ActorPoolGeneratorProps {
   open: boolean;
@@ -77,10 +84,16 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
     if (intN > MAX_BATCH_COUNT) return MAX_BATCH_COUNT;
     return intN;
   })();
+  // Per follow-up 124: prompt-only is the default — most actors are rendered
+  // externally on Kling/Seedance and re-imported, so direct Kling fire is opt-in.
+  const [mode, setMode] = useState<GenMode>("prompt_only");
   const [busy, setBusy] = useState<boolean>(false);
   const [previewBusy, setPreviewBusy] = useState<boolean>(false);
   const [preview, setPreview] = useState<PromptPreviewResult | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // Per follow-up 124: results of a prompt-only create — copyable id-tagged
+  // face/body prompts plus the allocated actor ids.
+  const [promptResults, setPromptResults] = useState<ActorPromptSlot[] | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const cancelledRef = useRef<boolean>(false);
@@ -97,6 +110,7 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
       setPreview(null);
       setPreviewError(null);
       setPreviewBusy(false);
+      setPromptResults(null);
       cancelledRef.current = false;
     }
   }, [open]);
@@ -201,6 +215,89 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
       setPreviewBusy(false);
     }
   }, [ageRange, body, busy, count, ethnicity, eyes, face, gender, lips, look, nose, notes, previewBusy, qiZhi, resolution, skin]);
+
+  const onCreatePrompts = useCallback(async () => {
+    if (busy || previewBusy) return;
+    setPreviewBusy(true);
+    setPreviewError(null);
+    setToast(null);
+    setPromptResults(null);
+    try {
+      // Same per-slot rolling as onPreview (RANDOM_SENTINEL → per-slot roll,
+      // explicit seeds + batch coordination) — the only difference is the
+      // backend ALLOCATES the actor folder + writes an id-tagged sidecar
+      // instead of doing a dry run.
+      const baseSeed = Date.now();
+      const batchSeed = baseSeed;
+      const batchSize = count;
+      const slotPlans = Array.from({ length: count }, (_, i) => ({
+        seed: baseSeed + i,
+        ethnicity: ethnicity === RANDOM_SENTINEL ? rollRandomAttr("ethnicity") : ethnicity,
+        gender: gender === RANDOM_SENTINEL ? rollRandomAttr("gender") : gender,
+        age_range: ageRange === RANDOM_SENTINEL ? rollRandomAttr("age_range") : ageRange,
+        look: look === RANDOM_SENTINEL ? rollRandomAttr("look") : look,
+        eyes: eyes === RANDOM_SENTINEL ? "" : eyes,
+        nose: nose === RANDOM_SENTINEL ? "" : nose,
+        lips: lips === RANDOM_SENTINEL ? "" : lips,
+        face: face === RANDOM_SENTINEL ? "" : face,
+        skin: skin === RANDOM_SENTINEL ? "" : skin,
+        body: body === RANDOM_SENTINEL ? "" : body,
+        qi_zhi: qiZhi.length === 0 ? "" : qiZhi[Math.floor(Math.random() * qiZhi.length)],
+      }));
+      const responses = await Promise.all(
+        slotPlans.map((plan, i) =>
+          createActorPrompts({
+            count: 1,
+            ethnicity: plan.ethnicity,
+            gender: plan.gender,
+            age_range: plan.age_range,
+            look: plan.look,
+            notes,
+            resolution,
+            seeds: [plan.seed],
+            batch_seed: batchSeed,
+            batch_size: batchSize,
+            slot_index: i,
+            eyes: plan.eyes,
+            nose: plan.nose,
+            lips: plan.lips,
+            face: plan.face,
+            skin: plan.skin,
+            body: plan.body,
+            qi_zhi: plan.qi_zhi,
+          }),
+        ),
+      );
+      const slots: ActorPromptSlot[] = [];
+      const errors: string[] = [];
+      for (const res of responses) {
+        for (const g of res.generated) slots.push(g);
+        for (const e of res.errors) errors.push(`${e.requested_id}: ${e.message}`);
+      }
+      slots.sort((a, b) => a.id.localeCompare(b.id));
+      if (slots.length === 0) {
+        setPreviewError(`生成 prompt 失败: ${errors.join("; ") || "无结果"}`);
+      } else {
+        setPromptResults(slots);
+        if (errors.length > 0) {
+          setToast({ kind: "err", text: `已建 ${slots.length} 个 / 失败 ${errors.length}` });
+        }
+        // The folders now exist (sidecar-only, pending import); refresh the tree
+        // so the user can see / import them.
+        onGenerated();
+      }
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? `${err.status} ${err.detail?.kind ?? err.message}`
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      setPreviewError(`生成 prompt 失败: ${msg}`);
+    } finally {
+      setPreviewBusy(false);
+    }
+  }, [ageRange, body, busy, count, ethnicity, eyes, face, gender, lips, look, nose, notes, onGenerated, previewBusy, qiZhi, resolution, skin]);
 
   const onConfirmGenerate = useCallback(async () => {
     if (!preview || busy) return;
@@ -356,8 +453,35 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
           </button>
         </div>
         <div className="modal-body">
+          <div className="form-field" role="radiogroup" aria-label="生成方式" style={{ marginTop: 0 }}>
+            <span className="form-field-label">生成方式</span>
+            <div className="qi-zhi-chips">
+              <button
+                type="button"
+                className={`qi-zhi-chip ${mode === "prompt_only" ? "qi-zhi-chip-selected" : ""}`}
+                aria-pressed={mode === "prompt_only"}
+                disabled={busy || previewBusy}
+                title="只建文件夹 + 出 prompt，自己拿去 Kling/Seedance 出图，下载后用 📥 导入演员 一键归位"
+                onClick={() => setMode("prompt_only")}
+              >
+                🎯 只生成 prompt（自己出图，默认）
+              </button>
+              <button
+                type="button"
+                className={`qi-zhi-chip ${mode === "kling" ? "qi-zhi-chip-selected" : ""}`}
+                aria-pressed={mode === "kling"}
+                disabled={busy || previewBusy}
+                title="直接调用 Kling API 出图入库"
+                onClick={() => setMode("kling")}
+              >
+                ⚡ 直接调 Kling 出图
+              </button>
+            </div>
+          </div>
           <p className="muted" style={{ marginTop: 0 }}>
-            每个字段可选 🎲 随机（默认）或具体值；点 "预览" 后端会按你选的（已固定的字段）+ 每槽随机滚剩下字段，给你 N 份独立 prompt 供 review。
+            {mode === "prompt_only"
+              ? "每个字段可选 🎲 随机（默认）或具体值；点 \"生成 prompt\" 后端会分配 actor 文件夹并给每个 face/body prompt 加上 id{编号}{f|b} 前缀。把 prompt 复制到 Kling/Seedance 出图，下载后用 📥 导入演员 按 tag 一键归位。"
+              : "每个字段可选 🎲 随机（默认）或具体值；点 \"预览\" 后端会按你选的（已固定的字段）+ 每槽随机滚剩下字段，给你 N 份独立 prompt 供 review。"}
           </p>
           <div className="form-grid">
             <Field label="民族" id="ethnicity">
@@ -516,14 +640,16 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
           <button
             type="button"
             className="modal-primary"
-            onClick={onPreview}
+            onClick={mode === "prompt_only" ? onCreatePrompts : onPreview}
             disabled={busy || previewBusy}
           >
             {busy && progress
               ? `生成中… (${progress.done + progress.failed} / ${progress.total})`
               : previewBusy
-                ? "计算预览中…"
-                : `预览 ${count} 个 prompt`}
+                ? mode === "prompt_only" ? "生成 prompt 中…" : "计算预览中…"
+                : mode === "prompt_only"
+                  ? `🎯 生成 ${count} 个 prompt`
+                  : `预览 ${count} 个 prompt`}
           </button>
         </div>
       </div>
@@ -534,6 +660,75 @@ export function ActorPoolGenerator({ open, onClose, onGenerated }: ActorPoolGene
           onConfirm={onConfirmGenerate}
         />
       ) : null}
+      {promptResults ? (
+        <ActorPromptsModal
+          slots={promptResults}
+          onClose={() => setPromptResults(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** follow-up 124: prompt-only results — each created actor's id + copyable
+ * id-tagged face/body prompt. The id prefix is what 📥 导入演员 routes on, so
+ * the user must keep it intact when pasting into Kling/Seedance. */
+function ActorPromptsModal({ slots, onClose }: { slots: ActorPromptSlot[]; onClose: () => void }): JSX.Element {
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = useCallback(async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      window.setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+    } catch {
+      setCopied(null);
+    }
+  }, []);
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="复制 prompt 自己出图" onClick={onClose}>
+      <div className="modal-panel prompt-preview-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>🎯 已建 {slots.length} 个演员 — 复制 prompt 出图</h2>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="关闭">×</button>
+        </div>
+        <div className="modal-body">
+          <p className="prompt-preview-hint">
+            文件夹已建好（仅 sidecar，待导入）。把每条 prompt 复制到 Kling 或 Seedance 出图 —
+            <strong> prompt 开头的 id 前缀（如 id0009f / id0009b）务必保留</strong>，下载后用左侧
+            <strong> 📥 导入演员 </strong>会按它一键归位（f=人脸 / b=全身）。
+          </p>
+          <ol className="prompt-preview-list">
+            {slots.map((s) => (
+              <li key={s.id} className="prompt-preview-card">
+                <div className="prompt-preview-meta">
+                  <strong>{s.id}</strong>
+                  <span className="prompt-preview-seed">{s.attrs.ethnicity} / {s.attrs.gender} / {s.attrs.age_range} / {s.attrs.look}</span>
+                  <span className="prompt-preview-seed">seed: {s.seed}</span>
+                </div>
+                <div className="prompt-preview-meta">
+                  <button type="button" onClick={() => copy(`${s.id}-f`, s.face_prompt)}>
+                    {copied === `${s.id}-f` ? "✓ 已复制" : "📋 复制人脸 prompt"}
+                  </button>
+                  <button type="button" onClick={() => copy(`${s.id}-b`, s.body_prompt)}>
+                    {copied === `${s.id}-b` ? "✓ 已复制" : "📋 复制全身 prompt"}
+                  </button>
+                </div>
+                <details>
+                  <summary className="prompt-preview-toggle">人脸: {s.face_prompt.slice(0, 140)}{s.face_prompt.length > 140 ? "…" : ""}</summary>
+                  <pre className="prompt-preview-body">{s.face_prompt}</pre>
+                </details>
+                <details>
+                  <summary className="prompt-preview-toggle">全身: {s.body_prompt.slice(0, 140)}{s.body_prompt.length > 140 ? "…" : ""}</summary>
+                  <pre className="prompt-preview-body">{s.body_prompt}</pre>
+                </details>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="modal-primary" onClick={onClose}>完成</button>
+        </div>
+      </div>
     </div>
   );
 }

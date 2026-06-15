@@ -19,11 +19,16 @@ class ActorQuery:
         self._pool = pool
         self._casting = casting
 
-    def list(self) -> ActorListQdto:
+    def list(self, include_pending: bool = False) -> ActorListQdto:
         """Tags each actor with `is_assigned` via one bulk
-        `CastingRepository.assigned_actor_ids()` scan (follow-up 086)."""
+        `CastingRepository.assigned_actor_ids()` scan (follow-up 086).
+        `include_pending=True` also returns prompt-only actors (no jpg yet),
+        flagged `pending_import`, so the grid can filter + bulk-delete them."""
         assigned_ids = self._casting.assigned_actor_ids()
-        return ActorMapper.list_to_qdto(self._pool.list_actors(), assigned_ids=assigned_ids)
+        return ActorMapper.list_to_qdto(
+            self._pool.list_actors(include_pending=include_pending),
+            assigned_ids=assigned_ids,
+        )
 
     def preview_prompts(self, input_cdto: GenerateActorsInputCdto) -> PreviewPromptsQdto:
         """Dry-run prompt preview (follow-up 032). Same {seed, prompt} pairs
