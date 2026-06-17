@@ -66,12 +66,12 @@ spec_coding/
 
 Required at task start. Pick one; ask the user if unclear; never invent.
 
-- `development` — software outputs land in `projects/{name}/`.
-- `ai_video` — video planning + render outputs land in `ai_videos/{name}/`.
+- `development` — software outputs land in `projects/{name}/`. Walks the **six-stage `agent_team`** workflow below.
+- `ai_video` — AI 短剧 planning + prompt outputs land in `ai_videos/{name}/`. **Does NOT use agent_team.** Walks the dedicated **`ai_videos__全流程编排`** pipeline (脑洞→立项→世界观人设→分集大纲→文学剧本→分镜运镜→标准化分镜Prompt；本期到出 prompt 即止). See § AI 短剧 pipeline below.
 
-## The six-stage workflow
+## The six-stage workflow (task_type=development)
 
-The skill `agent_team` is the single entry point and walks all six stages. Users invoke it as `/agent_team` or by asking for a spec-driven task.
+The skill `agent_team` is the single entry point for **`development`** tasks and walks all six stages. Users invoke it as `/agent_team` or by asking for a spec-driven software task. **For `task_type=ai_video`, use `ai_videos__全流程编排` instead (§ AI 短剧 pipeline).**
 
 | # | Stage | Output | Coordination |
 |---|---|---|---|
@@ -84,9 +84,27 @@ The skill `agent_team` is the single entry point and walks all six stages. Users
 
 The procedural detail for each coordinated stage lives in `.claude/skills/agent_team/playbooks/{interview,research,validation}.md`. The parent-direct coordination model — and why there is no manager-subagent layer — is documented once in § Tool scoping and team coordination.
 
+## AI 短剧 pipeline (task_type=ai_video)
+
+`task_type=ai_video` 走专用的 **`ai_videos__全流程编排`** skill（不走 agent_team）。六阶段（本期到出 prompt 即止，阶段 7 渲染剪辑暂不做）：
+
+| # | 阶段 | playbook | 产物落点 | QC 关卡 |
+|---|---|---|---|---|
+| 1 | 核心创意立项 | `ai_videos__stage1_立项` | `ai_videos/{name}/1_立项/concept.md` | 人工确认 |
+| 2 | 世界观+锁定人设 | `ai_videos__stage2_世界观人设` | `2_世界观人设/{world,characters,scenes,casting,style_guide}` | `ai_videos__格式契约` |
+| 3 | 分集大纲 | `ai_videos__stage3_大纲` | `3_大纲/arc_outline.md` | `ai_videos__剧情连贯`+`ai_videos__全剧序列` |
+| 4 | 文学剧本(台词) | `ai_videos__stage4_剧本` | `4_剧本/episodes/epNN/{script,dialogue}.md` | `ai_videos__台词大师` |
+| 5 | 分镜运镜 | `ai_videos__stage5_分镜` | `5_6_分镜与prompt/episodes/epNN/shots/shotNN/shotNN.md`(运镜设计) | 站位朝向/运镜/动作表演/光线色调/时长节奏 |
+| 6 | 标准化分镜 Prompt | `ai_videos__stage6_prompt` | 同 shotNN.md(五层 prompt)+`all_shot_prompts.md` | `ai_videos__格式契约` + 出片前全 `ai_videos__审查总编排` |
+
+阶段 5、6 产物合一在 `shotNN.md`。项目用**阶段编号目录**（`1_立项/ … 5_6_分镜与prompt/`），新项目默认采用；已有项目（wushen_juexing）保留原结构、可选迁移。
+
+**三大贯穿机制**（编排强制执行）：① **每步 QC**——每阶段强制过审（blocker 清零，严格度=严）才进下一步；② **每次 update 复核**——任何产物改动/重生默认跑受影响范围 `ai_videos__审查总编排` + 记 `specs/ai_video/{name}/changelog.md`；③ **反馈→进化**——用户每条实战反馈 surgical 更新对应 playbook/审查 skill/`agent_refs` + 记教训（带来源）。**交互默认 interactive**：每阶段先用多选题问用户、用答案细化再生成。详见 `.claude/skills/ai_videos__全流程编排/{SKILL.md, BLUEPRINT.md}`。
+
 ## Skill + playbook naming
 
 - Repo-owned skills use `<prefix>__<name>` (double underscore). The orchestrator skill `agent_team` is the exception (top-level workflow, no prefix).
+- **AI 短剧 skills use the `ai_videos__` prefix + a Chinese name** (e.g. `ai_videos__台词大师`, `ai_videos__全流程编排`): ASCII prefix keeps them greppable, Chinese suffix keeps them readable (Chinese skill names register fine). This covers the pipeline orchestrator, its stage playbooks (`ai_videos__stageN_*`), and the review skills.
 - Stage playbooks live under `.claude/skills/agent_team/playbooks/`. They are NOT subagent definitions — they are runbooks the parent reads inline.
 - `.claude/agents/` is reserved for future permanent subagents (currently empty; every spec-driven stage is parent-direct).
 - Workers spawned at runtime are general-purpose subagents driven by playbook prompts, captured under `.audit/adhoc_agents/{date}/{task_id}/spawns/`.
@@ -353,3 +371,6 @@ For `task_type=ai_video`, `task_name` is pinyin or English even when the project
 - Don't add error handling for cases that cannot happen. Validate at system boundaries (user input, external APIs); trust internal calls.
 - Prefer editing existing files over creating new ones. Never create `*.md` documentation files unless explicitly requested.
 - Strong typing + OOP rules above apply to all Python under `projects/` and `tools/`.
+- **Narrative-edit coherence check (default, no reminder needed).** Whenever you edit a narrative/content artifact — AI-video `script.md` / `dialogue.md` / shot `台词:` or shot 剧情 (小说原文/情节/动作/走位), or any analogous story/spec prose — you MUST, before finishing, re-check continuity with the **adjacent context**: the neighboring units (previous & next shot/section) AND any **boundary** the edit touches (for a first/last shot: the previous episode's ending ↔ this episode's opening). Confirm action/posture/emotion/dialogue carry over without abruptness, repeated beats, or contradiction; a key turn that already happened in the prior unit is NOT replayed, only continued. Fix any break surgically in the smallest adjacent spot. For AI video the full procedure is `.claude/agent_refs/project/ai_video.md` § "2026-06-16 amendment — 改动剧本/台词后默认自动做连贯性 check". **For AI video, this coherence check is now one layer of the full default review: any ep/shot edit must by default run the `ai_video__review_suite` orchestrator (台词/站位朝向/运镜/动作/时长节奏/光线/整集连贯/全剧序列/机械契约 — 9 single-responsibility skills) over the affected scope before finishing — see ai_video.md § "2026-06-17 amendment — 任何 ep/shot 改动 + 出片前，默认跑 review_suite".** The adjacent/whole-sequence checks below are the suite's continuity + arc layers.
+  - **Whole-work sequence review (not just pairwise-adjacent).** The adjacent/boundary check above catches local breaks but MISSES a beat that *repeats what an earlier unit already resolved* (e.g., a second break-up declaration opening EP2 after EP1 already ended on one). So whenever you finalize/regenerate an episode, touch an episode opening or ending, or are asked to review the story, ALSO read **every episode's opening + ending beats and all signature lines as one ordered sequence** (for a single-piece short: every scene's beats) and check across the whole work for: repeated beats/declarations across episode boundaries, redundant or restarting openings, contradictions, signature-line reuse, and爽点/escalation consistency. This holistic pass is a superset of the adjacent check — run it before declaring a multi-episode narrative coherent. For AI video the procedure is the same ai_video.md amendment, § 全剧序列 review.
+  - **Review plot + blocking, not just lines; muting a line is not a fix.** The review covers the actual *plot and spatial blocking* (who is where, facing where, moving or not — across consecutive units), not only the dialogue text. If a line is redundant, silencing it does NOT resolve the problem when the underlying plot/blocking is still illogical (e.g., a character who already "left" in the prior unit is kept on-stage for several more units, or "walks out" twice). When you find an unreasonable beat, **fix the subsequent plot**: re-sequence that beat and every affected later unit so positions/movement stay monotonic and each action happens once — don't just edit the words.

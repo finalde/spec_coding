@@ -6,6 +6,7 @@ import { Home } from "./components/Home";
 import { ActorGrid } from "./components/ActorGrid";
 import { DeletedView } from "./components/DeletedView";
 import { VoiceGrid } from "./components/VoiceGrid";
+import { BgmGrid } from "./components/BgmGrid";
 import { bumpMediaCacheBuster, fetchTree } from "./api";
 import { collectFilePaths } from "./lib/linkResolver";
 import type { TreeNode } from "./types";
@@ -87,6 +88,10 @@ export default function App(): JSX.Element {
           <Route
             path="/voices"
             element={<VoiceGrid tree={tree} onChange={() => setRefreshKey((k) => k + 1)} />}
+          />
+          <Route
+            path="/bgm"
+            element={<BgmGrid onChange={() => setRefreshKey((k) => k + 1)} />}
           />
           <Route
             path="/deleted"

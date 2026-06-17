@@ -12,7 +12,7 @@ class SubtitleMapper:
     @staticmethod
     def to_burn_cdto(r: BurnResult) -> BurnSubtitlesResultCdto:
         return BurnSubtitlesResultCdto(
-            src_rel=r.src_rel, out_rel=r.out_rel, cue_count=r.cue_count
+            src_rel=r.src_rel, out_rel=r.out_rel, cue_count=r.cue_count, lang=r.lang
         )
 
     @staticmethod

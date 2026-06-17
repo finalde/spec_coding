@@ -6,12 +6,16 @@ at `…/shots/shot{NN}/`, holding `shot{NN}.md` plus one or more rendered takes
 under `…/shots/shot{NN}/renders/`. The dialogue timeline is a single
 `…/shots/shot{NN}/subtitles.md` shared by every take.
 
-`burn(rel)` takes a render mp4, finds the sibling `subtitles.md`, parses its
-cues, renders an ASS script, and burns it via ffmpeg into a new
-`{stem}_subtitled.mp4` next to the source (original render untouched).
+`burn(rel, lang)` takes a render mp4, finds the sibling `subtitles.md`, parses
+its bilingual cues, renders an ASS script in the requested language mode
+(zh / en / both), and burns it via ffmpeg into a stable per-shot master named
+`shot{NN}_{zh|en|zhen}.mp4` in the shot-folder root (originals untouched). Any
+imported take can be burned; the language master name is fixed so a re-burn
+overwrites it, and episode concat selects masters by language.
 
-`scaffold(rel)` writes a starter `subtitles.md` from the shot's `shot{NN}.md`
-(`时长:` total evenly split across the `台词 / 字幕:` quoted lines), best-effort.
+`scaffold(rel)` writes a starter bilingual `subtitles.md` from the shot's
+`shot{NN}.md` (`时长:` total evenly split across the spoken `台词:` lines, each
+seeded as `中文 || ` with an empty English slot for the author to fill).
 
 ffmpeg binary is supplied by the `imageio-ffmpeg` wheel — no system install.
 """
@@ -36,13 +40,19 @@ from libs.domain.errors.frame__error import (
 from libs.domain.errors.subtitle__error import (
     BurnFailedError,
     EmptySubtitlesError,
+    InvalidSubtitleLangError,
     SubtitleAlreadyExistsError,
     SubtitleFileMissingError,
 )
 from libs.domain.value_objects.subtitle__valueobject import (
+    VALID_LANGS,
     cues_to_ass,
+    has_text_for,
     parse_subtitles,
 )
+
+# burn-mode lang -> output filename suffix
+_LANG_SUFFIX: dict[str, str] = {"zh": "zh", "en": "en", "both": "zhen"}
 
 VIDEO_EXTENSIONS: frozenset[str] = frozenset(
     {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
@@ -60,6 +70,7 @@ class BurnResult:
     src_rel: str
     out_rel: str
     cue_count: int
+    lang: str
 
 
 @dataclass(frozen=True)
@@ -74,22 +85,30 @@ class SubtitleBurner:
         self._exposed = exposed
         self._resolver = resolver
 
-    def burn(self, rel: str) -> BurnResult:
+    def burn(self, rel: str, lang: str = "zh") -> BurnResult:
+        if lang not in VALID_LANGS:
+            raise InvalidSubtitleLangError(lang)
         src = self._validate_video_source(rel)
-        sub_md = self._shot_folder(src) / SUBTITLE_FILE_NAME
+        shot_folder = self._shot_folder(src)
+        sub_md = shot_folder / SUBTITLE_FILE_NAME
         if not sub_md.is_file():
             raise SubtitleFileMissingError(self._rel(sub_md))
         cues = parse_subtitles(sub_md.read_text(encoding="utf-8"))
-        if not cues:
+        if not cues or not has_text_for(cues, lang):
             raise EmptySubtitlesError(self._rel(sub_md))
         try:
             ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
         except Exception as exc:  # imageio_ffmpeg raises various on failure
             raise FfmpegMissingError(str(exc)) from exc
-        out_path = src.with_name(f"{src.stem}_subtitled.mp4")
+        # Canonical per-shot, per-language master in the shot-folder ROOT
+        # (not next to the chosen raw take): `shot{NN}_{zh|en|zhen}.mp4`. Any of
+        # the shot's imported takes can be burned; the output name is stable, so
+        # re-burning overwrites the same language master. Episode concat then
+        # picks these by language.
+        out_path = shot_folder / f"{shot_folder.name}_{_LANG_SUFFIX[lang]}.mp4"
         with tempfile.TemporaryDirectory() as tmp:
             ass_path = Path(tmp) / "sub.ass"
-            ass_path.write_text(cues_to_ass(cues), encoding="utf-8")
+            ass_path.write_text(cues_to_ass(cues, lang), encoding="utf-8")
             cmd = [
                 ffmpeg,
                 "-y",
@@ -119,6 +138,7 @@ class SubtitleBurner:
             src_rel=self._rel(src),
             out_rel=self._rel(out_path),
             cue_count=len(cues),
+            lang=lang,
         )
 
     def scaffold(self, rel: str) -> ScaffoldResult:
@@ -149,11 +169,20 @@ class SubtitleBurner:
         if shot_md.is_file():
             text = shot_md.read_text(encoding="utf-8")
             for raw in text.splitlines():
-                if "时长" in raw and not lines and "时长目标" not in raw:
-                    m = _DURATION_RE.search(raw.split("时长", 1)[1])
+                stripped = raw.strip()
+                if "时长:" in raw and "时长目标" not in raw:
+                    m = _DURATION_RE.search(raw.split("时长:", 1)[1])
                     if m:
                         duration = float(m.group(1))
-                if "台词" in raw:
+                # Prefer the clean spoken lines from the `## 台词配音` blocks
+                # (`台词: 正文`). Skip the video-prompt `台词: （…paren note…）`.
+                if stripped.startswith("台词:"):
+                    val = stripped[len("台词:"):].strip()
+                    if val and not val.startswith("（") and not val.startswith("("):
+                        if val not in lines:
+                            lines.append(val)
+                # Fallback: quoted dialogue elsewhere (legacy shot.md shape).
+                elif "台词" in raw:
                     for q in _QUOTE_RE.findall(raw):
                         cleaned = q.strip().strip("：:")
                         if cleaned and cleaned not in lines:
@@ -164,10 +193,11 @@ class SubtitleBurner:
         self, shot_name: str, duration: float, lines: list[str]
     ) -> str:
         head = (
-            f"# {shot_name} 台词时间轴\n\n"
-            "> 每行一句: `起-止(秒) 台词文本`。内心独白(OS)写法相同, 不单独区分样式。\n"
+            f"# {shot_name} 双语台词时间轴\n\n"
+            "> 每行一句: `起-止(秒) 中文 || English`。`||` 左为中文、右为英文;\n"
+            ">   只写中文(省略 `||`)则为中文单语。内心独白(OS)写法相同, 不单独区分样式。\n"
             f"> 时间窗为按总时长 {self._fmt(duration)}s 均分的初值, 请按剧情逐句调整。\n"
-            "> 点击 render 卡片上的「💬 烧录台词」即可把本表烧进视频。\n\n"
+            "> render 卡片上的「💬中文 / 💬英文 / 💬中英」可分别烧出对应语言版本视频。\n\n"
             "```text\n"
         )
         cue_lines: list[str] = []
@@ -176,9 +206,9 @@ class SubtitleBurner:
             for i, text in enumerate(lines):
                 start = self._fmt(round(i * step, 2))
                 end = self._fmt(round((i + 1) * step, 2))
-                cue_lines.append(f"{start}-{end}  {text}")
+                cue_lines.append(f"{start}-{end}  {text} || ")
         else:
-            cue_lines.append(f"0-{self._fmt(duration)}  （在此填写台词）")
+            cue_lines.append(f"0-{self._fmt(duration)}  （在此填写中文台词） || (English here)")
         return head + "\n".join(cue_lines) + "\n```\n"
 
     @staticmethod

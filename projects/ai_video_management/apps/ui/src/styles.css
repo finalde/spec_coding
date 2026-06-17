@@ -289,6 +289,13 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 .reader-episode-concat-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .reader-episode-concat-btn:disabled { cursor: progress; opacity: 0.55; }
+.reader-copy-prompts-btn {
+  background: var(--bg-toolbar); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 4px 12px;
+  cursor: pointer; font-family: inherit;
+}
+.reader-copy-prompts-btn:hover:not(:disabled) { background: var(--bg-hover); }
+.reader-copy-prompts-btn:disabled { cursor: progress; opacity: 0.55; }
 .reader-body { padding: 8px 0; }
 
 .text-view {

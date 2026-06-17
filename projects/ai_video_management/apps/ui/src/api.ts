@@ -173,17 +173,23 @@ export async function extractScenePlates(path: string): Promise<ExtractScenePlat
   return readJson<ExtractScenePlatesResult>(response);
 }
 
+export type SubtitleLang = "zh" | "en" | "both";
+
 export interface BurnSubtitlesResult {
   src: string;
   out: string;
   cues: number;
+  lang: SubtitleLang;
 }
 
-export async function burnSubtitles(path: string): Promise<BurnSubtitlesResult> {
+export async function burnSubtitles(
+  path: string,
+  lang: SubtitleLang = "zh",
+): Promise<BurnSubtitlesResult> {
   const response = await fetch("/api/burn-subtitles", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, lang }),
   });
   return readJson<BurnSubtitlesResult>(response);
 }
@@ -746,20 +752,28 @@ export interface EpisodeShotSkipped {
   reason: string;
 }
 
+export type EpisodeLang = "original" | "zh" | "en" | "both";
+
 export interface ConcatEpisodeResult {
   episode: string;
   out: string | null;
   used: EpisodeShotUsed[];
   skipped: EpisodeShotSkipped[];
+  lang: EpisodeLang;
 }
 
-/** Stitch each shot's newest renders/ mp4 into one ep{NN}.mp4 in the episode
- * folder (overwrites). `path` may be any file under the episode folder. */
-export async function concatEpisode(path: string): Promise<ConcatEpisodeResult> {
+/** Stitch each shot's clip into one ep{NN}[_{lang}].mp4 in the episode folder
+ * (overwrites). `lang` "original" uses each shot's newest renders/ mp4; zh/en/
+ * both use each shot's burned `shot{NN}_{zh|en|zhen}.mp4` language master.
+ * `path` may be any file under the episode folder. */
+export async function concatEpisode(
+  path: string,
+  lang: EpisodeLang = "original",
+): Promise<ConcatEpisodeResult> {
   const response = await fetch("/api/concat-episode", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, lang }),
   });
   return readJson<ConcatEpisodeResult>(response);
 }
@@ -1047,4 +1061,226 @@ export async function castingUnassignVoice(path: string, role: string): Promise<
     body: JSON.stringify({ path, role }),
   });
   return readJson<CastingResult>(response);
+}
+
+// ============================================================================
+// BGM pool (shared background-music library). Mirrors the voice API surface
+// above but targets Stable Audio track prompts + rendered mp3s. Generation is
+// SLOW (GPU subprocess) — callers must surface an in-progress state. Delete is
+// refused (HTTP 409) when a drama's bgm.md still references the track; the
+// references endpoint reports who references it (read-only).
+// ============================================================================
+
+/** The 12 emotion categories, in canonical order (slug → 中文 label). */
+export const BGM_CATEGORY_OPTIONS = [
+  "tension",
+  "combat",
+  "climax_hype",
+  "faceslap",
+  "tragic",
+  "warm",
+  "romance_pain",
+  "suspense",
+  "daily",
+  "flashback",
+  "theme_open",
+  "system_cue",
+] as const;
+
+export const BGM_CATEGORY_LABELS_ZH: Record<string, string> = {
+  tension: "紧张对峙",
+  combat: "打斗",
+  climax_hype: "高燃爽点",
+  faceslap: "打脸爽感",
+  tragic: "悲情",
+  warm: "温情",
+  romance_pain: "虐恋",
+  suspense: "悬疑",
+  daily: "日常",
+  flashback: "回忆",
+  theme_open: "片头主题",
+  system_cue: "系统提示音",
+};
+
+// Curated free-text presets for the generation form. The backend accepts any
+// free text (≤ 200 chars) for mood / instruments; these are convenience
+// dropdowns so the user picks a common value first, then optionally overrides
+// with the free-text box beside it. Pure UI vocabulary — no backend enum.
+export const BGM_MOOD_PRESETS = [
+  "阴森压抑",
+  "紧张悬疑",
+  "热血激昂",
+  "悲伤凄凉",
+  "温暖治愈",
+  "甜蜜浪漫",
+  "诡异不安",
+  "轻松愉快",
+  "怀旧感伤",
+  "史诗恢弘",
+  "空灵神秘",
+] as const;
+
+export const BGM_INSTRUMENT_PRESETS = [
+  "弦乐 + 低音鼓",
+  "钢琴独奏",
+  "古筝 + 笛",
+  "电子合成器",
+  "管弦乐团",
+  "大提琴独奏",
+  "二胡",
+  "鼓点打击乐",
+  "氛围 pad + 长音",
+  "钢琴 + 弦乐",
+] as const;
+
+export interface BgmInfo {
+  id: string;
+  category: string;
+  category_label: string;
+  sidecar_path: string;
+  audio_path: string | null;
+  seed: number;
+  mtime: number;
+  mood: string;
+  bpm: number;
+  duration: number;
+  loopable: boolean;
+  intensity: number;
+  instruments: string;
+  notes: string;
+  is_referenced: boolean;
+}
+
+export interface GenerateBgmsRequest {
+  count: number;
+  category: string;
+  mood?: string;
+  bpm?: number;
+  duration?: number;
+  loopable?: boolean;
+  intensity?: number;
+  instruments?: string;
+  notes?: string;
+}
+
+export interface BgmPreviewSlot {
+  seed: number;
+  prompt: string;
+  category: string;
+  category_label: string;
+  attrs?: Record<string, unknown>;
+}
+
+export interface BgmPreviewResult {
+  prompts: BgmPreviewSlot[];
+}
+
+export interface GenerateBgmsResult {
+  generated: Array<{
+    id: string;
+    category: string;
+    category_label: string;
+    sidecar_path: string;
+    audio_path: string | null;
+    attrs?: Record<string, unknown>;
+    seed: number;
+  }>;
+  errors: Array<{ requested_id: string; message: string }>;
+}
+
+export interface DeleteBgmResult {
+  from: string;
+  to: string;
+}
+
+export interface BgmReference {
+  drama: string;
+  location: string;
+  cue_file: string;
+  cue_lines: string[];
+}
+
+export interface BgmReferencesResult {
+  bgm_id: string;
+  references: BgmReference[];
+}
+
+export async function listBgms(): Promise<{ bgms: BgmInfo[] }> {
+  const response = await fetch("/api/bgms", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<{ bgms: BgmInfo[] }>(response);
+}
+
+export async function previewBgmPrompts(req: GenerateBgmsRequest): Promise<BgmPreviewResult> {
+  const response = await fetch("/api/bgms/preview-prompts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<BgmPreviewResult>(response);
+}
+
+export async function generateBgms(req: GenerateBgmsRequest): Promise<GenerateBgmsResult> {
+  const response = await fetch("/api/bgms/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<GenerateBgmsResult>(response);
+}
+
+// Step 1: allocate tracks + write prompt-only sidecars (no audio rendered).
+export async function createBgmPrompts(req: GenerateBgmsRequest): Promise<GenerateBgmsResult> {
+  const response = await fetch("/api/bgms/create-prompts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(req),
+  });
+  return readJson<GenerateBgmsResult>(response);
+}
+
+export interface BgmAudioResult {
+  id: string;
+  audio_path: string;
+  imported_from?: string;
+}
+
+// Step 2a: render audio locally on GPU for an existing prompt-only track.
+export async function generateBgmAudio(bgmId: string): Promise<BgmAudioResult> {
+  const response = await fetch(`/api/bgms/${encodeURIComponent(bgmId)}/generate-audio`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<BgmAudioResult>(response);
+}
+
+// Step 2b: import the newest Downloads audio file into an existing track.
+export async function importBgmAudio(bgmId: string): Promise<BgmAudioResult> {
+  const response = await fetch(`/api/bgms/${encodeURIComponent(bgmId)}/import-audio`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<BgmAudioResult>(response);
+}
+
+export async function deleteBgm(bgmId: string): Promise<DeleteBgmResult> {
+  const response = await fetch("/api/bgms/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ bgm_id: bgmId }),
+  });
+  return readJson<DeleteBgmResult>(response);
+}
+
+export async function fetchBgmReferences(bgmId: string): Promise<BgmReferencesResult> {
+  const response = await fetch(
+    `/api/bgms/references?bgm_id=${encodeURIComponent(bgmId)}`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    },
+  );
+  return readJson<BgmReferencesResult>(response);
 }

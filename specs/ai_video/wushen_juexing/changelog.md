@@ -511,3 +511,282 @@ Auto-updated:
 校验: 19 台词字段已重排；台词文本零改动（仅排版/去引号）；ep02 shot04 无台词(群像)不变
 
 No conflicts found in: 台词配音 block(独立TTS源·未动), 角色/场景/world/spec
+
+## Follow-up 035 — 2026-06-15（系统出场/对话完善 + prompt 精简）
+Source: user_input/follow_ups/035-20260615-050000-system-explain-outcomes-simplify.md
+Summary: 系统须解释两条路结果(继续苟活=当废物 / 觉醒武神=逆天改命)；二选一标签改 继续苟活/觉醒武神；prompt 简化避免 Seedance 混乱。
+Auto-updated:
+- episodes/ep01/shots/shot04 — 系统出场重写(绑定+自报身份)、字段精简
+- episodes/ep01/shots/shot05 — 二选一：系统**解释两条路结果**(继续苟活/觉醒武神)、字段精简
+- episodes/ep01/shots/shot06 — 选【觉醒武神】→系统激活(金光入眉心·内敛不外放)、字段精简
+- 二选一标签 苟活/硬刚 → **继续苟活/觉醒武神**(硬刚保留为"态度"词)：同步 shotlist S05/S06+header、script 场景二+设钩、dialogue §二+§五、shot13、world §四、arc EP1+表、spec FR-7、publish 封面
+校验: EP1 14镜/90s 不变；choice-label 硬刚 残留=0(态度 硬刚 保留)；shot04-06 情节≤~200字精简；台词解释两条路结果；零字幕/零hex 不变
+说明: prompt 精简先落在系统三镜(用户痛点)；如需全 shot 进一步精简可再扫一遍。
+
+## Follow-up 036 — 2026-06-15 05:30:00
+Source: user_input/follow_ups/036-20260615-053000-shot03-remove-foot-cradle.md
+Summary: EP1 S03 删除两个肢体动作——裴昭抬脚踩兄长肩头、沈婉搂/拢幼子；改为俯睨折扇敲掌 + 侧身别眼偏袒；台词与人物底色不变。
+
+Auto-updated:
+- episodes/ep01/shots/shot03/shot03.md — 小说原文/标题/Shot context/情节·镜头·走位·动作·光线·节奏/台词舞台提示：踩肩→俯睨、去掉拢幼子动作
+- episodes/ep01/script.md — S03 动作行 + 裴昭舞台提示 踩肩→俯睨；沈婉去掉「把幼子拢到身侧」
+- episodes/ep01/dialogue.md — 裴昭动作括注 踩肩→俯睨
+- episodes/ep01/shotlist.md — S03 行 踩肩→俯睨、去「护幼子」动作词
+- final_specs/spec.md — FR-7 节拍③ 踩肩冷笑→俯睨冷笑
+
+No conflicts found in: interview/qa.md, findings/* (S01 头脑风暴/旧 validation 中的「踩肩」为历史构思非当前 canon，未改), characters/c9_沈婉（「偏爱幼子」为人物设定保留）
+
+## Follow-up 037 — 2026-06-15 06:00:00
+Source: user_input/follow_ups/037-20260615-060000-shot05-no-mouth-strip-taici.md
+Summary: EP1 shot05（全员无口型镜）Seedance 反复读台词乱套——视频 prompt 的 台词: 字段不再写台词全文，只留无口型/勿生成语音声明 + 在画 UI 选项按钮字；台词全文仅留台词配音块。沉淀为通用规则。
+
+Auto-updated:
+- episodes/ep01/shots/shot05/shot05.md — 视频 prompt `台词:` 字段：删两条台词正文，改为「无人开口·嘴唇不动·勿生成配音/语音/口型」声明 + 逐行说话人类型注 + 系统流对话框在画字【继续苟活】【觉醒武神】；台词全文保留在 `## 台词配音 prompt` 块
+- .claude/agent_refs/project/ai_video.md — 新增项目级规则「全员无口型镜：`台词:` 不写台词全文，防视频模型(Seedance)误读」（仅全员无口型镜适用；混排镜不剥离）
+
+No conflicts found in: interview/qa.md, findings/*, final_specs/spec.md（台词全文不变、仅视频 prompt 表达方式调整）, 其余 shots（混排镜含在画对白，按契约保留正文）
+
+## Follow-up 038 — 2026-06-15 06:45:00
+Source: user_input/follow_ups/038-20260615-064500-shot-facing-eyeline-pass.md
+Summary: shot03 弟弟/母亲说台词朝向不对（像对空气说）→ 升级监制 skill 加「朝向/眼神/走位 C1–C4」审查 + 收编「全员无口型镜不写台词全文」硬约束 + 修正过时约束；用升级 skill 全量复审 EP1 14 镜并修复。
+
+Auto-updated:
+- .claude/skills/ai_video__dialogue_master/SKILL.md — 新增朝向审查 C1–C4 表 + 工作流第 5 步「朝向落地」；硬约束改写（台词:label / 解耦 TTS / 全员无口型剥离 / OS 朝向 / 系统流互动）；description 工作流序号微调
+- episodes/ep01/shots/shot01,04,06,13 — 全员无口型镜：视频 prompt 台词字段剥离正文、改无口型/勿生成语音声明 + 在画 UI 字（台词全文留台词配音块）；shot05 上一轮已改
+- episodes/ep01/shots/shot02,03,07,08,09,10,11,12,14 — 在画对白补写朝向/眼神：说话人面向谁、视线落点写进台词 tag；shot03 另补 走位/动作（裴昭低头俯睨跪着的知秋、沈婉侧身朝知秋方向却别眼）
+
+No conflicts found in: interview/qa.md, findings/*, final_specs/spec.md（台词正文/情节不变，仅朝向表达与视频 prompt 台词呈现方式调整）, dialogue.md/script.md（台词正文不变，朝向属视频 prompt/走位层）
+
+## Follow-ups 039–045 — 2026-06-15（EP1 出片反馈连改）
+Source: user_input/follow_ups/039..045
+
+- **039** 修订 037：全员无口型镜**不可剥离台词正文**（shot05 剥离后成片无台词声音）。恢复 shot01/04/05/06/13 台词正文，改强标 `画外配音 voice-over`+`嘴唇不动不对口型`+系统句 `无任何在画人物对此口型` 防 lip-sync 乱套。ai_video.md「全员无口型镜」规则 + 监制 skill 硬约束同步修订。
+- **040** 镜头时长须容下台词（字数÷时长≤5字/s、上限15s）。EP1 重配镜长：S01→7/S04→10/S05→15(精简)/S08→13(精简)/S09→15(精简)/S10→6/S12→11/S13→13；总时长~90s→~132s。shotlist + spec FR-7 + 各 shot `时长/Duration/时长目标/动作`时间窗 同步。监制 skill 新增「时长/台词节奏审查」。
+- **041** 主角眼里假红光：删一切眼内发光（瞳泛金等），改额心/眉心微光内敛+表演；shot01/04/06/13 + script + shotlist 改；相关镜 `光线` 加"眼里不加发光特效/有色光斑"。监制 skill + ai_video 成规则。
+- **042** 系统(对话框)统一**读完整台词**（用户决策 option B）：系统语音由 `台词配音` 块独立 TTS 生成、时长目标配足整句、后期 mux；视频 prompt 系统句标 voice-over 不靠模型自动读。shot08 同时提速 15→13s、主角时长目标 9→8s。
+- **043** 朝向细化：shot09 主角"偏头"被渲染成背对弟弟→改"转身正脸面对面、绝不背对"；shot10 主角内心独白嘴动→强标双唇紧闭/只沈婉嘴动 + 眼神写死垂落地面 + 两人拉开间距 + 运镜由锁机位改缓推横移；shot03 双主角→同一沉默角色只具名一次+其余"他/兄长"+"全画面共N人互不重复"。监制 skill C2 加"慎用偏头"、新增 C5 防角色重复。
+- **044** shot14 自指"这废物也不稀罕"→"我也不稀罕"（shot14/dialogue/script/shotlist 4 处）。监制 skill D1 加"自指用「我」"。
+- **045** 回忆镜须一眼可辨：shot11/12 `情节` 标【回忆·时间·事件】+ `光线` 强回忆滤镜（做旧泛黄+暗角+颗粒+柔光+边缘虚）+ `渲染样式` 加做旧胶片质感。监制 skill 加规则。
+
+监制 skill（.claude/skills/ai_video__dialogue_master/SKILL.md）本轮累计升级：朝向审查 C1–C5、时长/台词节奏审查、眼神不加发光、回忆镜区分、系统读完整台词、自指用「我」。
+No conflicts found in: interview/qa.md, findings/*, characters/*（声口/voice_id 不变）。
+
+## Follow-up 046 — 2026-06-15 09:00:00
+Source: user_input/follow_ups/046-20260615-090000-shot12-dedup-and-camera-continuity.md
+Summary: shot12 两个王爷+面朝向修复；shot11 回忆色彩对齐 shot12；监制 skill 加跨镜运镜连贯审查并 review 全镜；修沈婉站位不连贯。
+
+Auto-updated:
+- episodes/ep01/shots/shot12 — 情节/走位/动作/台词：镇北王只一人端坐高座(去重)、裴昭转身正脸面对面讥讽
+- episodes/ep01/shots/shot11 — 回忆滤镜已与 shot12 统一(上一轮 045 落地，确认一致)
+- episodes/ep01/shots/shot10 — 沈婉 西→东侧、bg4_朝西→bg2_朝东_东列长案(参考/场景/Reference uploads 三处)，与裴昭同东侧
+- episodes/ep01/shots/shot03 — 裴昭自东侧越众(原自西)，沈婉东侧标注"家人一侧·全剧固定"
+- .claude/skills/ai_video__dialogue_master/SKILL.md — 新增「运镜连贯性审查（跨镜 M1–M6）」表
+
+运镜 review 结论：N–S 对峙轴(S02/07/08/14)与系统镜(S04–06)连贯 OK；重复人物已修(shot03/shot12)；站位不连贯(沈婉)已统一东侧。
+No conflicts found in: dialogue.md/script.md（台词正文不变；站位/朝向属视频 prompt 层）, characters/*。
+
+## Follow-up 047 — 2026-06-16 09:30:00
+Source: user_input/follow_ups/047-20260616-093000-shot11-12-logic-rename-xiongwucheng.md
+Summary: shot11 弟弟被袭呆站→改有惊恐反应+被推开；shot12 父亲端坐正对台下→改背对二子负手头也不回宣判；熊武城→蛮荒城（canon 全量改名）；监制 skill 加 P7 表演合常理。
+
+Auto-updated:
+- episodes/ep01/shots/shot11 — 小说原文/情节/走位/动作/Summary：裴昭惊呼后退、裴知秋推开弟弟硬挡（去"木头人呆站"）
+- episodes/ep01/shots/shot12 — 小说原文/情节/走位/动作/镜头/台词/Summary：裴霆背对二子负手而立头也不回下令（去"端坐正对台下"）
+- episodes/ep01/script.md — 场景四：裴昭被袭反应 + 裴霆背对二子宣判
+- 改名 熊武城→蛮荒城：world.md / arc_outline.md / final_specs/spec.md / script.md / dialogue.md / shotlist.md / shot12.md / scenes/s2_回忆书房（共 8 文件）；changelog 与历史 follow-up 020 保留原名作审计记录
+- .claude/skills/ai_video__dialogue_master/SKILL.md — 情节审查新增 P7「表演/走位合常理」
+
+No conflicts found in: interview/qa.md, findings/*, characters/*（声口/voice_id 不变）。
+
+## Follow-up 048 — 2026-06-16 10:05:00
+Source: user_input/follow_ups/048-20260616-100500-bilingual-subtitles-files.md
+Summary: EP1 全 14 shot 生成双语 subtitles.md（中文||英文、时间轴源自台词配音时长目标）。
+Auto-updated:
+- episodes/ep01/shots/shot01..14/subtitles.md — 新建双语台词时间轴（中文取台词配音块、英文为对应翻译）
+- 配合 ai_video_management webapp 三语言烧字幕按钮使用；规则见 .claude/agent_refs/project/ai_video.md rule 11c
+No conflicts found in: shot*.md（台词正文不变）、script/dialogue。
+
+## Follow-up 023 — 2026-06-16 00:00:00
+Source: user_input/follow_ups/023-20260616-000000-ep2-full-shots.md
+Summary: EP2 补足到完整 ~90s（6 镜/38s → 14 镜/~89s）。保留原 6 镜（厅内 + 凌虚子），续写「离府赶路 / 系统初引 / 玉佩生疑 / 城门末镜钩」8 新镜并出全部 shot 细节；新增 2 场景。
+
+Auto-updated:
+- ai_videos/wushen_juexing/episodes/ep02/script.md — 加场景三（离府赶路·系统初引·玉佩微感）+ 场景四（城门末镜钩·暗藏杀机）；场景二凌虚子改中段宗门暗线（去黑屏末镜）；时长 38→89s
+- ai_videos/wushen_juexing/episodes/ep02/shotlist.md — 重写为 14 镜/89s 清单（S01–S06 保留 + S07–S14 新增）
+- ai_videos/wushen_juexing/episodes/ep02/dialogue.md — 加离府赶路/系统初引/玉佩台词；台词类型对齐 v2（在画对白→正常台词、内心独白）
+- ai_videos/wushen_juexing/episodes/ep02/shots/shot07–shot14/ — 8 个新 shot 细节（folder-per-shot，canonical 模板：小说原文 + Shot context + 视频 prompt + 台词配音）
+- ai_videos/wushen_juexing/episodes/ep02/shots/shot01–shot06/ — 对齐最新规则：台词 在画对白→正常台词；shot06 由末镜黑屏 cliffhanger 改中段宗门暗线 beat（去黑屏/末镜/登场字幕位）；shot04 默剧格式归一
+- ai_videos/wushen_juexing/scenes/s6_王府外长街/、s7_镇北城门/ — 2 个新场景档（镜像 s5 结构：锁定描述符 + 立绘 seed + walk-through + bg index）
+- ai_videos/wushen_juexing/arc_outline.md — EP2 行更新为 14 镜/~89s 已详化（含离府赶路/玉佩暗钩/城门钩）
+- ai_videos/wushen_juexing/episodes/ep02/publish.md — 时长 44→89s；封面建议 S04 武神躯觉醒（错·违藏锋）→ S05 离场宣言；末镜 cliffhanger 注更新为城门暗藏杀机
+
+校验：14 shot 文件、总时长 2×5+5×6+7×7=89s；裴知秋角色锁定 13 处 byte-identical；s6/s7 一句话锁定 shot↔场景档 byte-identical（5/3 处）；零十六进制色码、零 IP；台词 v2 全合规（零字幕 token，内心独白均"嘴唇不动"、正常台词均"口型对X"）；藏锋契约（全集无武神躯威能显化）；S13/S14 黑影仅剪影无具名（不引入新角色档、不抢 EP3）。
+生成方式：2 场景 worker + 8 shot worker 并行（stage-6 parent-direct）；现有 6 镜对齐 + 连接性 artifact（script/shotlist/dialogue/arc/publish）由 parent 直接编辑。
+No conflicts found in: 角色档/world/style_guide（EP2 不新增具名角色）；EP1 不受影响。
+
+## Follow-up 024 — 2026-06-16 01:00:00
+Source: user_input/follow_ups/024-20260616-010000-ep2-shot4-route-shot5-baihua.md
+Summary: EP2 shot4 走位修正（去"穿过人群两次"）+ 去母亲沈婉的笑（只留裴昭+群宾）；shot5 标志台词文言→白话并全局同步；新增台词白话通则；修 publish 简介藏锋矛盾。
+
+Auto-updated:
+- ai_videos/wushen_juexing/episodes/ep02/shots/shot04/shot04.md — 走位改单向直线穿中央甬道一次（群宾分列两侧不挡道、不折返/不绕行/不穿插）；删 沈婉(母)+裴霆，嗤笑只留 裴昭+群宾；Characters/参考/角色/情节/小说原文同步
+- ai_videos/wushen_juexing/episodes/ep02/shotlist.md — S04 行（出场角色→裴知秋/裴昭/群宾、单向直行不穿插）+ S05 行（台词白话）
+- 标志台词 文言→白话「今天赶我走的人，将来都得仰起头来看我」全局 byte-identical 同步：ep02 shot05(prose/台词/配音)、script.md、dialogue.md、characters/c1_裴知秋(标志台词)、arc_outline(EP2/EP71-80/EP75 narrative tag「赶我走的人终将仰望我」)、publish 封面
+- ai_videos/wushen_juexing/style_guide.md — 新增 §六·B 台词语言风格（白话优先、少用文言对仗古文、除非用户指定；同角色语体一致）
+- ai_videos/wushen_juexing/episodes/ep02/publish.md — 简介改藏锋一致版（删"武神躯轰然觉醒/暖金裂纹/满堂失色"，改"系统悄悄暗授、藏锋上路"）；副标题白话化
+
+校验：旧台词「今日逐我者/逐我者/他日仰我」全项目零残留；新白话台词 shot05 prose/台词/配音 + script + dialogue byte-identical；shot04 零裴霆/沈婉、走位含"单向直线/只穿过一次/不折返不绕行不穿插"显式约束；publish 简介与 EP2 藏锋契约一致。
+连贯性：EP2 内部藏锋一致（全集无武神躯威能显化）。**注 canon 待用户定夺**：EP1 角色档/arc 仍写"EP1 当场觉醒王体+武神躯（暖金裂纹·中档）"公开显化，与 EP2 起"武神躯暗授藏锋"存在张力；EP1 已出片(ep01.mp4)未动，留作用户决定是否回溯对齐。
+No conflicts found in: world.md/其余角色档；EP1 shots（未改）。
+
+## Follow-up 049 — 2026-06-16 11:00:00
+Source: user_input/follow_ups/049-20260616-110000-ep2-ep1-boundary-coherence.md
+Summary: EP2 开场承接 EP1 结尾、消除"气场反转"重演的突兀；标志断绝台词白话化全局同步；把"改剧本/台词后默认自检连贯性"写进 harness 流程。
+
+Auto-updated:
+- ai_videos/wushen_juexing/episodes/ep02/shots/shot01/shot01.md — 小说原文/Summary/情节/动作 改为承接 EP1 已反转状态（引用"我也不稀罕"、脊背已挺直、不重演撑身反转 beat）；标志台词白话化
+- ai_videos/wushen_juexing/episodes/ep02/script.md — 场景一开头改"承接上集已反转气场、挺直而立"，去重复 beat
+- ai_videos/wushen_juexing/episodes/ep02/{dialogue.md, shots/shot01} + characters/c1_裴知秋 — 标志断绝台词 byte-identical 同步为白话版（"用不着你赶。我裴知秋今天把话撂在这儿——……我自己走出去！"）
+- CLAUDE.md「General coding rules」— 新增 "Narrative-edit coherence check (default, no reminder needed)" 通用约束（common-level）
+- .claude/agent_refs/project/ai_video.md — 新增 "2026-06-16 amendment — 改动剧本/台词后默认自动做连贯性 check（衔接相邻镜 + 跨集边界）" 权威条目
+
+校验：旧台词「不必你逐 / 今日把话撂这儿」全项目零残留；新白话台词 4 处（dialogue/script/shot01/角色档）byte-identical；EP1 S14 结尾未改（仍"撑直脊背·气场反转·我也不稀罕"），EP2 仅承接不重演。
+连贯性：EP1 末镜 ↔ EP2 首镜边界已平顺（同一气场反转 beat 不再跨集重复）。
+No conflicts found in: EP1 shots（未改）；其余 EP2 镜（S02–S14 未触及该 beat）；world/style_guide/arc。
+
+## Follow-up 050 — 2026-06-16 12:00:00
+Source: user_input/follow_ups/050-20260616-120000-ep2-s01-drop-duplicate-declaration.md
+Summary: 消除 EP1 S14↔EP2 S01 重复决裂宣告（EP2 起始重复/突兀）——用户选定只改 EP2、S01 改默剧沉默离场；并新增"全剧序列 review"流程。
+
+Auto-updated:
+- ai_videos/wushen_juexing/episodes/ep02/shots/shot01/shot01.md — 由"当众断绝走出宣告(正常台词)"改为"沉默转身离场(默剧·无台词)"：小说原文/Summary/标题/情节/走位/动作/台词/节奏重写，删 台词配音 块改默剧注；承接 EP1"我也不稀罕"、不再重复决裂宣告
+- ai_videos/wushen_juexing/episodes/ep02/script.md — 场景一去掉 S01 决裂台词、改沉默转身离场承接；裴昭对其背影立赌
+- ai_videos/wushen_juexing/episodes/ep02/dialogue.md — 删 S01 决裂台词行、改默剧注（断绝言留上集、离场宣言见本节末句 S05）
+- ai_videos/wushen_juexing/episodes/ep02/shotlist.md — S01 行内容+标记改"沉默离场·承接上集"（时长仍 7s，89s 总数不变）
+- ai_videos/wushen_juexing/characters/c1_裴知秋/c1_裴知秋.md — 标志台词去 orphan 的"用不着你赶…自己走出裴王府"、换 EP1 实际签名句"镇北王府容不下废物？正好——我也不稀罕"
+- CLAUDE.md「General coding rules」— Narrative-edit coherence check 扩条：新增 "Whole-work sequence review (not just pairwise-adjacent)"（common-level）
+- .claude/agent_refs/project/ai_video.md — 2026-06-16 amendment 增补「§ 全剧序列 review」详细流程
+
+校验：移除台词「用不着你赶/我自己走出去/恩断义绝这扇门」全 drama 文件零残留；全剧序列 review 已跑（仅 EP1/EP2）——EP2 开场不再重复 EP1 已收尾的决裂戏，单一决裂言(EP1)+单一离场宣言(S05)；S01→S02→S04→S05 离场序列连贯。
+连贯性：EP1（locked/已出片）未改；EP1 末"我也不稀罕"↔EP2 S01 沉默承接，跨集无重复宣告。
+No conflicts found in: EP1 全部 shots；EP2 S02–S14；world/style_guide/arc/publish（publish 简介为剧情梗概、未引用被删台词）。
+
+### Follow-up 050 修正 — 2026-06-16 12:40:00（二次反馈：不能只改台词、要改剧情+走位）
+用户指出：把 S01 静音不算修好——EP2 S01-S04 的走位仍不合理（S01 转身走向门 → S02"朝门走去的背影" → S03 立中轴 → S04 又"转身走出"，走出两次、"怎么还在大厅"）。
+
+Auto-updated（顺着往后改剧情+空间逻辑）：
+- ep02/shots/shot01/shot01.md — 由"沉默转身走向朱门离场"改为"立定不退·满堂死寂"：主角承接 EP1"我也不稀罕"后**一步未移、未转身**、冷眼回望高座裴霆、以沉默压场（小说原文/Summary/标题/情节/走位/动作/节奏全改）。转身离场移交 S04
+- ep02/shots/shot02/shot02.md — 裴昭斜睨对象由"朝门走去的背影"改为"立在厅心、挺直脊背不肯走"的主角；小说原文/情节/走位同步（主角未走未转身）
+- ep02/script.md — 场景一改"立定不退、沉默压场"承接；裴昭打破死寂立赌；注明转身走出在 S04、宣言在 S05
+- ep02/dialogue.md — S01 默剧注由"沉默转身走向朱门离场"改为"立定厅心、以沉默压场；转身走出在 S04"
+- ep02/shotlist.md — S01 行内容+标记改"立定不退·满堂死寂"（景别改全景沉降转中近景+缓推；时长仍 7s）
+- CLAUDE.md「General coding rules」+ .claude/agent_refs/project/ai_video.md §全剧序列 review — 加"review 剧情+走位/空间逻辑（非单条台词）；静音不算修好、须顺着改后续剧情"原则
+
+空间轨迹核对（S01→S06）：S01 立定中轴(一步未移) → S02 立厅心(未走未转身) → S03 立中轴(系统暗授) → S04 起步、沿中轴甬道单向走出(唯一一次转身离场) → S05 门前停步、离场宣言、跨门槛没入天光 → S06 凌虚子府外远眺出府背影。位置单调连续、转身走出只发生一次；S01-S03 零"走出"残留。
+
+## Follow-up 051 — 2026-06-16 13:00:00（EP2 全删重写 + canon 修正）
+Source: user_input/follow_ups/051-20260616-130000-ep2-full-regen-canon-fix.md
+Summary: 根因——EP1（已出片）只激活系统未给武神躯，EP2 S03 之前在"重复恭喜武神躯"；角色档过时写"EP1 公开觉醒武神躯+暖金裂纹+光柱"与已出片 EP1/arc 矛盾。用户决策：全删 ep02/ 从头重写；武神躯留 EP2 作"断绝后兑现的大礼"·重新设计不重复。stage-6 regen，scope=episode 2。
+
+Regen 审计（events.jsonl @ .audit/adhoc_agents/2026-06-16/wushen_juexing-20260616-130000/）：
+- regen.delete.planned ×18 + regen.delete.completed(count=18)：删 episodes/ep02 全部 markdown（script/dialogue/shotlist/publish + 14 shotNN.md）。**保留 renders/ 已渲染 mp4（S01/S02/S03）**——不销毁用户资产；新 spec 与旧 render 不符、需用户重渲染。
+- regen.write.completed ×18：重写 script.md/shotlist.md/dialogue.md/publish.md + 14 个 shotNN.md（14 个 stage-6 worker 并行产出、parent 锁定 spine + WORKER_CONTEXT 后 fan-out）。
+
+EP2 新结构（14 镜/89s）：S01 立定不退·满堂死寂(默剧·承 EP1"我也不稀罕"不重演反转) → S02 裴昭立赌 → **S03 兑现首份大礼·武神躯注入识海·藏锋(措辞/视觉区别于 EP1 绑定激活、无金光入眉心)** → S04 唯一一次转身走出 → S05 离场宣言(反讽) → S06 凌虚子远眺生疑 → S07 离府决然回望 → S08 长街独行 → S09 系统初引(指路·非兑现) → S10 玉佩生疑(身世暗钩) → S11 暮色赶路 → S12 城门在望 → S13 暗藏黑影锁定 → S14 末镜钩黑屏。
+
+canon 修正：
+- characters/c1_裴知秋/c1_裴知秋.md — 角色定位/弧光/标志能力表：EP1 公开觉醒武神躯+暖金裂纹+九道光柱+镇国虚影 → 改正为 EP1=系统激活(无公开异象)、EP2=武神躯暗授藏锋(无体外异象)、EP25+=威能显化(暖金裂纹/光柱/虚影归此)。
+
+校验：14 shot 全在；总时长 89s；裴知秋描述符 byte-identical(1 distinct)；藏锋契约零威能显化(暖金裂纹/光柱/虚影/瞳发光/金光入眉心 仅以"无…"否定式出现)；台词 v2 全合规(正常台词/内心独白/系统提示音 标注齐、零字幕 token、内心独白均"嘴唇不动")；S03 不重复 EP1(措辞=断绝达成/大礼/注入识海，非绑定/二选一/激活)；S13/S14 黑影仅剪影无具名；走位连续(S01-S03 立定未移、转身走出只 S04 一次)。
+全剧序列 review：EP1 末"我也不稀罕"+黑屏 ↔ EP2 S01 立定不退(同一刻承接、不重演)；EP2 末"城门门洞+黑影+黑屏"≠EP1 末 beat；系统 beat 跨集功能各异(EP1 绑定/二选一/激活/设钩 · EP2 兑现大礼/指路)无重复。
+No conflicts found in: EP1 全部 shots(未改·已出片)；world/style_guide；arc(EP2 行本就是藏锋版、与新 EP2 一致)。
+待办(用户)：EP2 S01/S02/S03 旧 render 与新 spec 不符，需重新渲染。
+
+## Follow-up 052 — 2026-06-16 14:00:00（EP2 从零重写·从小说原文派生）
+Source: user_input/follow_ups/052-20260616-140000-ep2-rewrite-from-novel.md
+Summary: 上一轮 regen 复刻了旧 spine，前三镜跟之前没区别、仍重踏 EP1"大厅+弟弟+系统框"。用户要求 EP2 所有信息统统删干净、清除 memory、先重写小说原文、再据此重写剧情台词、再重新生成 shot。stage-6 regen，read-zero from source。
+
+Regen 审计（events.jsonl @ .audit/adhoc_agents/2026-06-16/wushen_juexing-20260616-140000/）：
+- regen.delete.planned ×18 + completed(count=18)：删 ep02 全部 markdown（含上一轮刚写的 source 之外的 spine+14 shots）。删旧 WORKER_CONTEXT（不带入旧结构）。保留 renders/*.mp4（S01–03·待用户重渲染）。
+- regen.write.completed ×19：source_novel.md + script.md + shotlist.md + dialogue.md + publish.md + 14 shotNN.md。
+
+新 EP2（14 镜/89s·走出去 forward·从 source_novel.md 派生）：
+- 新增 `episodes/ep02/source_novel.md`（第二章原文）作为唯一派生源；剧情/台词/分镜逐层派生。
+- 结构：S01 转身迈步走出+裴昭过肩立赌(不回大厅静站) → **S02 边走边领武神躯大礼(脚下不停·对话框随运动·无静态系统框镜·藏锋·无金光入眉心)** → S03 门前离场宣言(反讽) → S04 凌虚子远眺生疑 → S05 府门石阶决然回望 → S06 下阶入街 → S07 长街独行 → S08 系统初引(指路) → S09 玉佩透温驻足取出 → S10 玉佩生疑收回(身世暗钩) → S11 暮色赶路远景 → S12 城门在望 → S13 黑影锁定背影 → S14 末镜没入门洞+黑影叠+黑屏。
+- 裴霆本集不出场（仅 S01 原文一句"没有再多看裴霆一眼"过场引用），不再正面对峙——大厅戏压到 3 镜。
+
+校验：14 shot 全在；总时长 89s；裴知秋描述符 byte-identical(1 distinct)；零真实威能泄露(金光入眉心/暖金裂纹/光柱/镇国虚影 仅以"无…"否定式出现)；S02 确为边走边领(脚下没停·对话框随运动·非静态框镜)；台词 v2 全合规(正常台词/内心独白/系统提示音 标注齐、字幕 token 仅"不烧字"否定式、内心独白均"嘴唇不动")；离场为一气贯通连续位移(厅心→甬道→朱门→门槛→府门石阶→长街→城门)、转身只 S01 一次。
+全剧序列 review：EP1 末"我也不稀罕"+黑屏 ↔ EP2 S01 直接转身走出(承接不重演、不回大厅静站)；EP2 不再有"大厅静站对峙/重复决裂宣告/静态系统框"等 EP1 回声；系统 beat 跨集功能各异(EP1 绑定/二选一/激活/设钩 · EP2 边走边领兑现大礼/指路)。
+No conflicts found in: EP1 全部 shots(未改·已出片)；characters(c1 canon 已于 follow-up 051 修正)；world/style_guide；arc。
+待办(用户)：EP2 旧 render(S01–03)与新 spec 不符，需重新渲染全集。
+
+## Follow-up 053 — 2026-06-16 15:00:00（EP2 台词大师 review + 参考精确匹配）
+Source: user_input/follow_ups/053-20260616-150000-ep2-dialogue-review-ref-match.md
+Summary: ① shot2"潜伏待显"通俗化；② 全集台词/情节流畅性+语速节奏 review（ai_video__dialogue_master）；③ 全 14 shot 参考/场景/Reference 精确匹配角色 id/name 与 scene/bg name。
+
+Auto-updated:
+- shot02：系统台词"…发放中，潜伏待显"→"断绝达成。首份大礼【武神躯】，已注入宿主体内"；内心精简；Duration 7→8s、时长目标 4+4；参考/Reference 用 s1_裴王府正厅 真实 bg。
+- shot03：名场面宣言去"堂堂正正地"（防语速飙）、Duration 7→9s、时长目标 9s（签名句 byte-identical 保留）；参考 裴知秋+bg3_朝南_厅门逆光。
+- shot08：系统台词去文绉绉（脱离桎梏/淬炼己身/前路机缘）→白话"宿主已脱身。武神躯初成、根基未稳，先找个清静地方好好修炼"；内心精简；Duration 6→8s、时长目标 5+3；参考 bg3_街心华灯。
+- shot01：裴昭赌约动作窗 2.5s→1.5–8s、时长目标 8→7s（≤5 字/秒）；参考/Reference s1_正厅→s1_裴王府正厅。
+- 全 14 shot `参考:`/`场景:`/`Reference uploads:`/`Scene:` 精确匹配：角色用精确名（去 turntable.mp4/c1_杂串）、场景用各 scene 档真实 bg 名（S04 去"inline bg"→s5/bg1_远眺王府；S05/06 bg1_府门石阶；S07 bg2_长街主向；S08/09/10 bg3_街心华灯；S11 归 s6/bg4_长街远景城道；S12 bg1_城门洞主向；S13 bg2_城楼飞檐；S14 bg3_门洞幽暗内）。
+- script.md/dialogue.md/source_novel.md：S02/S03/S08 台词同步、宣言去"堂堂正正地"全量同步；script 时长 89→94s。
+- shotlist.md：S02/S03/S08 时长更新、时长合计 89→94s、S08 系统引文同步。
+
+校验：全项目零"潜伏待显"；零 ref 不匹配（turntable.mp4/bg s6/scene-id-as-bg/s1_正厅/inline bg 全清）；durations 合计 94s（14 镜）；speaking 镜 时长目标之和≤Duration 且字数÷时长目标≤5；裴知秋描述符 byte-identical；藏锋契约零威能显化；情节链/朝向走位/系统互动 review 通过。EP1 未动。
+连贯性：走出去 forward 连续位移、转身只 S01 一次；系统 beat 跨集功能各异；与 EP1 无重复。
+No conflicts found in: EP1；characters/world/style_guide/arc。
+待办(用户)：EP2 旧 render(S01–03) 与新 spec 不符、需重新渲染。
+
+## Follow-up 054 — 2026-06-17 09:00:00（shot1 说话人背对远去对象 + 流程优化）
+Source: user_input/follow_ups/054-20260617-090000-shot1-speaker-facing-departing.md
+Summary: EP2 shot1 裴昭背对着远去的哥哥说话不合理（"过肩/半侧奚落"+横摇机位致模型渲染成正面朝镜头、背对目标）。修 shot1，并把该陷阱写进 review 流程。
+
+Auto-updated:
+- shot01：裴昭由"斜睨背影/过肩/半侧奚落"改为"啪合扇后整个人转身、正面朝兄长离去方向(朝南)、目光锁其远去背影提声立赌"；镜头改侧方(同框二人朝向一致、绝不让裴昭正面朝镜头而主角在其身后)；情节/镜头/走位/动作/台词朝向tag/Summary/H1标题/节奏/情绪全同步；shotlist S01 行+标记、script.md S01 台词tag 同步（去"过肩"全清）。
+- .claude/skills/ai_video__dialogue_master/SKILL.md C2：新增"对正在离去/背对的对象说话"专项（禁过肩/侧身/半侧奚落、写整个人转身正对其离去方向目光锁背影、机位侧方/反打使朝向一致、绝不正面朝镜头而对象在身后；shot01 教训）。
+- .claude/agent_refs/project/ai_video.md §2026-06-16 amendment item 1：加"说话人朝向必须对着所说对象（含离去/背对对象）"通用约束 + 指向 skill C2。
+
+校验：shot1 全字段零"过肩/身体半侧"；裴昭朝向明确对主角离去方向、目光锁背影、绝不背对/不面朝镜头自说自话。
+连贯性：S01→S02→S03 走出去 forward 连续位移不变；裴昭奚落朝向修正不影响主角动线。
+No conflicts: EP1；其余 EP2 镜。
+
+## Follow-up 055 — 2026-06-17 16:47:00（台词/小说原文全白话 + review_suite 九维重跑 EP1/EP2）
+Source: user_input/follow_ups/055-20260617-164700-baihua-and-review-suite-rerun.md
+Summary: 白话铁律落地本剧；用新建九维审查 skill（review_suite）全量重跑 EP1+EP2 surgical 修复；跨集 voice_id 统一并回填 casting.md。
+
+Auto-updated:
+- episodes/ep01：何曾→哪（shot12+dialogue+script+shotlist+subtitles 7 处）；系统 shot04/shot13 白话；shot02「除其族籍」→「把他逐出族谱」；起身·气场反转 beat 去重演（shot06→07→14 只反转一次，shot07/shot14+script 同步）；shot04 系统首话对齐 canonical；锁定串分隔符归一（7 镜）。
+- episodes/ep02：系统 shot02/shot08 白话；shot01 裴昭、shot03 主角离场宣言 白话；shot03 时长 9s→10s + 补 1s 离场收尾 beat（shotlist 同步、总时长更新）；系统 voice_id SYS-vo-01→SYS-gold-01（shot02/08）、裴昭 PZ-villain-01→PZ-brat-01（shot01）。
+- casting.md：回填全部锁定 voice_id（c1 PR-hero-01 / c3 PT-patriarch-01 / c9 PW-consort-01 / c2 PZ-brat-01 / c4 LXZ-sword-01 / 系统 SYS-gold-01）杜绝跨集漂移复发。
+
+Common-level（非本项目专属，已落公共面）：
+- .claude/agent_refs/project/ai_video.md：2026-06-16 白话铁律 amendment；2026-06-17「任何 ep/shot 改动+出片前默认跑 review_suite」amendment；12.4-D 退化为九维 skill 索引。
+- .claude/skills/：新建 ai_video__{blocking,camera,action,light,pacing,continuity,arc}_master + contract_checker + review_suite；dialogue_master 收窄为纯台词。
+- CLAUDE.md：narrative-edit coherence check 指向 review_suite。
+
+校验：EP1+EP2 单镜+整集+全剧三层 0 blocker；台词/小说原文/prompt 零文言；系统全白话；跨集 voice_id 一致；锁定串 byte-identical；时长∈[3,15] 且字数÷时长≤5。
+连贯性：EP1 内起身只反转一次；EP2 开场不重复 EP1 结尾宣告（"我也不稀罕" vs "成为武神回来"为递进非重复）；跨集爽点单调递进、藏锋无泄底。
+No conflicts found in: characters/world/style_guide/arc_outline；其余未触及 EP。
+审计：.audit/adhoc_agents/2026-06-17/wushen_juexing-20260617-164347/。
+
+## Follow-up 055 — 2026-06-17 10:00:00（shot2 台词去突兀 + 全 shot prompt 集合文件）
+Source: user_input/follow_ups/055-20260617-100000-shot2-line-and-prompt-collection.md
+Auto-updated:
+- shot02 内心台词：`来了。先沉到骨子里——这些人，还不配看见。`→`原来……这就是武神躯。先收着——这些人，还不配看见。`（先认出武神躯再决定藏、补 recognition beat、去突兀；D5/D1）。台词/情节/台词配音 + dialogue.md/script.md/source_novel.md/shotlist.md 六处同步。
+- 新增 `episodes/ep02/all_shot_prompts.md`：全 14 镜【视频 prompt】+【台词配音 prompt】代码块汇编（小标题+时长，复制即用、只读快照）。
+校验：全项目零"先沉到骨子里"；shot2 新台词承系统"武神躯已注入体内"→认出→藏锋，与 S01/S03 连贯；all_shot_prompts.md 含 14 镜、含 shot2 新台词。
+
+## Follow-up 056 — 2026-06-17 13:00:00（EP2 全镜优化 + 原则融入 skill）
+Source: user_input/follow_ups/056-20260617-130000-ep2-allshot-optimize-skill-integrate.md
+Summary: 按用户《EP2 全镜优化方案》重写全 14 镜（台词去机器化白话/运镜影视化/表演拟人化/节奏/情节衔接）；两处异议经用户裁定（①全剧换新白话签名句 ②全部白话化）。原则融入 camera/action/dialogue master skill。14 worker 并行（task wushen_juexing-20260617-120000）。
+
+Auto-updated:
+- 签名台词全剧替换为白话新句「总有一天，我会站上武神之位，让你们所有人都仰起头来看我」（byte-identical）：ep02 script/dialogue/shotlist/shot03/source_novel/publish/all_shot_prompts + characters/c1(标志台词+弧光) + arc_outline(EP71-80/EP2/EP75) + style_guide 示例。
+- ep02 全 14 shotNN.md：按 OPT_CONTEXT 逐镜改写 小说原文/情节/镜头/走位/动作/台词/台词配音/光线/节奏；台词逐字取自更新后 dialogue.md（白话）；PRESERVE 参考/描述符/场景/Reference/渲染样式/比例/Duration byte-identical。
+- ep02 script.md/dialogue.md/source_novel.md：全台词白话化 + 新签名 + 时长 95s。
+- .claude/skills/ai_video__camera_master（影视化动态运镜铁律）/ai_video__action_master（A7 表演拟人化·情绪层次）/ai_video__dialogue_master（D1 真人脱口而出·禁念稿）。
+
+校验：旧签名/文言（赶我走的人旧式/今日之辱/登临/皆要仰视/莫测道韵/经脉尽损）零残留；新签名 5 文件 byte-identical；藏锋零真实威能泄露；裴知秋描述符 1 distinct；时长合计 95s；台词 v2 零字幕 token；all_shot_prompts.md 重生（新签名×2、旧×0）。
+连贯性：走出去 forward 连续位移不变、转身只 S01；S01 裴昭转身正对离去方向（朝向契约）；S13/S14 黑影仅剪影。
+待办(用户)：EP2 旧 render(S01-03) 与新 spec 不符、需重新渲染全集。

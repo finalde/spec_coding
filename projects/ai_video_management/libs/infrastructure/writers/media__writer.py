@@ -32,6 +32,14 @@ from libs.domain.errors.media__error import (
 ARCHIVE_DIR_NAME = "archive"
 DELETED_DIR_NAME = "_deleted"
 AI_VIDEOS_ROOT_NAME = "ai_videos"
+# The episode subtree is never a rename target. Shot media there lives in the
+# name-excluded `renders/` subfolder (original names preserved); the only other
+# media under `episodes/` are the episode-root final cuts (`ep{NN}_{lang}.mp4`,
+# written by the subtitle-burn / concat feature) whose deliberate language-tagged
+# names must be preserved — the folder-name rename would otherwise collapse them
+# to `ep{NN}{i}.mp4` (follow-up 128). Only `characters/`, `scenes/`, and scene
+# `bg*` plate folders are canonicalized by the rename pass.
+EPISODES_DIR_NAME = "episodes"
 
 
 def _uniquify(target: Path) -> Path:
@@ -196,7 +204,7 @@ class MediaRenamer:
     ) -> RenameResult:
         drama_dir = self._validate_drama(rel_drama_path)
         result = RenameResult()
-        excluded = self._exposed.excluded_dirs()
+        excluded = self._exposed.excluded_dirs() | {EPISODES_DIR_NAME}
         if excluded_folder_names:
             excluded = frozenset(excluded | excluded_folder_names)
         ops: list[RenameOp] = []

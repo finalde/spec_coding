@@ -108,6 +108,37 @@ def test_no_shot_has_render_raises(tmp_path: Path) -> None:
         builder.build("ai_videos/td/episodes/ep03/shotlist.md")
 
 
+def test_concat_lang_variant_picks_language_master_and_names_output(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    ep = root / "ai_videos" / "td" / "episodes" / "ep01"
+    # shot01 has a burned zh master in the shot-folder root (not renders/).
+    _touch(ep / "shots" / "shot01" / "renders" / "raw.mp4", mtime=1000)
+    _touch(ep / "shots" / "shot01" / "shot01_zh.mp4", mtime=2000)
+    # shot02 has a raw render but NO zh master → skipped for the zh build.
+    _touch(ep / "shots" / "shot02" / "renders" / "raw.mp4", mtime=1000)
+    _touch(ep / "shotlist.md")
+
+    builder, captured = _make_builder(root)
+    result = builder.build("ai_videos/td/episodes/ep01/shotlist.md", "zh")
+
+    assert result.lang == "zh"
+    assert result.out_rel == "ai_videos/td/episodes/ep01/ep01_zh.mp4"
+    assert [u.shot for u in result.used] == ["shot01"]
+    assert result.used[0].video_rel == "ai_videos/td/episodes/ep01/shots/shot01/shot01_zh.mp4"
+    assert [(s.shot, s.reason) for s in result.skipped] == [("shot02", "no_zh_subtitle_mp4")]
+    assert [p.name for p in captured[0]] == ["shot01_zh.mp4"]
+
+
+def test_concat_both_variant_output_name(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    ep = root / "ai_videos" / "td" / "episodes" / "ep01"
+    _touch(ep / "shots" / "shot01" / "shot01_zhen.mp4", mtime=2000)
+    _touch(ep / "shotlist.md")
+    builder, _ = _make_builder(root)
+    result = builder.build("ai_videos/td/episodes/ep01/shotlist.md", "both")
+    assert result.out_rel == "ai_videos/td/episodes/ep01/ep01_zhen.mp4"
+
+
 def test_non_episode_path_rejected(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     _touch(root / "ai_videos" / "td" / "characters" / "c1_x" / "c1_x.md")

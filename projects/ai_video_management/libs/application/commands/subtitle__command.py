@@ -19,8 +19,8 @@ class SubtitleCommand:
     def __init__(self, burner: SubtitleBurner) -> None:
         self._burner = burner
 
-    def burn(self, rel_path: str) -> BurnSubtitlesResultCdto:
-        return SubtitleMapper.to_burn_cdto(self._burner.burn(rel_path))
+    def burn(self, rel_path: str, lang: str = "zh") -> BurnSubtitlesResultCdto:
+        return SubtitleMapper.to_burn_cdto(self._burner.burn(rel_path, lang))
 
     def scaffold(self, rel_path: str) -> ScaffoldSubtitlesResultCdto:
         return SubtitleMapper.to_scaffold_cdto(self._burner.scaffold(rel_path))

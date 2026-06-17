@@ -14,6 +14,7 @@ router = APIRouter()
 
 class ConcatEpisodeBody(BaseModel):
     path: str
+    lang: str = "original"  # "original" | "zh" | "en" | "both"
 
 
 @router.post("/api/concat-episode")
@@ -22,4 +23,6 @@ def concat_episode(
     body: ConcatEpisodeBody,
     command: EpisodeCommand = Depends(Provide[Container.episode_command]),
 ) -> Response:
-    return JSONResponse(status_code=200, content=command.concat(body.path).to_payload())
+    return JSONResponse(
+        status_code=200, content=command.concat(body.path, body.lang).to_payload()
+    )

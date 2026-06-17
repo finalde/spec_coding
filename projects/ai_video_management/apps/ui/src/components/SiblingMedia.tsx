@@ -25,6 +25,7 @@ import {
   scaffoldSubtitles,
   unarchiveMedia,
 } from "../api";
+import type { SubtitleLang } from "../api";
 import { announceToast as announce } from "../lib/announce";
 import { ApiError } from "../types";
 
@@ -152,9 +153,15 @@ interface MediaTileProps {
   onExtractFrames: (path: string) => void;
   onExtractScenePlates: (path: string) => void;
   onExtractCharacterViews: (path: string) => void;
-  onBurnSubtitles: (path: string) => void;
+  onBurnSubtitles: (path: string, lang: SubtitleLang) => void;
   onScaffoldSubtitles: (path: string) => void;
 }
+
+const SUBTITLE_LANG_BUTTONS: { lang: SubtitleLang; label: string; title: string }[] = [
+  { lang: "zh", label: "💬中文", title: "烧中文字幕 → *_subtitled_zh.mp4 (原视频保留)" },
+  { lang: "en", label: "💬EN", title: "Burn English subtitles → *_subtitled_en.mp4 (original kept)" },
+  { lang: "both", label: "💬中英", title: "烧中英双语字幕(中上英下) → *_subtitled_zhen.mp4 (原视频保留)" },
+];
 
 function MediaTile({
   path,
@@ -256,16 +263,21 @@ function MediaTile({
           </button>
         ) : null}
         {isShotVideo && !archived ? (
-          <button
-            type="button"
-            className="sibling-media-burn-btn"
-            onClick={() => onBurnSubtitles(path)}
-            disabled={busy || burning}
-            aria-label={`Burn subtitles into ${filename}`}
-            title="把同 shot 文件夹 subtitles.md 的台词按时间烧进视频，生成 *_subtitled.mp4 (原视频保留)"
-          >
-            {burning ? "⏳ 烧录中…" : "💬 烧录台词"}
-          </button>
+          <span className="sibling-media-burn-group" role="group" aria-label="烧录字幕语言">
+            {SUBTITLE_LANG_BUTTONS.map(({ lang, label, title }) => (
+              <button
+                key={lang}
+                type="button"
+                className="sibling-media-burn-btn"
+                onClick={() => onBurnSubtitles(path, lang)}
+                disabled={busy || burning}
+                aria-label={`Burn ${lang} subtitles into ${filename}`}
+                title={title}
+              >
+                {burning ? "⏳" : label}
+              </button>
+            ))}
+          </span>
         ) : null}
         {isCharacterVideo && !archived ? (
           <button
@@ -485,10 +497,10 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
     }
   };
 
-  const handleBurnSubtitles = async (path: string): Promise<void> => {
+  const handleBurnSubtitles = async (path: string, lang: SubtitleLang): Promise<void> => {
     setBurningPath(path);
     try {
-      const result = await burnSubtitles(path);
+      const result = await burnSubtitles(path, lang);
       announce(`已生成 ${basename(result.out)} (${result.cues} 句字幕)`);
       onChange?.();
     } catch (err) {
@@ -497,9 +509,9 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
         kind === "subtitle_file_missing"
           ? "未找到 subtitles.md — 请先点「📝 生成台词」或手写后再烧录"
           : kind === "empty_subtitles"
-            ? "subtitles.md 无可解析台词行"
+            ? "subtitles.md 该语言无可烧字幕（检查中文/英文是否填写）"
             : kind;
-      announce(`烧录台词失败: ${hint}`);
+      announce(`烧录字幕失败: ${hint}`);
     } finally {
       setBurningPath(null);
     }

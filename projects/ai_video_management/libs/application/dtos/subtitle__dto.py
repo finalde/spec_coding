@@ -10,12 +10,14 @@ class BurnSubtitlesResultCdto:
     src_rel: str
     out_rel: str
     cue_count: int
+    lang: str
 
     def to_payload(self) -> dict[str, Any]:
         return {
             "src": self.src_rel,
             "out": self.out_rel,
             "cues": self.cue_count,
+            "lang": self.lang,
         }
 
 

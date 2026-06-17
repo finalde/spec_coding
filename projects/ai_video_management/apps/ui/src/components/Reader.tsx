@@ -10,6 +10,7 @@ import { ImageRefView } from "./ImageRefView";
 import { CastingView } from "./CastingView";
 import { ActorView } from "./ActorView";
 import { VoiceView } from "./VoiceView";
+import { BgmView } from "./BgmView";
 import { PerfScorePanel } from "./PerfScorePanel";
 import { ShotRegenButton } from "./ShotRegenButton";
 import { Renderer } from "../markdown/renderer";
@@ -18,6 +19,7 @@ import { JsonlView } from "../markdown/JsonlView";
 import { SiblingMedia, isCharacterVideoPath } from "./SiblingMedia";
 import { detectShotPair } from "../lib/shotPairing";
 import { extractDramaAssets } from "../lib/dramas";
+import { episodeDirOf, extractVideoPromptBody, shotMdPathsInEpisode } from "../lib/videoPrompts";
 import { announceToast } from "../lib/announce";
 import {
   archiveMedia,
@@ -31,6 +33,7 @@ import {
   putFile,
   unarchiveMedia,
 } from "../api";
+import type { EpisodeLang } from "../api";
 import { ApiError, type FileResult, type TreeNode } from "../types";
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
@@ -66,6 +69,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [extractingViews, setExtractingViews] = useState<boolean>(false);
   const [concatBusy, setConcatBusy] = useState<boolean>(false);
   const [episodeConcatBusy, setEpisodeConcatBusy] = useState<boolean>(false);
+  const [copyingPrompts, setCopyingPrompts] = useState<boolean>(false);
 
   const ext = path ? extOf(path) : "";
   const isPerfEntry = path ? /_performances\/[^/]+\/perf_\d{4}\/perf_\d{4}\.md$/.test(path) : false;
@@ -181,18 +185,19 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     }
   }, [path, onSaved]);
 
-  const onConcatEpisodeClick = useCallback(async () => {
+  const onConcatEpisodeClick = useCallback(async (lang: EpisodeLang) => {
     if (!path) return;
     setEpisodeConcatBusy(true);
     try {
-      const result = await concatEpisode(path);
+      const result = await concatEpisode(path, lang);
       const skippedNames = result.skipped.map((s) => `${s.shot} (${s.reason})`).join(", ");
       let summary: string;
       if (result.out) {
         summary = `已合成 ${result.out.split("/").pop()} — 拼接 ${result.used.length} 个镜头`;
         if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
       } else {
-        summary = `未生成 — 没有镜头包含 renders/ mp4`;
+        const noun = lang === "original" ? "renders/ mp4" : `shot{NN}_${lang === "both" ? "zhen" : lang}.mp4`;
+        summary = `未生成 — 没有镜头包含 ${noun}`;
         if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
       }
       announceToast(summary);
@@ -203,6 +208,40 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
       setEpisodeConcatBusy(false);
     }
   }, [path, onSaved]);
+
+  const onCopyAllVideoPromptsClick = useCallback(async () => {
+    if (!path) return;
+    const epDir = episodeDirOf(path);
+    if (!epDir) { announceToast("无法定位本集文件夹"); return; }
+    const shotPaths = shotMdPathsInEpisode(knownPaths, epDir);
+    if (shotPaths.length === 0) { announceToast("本集未找到 shot prompt"); return; }
+    setCopyingPrompts(true);
+    try {
+      const bodies: string[] = [];
+      let missing = 0;
+      for (const sp of shotPaths) {
+        try {
+          const f = await fetchFile(sp);
+          const body = extractVideoPromptBody(f.content);
+          if (body) bodies.push(body);
+          else missing += 1;
+        } catch {
+          missing += 1;
+        }
+      }
+      if (bodies.length === 0) { announceToast("未提取到任何视频 prompt"); return; }
+      try {
+        await navigator.clipboard.writeText(bodies.join("\n\n"));
+        announceToast(
+          `已复制 ${bodies.length} 个视频 prompt${missing > 0 ? `（${missing} 个缺失/跳过）` : ""}`,
+        );
+      } catch {
+        announceToast("剪贴板不可用（浏览器拒绝）");
+      }
+    } finally {
+      setCopyingPrompts(false);
+    }
+  }, [path, knownPaths]);
 
   const onExtractFramesClick = useCallback(async () => {
     if (!path) return;
@@ -279,6 +318,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const isCasting = isMarkdown && /^ai_videos\/[^/]+\/casting\.md$/.test(path);
   const isActor = isMarkdown && /^ai_videos\/_actors\/actor_[^/]+\/actor_[^/]+\.md$/.test(path);
   const isVoice = isMarkdown && /^ai_videos\/_voices\/voice_[^/]+\/voice_[^/]+\.md$/.test(path);
+  const isBgm = isMarkdown && /^ai_videos\/_bgm\/[^/]+\/bgm_[^/]+\/bgm_[^/]+\.md$/.test(path);
   const isShotMd = isMarkdown && SHOT_MD_RE.test(path);
 
   const filename = path.split("/").pop() ?? path;
@@ -311,12 +351,29 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
           </button>
         ) : null}
         {isEpisodeFile ? (
-          <button type="button" className="reader-episode-concat-btn"
-            onClick={onConcatEpisodeClick} disabled={episodeConcatBusy}
-            aria-label="Concatenate every shot's newest renders/ mp4 into a single episode mp4"
-            title="扫描本集 shots/shotNN/renders/ 下每个镜头最新的 mp4，按镜头顺序 ffmpeg 拼接成整集 ep{NN}.mp4 放在本集文件夹下（已存在则覆盖）。没有 renders/ mp4 的镜头自动跳过。">
-            {episodeConcatBusy ? "⏳ 合成中…" : "🎬 合成本集视频"}
+          <button type="button" className="reader-copy-prompts-btn"
+            onClick={onCopyAllVideoPromptsClick} disabled={copyingPrompts}
+            aria-label="Copy every shot's video prompt for this episode to the clipboard"
+            title="把本集每个 shot 的【视频 prompt】代码块按 shot 顺序依次拼接、一次复制到剪贴板（只含视频 prompt，不含台词配音；块间空行分隔）。">
+            {copyingPrompts ? "⏳ 复制中…" : "📋 复制全部视频 prompt"}
           </button>
+        ) : null}
+        {isEpisodeFile ? (
+          <span className="reader-episode-concat-group" role="group" aria-label="合成本集视频（按语言）">
+            {([
+              ["original", "🎬 合成(原片)", "无字幕：每镜取 renders/ 最新 mp4 → ep{NN}.mp4"],
+              ["zh", "🎬 中文", "每镜取 shot{NN}_zh.mp4 → ep{NN}_zh.mp4"],
+              ["en", "🎬 EN", "每镜取 shot{NN}_en.mp4 → ep{NN}_en.mp4"],
+              ["both", "🎬 中英", "每镜取 shot{NN}_zhen.mp4 → ep{NN}_zhen.mp4"],
+            ] as [EpisodeLang, string, string][]).map(([lang, label, title]) => (
+              <button key={lang} type="button" className="reader-episode-concat-btn"
+                onClick={() => onConcatEpisodeClick(lang)} disabled={episodeConcatBusy}
+                aria-label={`Concatenate episode (${lang})`}
+                title={`按镜头顺序 ffmpeg 拼接成整集放在本集文件夹下（已存在则覆盖）。缺该片源的镜头自动跳过。${title}`}>
+                {episodeConcatBusy ? "⏳" : label}
+              </button>
+            ))}
+          </span>
         ) : null}
         {/* Per follow-up 2026-05-30: hide whole-file Edit for ai_videos paths.
             Users must edit prompts via the per-code-block ✏ Edit affordance
@@ -419,6 +476,8 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             <ActorView primaryFile={file} primaryPath={path} knownPaths={knownPaths} tree={tree} onSaved={onSaved} />
           ) : isVoice ? (
             <VoiceView primaryFile={file} primaryPath={path} knownPaths={knownPaths} tree={tree} onSaved={onSaved} />
+          ) : isBgm ? (
+            <BgmView primaryFile={file} primaryPath={path} knownPaths={knownPaths} onSaved={onSaved} />
           ) : isImageRef ? (
             <>
               <ImageRefView primaryFile={file} primaryPath={path} knownPaths={knownPaths} onSaved={onSaved} />

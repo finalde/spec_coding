@@ -16,13 +16,20 @@ class SubtitlePathBody(BaseModel):
     path: str
 
 
+class BurnSubtitlesBody(BaseModel):
+    path: str
+    lang: str = "zh"  # "zh" | "en" | "both"
+
+
 @router.post("/api/burn-subtitles")
 @inject
 def burn_subtitles(
-    body: SubtitlePathBody,
+    body: BurnSubtitlesBody,
     command: SubtitleCommand = Depends(Provide[Container.subtitle_command]),
 ) -> Response:
-    return JSONResponse(status_code=200, content=command.burn(body.path).to_payload())
+    return JSONResponse(
+        status_code=200, content=command.burn(body.path, body.lang).to_payload()
+    )
 
 
 @router.post("/api/scaffold-subtitles")

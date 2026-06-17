@@ -23,4 +23,5 @@ class EpisodeMapper:
             out_rel=r.out_rel,
             used=used,
             skipped=skipped,
+            lang=r.lang,
         )

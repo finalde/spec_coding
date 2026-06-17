@@ -30,6 +30,7 @@ class ConcatEpisodeResultCdto:
     out_rel: str | None
     used: tuple[EpisodeShotUsedCdto, ...]
     skipped: tuple[EpisodeShotSkippedCdto, ...]
+    lang: str
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -37,4 +38,5 @@ class ConcatEpisodeResultCdto:
             "out": self.out_rel,
             "used": [u.to_payload() for u in self.used],
             "skipped": [s.to_payload() for s in self.skipped],
+            "lang": self.lang,
         }

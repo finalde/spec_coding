@@ -1,0 +1,26 @@
+# Dependencies for tools/stableaudio_gen.py ONLY — the self-hosted Stable
+# Audio BGM generator. Heavy (torch + GPU). Install into a DEDICATED venv and
+# point the webapp at its interpreter via the BGM_PYTHON env var so torch
+# never enters the ai_video_management webapp environment.
+#
+#   python -m venv .venv-stableaudio
+#   # GPU torch: install the cu1xx build matching your driver from pytorch.org:
+#   .venv-stableaudio/Scripts/pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+#   .venv-stableaudio/Scripts/pip install -r tools/stableaudio_gen.requirements.txt
+#   set BGM_PYTHON=.../.venv-stableaudio/Scripts/python.exe
+#
+# Backend = diffusers' StableAudioPipeline loading the gated open weights
+# `stabilityai/stable-audio-open-1.0`. (The original `stable-audio-tools`
+# hard-pins 2023-era deps — pandas==2.0.2 etc. — with no Python 3.12/3.13
+# wheels; diffusers loads the same weights and installs cleanly on modern
+# Python.) One-time HF auth is required: accept the license on the model page
+# and `huggingface-cli login` (or set HF_TOKEN) in this venv.
+torch>=2.0
+torchaudio>=2.0
+diffusers>=0.29
+transformers
+accelerate
+sentencepiece
+protobuf
+soundfile
+imageio-ffmpeg

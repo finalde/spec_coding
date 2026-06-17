@@ -30,6 +30,20 @@ from libs.domain.errors.actor__error import (
     InvalidActorAttributeError,
     InvalidActorIdError,
 )
+from libs.domain.errors.bgm__error import (
+    BgmAlreadyAssignedError,
+    BgmDeleteFailedError,
+    BgmDeleteTargetExistsError,
+    BgmGenerationDirMissingError,
+    BgmNoDownloadAudioError,
+    BgmNotFoundError,
+    BgmReferenceScanFailedError,
+    BgmSidecarUnreadableError,
+    InvalidBgmAttributeError,
+    InvalidBgmIdError,
+    StableAudioFailedError,
+    StableAudioMissingError,
+)
 from libs.domain.errors.casting__error import (
     DramaNotFoundError,
     InvalidDramaPathError,
@@ -82,6 +96,7 @@ from libs.domain.errors.frame__error import (
 from libs.domain.errors.subtitle__error import (
     BurnFailedError,
     EmptySubtitlesError,
+    InvalidSubtitleLangError,
     SubtitleAlreadyExistsError,
     SubtitleFileMissingError,
 )
@@ -179,6 +194,7 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     (EmptySubtitlesError, 400, "empty_subtitles", True),
     (SubtitleAlreadyExistsError, 409, "subtitles_already_exist", True),
     (BurnFailedError, 500, "burn_failed", True),
+    (InvalidSubtitleLangError, 400, "invalid_subtitle_lang", True),
     # media
     (InvalidMediaPathError, 400, "invalid_path", False),
     (NotMediaError, 400, "extension_not_allowed", False),
@@ -202,6 +218,17 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     (VoiceMp4MissingError, 400, "mp4_missing", True),
     (VoiceFfmpegMissingError, 500, "ffmpeg_missing", True),
     (VoiceAudioExtractFailedError, 500, "audio_extract_failed", True),
+    # bgm (background-music library)
+    (InvalidBgmAttributeError, 400, "invalid_attribute", True),
+    (InvalidBgmIdError, 400, "invalid_bgm_id", True),
+    (BgmNotFoundError, 404, "bgm_not_found", False),
+    (BgmDeleteFailedError, 500, "move_failed", True),
+    (BgmGenerationDirMissingError, 500, "bgm_dir_unwritable", True),
+    (BgmReferenceScanFailedError, 500, "references_scan_failed", True),
+    (StableAudioMissingError, 500, "stableaudio_missing", True),
+    (StableAudioFailedError, 500, "stableaudio_failed", True),
+    (BgmSidecarUnreadableError, 422, "bgm_sidecar_unreadable", True),
+    (BgmNoDownloadAudioError, 404, "bgm_no_download_audio", True),
     # prompt suggestions (follow-up 117)
     (InvalidSuggestionRequestError, 400, "invalid_suggestion_request", True),
     (SuggestionProviderUnavailableError, 503, "suggestion_unavailable", True),
@@ -243,6 +270,14 @@ def _register_exception_handlers(app: FastAPI) -> None:
     def _voice_target_exists(_req: Request, exc: VoiceDeleteTargetExistsError) -> Response:  # type: ignore[unused-function]
         return _err(409, "target_exists", target=str(exc))
 
+    @app.exception_handler(BgmAlreadyAssignedError)
+    def _bgm_assigned(_req: Request, exc: BgmAlreadyAssignedError) -> Response:  # type: ignore[unused-function]
+        return _err(409, "bgm_is_referenced", bgm_id=exc.bgm_id, assignments=exc.assignments)
+
+    @app.exception_handler(BgmDeleteTargetExistsError)
+    def _bgm_target_exists(_req: Request, exc: BgmDeleteTargetExistsError) -> Response:  # type: ignore[unused-function]
+        return _err(409, "target_exists", target=str(exc))
+
     @app.exception_handler(MediaTargetExistsError)
     def _media_target_exists(_req: Request, exc: MediaTargetExistsError) -> Response:  # type: ignore[unused-function]
         return _err(409, "target_exists", target=str(exc))
@@ -275,6 +310,8 @@ def create_app(container: Container, serve_static: bool = True) -> FastAPI:
     container.actor_pool().actors_dir().mkdir(parents=True, exist_ok=True)
     # Same posture for the voice pool folder (follow-up 115).
     container.voice_pool().voices_dir().mkdir(parents=True, exist_ok=True)
+    # Same posture for the shared BGM library folder.
+    container.bgm_pool().bgm_dir().mkdir(parents=True, exist_ok=True)
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(OriginHostMiddleware, bound=container.bound_origin())

@@ -11,6 +11,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from apps.api.routes.actor__route import router as _actor_router
+from apps.api.routes.bgm__route import router as _bgm_router
 from apps.api.routes.casting__route import router as _casting_router
 from apps.api.routes.character_video__route import router as _character_video_router
 from apps.api.routes.downloads__route import router as _downloads_router
@@ -36,6 +37,7 @@ router.include_router(_frame_router)
 router.include_router(_scene_plate_router)
 router.include_router(_downloads_router)
 router.include_router(_actor_router)
+router.include_router(_bgm_router)
 router.include_router(_casting_router)
 router.include_router(_character_video_router)
 router.include_router(_episode_router)

@@ -18,6 +18,7 @@ from pathlib import Path
 from dependency_injector import containers, providers
 
 from libs.application.commands.actor__command import ActorCommand
+from libs.application.commands.bgm__command import BgmCommand
 from libs.application.commands.casting__command import CastingCommand
 from libs.application.commands.character_video__command import CharacterVideoCommand
 from libs.application.commands.downloads__command import DownloadsCommand
@@ -31,6 +32,7 @@ from libs.application.commands.perf_score__command import PerfScoreCommand
 from libs.application.commands.subtitle__command import SubtitleCommand
 from libs.application.commands.voice__command import VoiceCommand
 from libs.application.queries.actor__query import ActorQuery
+from libs.application.queries.bgm__query import BgmQuery
 from libs.application.queries.casting__query import CastingQuery
 from libs.application.queries.file__query import FileQuery
 from libs.application.queries.perf_check__query import PerfCheckPromptQuery
@@ -44,11 +46,13 @@ from libs.common.exposed_tree import ExposedTree
 from libs.common.origin import BoundOrigin
 from libs.common.safe_resolve import SafeResolver
 from libs.infrastructure.clients.anthropic__client import AnthropicClient
+from libs.infrastructure.readers.bgm_reference__reader import BgmReferenceReader
 from libs.infrastructure.readers.file__reader import FileReader
 from libs.infrastructure.readers.perf_check__reader import PerfCheckPromptReader
 from libs.infrastructure.readers.shot_regen__reader import ShotRegenPromptReader
 from libs.infrastructure.readers.tree__reader import TreeReader
 from libs.infrastructure.writers.actor__writer import ActorPool
+from libs.infrastructure.writers.bgm__writer import BgmPool
 from libs.infrastructure.writers.casting__writer import Casting
 from libs.infrastructure.writers.character_video__writer import (
     CharacterVideoTruncator,
@@ -126,6 +130,12 @@ class Container(containers.DeclarativeContainer):
     voice_pool: providers.Singleton[VoicePool] = providers.Singleton(
         VoicePool, exposed=exposed_tree, resolver=safe_resolver
     )
+    bgm_pool: providers.Singleton[BgmPool] = providers.Singleton(
+        BgmPool, exposed=exposed_tree, resolver=safe_resolver
+    )
+    bgm_reference_reader: providers.Singleton[BgmReferenceReader] = providers.Singleton(
+        BgmReferenceReader, exposed=exposed_tree, resolver=safe_resolver
+    )
     casting: providers.Singleton[Casting] = providers.Singleton(
         Casting,
         exposed=exposed_tree,
@@ -168,6 +178,9 @@ class Container(containers.DeclarativeContainer):
     casting_command: providers.Factory[CastingCommand] = providers.Factory(
         CastingCommand, casting=casting
     )
+    bgm_command: providers.Factory[BgmCommand] = providers.Factory(
+        BgmCommand, pool=bgm_pool, references=bgm_reference_reader
+    )
     media_command: providers.Factory[MediaCommand] = providers.Factory(
         MediaCommand, archiver=media_archiver, renamer=media_renamer, casting=casting
     )
@@ -207,6 +220,9 @@ class Container(containers.DeclarativeContainer):
 
     actor_query: providers.Factory[ActorQuery] = providers.Factory(
         ActorQuery, pool=actor_pool, casting=casting
+    )
+    bgm_query: providers.Factory[BgmQuery] = providers.Factory(
+        BgmQuery, pool=bgm_pool, references=bgm_reference_reader
     )
     voice_command: providers.Factory[VoiceCommand] = providers.Factory(
         VoiceCommand, pool=voice_pool, casting=casting

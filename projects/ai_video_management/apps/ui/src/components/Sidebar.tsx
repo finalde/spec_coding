@@ -4,6 +4,7 @@ import { deleteActor, deleteVoice, importFromDownloads } from "../api";
 import { ApiError, type TreeNode } from "../types";
 import { ActorPoolGenerator } from "./ActorPoolGenerator";
 import { VoicePoolGenerator } from "./VoicePoolGenerator";
+import { BgmPoolGenerator } from "./BgmPoolGenerator";
 
 const ACTOR_ID_RE = /^actor_\d{4,}$/;
 const VOICE_ID_RE = /^voice_\d{4,}$/;
@@ -27,6 +28,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
   const [renameToast, setRenameToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState<boolean>(false);
   const [voiceGeneratorOpen, setVoiceGeneratorOpen] = useState<boolean>(false);
+  const [bgmGeneratorOpen, setBgmGeneratorOpen] = useState<boolean>(false);
   const [deletingActorId, setDeletingActorId] = useState<string | null>(null);
   const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
 
@@ -275,6 +277,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
           const isDrama = isAiVideoChild && !isSystemFolder;
           const isActorsRoot = isAiVideoChild && dramaPathParts[1] === "_actors";
           const isVoicesRoot = isAiVideoChild && dramaPathParts[1] === "_voices";
+          const isBgmRoot = isAiVideoChild && dramaPathParts[1] === "_bgm";
           const isPerformancesRoot = isAiVideoChild && dramaPathParts[1] === "_performances";
           const isDeletedRoot = isAiVideoChild && dramaPathParts[1] === "_deleted";
           const isActorEntry =
@@ -328,6 +331,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
               {item.node.type === "voice" ? <span aria-hidden="true" className="tree-icon">🎙</span> : null}
               {isActorsRoot ? <span aria-hidden="true" className="tree-icon">🎭</span> : null}
               {isVoicesRoot ? <span aria-hidden="true" className="tree-icon">🎙</span> : null}
+              {isBgmRoot ? <span aria-hidden="true" className="tree-icon">🎵</span> : null}
               {isPerformancesRoot ? <span aria-hidden="true" className="tree-icon">🎬</span> : null}
               <span className="tree-label">{item.node.display_name || item.node.name}</span>
               {subType ? (
@@ -414,6 +418,28 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                   </button>
                 </>
               ) : null}
+              {isBgmRoot ? (
+                <>
+                  <button
+                    type="button"
+                    className="drama-rename-btn"
+                    aria-label="生成新一批 BGM 背景音乐"
+                    title="调用 Stable Audio 生成一批背景音乐（耗时较长），按情绪分类入库"
+                    onClick={(e) => { e.stopPropagation(); setBgmGeneratorOpen(true); }}
+                  >
+                    🎵 生成 BGM
+                  </button>
+                  <button
+                    type="button"
+                    className="drama-rename-btn"
+                    aria-label="在网格视图中查看所有 BGM"
+                    title="网格视图：情绪分类筛选 + 一键试听"
+                    onClick={(e) => { e.stopPropagation(); navigate("/bgm"); }}
+                  >
+                    🔲 网格
+                  </button>
+                </>
+              ) : null}
               {isDeletedRoot ? (
                 <button
                   type="button"
@@ -461,6 +487,11 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
       <VoicePoolGenerator
         open={voiceGeneratorOpen}
         onClose={() => setVoiceGeneratorOpen(false)}
+        onGenerated={() => { if (onTreeReload) onTreeReload(); }}
+      />
+      <BgmPoolGenerator
+        open={bgmGeneratorOpen}
+        onClose={() => setBgmGeneratorOpen(false)}
         onGenerated={() => { if (onTreeReload) onTreeReload(); }}
       />
     </nav>

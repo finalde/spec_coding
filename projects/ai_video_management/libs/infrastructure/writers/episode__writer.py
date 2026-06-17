@@ -46,6 +46,12 @@ _RENDERS_DIR_NAME = "renders"
 _ARCHIVE_DIR_NAME = "archive"
 _MP4_EXT = ".mp4"
 
+# Episode build variants. "original" = each shot's newest raw render under
+# renders/. The subtitle variants pick each shot's burned language master
+# `shot{NN}_{suffix}.mp4` (produced by SubtitleBurner) from the shot-folder root.
+VALID_EPISODE_LANGS: tuple[str, ...] = ("original", "zh", "en", "both")
+_LANG_SUFFIX: dict[str, str] = {"zh": "zh", "en": "en", "both": "zhen"}
+
 _EPISODE_FFMPEG_TIMEOUT_S: int = 600
 _CONCAT_TARGET_W: int = 720      # 9:16 reel — 720x1280 is fast to encode + plenty for review
 _CONCAT_TARGET_H: int = 1280
@@ -76,6 +82,7 @@ class EpisodeConcatResult:
     out_rel: str | None
     used: tuple[ShotClip, ...]
     skipped: tuple[ShotSkip, ...]
+    lang: str
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -83,6 +90,7 @@ class EpisodeConcatResult:
             "out": self.out_rel,
             "used": [u.to_payload() for u in self.used],
             "skipped": [s.to_payload() for s in self.skipped],
+            "lang": self.lang,
         }
 
 
@@ -91,7 +99,9 @@ class EpisodeConcatBuilder:
         self._exposed = exposed
         self._resolver = resolver
 
-    def build(self, rel: str) -> EpisodeConcatResult:
+    def build(self, rel: str, lang: str = "original") -> EpisodeConcatResult:
+        if lang not in VALID_EPISODE_LANGS:
+            raise InvalidEpisodePathError(f"unknown episode lang: {lang!r}")
         episode_dir, episode_slug = self._validate_episode(rel)
         shots_dir = episode_dir / "shots"
         if not shots_dir.is_dir():
@@ -103,16 +113,21 @@ class EpisodeConcatBuilder:
         used: list[ShotClip] = []
         skipped: list[ShotSkip] = []
         for shot_dir in shot_dirs:
-            clip = self._newest_render(shot_dir)
+            clip = self._select_clip(shot_dir, lang)
             if clip is None:
-                skipped.append(ShotSkip(shot_dir.name, "no_render_mp4"))
+                reason = (
+                    "no_render_mp4" if lang == "original"
+                    else f"no_{_LANG_SUFFIX[lang]}_subtitle_mp4"
+                )
+                skipped.append(ShotSkip(shot_dir.name, reason))
                 continue
             used.append(ShotClip(shot_dir.name, self._rel(clip)))
 
         if not used:
-            raise NoShotVideosError("no shot has a renders/ mp4 to concatenate")
+            raise NoShotVideosError("no shot has a matching mp4 to concatenate")
 
-        out_path = episode_dir / f"{episode_slug}{_MP4_EXT}"
+        suffix = "" if lang == "original" else f"_{_LANG_SUFFIX[lang]}"
+        out_path = episode_dir / f"{episode_slug}{suffix}{_MP4_EXT}"
         self._ffmpeg_concat(
             inputs=[self._resolver.resolve(u.video_rel) for u in used],  # type: ignore[list-item]
             out_path=out_path,
@@ -122,6 +137,7 @@ class EpisodeConcatBuilder:
             out_rel=self._rel(out_path),
             used=tuple(used),
             skipped=tuple(skipped),
+            lang=lang,
         )
 
     def _validate_episode(self, rel: str) -> tuple[Path, str]:
@@ -159,6 +175,20 @@ class EpisodeConcatBuilder:
             e for e in entries
             if e.is_dir() and not e.is_symlink() and _SHOT_DIR_RE.match(e.name)
         ]
+
+    def _select_clip(self, shot_dir: Path, lang: str) -> Path | None:
+        """Pick the clip representing this shot for the requested variant.
+
+        - "original": newest raw take under `renders/`.
+        - zh / en / both: the burned language master `shot{NN}_{suffix}.mp4` in
+          the shot-folder root (skip the shot if that master hasn't been burned).
+        """
+        if lang == "original":
+            return self._newest_render(shot_dir)
+        master = shot_dir / f"{shot_dir.name}_{_LANG_SUFFIX[lang]}{_MP4_EXT}"
+        if master.is_file() and not master.is_symlink():
+            return master
+        return None
 
     @staticmethod
     def _newest_render(shot_dir: Path) -> Path | None:

@@ -3806,3 +3806,65 @@ Auto-updated (stage-6 generated outputs under projects/ai_video_management/):
 判断点: 导入 tag 用 idNNNN[f|b]（ASCII + 显式 f/b）而非裸 0009，避免与文件名时间戳冲突并区分 face/body（沿用 perf 库 演NNNN tag 的防冲突教训）。
 
 No conflicts found in (downstream walk): interview/qa.md, findings/, final_specs/spec.md, validation/* — 演员池生成器/出图历来直接落代码，未进入 spec.md 与 validation 覆盖，故无既有章节可作外科补丁；不在本轮 retro-spec 整个演员子系统（wholesale 反模式）。仅持久化 follow-up 草案 + 本 changelog + 代码。
+
+## Follow-up 125 — 2026-06-16 10:00:00
+Source: user_input/follow_ups/125-20260616-100000-bilingual-subtitle-burn.md
+Summary: 双语 subtitles.md（中文||英文）+ 烧字幕三语言模式（zh/en/both）。
+Auto-updated:
+- libs/domain/value_objects/subtitle__valueobject.py — SubtitleCue 加 zh/en；parse 按 || 切双语；cues_to_ass(cues, lang) 三模式（ZH/EN 双 style，both 中上英下）；`|` 移出时间分隔符
+- libs/domain/errors/subtitle__error.py — 新增 InvalidSubtitleLangError
+- libs/infrastructure/writers/subtitle__writer.py — burn(rel, lang) 输出 *_subtitled_{zh|en|zhen}.mp4、lang 校验、按 lang 空文本→EmptySubtitles；scaffold 双语模板 + 从 ## 台词配音 取词
+- libs/application/{dtos,mappers,commands}/subtitle__* — 透传 lang
+- apps/api/routes/subtitle__route.py — BurnSubtitlesBody{path, lang}
+- apps/api/app_factory.py — 注册 invalid_subtitle_lang(400)
+- apps/ui/src/api.ts — burnSubtitles(path, lang); SubtitleLang 类型
+- apps/ui/src/components/SiblingMedia.tsx — 单按钮→「💬中文/💬EN/💬中英」三按钮
+- tests/test_subtitle_burn.py — 双语解析 + 三模式烧录 + 非法 lang + en-only 空校验
+- README.md — 双语字幕烧录 UX 段
+Tests: test_subtitle_burn.py 14 passed。全量 5 个失败均为既有(wukong_juexing 缺数据 + PUT-file 安全)，与本改动无关（已 stash 验证 HEAD 同样失败）。
+
+## Follow-up 126 — 2026-06-16 11:00:00
+Source: user_input/follow_ups/126-20260616-110000-subtitle-margins-naming-episode-lang.md
+Summary: 字幕边距上移+左右加宽；烧字幕输出改 shot{NN}_{zh|en|zhen}.mp4（shot 文件夹根）；按语言合成整集（original/zh/en/both，最多 4 版本 ep{NN}[_suffix].mp4）。
+Auto-updated:
+- libs/domain/value_objects/subtitle__valueobject.py — MarginV 80→170(solo)/250-170(both 中上英下)、MarginL/R 60→120
+- libs/infrastructure/writers/subtitle__writer.py — burn 输出 shot{NN}_{suffix}.mp4 于 shot 文件夹根（原 {stem}_subtitled_*）
+- libs/infrastructure/writers/episode__writer.py — build(rel, lang) 按语言选 clip（original=renders 最新 / zh|en|both=shot{NN}_{suffix}.mp4）、输出 ep{NN}[_suffix].mp4、缺源跳过；EpisodeConcatResult.lang
+- libs/application/{dtos,mappers,commands}/episode__* — 透传 lang；apps/api/routes/episode__route.py — ConcatEpisodeBody.lang
+- apps/ui/src/api.ts — concatEpisode(path, lang)+EpisodeLang；burn 输出名变更已兼容
+- apps/ui/src/components/Reader.tsx — 合成本集 4 语言按钮（原片/中文/EN/中英）
+- tests/test_subtitle_burn.py — 输出命名断言更新；tests/test_episode_concat.py — 新增按语言合成 + both 命名测试
+- .claude/agent_refs/project/ai_video.md rule 11c + README.md — 命名/边距/按语言合成 文档
+Tests: test_subtitle_burn + test_episode_concat 20 passed；e2e 真机验证 burn→shot01_zh.mp4 / concat zh→ep01_zh.mp4 通过（artifacts 已清）。
+
+## Follow-up 127 — 2026-06-16 12:00:00
+Source: user_input/follow_ups/127-20260616-120000-subtitle-wrap-margins-os.md
+Summary: 字幕长行溢出根因=WrapStyle 不换行→改自动折行（中≤13/英≤32 均分多行）+ WrapStyle 0；字号 72/52→64/46；both 合成单块防重叠；确认内心独白进字幕。
+Auto-updated:
+- libs/domain/value_objects/subtitle__valueobject.py — _wrap() 均分折行（CJK 硬切/拉丁按空格）；cues_to_ass 渲染层折行；WrapStyle 2→0；ZH 64/EN 46；both=单底部锚定块(中上英下)；删除 stacked 双 MarginV 常量
+- tests/test_subtitle_burn.py — 新增长行折行 + 短行不折 + both 单块测试；both 旧"两事件"断言更新
+- .claude/agent_refs/project/ai_video.md rule 11c — 自动换行/字号/both 单块/内心独白进字幕 文档
+Tests: test_subtitle_burn + test_episode_concat 22 passed；e2e 校验 shot05 长台词折行(中≤13、英按空格)、both 单块不重叠。wushen EP1 14 文件全部含内心独白行(已校验)。
+
+## Follow-up 128 — 2026-06-16 13:00:00
+Source: user_input/follow_ups/128-20260616-130000-rename-skip-episode-final-cuts.md
+Summary: 导入/重命名 button 的 rename pass 会递归遍历 episodes/ 把剧集成片 ep{NN}_{lang}.mp4 误改名为 ep01{i}.mp4（ep1_zh.mp4→ep012.mp4）。修复：rename_drama 永久排除整个 episodes/ 子树（renders/ 本就已排除，成片名得以保留），只规范化 characters/、scenes/ 及其 bg* plate 文件夹。
+
+Auto-updated:
+- libs/infrastructure/writers/media__writer.py — 新增 EPISODES_DIR_NAME 常量；rename_drama 的 excluded 集合无条件并入 episodes/，两处调用方（导入 button + 独立 rename button）均受益
+- tests/test_downloads_import_shots.py — 新增 test_rename_pass_preserves_episode_final_cuts 回归测试（ep01_zh/ep01_en.mp4 不被改名）
+
+No conflicts found in: interview/qa.md, findings/, final_specs/spec.md, validation/*
+
+## Follow-up 129 — 2026-06-17 11:00:00（一键复制本集所有视频 prompt）
+Source: user_input/follow_ups/129-20260617-110000-copy-all-video-prompts-button.md
+Summary: episode 工具栏新增「📋 复制全部视频 prompt」按钮——一键把本集每个 shot 的【视频 prompt】块（only 视频 prompt、不含台词配音）按 shot 顺序拼接复制到剪贴板。纯前端、无新后端端点。
+
+Auto-updated:
+- apps/ui/src/lib/videoPrompts.ts（新）：extractVideoPromptBody（按前置 ## 标题分类取 video 块）/ episodeDirOf / shotMdPathsInEpisode。
+- apps/ui/src/components/Reader.tsx：isEpisodeFile 工具栏加按钮 + onCopyAllVideoPromptsClick（从 knownPaths 过滤本集 shots→逐个 GET /api/file→提取 video 块→空行拼接→clipboard→toast 复制/跳过数）+ copyingPrompts state。
+- apps/ui/src/styles.css：.reader-copy-prompts-btn（镜像 .reader-episode-concat-btn）。
+- test/videoPrompts.test.ts（新·7 例）。
+- README.md：新增「📋 复制全部视频 prompt」feature 条目（ShotPairView/ShotlistTableView 章节区）。
+
+校验：tsc --noEmit 通过；vitest 全绿（旧 30 + 新 7 = 37）。只取 视频 prompt、显式排除 台词配音（测试覆盖）。

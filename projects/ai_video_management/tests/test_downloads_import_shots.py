@@ -169,6 +169,32 @@ def test_scene_plate_reimport_overwrites_and_clears_numbered(tmp_path: Path) -> 
     assert (plate / "bg1_朝北_主位.png").read_bytes() == b"NEW"  # overwritten
 
 
+def test_rename_pass_preserves_episode_final_cuts(tmp_path: Path) -> None:
+    """Regression (follow-up 128): the trailing rename pass must NOT touch
+    episode-root final cuts. The subtitle-burn / concat feature writes
+    `ep{NN}_{lang}.mp4` directly into `episodes/ep{NN}/`; the folder-name rename
+    would collapse two such files (folder `ep01`) to `ep011.mp4` / `ep012.mp4`,
+    destroying their language-tagged names. Importing must leave them intact."""
+    root = tmp_path / "repo"
+    ep_dir = root / "ai_videos" / "td" / "episodes" / "ep01"
+    _touch(ep_dir / "ep01_zh.mp4")
+    _touch(ep_dir / "ep01_en.mp4")
+    _touch(ep_dir / "script.md")
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir(parents=True)
+
+    result = _make_importer(root, downloads).import_drama("ai_videos/td")
+
+    assert result.errors == []
+    # Final cuts keep their deliberate names — NOT renamed to ep01{1,2}.mp4.
+    assert (ep_dir / "ep01_zh.mp4").is_file()
+    assert (ep_dir / "ep01_en.mp4").is_file()
+    assert not (ep_dir / "ep011.mp4").exists()
+    assert not (ep_dir / "ep012.mp4").exists()
+    renamed_to = {r["to"] for r in result.rename["renamed"]}
+    assert not any("episodes/" in t for t in renamed_to), renamed_to
+
+
 def test_unrelated_file_lands_in_not_matched(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     (root / "ai_videos" / "td" / "episodes" / "ep01" / "shots" / "shot01").mkdir(parents=True)

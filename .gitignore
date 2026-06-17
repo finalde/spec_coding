@@ -239,3 +239,4 @@ ai_videos/**/*.jpeg
 ai_videos/**/*.webp
 ai_videos/**/*.gif
 ai_videos/**/*.bmp
+.venv-stableaudio/

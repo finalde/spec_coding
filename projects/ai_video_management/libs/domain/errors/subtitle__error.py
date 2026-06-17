@@ -25,3 +25,7 @@ class SubtitleAlreadyExistsError(SubtitleDomainError):
 
 class BurnFailedError(SubtitleDomainError):
     """ffmpeg ran but failed to produce the subtitled mp4."""
+
+
+class InvalidSubtitleLangError(SubtitleDomainError):
+    """Requested subtitle language is not one of zh / en / both."""
