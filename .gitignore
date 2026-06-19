@@ -239,4 +239,9 @@ ai_videos/**/*.jpeg
 ai_videos/**/*.webp
 ai_videos/**/*.gif
 ai_videos/**/*.bmp
+
+# Recycle bin — soft-deleted content awaiting hard purge. Nothing under it is
+# ever tracked (the webapp's "清空回收站" purge wipes it from disk anyway).
+ai_videos/_deleted/
+
 .venv-stableaudio/
