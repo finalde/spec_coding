@@ -33,9 +33,13 @@ export async function fetchTree(): Promise<TreeNode> {
 }
 
 export async function fetchFile(path: string): Promise<FileResult> {
+  // `no-store`: after an edit/rename the viewer must show current bytes, not a
+  // browser-cached stale copy (mirrors fetchTree). Without it a shot opened
+  // before a rename keeps showing the old (e.g. pinyin) content.
   const response = await fetch(`/api/file?path=${encodeURIComponent(path)}`, {
     method: "GET",
     headers: { Accept: "application/json" },
+    cache: "no-store",
   });
   return readJson<FileResult>(response);
 }
@@ -124,6 +128,20 @@ export async function hardDeleteMedia(path: string): Promise<HardDeleteMediaResu
   return readJson<HardDeleteMediaResult>(response);
 }
 
+export interface PurgeDeletedResult {
+  purged: number;
+}
+
+/** Empty the recycle bin: recursively wipe everything under
+ * ai_videos/_deleted/ (every file type + folders), not just media. */
+export async function purgeDeleted(): Promise<PurgeDeletedResult> {
+  const response = await fetch("/api/purge-deleted", {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  return readJson<PurgeDeletedResult>(response);
+}
+
 export interface ExtractedFrame {
   timestamp: number;
   role: string;
@@ -161,9 +179,11 @@ export interface ExtractScenePlatesResult {
   failures: { folder: string; error: string }[];
 }
 
-/** Extract per-direction background plates from a scene walk-through mp4 at the
- * canonical 方位 timepoints (北1.5s/东4.5s/南7.5s/西10.5s/中13.5s) into the
- * sibling bg{N}_{方位}_ folders. */
+/** Extract per-direction background plates from a scene walk-through mp4 into
+ * the sibling bg{N}_{方位}_ folders. Each plate's grab second is read from the
+ * scene md「背景图系统 index」table (per-scene dwell order — keeps it in lock-step
+ * with the 步骤二 walk-through timeline); the fixed 1.5/4.5/7.5/10.5/13.5s
+ * compass map is only the fallback when the table is absent. */
 export async function extractScenePlates(path: string): Promise<ExtractScenePlatesResult> {
   const response = await fetch("/api/extract-scene-plates", {
     method: "POST",
@@ -209,6 +229,72 @@ export async function scaffoldSubtitles(path: string): Promise<ScaffoldSubtitles
   return readJson<ScaffoldSubtitlesResult>(response);
 }
 
+export interface BatchShotOutcome {
+  episode: string;
+  shot: string;
+  ok: boolean;
+  out: string | null;
+  cues: number | null;
+  reason: string | null;
+}
+
+export interface ScaffoldEpisodeSubtitlesResult {
+  episode: string;
+  outcomes: BatchShotOutcome[];
+}
+
+/** (Re)generate subtitles.md for every shot in one episode. `path` may be any
+ * file under the episode folder. */
+export async function scaffoldEpisodeSubtitles(
+  path: string,
+): Promise<ScaffoldEpisodeSubtitlesResult> {
+  const response = await fetch("/api/scaffold-episode-subtitles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ScaffoldEpisodeSubtitlesResult>(response);
+}
+
+export interface BurnDramaSubtitlesResult {
+  drama: string;
+  lang: SubtitleLang;
+  outcomes: BatchShotOutcome[];
+}
+
+/** Burn the {lang} subtitle master for every shot across ALL episodes of a
+ * drama (each shot's newest render + its subtitles.md). `path` may be any file
+ * under the drama folder. */
+export async function burnDramaSubtitles(
+  path: string,
+  lang: SubtitleLang = "zh",
+): Promise<BurnDramaSubtitlesResult> {
+  const response = await fetch("/api/burn-drama-subtitles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, lang }),
+  });
+  return readJson<BurnDramaSubtitlesResult>(response);
+}
+
+export interface BurnIntroCardsResult {
+  src: string;
+  out: string;
+  cards: number;
+  names: string[];
+}
+
+/** Burn character intro cards (freeze-frame nameplate, ai_video.md 11d) into a
+ * shot render per the episode's intro_cards.md → shot{NN}_card.mp4. */
+export async function burnIntroCards(path: string): Promise<BurnIntroCardsResult> {
+  const response = await fetch("/api/burn-intro-cards", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<BurnIntroCardsResult>(response);
+}
+
 export interface PerfScoreResult {
   path: string;
   validation_status: string;
@@ -222,13 +308,98 @@ export interface RegenShotPromptResult {
   message: string;
 }
 
-export async function regenShotPrompt(path: string): Promise<RegenShotPromptResult> {
+export async function regenShotPrompt(
+  path: string,
+  selectedPerfIds?: string[],
+): Promise<RegenShotPromptResult> {
+  const body: { path: string; selected_perf_ids?: string[] } = { path };
+  if (selectedPerfIds && selectedPerfIds.length > 0) body.selected_perf_ids = selectedPerfIds;
   const response = await fetch("/api/regen-shot-prompt", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify(body),
   });
   return readJson<RegenShotPromptResult>(response);
+}
+
+// ============================================================================
+// Performance library candidate recommendation + multi-select (per follow-up:
+// shot 页演技库候选推荐). The backend scores the shared performance library
+// against the shot's emotion/intensity/duration and returns a top-N candidate
+// list; the user multi-selects, writes the selection back as the shot's
+// `表演库参考:` line, and optionally re-assembles a copy-paste regen prompt.
+// ============================================================================
+
+export interface PerformanceCandidate {
+  perf_id: string;
+  emotion: string;
+  intensity: number;
+  style: string;
+  carrier: string;
+  duration_s: number;
+  title: string;
+  preview: string;
+  mp4_rel_path: string | null;
+  score: number;
+}
+
+export interface PerformanceCandidatesResult {
+  candidates: PerformanceCandidate[];
+  shot_emotion_guess: string | null;
+}
+
+export interface PerformanceCandidatesOptions {
+  emotion?: string;
+  intensity?: number;
+  durationS?: number;
+  topN?: number;
+}
+
+export async function performanceCandidates(
+  shotPath: string,
+  opts: PerformanceCandidatesOptions = {},
+): Promise<PerformanceCandidatesResult> {
+  const body: {
+    shot_path: string;
+    emotion?: string;
+    intensity?: number;
+    duration_s?: number;
+    top_n?: number;
+  } = { shot_path: shotPath };
+  if (opts.emotion !== undefined) body.emotion = opts.emotion;
+  if (opts.intensity !== undefined) body.intensity = opts.intensity;
+  if (opts.durationS !== undefined) body.duration_s = opts.durationS;
+  if (opts.topN !== undefined) body.top_n = opts.topN;
+  const response = await fetch("/api/performance-candidates", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson<PerformanceCandidatesResult>(response);
+}
+
+export interface SetShotPerformanceRefsResult {
+  path: string;
+  content: string;
+  mtime: string;
+}
+
+export async function setShotPerformanceRefs(
+  shotPath: string,
+  perfIds: string[],
+  mtime?: string,
+): Promise<SetShotPerformanceRefsResult> {
+  const body: { shot_path: string; perf_ids: string[]; mtime?: string } = {
+    shot_path: shotPath,
+    perf_ids: perfIds,
+  };
+  if (mtime !== undefined) body.mtime = mtime;
+  const response = await fetch("/api/shot-performance-refs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson<SetShotPerformanceRefsResult>(response);
 }
 
 export interface PerfCheckPromptResult {
@@ -721,6 +892,11 @@ export interface CharacterAudio {
   path: string;
 }
 
+export interface CharacterTrim {
+  path: string;
+  duration_seconds: number;
+}
+
 export interface CharacterViewFailure {
   target: string;
   error: string;
@@ -730,6 +906,7 @@ export interface ExtractCharacterViewsResult {
   src: string;
   views: CharacterView[];
   audio: CharacterAudio | null;
+  trim: CharacterTrim | null;
   failures: CharacterViewFailure[];
 }
 

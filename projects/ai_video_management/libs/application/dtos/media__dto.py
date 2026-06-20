@@ -38,6 +38,14 @@ class MediaHardDeleteCdto:
 
 
 @dataclass(frozen=True)
+class MediaPurgeDeletedCdto:
+    count: int
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"purged": self.count}
+
+
+@dataclass(frozen=True)
 class RenameMediaResultCdto:
     renamed: list[dict[str, str]]
     skipped: list[str]

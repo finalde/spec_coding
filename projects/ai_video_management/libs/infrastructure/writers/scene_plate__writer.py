@@ -53,6 +53,28 @@ DIRECTION_TIMEPOINTS: tuple[tuple[str, tuple[str, ...], float], ...] = (
 _BG_DIR_RE = re.compile(r"^bg\d+_")
 _FFMPEG_TIMEOUT_S: int = 30
 
+# A full plate-folder token inside the scene md index table, e.g.
+# `bg1_朝北_高座主位`. Requires at least one `_{描述}` segment after the number
+# so a bare `bg1` name-dropped in prose does NOT match (only the canonical
+# folder ids do). Stops at table/markdown delimiters and CJK punctuation.
+_PLATE_TOKEN_RE = re.compile(r"bg\d+(?:_[^\s`/|、，（）()]+)+")
+# First `N` / `N.N` seconds value in a cell (the 截帧时点 column holds `1.5s`).
+_SECONDS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*s")
+
+
+def _split_md_row(line: str) -> list[str]:
+    stripped = line.strip()
+    if stripped.startswith("|"):
+        stripped = stripped[1:]
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    return [c.strip() for c in stripped.split("|")]
+
+
+def _first_seconds(cell: str) -> float | None:
+    m = _SECONDS_RE.search(cell)
+    return float(m.group(1)) if m is not None else None
+
 
 @dataclass(frozen=True)
 class PlateResult:
@@ -104,15 +126,27 @@ class ScenePlateExtractor:
         except Exception as exc:
             raise FfmpegMissingError(str(exc)) from exc
 
+        scene_timepoints = self._parse_scene_timepoints(scene_dir)
         plates: list[PlateResult] = []
         skipped: list[str] = []
         failures: list[tuple[str, str]] = []
         for d in bg_dirs:
             routed = self._route_direction(d.name)
-            if routed is None:
+            table_t = scene_timepoints.get(d.name)
+            if routed is not None:
+                direction, default_t = routed
+                # The scene md's 背景图系统 index table is the per-scene source
+                # of truth for 截帧时点 (the walk-through dwell order is authored
+                # per scene; the global compass map is only a fallback).
+                t = table_t if table_t is not None else default_t
+            elif table_t is not None:
+                # Folder not compass-routable (e.g. 座前 虚化背景) but the scene
+                # table assigns it a dwell timepoint → extract at that second.
+                direction = self._direction_segment(d.name)
+                t = table_t
+            else:
                 skipped.append(d.name)
                 continue
-            direction, t = routed
             out_path = d / f"{d.name}.png"
             cmd = [
                 ffmpeg, "-y",
@@ -153,6 +187,64 @@ class ScenePlateExtractor:
             if any(tok in folder_name for tok in tokens):
                 return direction, t
         return None
+
+    @staticmethod
+    def _direction_segment(folder_name: str) -> str:
+        """The 方位 segment of a `bg{N}_{方位}_{描述}` folder name (first token
+        after the `bg\\d+_` prefix), used as the display direction when the name
+        isn't compass-routable (e.g. `bg6_座前_虚化背景` → `座前`)."""
+        rest = _BG_DIR_RE.sub("", folder_name)
+        return rest.split("_", 1)[0] if rest else folder_name
+
+    def _parse_scene_timepoints(self, scene_dir: Path) -> dict[str, float]:
+        """Read the scene md's `背景图系统 index（… 截帧时点 …）` table and return
+        `{bg_folder_name: 截帧时点_seconds}`.
+
+        This table is the per-scene contract that keeps THIS extractor's grab
+        seconds in lock-step with the walk-through video prompt authored in the
+        same file (步骤二). The dwell order — and therefore which compass
+        direction sits at which second — is chosen per scene (the 5 dwells are
+        framing-roles: hero/reverse/vert/mid/detail), so a global compass map
+        can't stay consistent; the table can. Best-effort: any parse failure
+        returns `{}` and the caller falls back to the compass default.
+        """
+        scene_md = scene_dir / f"{scene_dir.name}.md"
+        try:
+            text = scene_md.read_text(encoding="utf-8")
+        except OSError:
+            return {}
+        lines = text.splitlines()
+        # Locate the table header row carrying a 截帧时点 column.
+        header_idx: int | None = None
+        time_col: int | None = None
+        for i, ln in enumerate(lines):
+            if "|" not in ln or "截帧时点" not in ln:
+                continue
+            cells = _split_md_row(ln)
+            for j, c in enumerate(cells):
+                if "截帧时点" in c:
+                    header_idx, time_col = i, j
+                    break
+            if header_idx is not None:
+                break
+        if header_idx is None or time_col is None:
+            return {}
+        out: dict[str, float] = {}
+        # Data rows start two lines down (skip the `---` separator row).
+        for ln in lines[header_idx + 2:]:
+            if "|" not in ln:
+                break
+            cells = _split_md_row(ln)
+            if time_col >= len(cells):
+                continue
+            t = _first_seconds(cells[time_col])
+            if t is None:
+                continue
+            for token in _PLATE_TOKEN_RE.findall(cells[0]):
+                # Keep the first timepoint seen per folder (a folder may be
+                # name-dropped in a later row's prose — e.g. `/ bg1 中景`).
+                out.setdefault(token, t)
+        return out
 
     def _find_bg_dirs(self, scene_dir: Path) -> list[Path]:
         try:

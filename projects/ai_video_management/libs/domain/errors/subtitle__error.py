@@ -19,13 +19,17 @@ class EmptySubtitlesError(SubtitleDomainError):
     """`subtitles.md` exists but contains no parseable cue lines."""
 
 
-class SubtitleAlreadyExistsError(SubtitleDomainError):
-    """Scaffold refused — a non-empty `subtitles.md` already exists."""
-
-
 class BurnFailedError(SubtitleDomainError):
     """ffmpeg ran but failed to produce the subtitled mp4."""
 
 
 class InvalidSubtitleLangError(SubtitleDomainError):
     """Requested subtitle language is not one of zh / en / both."""
+
+
+class InvalidBatchScopeError(SubtitleDomainError):
+    """Batch path is empty, outside the sandbox, or not an episode / drama."""
+
+
+class NoBatchShotsError(SubtitleDomainError):
+    """The episode (or whole drama) has no shot folders to operate on."""

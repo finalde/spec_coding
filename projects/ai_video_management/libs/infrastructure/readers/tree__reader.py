@@ -198,49 +198,74 @@ class TreeReader:
         return node
 
     def _project_zh_title(self, project_dir: Path) -> str | None:
-        """Per CLAUDE.md AI video rules: the Chinese title lives in
-        `ai_videos/{name}/README.md`. Extract it from the first H1 line —
-        canonical shape `# 《<title>》— AI 视频项目`. Also reused by
-        `my_novel/{name}/README.md`, which follows the same convention.
+        """Chinese display title for a drama folder (pinyin / English on disk).
+
+        Legacy: `ai_videos/{name}/README.md` first H1 `# 《<title>》— …`.
+        Staged pipeline (no top-level README): the title lives in
+        `1_立项/concept.md`'s H1, shape `# 立项策划单 · 武神觉醒` → 武神觉醒.
+        Also reused by `my_novel/{name}/README.md`.
         """
-        readme = project_dir / "README.md"
-        if not readme.is_file():
+        title = self._h1_zh(project_dir / "README.md")
+        if title:
+            return title
+        return self._h1_zh(project_dir / "1_立项" / "concept.md")
+
+    def _h1_zh(self, md_path: Path) -> str | None:
+        """Extract a Chinese display title from a markdown file's first H1.
+        Priority: 《…》 → （…） → text after a middle-dot separator (· / ・) →
+        the whole H1 text. None when the file is missing or has no H1.
+        """
+        if not md_path.is_file():
             return None
         try:
-            with readme.open(encoding="utf-8") as fh:
+            with md_path.open(encoding="utf-8") as fh:
                 for line in fh:
                     stripped = line.strip()
                     if stripped.startswith("# "):
-                        m = re.search(r"《([^》]+)》", stripped)
+                        head = stripped[2:].strip()
+                        m = re.search(r"《([^》]+)》", head)
                         if m:
                             return m.group(1)
-                        return stripped[2:].strip() or None
+                        m = re.search(r"[（(]([^）)]+)[）)]", head)
+                        if m:
+                            return m.group(1)
+                        tail = re.split(r"\s*[·・]\s*", head)[-1].strip()
+                        return tail or head or None
         except OSError:
             return None
         return None
 
     def _sidecar_zh_label(self, directory: Path) -> str | None:
-        """Chinese display label for a nested directory that carries a naming
-        sidecar. Performance-library emotion folders (`_performances/{emotion}/`)
-        use pinyin folder names but hold the Chinese name in `_emotion.md`'s H1
-        (`# 压抑隐忍（yayi_yinren）`). Return the Chinese head, dropping the
-        trailing `（pinyin）` / `(pinyin)` annotation. None when no sidecar.
+        """Chinese display label for a nested pinyin-named directory.
+
+        1) Performance-library emotion folders (`_performances/{emotion}/`) hold
+           the Chinese name in `_emotion.md`'s H1 (`# 压抑隐忍（yayi_yinren）`) —
+           return the head, dropping the trailing `（pinyin）` annotation.
+        2) Scene folders (staged pipeline `…/scenes/{pinyin}/`) hold the Chinese
+           name in `{pinyin}.md`'s H1 (`# zhenbei_wangfu_zhengting（镇北王府正厅）`)
+           — return the `（中文）` group.
+        None when no recognizable sidecar.
         """
-        sidecar = directory / "_emotion.md"
-        if not sidecar.is_file():
-            return None
-        try:
-            with sidecar.open(encoding="utf-8") as fh:
-                for line in fh:
-                    stripped = line.strip()
-                    if stripped.startswith("# "):
-                        title = stripped[2:].strip()
-                        head = re.split(r"[（(]", title, maxsplit=1)[0].strip()
-                        return head or None
-                    if stripped:
-                        return None
-        except OSError:
-            return None
+        emotion = directory / "_emotion.md"
+        if emotion.is_file():
+            try:
+                with emotion.open(encoding="utf-8") as fh:
+                    for line in fh:
+                        stripped = line.strip()
+                        if stripped.startswith("# "):
+                            title = stripped[2:].strip()
+                            head = re.split(r"[（(]", title, maxsplit=1)[0].strip()
+                            if head:
+                                return head
+                            break
+                        if stripped:
+                            break
+            except OSError:
+                pass
+        if directory.parent.name == "scenes":
+            label = self._h1_zh(directory / f"{directory.name}.md")
+            if label:
+                return label
         return None
 
     def _walk_filtered(self, directory: Path, leaf_predicate: Any) -> list[dict[str, Any]]:
@@ -361,7 +386,20 @@ class TreeReader:
             node_type = "audio"
         else:
             node_type = "file"
-        return {"type": node_type, "name": f.name, "path": self._rel(f)}
+        node: dict[str, Any] = {"type": node_type, "name": f.name, "path": self._rel(f)}
+        # A scene's main sidecar `.md` (`…/scenes/{pinyin}/{pinyin}.md`) is shown
+        # in Chinese in the nav (from its H1 `（中文）`), mirroring the scene
+        # folder's display_name. Only the display label changes — `name`/`path`
+        # stay pinyin, so import routing / download / open are unaffected.
+        if (
+            f.suffix.lower() == ".md"
+            and f.stem == f.parent.name
+            and f.parent.parent.name == "scenes"
+        ):
+            zh = self._h1_zh(f)
+            if zh:
+                node["display_name"] = zh
+        return node
 
     def _rel(self, p: Path) -> str:
         try:

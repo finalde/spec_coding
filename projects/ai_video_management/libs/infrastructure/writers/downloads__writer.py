@@ -33,6 +33,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 from io import BytesIO
+from libs.common import drama_layout
 from pathlib import Path
 
 from PIL import Image
@@ -142,10 +143,19 @@ class DownloadsImporter:
                 continue
             chosen = self._classify(src.name, candidates)
             if chosen is None:
-                dst_folder = not_matched_dir
-                kind = "unmatched"
+                # Fallback: a scene background-plate download often carries only
+                # the 方位 token (`bg1_朝北_…`) with NO pinyin scene-name token —
+                # the out-of-image tool (kling/jimeng) truncates the filename to
+                # the prompt's first ~10 chars, where the early 方位 survives but
+                # the scene handle does not. Route by 方位 to the unique matching
+                # plate folder across the drama's scenes.
+                plate = self._match_plate_any_scene(src.name, drama_dir)
+                if plate is not None:
+                    dst_folder, kind, unmatched = plate, "scene_plate", False
+                else:
+                    dst_folder, kind, unmatched = not_matched_dir, "unmatched", True
             else:
-                dst_folder, kind = chosen.folder, chosen.kind
+                dst_folder, kind, unmatched = chosen.folder, chosen.kind, False
                 if chosen.kind == "scene":
                     plate = self._match_scene_plate(src.name, chosen.folder)
                     if plate is not None:
@@ -175,7 +185,7 @@ class DownloadsImporter:
                 result.errors.append({"path": self._display_src(src), "message": f"move_failed: {exc}"})
                 continue
             entry = {"from": self._display_src(src), "to": self._rel(dst), "kind": kind}
-            if chosen is None:
+            if unmatched:
                 result.unmatched.append(entry)
             else:
                 result.moved.append(entry)
@@ -376,17 +386,17 @@ class DownloadsImporter:
 
     def _collect_candidates(self, drama_dir: Path) -> list[_Candidate]:
         out: list[_Candidate] = []
-        characters_dir = drama_dir / "characters"
+        characters_dir = drama_layout.characters_dir(drama_dir)
         if characters_dir.is_dir():
             for child in sorted(characters_dir.iterdir()):
                 if child.is_dir() and not child.is_symlink():
                     out.append(_Candidate(folder=child, kind="character", tokens=self._tokens(child.name)))
-        scenes_dir = drama_dir / "scenes"
+        scenes_dir = drama_layout.scenes_dir(drama_dir)
         if scenes_dir.is_dir():
             for child in sorted(scenes_dir.iterdir()):
                 if child.is_dir() and not child.is_symlink():
                     out.append(_Candidate(folder=child, kind="scene", tokens=self._tokens(child.name)))
-        episodes_dir = drama_dir / "episodes"
+        episodes_dir = drama_layout.episodes_dir(drama_dir)
         if episodes_dir.is_dir():
             for ep in sorted(episodes_dir.iterdir()):
                 if not ep.is_dir() or ep.is_symlink():
@@ -521,6 +531,51 @@ class DownloadsImporter:
             if best is None or key > best[:2]:
                 best = (len(token), child.name, child)
         return best[2] if best is not None else None
+
+    def _match_plate_any_scene(self, filename: str, drama_dir: Path) -> Path | None:
+        """Route a scene background-plate download by its 方位 token alone, when
+        `_classify` found no scene-name match.
+
+        Out-of-image tools truncate the download filename to the prompt's first
+        ~10 chars; for a plate prompt whose first line is the plate_id
+        (`bg{N}_{方位}_…`) the EARLY 方位 token survives but the pinyin scene
+        handle does not — so the file never matches a scene by name. This scans
+        every plate folder under `scenes/*/bg{N}_{方位}_…/` and routes the file
+        to the one whose 方位 token appears in the filename. Disambiguation when
+        more than one scene owns the same 方位: keep only plates whose SCENE name
+        token also appears in the filename; route iff that leaves exactly one
+        plate folder (else None → not_matched, never a silent misroute).
+        """
+        name = filename.lower()
+        scenes_dir = drama_layout.scenes_dir(drama_dir)
+        if not scenes_dir.is_dir():
+            return None
+        all_hits: list[Path] = []
+        scene_scoped_hits: list[Path] = []
+        try:
+            scenes = sorted(scenes_dir.iterdir(), key=lambda p: p.name)
+        except OSError:
+            return None
+        for scene in scenes:
+            if not scene.is_dir() or scene.is_symlink():
+                continue
+            scene_present = any(tok in name for tok in self._tokens(scene.name))
+            try:
+                children = sorted(scene.iterdir(), key=lambda p: p.name)
+            except OSError:
+                continue
+            for child in children:
+                if not child.is_dir() or child.is_symlink() or child.name in _PLATE_NON_DEST:
+                    continue
+                token = self._plate_orientation_token(child.name)
+                if token is None or token not in name:
+                    continue
+                all_hits.append(child)
+                if scene_present:
+                    scene_scoped_hits.append(child)
+        pool = scene_scoped_hits or all_hits
+        unique = {p.resolve() for p in pool}
+        return pool[0] if len(unique) == 1 else None
 
     def _iter_downloads(self, cutoff: float) -> list[Path]:
         out: list[Path] = []

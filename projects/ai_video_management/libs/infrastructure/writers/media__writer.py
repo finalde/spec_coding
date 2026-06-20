@@ -8,6 +8,7 @@ name). One file per aggregate per role, per follow-up 059.
 """
 from __future__ import annotations
 
+import shutil
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -143,6 +144,24 @@ class MediaArchiver:
         except OSError as exc:
             raise MediaMoveFailedError(str(exc)) from exc
         return rel_str
+
+    def purge_deleted(self) -> int:
+        """Empty the recycle bin: recursively remove EVERYTHING under
+        ai_videos/_deleted/ — files of any type (md / json / media / …) plus
+        all subfolders — then remove the now-empty _deleted/ itself. Returns
+        the count of files removed. Unlike hard_delete this applies no
+        media-extension filter: the whole _deleted/ subtree is a purge target,
+        which is why per-media purges used to leave the .md sidecars and empty
+        folders behind."""
+        deleted_root = self._resolver.root / AI_VIDEOS_ROOT_NAME / DELETED_DIR_NAME
+        if not deleted_root.is_dir():
+            return 0
+        count = sum(1 for p in deleted_root.rglob("*") if p.is_file())
+        try:
+            shutil.rmtree(deleted_root)
+        except OSError as exc:
+            raise MediaMoveFailedError(str(exc)) from exc
+        return count
 
     def _validate_media_source(self, rel: str) -> Path:
         if not isinstance(rel, str) or rel == "":

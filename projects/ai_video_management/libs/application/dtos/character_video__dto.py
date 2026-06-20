@@ -84,6 +84,15 @@ class CharacterAudioCdto:
 
 
 @dataclass(frozen=True)
+class CharacterTrimCdto:
+    path: str
+    duration_seconds: float
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"path": self.path, "duration_seconds": self.duration_seconds}
+
+
+@dataclass(frozen=True)
 class CharacterViewFailureCdto:
     target: str
     error: str
@@ -97,6 +106,7 @@ class ExtractCharacterViewsResultCdto:
     src_rel: str
     views: tuple[CharacterViewCdto, ...]
     audio: CharacterAudioCdto | None
+    trim: CharacterTrimCdto | None
     failures: tuple[CharacterViewFailureCdto, ...]
 
     def to_payload(self) -> dict[str, Any]:
@@ -104,5 +114,6 @@ class ExtractCharacterViewsResultCdto:
             "src": self.src_rel,
             "views": [v.to_payload() for v in self.views],
             "audio": self.audio.to_payload() if self.audio is not None else None,
+            "trim": self.trim.to_payload() if self.trim is not None else None,
             "failures": [f.to_payload() for f in self.failures],
         }

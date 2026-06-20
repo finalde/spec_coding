@@ -1,4 +1,5 @@
-"""Subtitle-aggregate routes: POST /api/burn-subtitles, /api/scaffold-subtitles."""
+"""Subtitle-aggregate routes: per-shot burn / scaffold, plus batch
+scaffold-episode and burn-drama."""
 from __future__ import annotations
 
 from dependency_injector.wiring import Provide, inject
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 
 from apps.api.container import Container
 from libs.application.commands.subtitle__command import SubtitleCommand
+from libs.application.commands.subtitle_batch__command import SubtitleBatchCommand
 
 router = APIRouter()
 
@@ -39,3 +41,25 @@ def scaffold_subtitles(
     command: SubtitleCommand = Depends(Provide[Container.subtitle_command]),
 ) -> Response:
     return JSONResponse(status_code=200, content=command.scaffold(body.path).to_payload())
+
+
+@router.post("/api/scaffold-episode-subtitles")
+@inject
+def scaffold_episode_subtitles(
+    body: SubtitlePathBody,
+    command: SubtitleBatchCommand = Depends(Provide[Container.subtitle_batch_command]),
+) -> Response:
+    return JSONResponse(
+        status_code=200, content=command.scaffold_episode(body.path).to_payload()
+    )
+
+
+@router.post("/api/burn-drama-subtitles")
+@inject
+def burn_drama_subtitles(
+    body: BurnSubtitlesBody,
+    command: SubtitleBatchCommand = Depends(Provide[Container.subtitle_batch_command]),
+) -> Response:
+    return JSONResponse(
+        status_code=200, content=command.burn_drama(body.path, body.lang).to_payload()
+    )

@@ -26,16 +26,20 @@ from libs.application.commands.episode__command import EpisodeCommand
 from libs.application.commands.file__command import FileCommand
 from libs.application.commands.frame__command import FrameCommand
 from libs.application.commands.scene_plate__command import ScenePlateCommand
+from libs.application.commands.intro_card__command import IntroCardCommand
 from libs.application.commands.media__command import MediaCommand
 from libs.application.commands.novel__command import NovelCommand
 from libs.application.commands.perf_score__command import PerfScoreCommand
 from libs.application.commands.subtitle__command import SubtitleCommand
+from libs.application.commands.subtitle_batch__command import SubtitleBatchCommand
 from libs.application.commands.voice__command import VoiceCommand
 from libs.application.queries.actor__query import ActorQuery
 from libs.application.queries.bgm__query import BgmQuery
 from libs.application.queries.casting__query import CastingQuery
 from libs.application.queries.file__query import FileQuery
+from libs.application.commands.shot_performance__command import ShotPerformanceCommand
 from libs.application.queries.perf_check__query import PerfCheckPromptQuery
+from libs.application.queries.performance_candidate__query import PerformanceCandidateQuery
 from libs.application.queries.shot_regen__query import ShotRegenPromptQuery
 from libs.application.queries.media__query import MediaQuery
 from libs.application.queries.novel__query import NovelQuery
@@ -49,6 +53,7 @@ from libs.infrastructure.clients.anthropic__client import AnthropicClient
 from libs.infrastructure.readers.bgm_reference__reader import BgmReferenceReader
 from libs.infrastructure.readers.file__reader import FileReader
 from libs.infrastructure.readers.perf_check__reader import PerfCheckPromptReader
+from libs.infrastructure.readers.performance_library__reader import PerformanceLibraryReader
 from libs.infrastructure.readers.shot_regen__reader import ShotRegenPromptReader
 from libs.infrastructure.readers.tree__reader import TreeReader
 from libs.infrastructure.writers.actor__writer import ActorPool
@@ -64,7 +69,10 @@ from libs.infrastructure.writers.episode__writer import EpisodeConcatBuilder
 from libs.infrastructure.writers.file__writer import FileWriter
 from libs.infrastructure.writers.frame__writer import FrameExtractor
 from libs.infrastructure.writers.scene_plate__writer import ScenePlateExtractor
+from libs.infrastructure.writers.shot_performance__writer import ShotPerformanceWriter
+from libs.infrastructure.writers.intro_card__writer import IntroCardBurner
 from libs.infrastructure.writers.subtitle__writer import SubtitleBurner
+from libs.infrastructure.writers.subtitle_batch__writer import SubtitleBatchBurner
 from libs.infrastructure.writers.media__writer import MediaArchiver, MediaRenamer
 from libs.infrastructure.writers.novel__writer import NovelDownloader
 from libs.infrastructure.writers.perf_score__writer import PerfScorer
@@ -109,6 +117,15 @@ class Container(containers.DeclarativeContainer):
     subtitle_burner: providers.Singleton[SubtitleBurner] = providers.Singleton(
         SubtitleBurner, exposed=exposed_tree, resolver=safe_resolver
     )
+    intro_card_burner: providers.Singleton[IntroCardBurner] = providers.Singleton(
+        IntroCardBurner, exposed=exposed_tree, resolver=safe_resolver
+    )
+    subtitle_batch_burner: providers.Singleton[SubtitleBatchBurner] = providers.Singleton(
+        SubtitleBatchBurner,
+        exposed=exposed_tree,
+        resolver=safe_resolver,
+        burner=subtitle_burner,
+    )
     perf_scorer: providers.Singleton[PerfScorer] = providers.Singleton(
         PerfScorer, exposed=exposed_tree, resolver=safe_resolver
     )
@@ -117,6 +134,15 @@ class Container(containers.DeclarativeContainer):
     )
     perf_check_reader: providers.Singleton[PerfCheckPromptReader] = providers.Singleton(
         PerfCheckPromptReader, exposed=exposed_tree, resolver=safe_resolver
+    )
+    performance_library_reader: providers.Singleton[PerformanceLibraryReader] = providers.Singleton(
+        PerformanceLibraryReader, root=repo_root_path
+    )
+    shot_performance_writer: providers.Singleton[ShotPerformanceWriter] = providers.Singleton(
+        ShotPerformanceWriter,
+        exposed=exposed_tree,
+        resolver=safe_resolver,
+        library=performance_library_reader,
     )
     downloads_importer: providers.Singleton[DownloadsImporter] = providers.Singleton(
         DownloadsImporter,
@@ -196,6 +222,12 @@ class Container(containers.DeclarativeContainer):
     subtitle_command: providers.Factory[SubtitleCommand] = providers.Factory(
         SubtitleCommand, burner=subtitle_burner
     )
+    intro_card_command: providers.Factory[IntroCardCommand] = providers.Factory(
+        IntroCardCommand, burner=intro_card_burner
+    )
+    subtitle_batch_command: providers.Factory[SubtitleBatchCommand] = providers.Factory(
+        SubtitleBatchCommand, batch_burner=subtitle_batch_burner
+    )
     perf_score_command: providers.Factory[PerfScoreCommand] = providers.Factory(
         PerfScoreCommand, scorer=perf_scorer
     )
@@ -204,6 +236,14 @@ class Container(containers.DeclarativeContainer):
     )
     perf_check_query: providers.Factory[PerfCheckPromptQuery] = providers.Factory(
         PerfCheckPromptQuery, reader=perf_check_reader
+    )
+    performance_candidate_query: providers.Factory[PerformanceCandidateQuery] = providers.Factory(
+        PerformanceCandidateQuery,
+        reader=performance_library_reader,
+        resolver=safe_resolver,
+    )
+    shot_performance_command: providers.Factory[ShotPerformanceCommand] = providers.Factory(
+        ShotPerformanceCommand, writer=shot_performance_writer
     )
     downloads_command: providers.Factory[DownloadsCommand] = providers.Factory(
         DownloadsCommand, importer=downloads_importer

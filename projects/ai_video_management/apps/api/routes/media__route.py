@@ -1,4 +1,4 @@
-"""Media-aggregate routes: serve / archive / unarchive / delete / hard_delete / rename."""
+"""Media-aggregate routes: serve / archive / unarchive / delete / hard_delete / purge_deleted / rename."""
 from __future__ import annotations
 
 from dependency_injector.wiring import Provide, inject
@@ -79,3 +79,11 @@ def hard_delete_media(
     command: MediaCommand = Depends(Provide[Container.media_command]),
 ) -> Response:
     return JSONResponse(status_code=200, content=command.hard_delete(body.path).to_payload())
+
+
+@router.post("/api/purge-deleted")
+@inject
+def purge_deleted(
+    command: MediaCommand = Depends(Provide[Container.media_command]),
+) -> Response:
+    return JSONResponse(status_code=200, content=command.purge_deleted().to_payload())

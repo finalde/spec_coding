@@ -30,7 +30,11 @@ class ShotRegenPromptReader:
         self._exposed = exposed
         self._resolver = resolver
 
-    def build(self, rel_shot_path: str) -> dict[str, object]:
+    def build(
+        self,
+        rel_shot_path: str,
+        selected_perf_ids: list[str] | None = None,
+    ) -> dict[str, object]:
         norm = (rel_shot_path or "").replace("\\", "/")
         if not norm or not self._exposed.is_inside(norm):
             raise ShotRegenPathError("shot path outside sandbox")
@@ -38,7 +42,19 @@ class ShotRegenPromptReader:
         if shot is None or not shot.is_file():
             raise ShotRegenPathError("shot file does not exist")
         shot_md = shot.read_text(encoding="utf-8")
-        refs = _REF_LINE.findall(shot_md)
+        # When the caller passes an explicit selection, assemble the prompt from
+        # those perf_ids (deduped, order preserved) instead of scanning the
+        # shot's already-annotated `表演库参考:` lines.
+        if selected_perf_ids:
+            seen: set[str] = set()
+            refs = []
+            for pid in selected_perf_ids:
+                if pid in seen:
+                    continue
+                seen.add(pid)
+                refs.append((pid, ""))
+        else:
+            refs = _REF_LINE.findall(shot_md)
         if not refs:
             return {
                 "prompt": "",
@@ -107,6 +123,7 @@ class ShotRegenPromptReader:
         parts.append("- 保留「写物理动作不写情绪名」的内核与关键肌肉动作；但按**本 shot 的角色 / 机位 / 时长 / 剧情语境**重新措辞、按本镜时长拆 timed beats、并入本镜既有走位与台词。")
         parts.append("- **不要**把 entry 的检验视频 prompt 整段粘进来。其它字段（镜头/场景/光线/台词等）保持不变，只更新表演相关字段。")
         parts.append("- 保留 shot 的 `表演库参考:` 标注行。")
+        parts.append("- **重生范围：本 shot**；若本次表演改动影响开场/结尾的情绪走向，连带相邻 shot / 本集 episode 一并 review（见 ai_video.md 2026-06-16 / 2026-06-17 连贯性契约 — 改动剧本/台词/表演后默认做相邻+全剧序列连贯性 check）。")
         parts.append("")
         parts.append("## 本 shot 当前 Shot context")
         parts.append("")

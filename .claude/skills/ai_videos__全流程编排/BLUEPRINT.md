@@ -37,7 +37,7 @@
 ```
 ai_videos/{name}/
 ├── 1_立项/concept.md
-├── 2_世界观人设/{world.md, characters/{角色}/…, scenes/{场景}/…, casting.md, style_guide.md}
+├── 2_世界观人设/{world.md, characters/{角色}/…, scenes/{场景}/…, props/{物件}/…, casting.md, style_guide.md}
 ├── 3_大纲/arc_outline.md
 ├── 4_剧本/episodes/epNN/{script.md, dialogue.md}
 ├── 5_6_分镜与prompt/episodes/epNN/{shotlist.md, shots/shotNN/shotNN.md, all_shot_prompts.md, shots/shotNN/subtitles.md}

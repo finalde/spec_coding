@@ -15,6 +15,7 @@ router = APIRouter()
 
 class RegenShotPromptBody(BaseModel):
     path: str
+    selected_perf_ids: list[str] | None = None
 
 
 @router.post("/api/regen-shot-prompt")
@@ -23,4 +24,7 @@ def regen_shot_prompt(
     body: RegenShotPromptBody,
     query: ShotRegenPromptQuery = Depends(Provide[Container.shot_regen_query]),
 ) -> Response:
-    return JSONResponse(status_code=200, content=query.build(body.path))
+    return JSONResponse(
+        status_code=200,
+        content=query.build(body.path, body.selected_perf_ids),
+    )

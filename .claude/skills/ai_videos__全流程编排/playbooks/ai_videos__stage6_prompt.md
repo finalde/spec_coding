@@ -12,7 +12,7 @@
 - **何时**：阶段 5 分镜运镜设计已过 QC（`站位朝向` + `运镜` + `动作表演` + `光线色调` + `时长节奏` blocker 清零），开始把每镜补成标准化生成 prompt。
 - **输入**：
   - `5_6_分镜与prompt/episodes/epNN/shots/shotNN/shotNN.md`——阶段 5 已写好的运镜设计字段（镜头/走位/动作分秒/光线色调/节奏/时长）。本步在**同一文件**上补全。
-  - `2_世界观人设/characters/{角色}/{角色}.md` 人物卡——**锁定描述符**（一句话锁定 + 面部辨识特征，第 10 行）+ **voice_id**。逐字复制源。
+  - `2_世界观人设/characters/{角色}/{角色}.md` 人物卡——**角色识别标签**（造型可辨项无五官，第 8 行）+ **voice_id**；脸取该角色 turntable / 选角图（`_cast.md`）。逐字复制识别标签（2026-06-18 选角供脸：不复制五官）。
   - `2_世界观人设/scenes/{场景}/…` 场景档——bg 代号 + 一句话场景锁定 + 朝向 plate。
   - `2_世界观人设/style_guide.md`——全剧统一渲染样式串 + 负面词固定块。
   - `4_剧本/episodes/epNN/{script.md, dialogue.md}`——台词正文（三类标注）透传到 `台词:` 与配音块。
@@ -47,8 +47,9 @@
 
 ```text
 {NN}集{NN}镜视
-参考: `{人物1}：place_holder, {人物2}：place_holder, {bg代号}_place_holder`
-角色: `{人物1}: {人物卡锁定描述符·byte-identical}; 面部辨识特征: {辨识锚·byte-identical}; {剪影配角}: {只写从背面可见的轮廓·衣色/发型/体态，不给五官}`
+参考: `{人物1}=>, {人物2}=>, {bg代号}=>`
+角色: `{人物1}: {角色识别标签·byte-identical 自人物卡第8行，造型可辨项无五官}; {剪影配角}: {只写从背面可见的轮廓·衣色/发型/体态，不给五官}`
+角色识别 / 参考图: `{人物1}＝参考图(turntable/选角脸·见参考行); 多人物同框时逐个写死「参考图↔画面位置↔识别标签」绑定，如 画面左·{人物1}=参考图A·{标签}; 画面右·{人物2}=参考图B·{标签}（防 Seedance/Kling 串脸；脸由选角图承载，此处只做绑定消歧，不写五官，2026-06-18 选角供脸 rule 12.4-B）`
 情节: `{承接上镜的小说原文/剧情·verbatim；具体角色名不用关系称谓}`
 场景: `{bg代号} · {一句话场景锁定}`
 镜头: `{景别} + {运动}（近景/特写注「背景浅景深虚化柔焦、主体清晰」；关键情绪瞬间用缓慢推近至面部）`
@@ -100,7 +101,9 @@
 1. 读全部输入（阶段 5 的 shotNN.md + 人物卡锁定串/voice_id + 场景档 + style_guide + script/dialogue）。
 2. **逐镜把运镜设计补全成五层 prompt**：层1 填 bg 代号 + 场景锁定；层2 byte-identical 复制锁定描述符（剪影只写轮廓）；层3 补情节承接 + 透传镜头/走位/动作分秒 + 台词标注；层4 补随情绪光影、藏锋无外放；层5 重贴全剧统一渲染串 + 负面词块；透传时长/比例。
 3. **每个说话镜补 `## 台词配音 prompt` 块**（每发声单元一块），voice_id 对齐 bible。
+3b. **带显著情绪 beat 的镜引用演技库**（§9b + 2026-06-18 演技库 amendment）：按 情绪大类+强度+时长 在 `_performances/` 匹配 top-N，选中条目把锁定文本块**融入（不照抄）**该镜 `动作:`/表情，并加 `表演库参考: perf_NNNN (情绪·强度·风格·载体) — 用于 <角色> <beat>` 标注行。webapp 可推荐候选 + 多选 + 一键重生（`POST /api/regen-shot-prompt`）。
 4. **生成全集汇编 `all_shot_prompts.md`**：自动汇编自各 shot 源，含每镜视频 prompt +（说话镜的）台词配音 prompt，顶部注「只读快照——改各 shot 源后重新汇编」。
+5. **人物出场定格字卡（rule 11d · 标准步骤）**：扫本集有无**重要角色首次登场**（主角/核心反派/关键长线配角；龙套·路人·系统不发卡，门槛见 ai_video.md 11d / style_guide §7）。有则 ① 该首登镜 `## Shot context` 加 `首登字卡:` 行（字卡文字**不入** `## 视频 prompt` ```text``` 块）；② 该集建 `episodes/epNN/intro_cards.md`（行式：`角色 | 首登shot | 定格点(秒) | 主名 | 副身份 | 字体/样式 | 位置 | 时长`，文案按角色 bible 拟、用户审）。同角色全剧仅首登发一次——本集若无重要新角色首登（如纯延续集）则**省此文件**。后期由 webapp「🪧 人物卡」(`POST /api/burn-intro-cards`) 按 intro_cards.md 定格亮相 + 烧名牌 → 生成 `shot{NN}.mp4`（落 shot 根目录、不覆盖 `renders/` 原片、二次烧录可覆盖）。
 
 ---
 
@@ -108,8 +111,9 @@
 
 落点：`ai_videos/{name}/5_6_分镜与prompt/episodes/epNN/`。
 
-- 各 `shots/shotNN/shotNN.md`——补全后的 canonical shot 文件（YAML envelope → 小说原文/Chapter excerpt → H1 → `## Shot context` → `## 视频 prompt`（五层单块）→ `## 台词配音 prompt`）。`## 起始帧` / `## 结束帧` 静帧块已废止，不得出现。
+- 各 `shots/shotNN/shotNN.md`——补全后的 canonical shot 文件（YAML envelope → 小说原文/Chapter excerpt → H1 → `## Shot context` → `## 视频 prompt`（五层单块）→ `## 台词配音 prompt`）。`## 起始帧` / `## 结束帧` 静帧块已废止，不得出现。带显著情绪 beat 的镜按 §9b + 2026-06-18 演技库 amendment 加 `表演库参考: perf_NNNN (情绪·强度·风格·载体) — 用于 <角色> <beat>` 标注行（不另立段）。
 - `all_shot_prompts.md`——全集汇编快照。
+- `intro_cards.md`（**仅当本集有重要角色首次登场**，rule 11d）——人物出场定格字卡清单；对应首登镜 `## Shot context` 带 `首登字卡:` 行。
 
 ---
 

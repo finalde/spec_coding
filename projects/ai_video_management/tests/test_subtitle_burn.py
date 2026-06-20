@@ -17,7 +17,6 @@ from libs.common.safe_resolve import SafeResolver
 from libs.domain.errors.subtitle__error import (
     EmptySubtitlesError,
     InvalidSubtitleLangError,
-    SubtitleAlreadyExistsError,
     SubtitleFileMissingError,
 )
 from libs.domain.value_objects.subtitle__valueobject import (
@@ -185,7 +184,7 @@ def test_burn_produces_subtitled_mp4_per_lang(tmp_path: Path) -> None:
         assert result.out_rel.endswith(f"shots/shot01/shot01_{suffix}.mp4")
 
 
-def test_scaffold_from_shot_md_bilingual_and_refuses_overwrite(tmp_path: Path) -> None:
+def test_scaffold_from_shot_md_bilingual_and_overwrites(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     mp4, rel = _shot_render(root)
     shot_folder = mp4.parent.parent
@@ -199,8 +198,35 @@ def test_scaffold_from_shot_md_bilingual_and_refuses_overwrite(tmp_path: Path) -
     assert "重活一回 ||" in body and "你们等着 ||" in body
     cues = parse_subtitles(body)
     assert len(cues) == 2 and cues[-1].end == 6
-    with pytest.raises(SubtitleAlreadyExistsError):
-        _burner(root).scaffold(rel)
+    # Second scaffold overwrites in place rather than failing; created=False.
+    again = _burner(root).scaffold(rel)
+    assert again.created is False
+    body2 = (shot_folder / "subtitles.md").read_text(encoding="utf-8")
+    assert "重活一回 ||" in body2 and "你们等着 ||" in body2
+
+
+def test_scaffold_splits_line_into_phrase_cues(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    mp4, rel = _shot_render(root)
+    shot_folder = mp4.parent.parent
+    # One spoken line with three comma/period phrases over a 9s shot must yield
+    # three time-synced cues that advance, not one cue spanning the whole shot.
+    (shot_folder / "shot01.md").write_text(
+        "时长: 9秒\n## 台词配音\n台词: 老天爷，竟真让我重活一回。你们，都等着。\n",
+        encoding="utf-8",
+    )
+    result = _burner(root).scaffold(rel)
+    body = (shot_folder / "subtitles.md").read_text(encoding="utf-8")
+    cues = parse_subtitles(body)
+    assert len(cues) == result.cue_count >= 3
+    # Cues are contiguous, monotonic, and cover the full duration.
+    assert cues[0].start == 0
+    assert cues[-1].end == 9
+    for a, b in zip(cues, cues[1:]):
+        assert a.end == b.start and a.end > a.start
+    # Punctuation is stripped from phrase text.
+    assert any(c.zh == "老天爷" for c in cues)
+    assert any(c.zh == "竟真让我重活一回" for c in cues)
 
 
 def test_scaffold_placeholder_when_no_shot_md(tmp_path: Path) -> None:

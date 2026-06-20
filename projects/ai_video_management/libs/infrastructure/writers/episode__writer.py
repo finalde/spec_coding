@@ -29,6 +29,7 @@ from pathlib import Path
 import imageio_ffmpeg
 
 from libs.common.exposed_tree import ExposedTree
+from libs.common.render_select import newest_render
 from libs.common.safe_resolve import SafeResolver
 from libs.domain.errors.episode__error import (
     EpisodeConcatFailedError,
@@ -42,8 +43,6 @@ from libs.domain.errors.episode__error import (
 
 _EP_DIR_RE = re.compile(r"^ep\d+$", re.IGNORECASE)
 _SHOT_DIR_RE = re.compile(r"^shot\d+$", re.IGNORECASE)
-_RENDERS_DIR_NAME = "renders"
-_ARCHIVE_DIR_NAME = "archive"
 _MP4_EXT = ".mp4"
 
 # Episode build variants. "original" = each shot's newest raw render under
@@ -184,34 +183,11 @@ class EpisodeConcatBuilder:
           the shot-folder root (skip the shot if that master hasn't been burned).
         """
         if lang == "original":
-            return self._newest_render(shot_dir)
+            return newest_render(shot_dir)
         master = shot_dir / f"{shot_dir.name}_{_LANG_SUFFIX[lang]}{_MP4_EXT}"
         if master.is_file() and not master.is_symlink():
             return master
         return None
-
-    @staticmethod
-    def _newest_render(shot_dir: Path) -> Path | None:
-        """Return the most-recently-modified `.mp4` under `shot_dir/renders/`,
-        or None. `archive/` subfolders are excluded; symlinks are skipped."""
-        renders = shot_dir / _RENDERS_DIR_NAME
-        if not renders.is_dir():
-            return None
-        candidates: list[Path] = []
-        try:
-            for entry in renders.rglob(f"*{_MP4_EXT}"):
-                if entry.is_symlink() or not entry.is_file():
-                    continue
-                if entry.suffix.lower() != _MP4_EXT:
-                    continue
-                if _ARCHIVE_DIR_NAME in entry.relative_to(renders).parts:
-                    continue
-                candidates.append(entry)
-        except OSError:
-            return None
-        if not candidates:
-            return None
-        return max(candidates, key=lambda p: (_safe_mtime(p), p.name))
 
     def _ffmpeg_concat(self, inputs: list[Path], out_path: Path) -> None:
         try:
@@ -314,10 +290,3 @@ class EpisodeConcatBuilder:
             return p.resolve().relative_to(self._resolver.root).as_posix()
         except (OSError, ValueError):
             return p.as_posix()
-
-
-def _safe_mtime(p: Path) -> float:
-    try:
-        return p.stat().st_mtime
-    except OSError:
-        return 0.0

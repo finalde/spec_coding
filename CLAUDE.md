@@ -91,7 +91,7 @@ The procedural detail for each coordinated stage lives in `.claude/skills/agent_
 | # | 阶段 | playbook | 产物落点 | QC 关卡 |
 |---|---|---|---|---|
 | 1 | 核心创意立项 | `ai_videos__stage1_立项` | `ai_videos/{name}/1_立项/concept.md` | 人工确认 |
-| 2 | 世界观+锁定人设 | `ai_videos__stage2_世界观人设` | `2_世界观人设/{world,characters,scenes,casting,style_guide}` | `ai_videos__格式契约` |
+| 2 | 世界观+锁定人设 | `ai_videos__stage2_世界观人设` | `2_世界观人设/{world,characters,scenes,props,casting,style_guide}`（`props/`＝重要复用物件卡，ai_video.md rule 4b） | `ai_videos__格式契约` |
 | 3 | 分集大纲 | `ai_videos__stage3_大纲` | `3_大纲/arc_outline.md` | `ai_videos__剧情连贯`+`ai_videos__全剧序列` |
 | 4 | 文学剧本(台词) | `ai_videos__stage4_剧本` | `4_剧本/episodes/epNN/{script,dialogue}.md` | `ai_videos__台词大师` |
 | 5 | 分镜运镜 | `ai_videos__stage5_分镜` | `5_6_分镜与prompt/episodes/epNN/shots/shotNN/shotNN.md`(运镜设计) | 站位朝向/运镜/动作表演/光线色调/时长节奏 |
@@ -99,7 +99,7 @@ The procedural detail for each coordinated stage lives in `.claude/skills/agent_
 
 阶段 5、6 产物合一在 `shotNN.md`。项目用**阶段编号目录**（`1_立项/ … 5_6_分镜与prompt/`），新项目默认采用；已有项目（wushen_juexing）保留原结构、可选迁移。
 
-**三大贯穿机制**（编排强制执行）：① **每步 QC**——每阶段强制过审（blocker 清零，严格度=严）才进下一步；② **每次 update 复核**——任何产物改动/重生默认跑受影响范围 `ai_videos__审查总编排` + 记 `specs/ai_video/{name}/changelog.md`；③ **反馈→进化**——用户每条实战反馈 surgical 更新对应 playbook/审查 skill/`agent_refs` + 记教训（带来源）。**交互默认 interactive**：每阶段先用多选题问用户、用答案细化再生成。详见 `.claude/skills/ai_videos__全流程编排/{SKILL.md, BLUEPRINT.md}`。
+**三大贯穿机制**（编排强制执行）：① **每步 QC**——每阶段强制过审（blocker 清零，严格度=严）才进下一步；② **每次 update 复核**——任何产物改动/重生默认跑受影响范围 `ai_videos__审查总编排` + 记 `specs/ai_video/{name}/changelog.md`；③ **反馈→进化**——用户每条实战反馈 surgical 更新对应 playbook/审查 skill/`agent_refs` + 记教训（带来源）。**交互默认 interactive**：每阶段先用多选题问用户、用答案细化再生成。**敏捷原则**（2026-06-18）：大方向先定、每集剧情边拍边改，不一次性出全剧剧情；阶段 1–3 只定大方向骨架 + 前几集细纲，后续各集留松、推进到该集再细化、随 feedback 临时调整、不绑死。详见 `.claude/skills/ai_videos__全流程编排/{SKILL.md, BLUEPRINT.md}`。
 
 ## Skill + playbook naming
 
@@ -155,7 +155,8 @@ The spec_driven webapp's `EXPOSED_TREE` recursive globs (`.claude/skills/agent_t
 Detailed output rules live in `.claude/agent_refs/project/ai_video.md` per § Stage playbooks and reference docs. This section captures only the harness contract that other parts of `CLAUDE.md` reference.
 
 - One folder per project at `ai_videos/{task_name}/`. `task_name` is **pinyin or English**, never Chinese (e.g. `chongsheng_zhi_zongcai_furen`). The Chinese title lives in `ai_videos/{name}/README.md`.
-- Folder and file names inside `ai_videos/{name}/` are English/pinyin. **All file content is Chinese.** The "everything Chinese in `ai_videos/`" rule applies to content, not paths.
+- **Drama folder (`task_name`) + structural files stay English/pinyin** (task_id stability + cross-project template reuse): `shotlist.md` / `world.md` / `style_guide.md` / `arc_outline.md` / `script.md` / `dialogue.md` / `shotNN.md` / `episodes/epNN/` / `shots/shotNN/` etc. **All file content is Chinese.**
+- **Asset sub-folders MAY be Chinese (per follow-up 2026-06-19).** Character folders (`characters/c{N}_裴知秋`), scene folders (`scenes/集市长街`), and scene-plate folders (`bg{N}_街角_摊位`) — plus their main sidecar `.md` + generated `.png/.mp4` named after the folder — use Chinese names so the left-nav reads natively in Chinese AND the download-import routing key (prompt first line) is Chinese end-to-end. `DownloadsImporter` routes on Chinese tokens fine (scene-name token + 方位/机位 token); verified. Drama folder still pinyin. (This relaxes the earlier "all paths English/pinyin" rule.)
 - Two sub-types, distinguished at stage-2 interview: `novel` (multi-episode, layout under `episodes/epNN/`) and `short` (single-piece, flat layout). Sub-type is captured in `qa.md` metadata and reasserted in stage-4 spec.
 - Every shot is **3–15 s, duration set per plot beat (≤ 15 s ceiling)**. Author picks the duration the dramatic beat actually needs — fast reaction cuts at 3–6 s, expository / hook / monologue beats stretching toward 15 s — instead of padding short scenes to fill the Seedance budget. No "fill the full budget" pressure; no divergence note needed for any specific duration in the range. Anything longer than 15 s is two shots with a continuity token. Per-Kling-cap (10 s) splits inside a shot are an author-side rendering concern handled with seam frames; the spec carries whatever duration the beat needs.
 - Every shot ships with BOTH a Kling prompt AND a Seedance prompt. Default aspect ratio 9:16.

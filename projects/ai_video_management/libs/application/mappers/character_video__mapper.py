@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from libs.application.dtos.character_video__dto import (
     CharacterAudioCdto,
+    CharacterTrimCdto,
     CharacterViewCdto,
     CharacterViewFailureCdto,
     ConcatShotCharactersResultCdto,
@@ -59,6 +60,11 @@ class CharacterVideoMapper:
             for v in r.views
         )
         audio = CharacterAudioCdto(path=r.audio.out_rel) if r.audio is not None else None
+        trim = (
+            CharacterTrimCdto(path=r.trim.out_rel, duration_seconds=r.trim.duration_seconds)
+            if r.trim is not None
+            else None
+        )
         failures = tuple(
             CharacterViewFailureCdto(target=t, error=e) for (t, e) in r.failures
         )
@@ -66,5 +72,6 @@ class CharacterVideoMapper:
             src_rel=r.src_rel,
             views=views,
             audio=audio,
+            trim=trim,
             failures=failures,
         )

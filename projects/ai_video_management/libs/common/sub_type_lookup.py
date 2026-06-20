@@ -13,6 +13,7 @@ mis-detect as short. Acceptable; user can fix downstream by adding the first
 from __future__ import annotations
 
 from dataclasses import dataclass
+from libs.common import drama_layout
 from pathlib import Path
 from typing import Literal
 
@@ -47,7 +48,7 @@ def lookup(repo_root: Path, project_name: str) -> ProjectMeta:
 
 
 def _count_episodes(project_dir: Path) -> int | None:
-    episodes_dir = project_dir / "episodes"
+    episodes_dir = drama_layout.episodes_dir(project_dir)
     if not episodes_dir.is_dir():
         return None
     count = sum(1 for p in episodes_dir.iterdir() if p.is_dir() and _EPISODE_DIR_RE.match(p.name))

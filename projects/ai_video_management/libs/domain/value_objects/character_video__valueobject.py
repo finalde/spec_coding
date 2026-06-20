@@ -48,3 +48,13 @@ def view_output_filename(prefix: str, spec: CharacterViewSpec) -> str:
 def audio_output_filename(prefix: str) -> str:
     """`{prefix}_audio.mp3` per follow-up 093."""
     return f"{prefix}_audio.mp3"
+
+
+TRIM_DURATION_S: float = 3.0
+
+
+def trim_output_filename(prefix: str) -> str:
+    """`{prefix}_trim3s.mp4` — the first `TRIM_DURATION_S` seconds of the source
+    turntable mp4, emitted alongside the 3 view PNGs + audio so a single click
+    yields all 5 files."""
+    return f"{prefix}_trim3s.mp4"

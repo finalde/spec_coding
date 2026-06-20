@@ -27,8 +27,10 @@ from libs.common.safe_resolve import SafeResolver
 
 from libs.domain.value_objects.character_video__valueobject import (
     CANONICAL_VIEWS,
+    TRIM_DURATION_S,
     CharacterViewSpec,
     audio_output_filename,
+    trim_output_filename,
     view_output_filename,
 )
 from libs.domain.errors.character_video__error import (
@@ -150,11 +152,14 @@ class CharacterVideoTruncator:
             return False
         if parts[1].startswith("_"):
             return False
-        if parts[2] != "characters":
+        # `characters/` sits at the drama root (legacy) or under a stage folder
+        # (staged pipeline `2_世界观人设/characters/`). Find it, then require a
+        # cN_ child immediately after.
+        try:
+            ci = parts.index("characters", 2)
+        except ValueError:
             return False
-        if not _CHARACTER_DIR_RE.match(parts[3]):
-            return False
-        return True
+        return ci + 1 < len(parts) and bool(_CHARACTER_DIR_RE.match(parts[ci + 1]))
 
     def _rel(self, p: Path) -> str:
         try:
@@ -570,21 +575,21 @@ class ShotConcatBuilder:
         if cell.startswith("/") or ".." in cell.split("/"):
             return None
         parts = cell.split("/")
+        # Locate the `characters/` segment + its cN_ child, tolerating both the
+        # flat layout (`characters/cN`) and the staged one
+        # (`2_世界观人设/characters/cN`), with or without an `ai_videos/{drama}/` prefix.
+        try:
+            ci = parts.index("characters")
+        except ValueError:
+            return None
+        if ci + 1 >= len(parts) or not _CHARACTER_DIR_RE.match(parts[ci + 1]):
+            return None
         if parts[0] == "ai_videos":
-            if len(parts) < 5 or parts[1] != drama or parts[2] != "characters":
+            if len(parts) < 2 or parts[1] != drama:
                 return None
-            char_dir = parts[3]
-            if not _CHARACTER_DIR_RE.match(char_dir):
-                return None
-            return f"ai_videos/{drama}/characters/{char_dir}"
-        if parts[0] == "characters":
-            if len(parts) < 3:
-                return None
-            char_dir = parts[1]
-            if not _CHARACTER_DIR_RE.match(char_dir):
-                return None
-            return f"ai_videos/{drama}/characters/{char_dir}"
-        return None
+            return "/".join(parts[: ci + 2])
+        # cell was drama-relative (`characters/cN` or `2_世界观人设/characters/cN`)
+        return f"ai_videos/{drama}/" + "/".join(parts[: ci + 2])
 
     def _ffmpeg_concat(self, inputs: list[Path], out_path: Path) -> None:
         """Concatenate `inputs` into `out_path` as a uniform 9:16 reel with audio.
@@ -731,6 +736,7 @@ def _unwrap_inline_code(cell: str) -> str:
 
 _VIEW_FFMPEG_TIMEOUT_S: int = 30
 _AUDIO_FFMPEG_TIMEOUT_S: int = 60
+_TRIM_FFMPEG_TIMEOUT_S: int = 60
 _VIEWS_SUBDIR: str = "views"
 _AUDIO_MP3_QUALITY: str = "4"  # libmp3lame VBR ~165 kbps — small, transparent for speech
 
@@ -754,32 +760,45 @@ class AudioResult:
 
 
 @dataclass(frozen=True)
+class TrimResult:
+    out_rel: str
+    duration_seconds: float
+
+    def to_payload(self) -> dict[str, object]:
+        return {"path": self.out_rel, "duration_seconds": self.duration_seconds}
+
+
+@dataclass(frozen=True)
 class ViewExtractResult:
     src_rel: str
     views: tuple[ViewResult, ...]
     audio: AudioResult | None
-    failures: tuple[tuple[str, str], ...]  # (target, error_msg) where target is "front"/"side"/"back"/"audio"
+    trim: TrimResult | None
+    failures: tuple[tuple[str, str], ...]  # (target, error_msg) where target is "front"/"side"/"back"/"audio"/"trim"
 
     def to_payload(self) -> dict[str, object]:
         return {
             "src": self.src_rel,
             "views": [v.to_payload() for v in self.views],
             "audio": self.audio.to_payload() if self.audio is not None else None,
+            "trim": self.trim.to_payload() if self.trim is not None else None,
             "failures": [{"target": t, "error": e} for (t, e) in self.failures],
         }
 
 
 class CharacterViewExtractor:
-    """Extracts 3 angle PNGs (front/side/back) + the full audio (mp3) from a
-    v9 character turntable mp4. Outputs land in `{src.parent}/views/` with
-    `{src.parent.name}_{role}.png` + `{src.parent.name}_audio.mp3` naming so
-    re-extraction in the same character folder overwrites the same outputs
-    regardless of mp4 stem (the latest extraction is the single source of
-    truth in `views/`).
+    """Extracts 3 angle PNGs (front/side/back) + the full audio (mp3) + a
+    first-`TRIM_DURATION_S`-seconds trimmed mp4 from a character turntable mp4
+    — 5 outputs in one click. They land in `{src.parent}/views/` with
+    `{src.parent.name}_{role}.png` + `{src.parent.name}_audio.mp3` +
+    `{src.parent.name}_trim3s.mp4` naming so re-extraction in the same
+    character folder overwrites the same outputs regardless of mp4 stem (the
+    latest extraction is the single source of truth in `views/`).
 
-    Per follow-up 093. The 3 timestamps live in
+    Per follow-up 093 (3 views + audio); the trimmed mp4 was added so the same
+    button yields all 5 reference files. The 3 timestamps live in
     `libs/domain/value_objects/character_video__valueobject.py` and are
-    pinned to rule #12.5 v9's camera path.
+    pinned to rule #12.5 v10.2's camera path.
     """
 
     def __init__(self, exposed: ExposedTree, resolver: SafeResolver) -> None:
@@ -822,13 +841,22 @@ class CharacterViewExtractor:
         else:
             audio = None
             failures.append(("audio", err))
-        if not views and audio is None:
+        trim_path = out_dir / trim_output_filename(prefix)
+        trim: TrimResult | None
+        ok, err = self._run_trim(ffmpeg, src, trim_path)
+        if ok:
+            trim = TrimResult(out_rel=self._rel(trim_path), duration_seconds=TRIM_DURATION_S)
+        else:
+            trim = None
+            failures.append(("trim", err))
+        if not views and audio is None and trim is None:
             joined = "; ".join(f"{tgt}: {e}" for (tgt, e) in failures)
             raise ViewExtractFailedError(joined or "no outputs produced")
         return ViewExtractResult(
             src_rel=self._rel(src),
             views=tuple(views),
             audio=audio,
+            trim=trim,
             failures=tuple(failures),
         )
 
@@ -893,6 +921,39 @@ class CharacterViewExtractor:
             return False, err or "ffmpeg_failed"
         return True, ""
 
+    def _run_trim(
+        self,
+        ffmpeg: str,
+        src: Path,
+        out_path: Path,
+    ) -> tuple[bool, str]:
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-i", str(src),
+            "-t", str(TRIM_DURATION_S),
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-movflags", "+faststart",
+            "-loglevel", "error",
+            str(out_path),
+        ]
+        try:
+            completed = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=_TRIM_FFMPEG_TIMEOUT_S,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "ffmpeg_timeout"
+        if completed.returncode != 0 or not out_path.is_file():
+            err = completed.stderr.decode("utf-8", errors="replace").strip()[:200]
+            return False, err or "ffmpeg_failed"
+        return True, ""
+
     def _sweep_outputs(self, views_dir: Path) -> None:
         try:
             entries = list(views_dir.iterdir())
@@ -902,7 +963,7 @@ class CharacterViewExtractor:
             if entry.is_symlink() or not entry.is_file():
                 continue
             suffix = entry.suffix.lower()
-            if suffix not in (".png", ".mp3"):
+            if suffix not in (".png", ".mp3", ".mp4"):
                 continue
             try:
                 entry.unlink()

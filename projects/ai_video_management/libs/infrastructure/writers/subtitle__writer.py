@@ -14,8 +14,13 @@ imported take can be burned; the language master name is fixed so a re-burn
 overwrites it, and episode concat selects masters by language.
 
 `scaffold(rel)` writes a starter bilingual `subtitles.md` from the shot's
-`shot{NN}.md` (`时长:` total evenly split across the spoken `台词:` lines, each
-seeded as `中文 || ` with an empty English slot for the author to fill).
+`shot{NN}.md`. Each spoken `台词:` line is segmented into short phrases (split
+on Chinese/Latin punctuation, long punctuation-free runs hard-capped) and the
+shot's `时长:` is distributed across all phrases proportional to character
+count (≈ constant speaking rate). This yields phrase-level cues that advance as
+the line is spoken — instead of one whole line sitting on screen for the entire
+window — each seeded as `中文 || ` with an empty English slot for the author to
+fine-tune.
 
 ffmpeg binary is supplied by the `imageio-ffmpeg` wheel — no system install.
 """
@@ -41,7 +46,6 @@ from libs.domain.errors.subtitle__error import (
     BurnFailedError,
     EmptySubtitlesError,
     InvalidSubtitleLangError,
-    SubtitleAlreadyExistsError,
     SubtitleFileMissingError,
 )
 from libs.domain.value_objects.subtitle__valueobject import (
@@ -58,11 +62,38 @@ VIDEO_EXTENSIONS: frozenset[str] = frozenset(
     {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
 )
 RENDERS_DIR_NAME: str = "renders"
+_SHOT_DIR_RE = re.compile(r"^shot\d+$", re.IGNORECASE)
 SUBTITLE_FILE_NAME: str = "subtitles.md"
 _FFMPEG_TIMEOUT_S: int = 300
 
 _QUOTE_RE = re.compile(r"[\"“]([^\"”]+)[\"”]")
 _DURATION_RE = re.compile(r"(\d+(?:\.\d+)?)")
+
+# Phrase segmentation for speech-synced cues: break a spoken line at Chinese /
+# Latin punctuation and whitespace, then hard-cap any punctuation-free run so a
+# long unpunctuated line still advances. Trailing punctuation is dropped from
+# each phrase (subtitles read cleaner without it).
+_PHRASE_SPLIT_RE = re.compile(r"[，。！？；：、,.!?;:…—\-\s]+")
+_MAX_PHRASE_CHARS: int = 18
+
+
+def _split_phrases(text: str) -> list[str]:
+    phrases: list[str] = []
+    for seg in _PHRASE_SPLIT_RE.split(text):
+        seg = seg.strip()
+        if not seg:
+            continue
+        if len(seg) <= _MAX_PHRASE_CHARS:
+            phrases.append(seg)
+            continue
+        # Hard-cap long punctuation-free runs into balanced chunks.
+        n_chunks = -(-len(seg) // _MAX_PHRASE_CHARS)
+        per = -(-len(seg) // n_chunks)
+        for i in range(0, len(seg), per):
+            chunk = seg[i:i + per].strip()
+            if chunk:
+                phrases.append(chunk)
+    return phrases
 
 
 @dataclass(frozen=True)
@@ -143,21 +174,45 @@ class SubtitleBurner:
 
     def scaffold(self, rel: str) -> ScaffoldResult:
         src = self._validate_video_source(rel)
-        shot_folder = self._shot_folder(src)
+        return self.scaffold_folder(self._shot_folder(src))
+
+    def scaffold_folder(self, shot_folder: Path) -> ScaffoldResult:
+        """(Re)write `subtitles.md` for a shot folder from its `shot{NN}.md`.
+
+        Always overwrites — a second call regenerates rather than failing. Used
+        directly by per-shot scaffolding and by batch episode scaffolding (no
+        render mp4 needed; the timeline is derived from `shot{NN}.md`)."""
         sub_md = shot_folder / SUBTITLE_FILE_NAME
-        if sub_md.is_file() and sub_md.read_text(encoding="utf-8").strip():
-            raise SubtitleAlreadyExistsError(self._rel(sub_md))
+        existed = sub_md.is_file() and bool(sub_md.read_text(encoding="utf-8").strip())
         duration, lines = self._read_shot_dialogue(shot_folder)
-        body = self._build_scaffold(shot_folder.name, duration, lines)
+        phrases: list[str] = []
+        for line in lines:
+            phrases.extend(_split_phrases(line))
+        body = self._build_scaffold(shot_folder.name, duration, phrases)
         sub_md.write_text(body, encoding="utf-8")
         return ScaffoldResult(
             md_rel=self._rel(sub_md),
-            cue_count=len(lines) or 1,
-            created=True,
+            cue_count=len(phrases) or 1,
+            created=not existed,
         )
 
+    def spoken_lines(self, shot_folder: Path) -> list[str]:
+        """The clean spoken `台词:` lines for a shot (empty if the shot is
+        silent). Batch scaffolding uses this to skip dialogue-free shots."""
+        _, lines = self._read_shot_dialogue(shot_folder)
+        return lines
+
     def _shot_folder(self, src: Path) -> Path:
-        return src.parent.parent if src.parent.name == RENDERS_DIR_NAME else src.parent
+        """The shot ROOT folder (`…/shotNN`). Burned language masters land here,
+        NEVER under `renders/` (which holds the untouched originals). Resolve to
+        the nearest `shotNN` ancestor so a render nested anywhere under
+        `renders/` still maps to the shot root."""
+        for anc in (src.parent, *src.parent.parents):
+            if _SHOT_DIR_RE.match(anc.name):
+                return anc
+        if src.parent.name == RENDERS_DIR_NAME:
+            return src.parent.parent
+        return src.parent
 
     def _read_shot_dialogue(self, shot_folder: Path) -> tuple[float, list[str]]:
         shot_md = shot_folder / f"{shot_folder.name}.md"
@@ -190,23 +245,31 @@ class SubtitleBurner:
         return duration, lines
 
     def _build_scaffold(
-        self, shot_name: str, duration: float, lines: list[str]
+        self, shot_name: str, duration: float, phrases: list[str]
     ) -> str:
         head = (
             f"# {shot_name} 双语台词时间轴\n\n"
             "> 每行一句: `起-止(秒) 中文 || English`。`||` 左为中文、右为英文;\n"
             ">   只写中文(省略 `||`)则为中文单语。内心独白(OS)写法相同, 不单独区分样式。\n"
-            f"> 时间窗为按总时长 {self._fmt(duration)}s 均分的初值, 请按剧情逐句调整。\n"
+            "> 台词已按标点拆成短句、时间窗按字数估算(≈匀速), 字幕随说话推进逐句切换;\n"
+            f"> 总时长 {self._fmt(duration)}s, 请按真实语速逐句微调起止。\n"
             "> render 卡片上的「💬中文 / 💬英文 / 💬中英」可分别烧出对应语言版本视频。\n\n"
             "```text\n"
         )
         cue_lines: list[str] = []
-        if lines:
-            step = duration / len(lines)
-            for i, text in enumerate(lines):
-                start = self._fmt(round(i * step, 2))
-                end = self._fmt(round((i + 1) * step, 2))
-                cue_lines.append(f"{start}-{end}  {text} || ")
+        if phrases:
+            total_chars = sum(len(p) for p in phrases) or 1
+            cursor = 0.0
+            for i, text in enumerate(phrases):
+                start = round(cursor, 2)
+                if i == len(phrases) - 1:
+                    end = duration
+                else:
+                    end = round(cursor + duration * len(text) / total_chars, 2)
+                    if end <= start:  # guard against zero-width windows
+                        end = round(start + 0.1, 2)
+                cue_lines.append(f"{self._fmt(start)}-{self._fmt(end)}  {text} || ")
+                cursor = end
         else:
             cue_lines.append(f"0-{self._fmt(duration)}  （在此填写中文台词） || (English here)")
         return head + "\n".join(cue_lines) + "\n```\n"

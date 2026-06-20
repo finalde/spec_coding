@@ -9,6 +9,7 @@ from __future__ import annotations
 from libs.application.dtos.media__dto import (
     MediaHardDeleteCdto,
     MediaMoveCdto,
+    MediaPurgeDeletedCdto,
     RenameMediaResultCdto,
 )
 from libs.application.mappers.media__mapper import MediaMapper
@@ -67,6 +68,11 @@ class MediaCommand:
             raise NotUnderDeletedError("hard_delete only operates inside ai_videos/_deleted/")
         deleted_rel = self._archiver.hard_delete(rel_path)
         return MediaHardDeleteCdto(deleted_rel=deleted_rel)
+
+    def purge_deleted(self) -> MediaPurgeDeletedCdto:
+        """Empty the recycle bin — recursively remove all of
+        ai_videos/_deleted/ (every file type + folders), not just media."""
+        return MediaPurgeDeletedCdto(count=self._archiver.purge_deleted())
 
     def rename(self, rel_drama_path: str) -> RenameMediaResultCdto:
         """Drama-scoped batch rename of image/video files to match their

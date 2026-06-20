@@ -13,27 +13,31 @@ import { VoiceView } from "./VoiceView";
 import { BgmView } from "./BgmView";
 import { PerfScorePanel } from "./PerfScorePanel";
 import { ShotRegenButton } from "./ShotRegenButton";
+import { PerformanceSelector } from "./PerformanceSelector";
 import { Renderer } from "../markdown/renderer";
 import { CodeView } from "../markdown/CodeView";
 import { JsonlView } from "../markdown/JsonlView";
-import { SiblingMedia, isCharacterVideoPath } from "./SiblingMedia";
+import { SiblingMedia, isCharacterVideoPath, isSceneVideoPath } from "./SiblingMedia";
 import { detectShotPair } from "../lib/shotPairing";
 import { extractDramaAssets } from "../lib/dramas";
 import { episodeDirOf, extractVideoPromptBody, shotMdPathsInEpisode } from "../lib/videoPrompts";
 import { announceToast } from "../lib/announce";
 import {
   archiveMedia,
+  burnDramaSubtitles,
   concatEpisode,
   concatShotCharacters,
   deleteMedia,
   extractCharacterViews,
   extractFrames,
+  extractScenePlates,
   fetchFile,
   mediaUrl,
   putFile,
+  scaffoldEpisodeSubtitles,
   unarchiveMedia,
 } from "../api";
-import type { EpisodeLang } from "../api";
+import type { EpisodeLang, SubtitleLang } from "../api";
 import { ApiError, type FileResult, type TreeNode } from "../types";
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
@@ -67,13 +71,17 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [deleting, setDeleting] = useState<boolean>(false);
   const [extracting, setExtracting] = useState<boolean>(false);
   const [extractingViews, setExtractingViews] = useState<boolean>(false);
+  const [extractingPlates, setExtractingPlates] = useState<boolean>(false);
   const [concatBusy, setConcatBusy] = useState<boolean>(false);
   const [episodeConcatBusy, setEpisodeConcatBusy] = useState<boolean>(false);
   const [copyingPrompts, setCopyingPrompts] = useState<boolean>(false);
+  const [scaffoldEpBusy, setScaffoldEpBusy] = useState<boolean>(false);
+  const [burnDramaBusy, setBurnDramaBusy] = useState<boolean>(false);
 
   const ext = path ? extOf(path) : "";
   const isPerfEntry = path ? /_performances\/[^/]+\/perf_\d{4}\/perf_\d{4}\.md$/.test(path) : false;
   const isShotEntry = path ? /\/shots\/[^/]+\/shot[^/]*\.md$/.test(path) : false;
+  const isShotMdEntry = path ? /\/shot\d+\/shot\d+\.md$/.test(path) : false;
   const isMediaImage = IMAGE_EXTS.has(ext);
   const isMediaVideo = VIDEO_EXTS.has(ext);
   const isMediaAudio = AUDIO_EXTS.has(ext);
@@ -209,6 +217,48 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     }
   }, [path, onSaved]);
 
+  const onScaffoldEpisodeSubtitlesClick = useCallback(async () => {
+    if (!path) return;
+    setScaffoldEpBusy(true);
+    try {
+      const result = await scaffoldEpisodeSubtitles(path);
+      const ok = result.outcomes.filter((o) => o.ok).length;
+      const skipped = result.outcomes.filter((o) => !o.ok);
+      let summary = `已重生 ${ok} 个镜头的字幕`;
+      if (skipped.length > 0) {
+        const names = skipped.map((s) => `${s.shot} (${s.reason})`).join(", ");
+        summary += ` · 跳过 ${skipped.length}: ${names}`;
+      }
+      announceToast(summary);
+      onSaved();
+    } catch (err) {
+      announceToast(`重生本集字幕失败: ${archiveErrorKind(err)}`);
+    } finally {
+      setScaffoldEpBusy(false);
+    }
+  }, [path, onSaved]);
+
+  const onBurnDramaSubtitlesClick = useCallback(async (lang: SubtitleLang) => {
+    if (!path) return;
+    setBurnDramaBusy(true);
+    try {
+      const result = await burnDramaSubtitles(path, lang);
+      const ok = result.outcomes.filter((o) => o.ok).length;
+      const skipped = result.outcomes.filter((o) => !o.ok);
+      let summary = `已为 ${ok} 个镜头烧入${lang === "both" ? "中英" : lang === "en" ? "英文" : "中文"}字幕`;
+      if (skipped.length > 0) {
+        const names = skipped.map((s) => `${s.episode}/${s.shot} (${s.reason})`).join(", ");
+        summary += ` · 跳过 ${skipped.length}: ${names}`;
+      }
+      announceToast(summary);
+      onSaved();
+    } catch (err) {
+      announceToast(`全剧烧字幕失败: ${archiveErrorKind(err)}`);
+    } finally {
+      setBurnDramaBusy(false);
+    }
+  }, [path, onSaved]);
+
   const onCopyAllVideoPromptsClick = useCallback(async () => {
     if (!path) return;
     const epDir = episodeDirOf(path);
@@ -271,11 +321,11 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     setExtractingViews(true);
     try {
       const result = await extractCharacterViews(path);
-      const okCount = result.views.length + (result.audio ? 1 : 0);
+      const okCount = result.views.length + (result.audio ? 1 : 0) + (result.trim ? 1 : 0);
       const failCount = result.failures.length;
       const summary =
         failCount === 0
-          ? `Extracted ${okCount} views + audio from ${name} → views/`
+          ? `Extracted ${okCount} 文件 (三视图 + 音频 + 前3s) from ${name} → views/`
           : `Extracted ${okCount} from ${name} (${failCount} failed)`;
       announceToast(summary);
       onSaved();
@@ -283,6 +333,27 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
       announceToast(`Extract views failed: ${archiveErrorKind(err)}`);
     } finally {
       setExtractingViews(false);
+    }
+  }, [path, onSaved]);
+
+  const onExtractScenePlatesClick = useCallback(async () => {
+    if (!path) return;
+    setExtractingPlates(true);
+    try {
+      const result = await extractScenePlates(path);
+      const okCount = result.plates.length;
+      const dirs = result.plates.map((p) => p.direction).join("/");
+      const failCount = result.failures.length;
+      const summary =
+        failCount === 0
+          ? `已截取 ${okCount} 张方向背景图（${dirs}）→ 各 bg 文件夹`
+          : `已截取 ${okCount} 张（${dirs}），${failCount} 张失败`;
+      announceToast(summary);
+      onSaved();
+    } catch (err) {
+      announceToast(`截取方向背景图失败: ${archiveErrorKind(err)}`);
+    } finally {
+      setExtractingPlates(false);
     }
   }, [path, onSaved]);
 
@@ -313,26 +384,36 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   // shotlist.md / script.md / dialogue.md / publish.md) — NOT the per-shot
   // shots/shotNN/shotNN.md (extra path segment). Anchors the episode-concat button
   // so it's reachable from anywhere "inside the episode".
-  const isEpisodeFile = isMarkdown && /^ai_videos\/[^_][^/]+\/episodes\/ep\d+\/[^/]+\.md$/.test(path);
+  // episode-level md: `…/episodes/ep{NN}/{file}.md`, where `episodes/` is at
+  // the drama root (legacy) OR under a stage folder (`4_剧本/episodes/`).
+  const isEpisodeFile = isMarkdown && /^ai_videos\/[^_][^/]+\/(?:[^/]+\/)?episodes\/ep\d+\/[^/]+\.md$/.test(path);
   const isImageRef = (isMarkdown && /\/ref_images\/[^/]+_seedream\.md$/.test(path));
-  const isCasting = isMarkdown && /^ai_videos\/[^/]+\/casting\.md$/.test(path);
+  // casting.md sits at the drama root (legacy) OR under a stage folder
+  // (staged pipeline: `2_世界观人设/casting.md`). Match it anywhere under a
+  // (non-`_`) drama so CastingView renders in both layouts.
+  const isCasting = isMarkdown && /^ai_videos\/[^_][^/]*\/(?:[^/]+\/)*casting\.md$/.test(path);
   const isActor = isMarkdown && /^ai_videos\/_actors\/actor_[^/]+\/actor_[^/]+\.md$/.test(path);
   const isVoice = isMarkdown && /^ai_videos\/_voices\/voice_[^/]+\/voice_[^/]+\.md$/.test(path);
   const isBgm = isMarkdown && /^ai_videos\/_bgm\/[^/]+\/bgm_[^/]+\/bgm_[^/]+\.md$/.test(path);
   const isShotMd = isMarkdown && SHOT_MD_RE.test(path);
+  // Drama homepage (`ai_videos/{drama}/README.md`) — anchors the drama-wide
+  // "burn subtitles into every shot of every episode" action.
+  const isDramaReadme = isMarkdown && /^ai_videos\/[^_][^/]+\/README\.md$/i.test(path);
 
   const filename = path.split("/").pop() ?? path;
   const pathParts = path.split("/");
   const isArchivedFile = pathParts.length >= 2 && pathParts[pathParts.length - 2] === "archive";
   const isDeletedFile = path.startsWith("ai_videos/_deleted/");
-  const mediaActionsBusy = archiving || deleting || extracting || extractingViews;
+  const mediaActionsBusy = archiving || deleting || extracting || extractingViews || extractingPlates;
   const archiveLabel = isArchivedFile
     ? (archiving ? "Unarchiving…" : "↺ Unarchive")
     : (archiving ? "Archiving…" : "📦 Archive");
   const deleteLabel = deleting ? "Deleting…" : "🗑 Delete";
   const extractLabel = extracting ? "⏳ Extracting…" : "🎞 Extract Frames";
-  const viewsExtractLabel = extractingViews ? "⏳ 提取中…" : "🖼 提取三视图+音频";
+  const viewsExtractLabel = extractingViews ? "⏳ 提取中…" : "🖼 提取三视图+音频+前3s";
   const showViewsBtn = isVideo && !isArchivedFile && !isDeletedFile && isCharacterVideoPath(path);
+  const platesExtractLabel = extractingPlates ? "⏳ 截取中…" : "🧭 截取方向背景图";
+  const showPlatesBtn = isVideo && !isArchivedFile && !isDeletedFile && isSceneVideoPath(path);
 
   return (
     <div className="reader">
@@ -357,6 +438,30 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             title="把本集每个 shot 的【视频 prompt】代码块按 shot 顺序依次拼接、一次复制到剪贴板（只含视频 prompt，不含台词配音；块间空行分隔）。">
             {copyingPrompts ? "⏳ 复制中…" : "📋 复制全部视频 prompt"}
           </button>
+        ) : null}
+        {isEpisodeFile ? (
+          <button type="button" className="reader-scaffold-ep-btn"
+            onClick={onScaffoldEpisodeSubtitlesClick} disabled={scaffoldEpBusy}
+            aria-label="Regenerate subtitles.md for every shot in this episode"
+            title="为本集每个 shot 从 shot.md 重新生成 subtitles.md 台词时间轴（按标点拆句、按字数估算时间窗、覆盖旧文件；无台词的镜头自动跳过）。生成后逐镜微调，再用各 render 的「💬」烧字幕。">
+            {scaffoldEpBusy ? "⏳ 重生中…" : "📝 重生本集字幕"}
+          </button>
+        ) : null}
+        {isDramaReadme || isShotlistTable ? (
+          <span className="reader-episode-concat-group" role="group" aria-label="全剧烧字幕（按语言）">
+            {([
+              ["zh", "💬 全剧·中文字幕", "为全剧每集每镜取最新 render + subtitles.md 烧中文字幕 → shot{NN}_zh.mp4"],
+              ["en", "💬 全剧·EN", "为全剧每集每镜烧英文字幕 → shot{NN}_en.mp4"],
+              ["both", "💬 全剧·中英", "为全剧每集每镜烧中英字幕 → shot{NN}_zhen.mp4"],
+            ] as [SubtitleLang, string, string][]).map(([lang, label, title]) => (
+              <button key={lang} type="button" className="reader-episode-concat-btn"
+                onClick={() => onBurnDramaSubtitlesClick(lang)} disabled={burnDramaBusy}
+                aria-label={`Burn ${lang} subtitles into every shot of every episode`}
+                title={`遍历全剧所有 episodes/ep*/shots/shot*，每镜取最新 render 烧入字幕（已存在则覆盖）。缺 render 或缺 subtitles.md 的镜头自动跳过。${title}`}>
+                {burnDramaBusy ? "⏳" : label}
+              </button>
+            ))}
+          </span>
         ) : null}
         {isEpisodeFile ? (
           <span className="reader-episode-concat-group" role="group" aria-label="合成本集视频（按语言）">
@@ -416,9 +521,17 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
                   {showViewsBtn ? (
                     <button type="button" className="reader-media-views-btn"
                       onClick={onExtractCharacterViewsClick} disabled={mediaActionsBusy}
-                      aria-label={`Extract 3 views and audio from ${filename}`}
-                      title="提取三视图 (front / side / back) + 音频 (.mp3) 到 ./views/ — 适用于 v10 character turntable (7s locked-framing + 180° slow orbit)">
+                      aria-label={`Extract 3 views, audio and first-3s trim from ${filename}`}
+                      title="一键提取 5 个文件到 ./views/：三视图 (front / side / back .png) + 音频 (.mp3) + 原片前 3 秒 (_trim3s.mp4) — 适用于 v10 character turntable (7s locked-framing + 180° slow orbit)">
                       {viewsExtractLabel}
+                    </button>
+                  ) : null}
+                  {showPlatesBtn ? (
+                    <button type="button" className="reader-media-plates-btn"
+                      onClick={onExtractScenePlatesClick} disabled={mediaActionsBusy}
+                      aria-label={`Extract per-direction bg plates from ${filename}`}
+                      title="从场景 walk-through mp4 按各 bg 朝向的截帧时点抽帧，写入对应 bg{N}_{方位}/ 文件夹。截帧秒数读自本场景 md「背景图系统 index」表（与 步骤二 walk-through 时间轴一致）。">
+                      {platesExtractLabel}
                     </button>
                   ) : null}
                   <button type="button" className="reader-media-archive-btn"
@@ -506,6 +619,9 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
                 <PerfScorePanel path={path} content={file.content} onScored={async () => { await load(); onSaved(); }} />
               ) : null}
               {isShotEntry ? <ShotRegenButton path={path} content={file.content} /> : null}
+              {isShotMdEntry ? (
+                <PerformanceSelector shotPath={path} mtime={file.mtime_http} content={file.content} />
+              ) : null}
               <Renderer
                 content={file.content}
                 currentPath={path}

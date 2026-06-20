@@ -3868,3 +3868,22 @@ Auto-updated:
 - README.md：新增「📋 复制全部视频 prompt」feature 条目（ShotPairView/ShotlistTableView 章节区）。
 
 校验：tsc --noEmit 通过；vitest 全绿（旧 30 + 新 7 = 37）。只取 视频 prompt、显式排除 台词配音（测试覆盖）。
+
+## Follow-up 130 — 2026-06-18 09:30:00（Sidebar 中文 display_name：drama + scene）
+Source: user_input/follow_ups/130-20260618-093000-sidebar-zh-display-name.md
+Auto-updated:
+- libs/infrastructure/readers/tree__reader.py：新增 `_h1_zh`（《…》/（…）/·后段/整段 H1 提取）；`_project_zh_title` 扩展为 README《》→`1_立项/concept.md` H1（drama→武神觉醒）；`_sidecar_zh_label` 加 scene 分支（`parent=='scenes'` 读 `{name}.md` 的 `（中文）`→镇北王府正厅），scope 限定避免误改 character。
+- tests/test_tree_display_name_zh.py（新·5 例，全过）。
+- README.md：加「中文 display_name in sidebar」feature 条目。
+校验：功能验证 wushen_juexing→武神觉醒、zhenbei_wangfu_zhengting→镇北王府正厅；新 5 测全过；前端 Sidebar 已用 display_name 无需改。
+注：tests/test_tree_walker_consumer_walk.py::…wukong 失败为**既有 stale fixture**（项目已由 wukong_juexing 改名 wushen_juexing），与本改动无关。
+
+## Follow-up 131 — 2026-06-18 11:00:00（分阶段结构破坏 assign/导入——drama_layout 解析器修复）
+Source: user_input/follow_ups/131-20260618-110000-drama-layout-staged-paths.md
+根因：staged 结构把 casting.md/characters/scenes→2_世界观人设/、episodes→4_剧本/；多处硬编码旧根路径，assign 断在前端 isCasting 正则不配新位置（CastingView 不渲染）+ 后端 writer 写错位置。
+Auto-updated:
+- 新增 libs/common/drama_layout.py（casting_md/characters_dir/scenes_dir/episodes_dir，根/stage 双兼容）。
+- 后端接入：casting__writer、downloads__writer、sub_type_lookup、bgm_reference__reader、character_video__writer。
+- 前端：Reader isCasting/isEpisodeFile 正则放开 stage 段；dramas.ts +findAssetDir（characters/scenes 根或 2_世界观人设/ 下找）。
+- tests/test_drama_layout.py（5 例全过）。
+校验：wushen(staged)/nvdi(root) 解析正确；tsc 干净；casting/character_video/downloads/tree 测试过。既有 stale wukong fixture 失败与本修复无关。

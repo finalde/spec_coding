@@ -6,7 +6,7 @@
  */
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { hardDeleteMedia, mediaUrl } from "../api";
+import { hardDeleteMedia, mediaUrl, purgeDeleted } from "../api";
 import { announceToast } from "../lib/announce";
 import { ApiError, type TreeNode } from "../types";
 
@@ -34,8 +34,11 @@ export function DeletedView({ tree, onChange }: DeletedViewProps): JSX.Element {
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [typedConfirm, setTypedConfirm] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
+  const [purgeAllOpen, setPurgeAllOpen] = useState<boolean>(false);
+  const [purgeAllConfirm, setPurgeAllConfirm] = useState<string>("");
 
   const entries = useMemo<DeletedEntry[]>(() => collectDeletedMedia(tree), [tree]);
+  const totalCount = useMemo<number>(() => countDeletedFiles(tree), [tree]);
 
   const totalPages = useMemo(() => {
     if (entries.length === 0) return 1;
@@ -122,7 +125,35 @@ export function DeletedView({ tree, onChange }: DeletedViewProps): JSX.Element {
     onChange();
   }, [busy, exitSelectMode, onChange, selectedPaths, typedConfirm]);
 
-  if (entries.length === 0) {
+  const openPurgeAll = useCallback(() => {
+    setPurgeAllConfirm("");
+    setPurgeAllOpen(true);
+  }, []);
+
+  const closePurgeAll = useCallback(() => {
+    if (busy) return;
+    setPurgeAllOpen(false);
+    setPurgeAllConfirm("");
+  }, [busy]);
+
+  const onConfirmPurgeAll = useCallback(async () => {
+    if (purgeAllConfirm !== CONFIRM_TOKEN || busy) return;
+    setBusy(true);
+    try {
+      const { purged } = await purgeDeleted();
+      announceToast(`已清空回收站 — 永久删除 ${purged} 个文件`);
+    } catch (err) {
+      const kind = err instanceof ApiError ? err.detail?.kind ?? String(err.status) : String(err);
+      announceToast(`清空回收站失败：${kind}`);
+    }
+    setBusy(false);
+    setPurgeAllOpen(false);
+    setPurgeAllConfirm("");
+    exitSelectMode();
+    onChange();
+  }, [busy, exitSelectMode, onChange, purgeAllConfirm]);
+
+  if (totalCount === 0) {
     return (
       <div className="deleted-view-page">
         <div className="deleted-view-header">
@@ -138,13 +169,24 @@ export function DeletedView({ tree, onChange }: DeletedViewProps): JSX.Element {
   return (
     <div className="deleted-view-page">
       <div className="deleted-view-header">
-        <h2>🗑 回收站 ({entries.length} 个文件)</h2>
+        <h2>
+          🗑 回收站 ({totalCount} 个文件
+          {entries.length !== totalCount ? `，其中 ${entries.length} 个可预览媒体` : ""})
+        </h2>
         <div className="deleted-view-header-actions">
           {selectMode ? (
             <button type="button" onClick={exitSelectMode} disabled={busy}>✕ 退出选择</button>
           ) : (
             <button type="button" onClick={enterSelectMode}>✅ 选择</button>
           )}
+          <button
+            type="button"
+            className="deleted-bulk-purge"
+            onClick={openPurgeAll}
+            disabled={busy}
+          >
+            🧹 清空回收站（全部 {totalCount}）
+          </button>
         </div>
         {totalPages > 1 ? (
           <div className="actor-grid-pagination" role="navigation" aria-label="回收站分页">
@@ -214,6 +256,68 @@ export function DeletedView({ tree, onChange }: DeletedViewProps): JSX.Element {
           onConfirm={onConfirmPurge}
         />
       ) : null}
+      {purgeAllOpen ? (
+        <ConfirmPurgeAllModal
+          totalCount={totalCount}
+          typedConfirm={purgeAllConfirm}
+          onTypedChange={setPurgeAllConfirm}
+          busy={busy}
+          onCancel={closePurgeAll}
+          onConfirm={onConfirmPurgeAll}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+interface ConfirmPurgeAllModalProps {
+  totalCount: number;
+  typedConfirm: string;
+  onTypedChange: (next: string) => void;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+function ConfirmPurgeAllModal({ totalCount, typedConfirm, onTypedChange, busy, onCancel, onConfirm }: ConfirmPurgeAllModalProps): JSX.Element {
+  const armed = typedConfirm === CONFIRM_TOKEN;
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="确认清空回收站" onClick={onCancel}>
+      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>清空整个回收站？</h2>
+          <button type="button" className="modal-close" onClick={onCancel} aria-label="关闭" disabled={busy}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="deleted-view-confirm-warning" role="alert">
+            ⚠ 此操作不可撤销 — <code>ai_videos/_deleted/</code> 下的全部内容（{totalCount} 个文件，含 .md 等非媒体文件与所有空文件夹）都将从磁盘真删除。
+          </div>
+          <label className="form-field">
+            <span className="form-field-label">输入 <code>{CONFIRM_TOKEN}</code> 解锁确认按钮</span>
+            <input
+              className="deleted-view-confirm-input"
+              type="text"
+              value={typedConfirm}
+              onChange={(e) => onTypedChange(e.target.value)}
+              disabled={busy}
+              autoFocus
+              placeholder={CONFIRM_TOKEN}
+              aria-label="输入 DELETE 解锁确认"
+            />
+          </label>
+        </div>
+        <div className="modal-footer">
+          <button type="button" onClick={onCancel} disabled={busy}>取消</button>
+          <button
+            type="button"
+            className="modal-primary deleted-bulk-purge"
+            onClick={onConfirm}
+            disabled={busy || !armed}
+          >
+            {busy ? "清空中…" : `清空回收站（${totalCount} 个文件）`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -274,6 +378,20 @@ function ConfirmPurgeModal({ paths, typedConfirm, onTypedChange, busy, onCancel,
       </div>
     </div>
   );
+}
+
+function countDeletedFiles(tree: TreeNode | null): number {
+  if (!tree) return 0;
+  let n = 0;
+  const walk = (node: TreeNode): void => {
+    if (node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "file") {
+      if (node.path.startsWith("ai_videos/_deleted/")) n += 1;
+      return;
+    }
+    for (const c of node.children ?? []) walk(c);
+  };
+  walk(tree);
+  return n;
 }
 
 function collectDeletedMedia(tree: TreeNode | null): DeletedEntry[] {

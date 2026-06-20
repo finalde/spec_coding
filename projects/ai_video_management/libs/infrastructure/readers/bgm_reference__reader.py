@@ -15,6 +15,7 @@ skip `_`-prefixed dirs, parse) but over bgm.md instead of casting.md.
 from __future__ import annotations
 
 import re
+from libs.common import drama_layout
 from pathlib import Path
 
 from libs.common.exposed_tree import ExposedTree
@@ -56,7 +57,7 @@ class BgmReferenceReader:
             root_cue = drama_dir / BGM_CUE_FILE_NAME
             if root_cue.is_file():
                 out.append((drama_dir.name, "(root)", root_cue))
-            episodes = drama_dir / "episodes"
+            episodes = drama_layout.episodes_dir(drama_dir)
             if episodes.is_dir():
                 for ep_dir in sorted(episodes.iterdir(), key=lambda p: p.name):
                     if not ep_dir.is_dir() or ep_dir.is_symlink():

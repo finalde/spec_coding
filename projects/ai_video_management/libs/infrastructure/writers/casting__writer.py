@@ -14,6 +14,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from libs.common import drama_layout
 from libs.common.exposed_tree import ExposedTree
 from libs.common.safe_resolve import SafeResolver
 from libs.domain.errors.actor__error import InvalidActorIdError
@@ -82,7 +83,7 @@ class Casting:
 
     def read(self, rel_drama_path: str) -> CastingResult:
         drama_dir = self._renamer.validate_drama(rel_drama_path)
-        casting_path = drama_dir / CASTING_FILE_NAME
+        casting_path = drama_layout.casting_md(drama_dir)
         entries = self._parse(casting_path) if casting_path.is_file() else []
         return CastingResult(path=self._rel(casting_path), entries=[e.to_dict() for e in entries])
 
@@ -91,7 +92,7 @@ class Casting:
         self._validate_role(role)
         if not self._actor_pool.actor_exists(actor_id):
             raise InvalidActorIdError(f"actor_id={actor_id!r} not found in pool")
-        casting_path = drama_dir / CASTING_FILE_NAME
+        casting_path = drama_layout.casting_md(drama_dir)
         entries = self._parse(casting_path) if casting_path.is_file() else []
         # Preserve any existing voice_id on this role — actor assignment
         # never clobbers the voice column (follow-up 115).
@@ -114,7 +115,7 @@ class Casting:
         the whole row is removed and the character _cast.md is deleted."""
         drama_dir = self._renamer.validate_drama(rel_drama_path)
         self._validate_role(role)
-        casting_path = drama_dir / CASTING_FILE_NAME
+        casting_path = drama_layout.casting_md(drama_dir)
         if not casting_path.is_file():
             raise DramaNotFoundError(f"no casting.md at {self._rel(casting_path)}")
         entries = self._parse(casting_path)
@@ -158,7 +159,7 @@ class Casting:
         self._validate_role(role)
         if self._voice_pool is None or not self._voice_pool.voice_exists(voice_id):
             raise InvalidVoiceIdError(f"voice_id={voice_id!r} not found in pool")
-        casting_path = drama_dir / CASTING_FILE_NAME
+        casting_path = drama_layout.casting_md(drama_dir)
         entries = self._parse(casting_path) if casting_path.is_file() else []
         existing_actor = ""
         existing_notes = ""
@@ -188,7 +189,7 @@ class Casting:
         clear, drop the row entirely."""
         drama_dir = self._renamer.validate_drama(rel_drama_path)
         self._validate_role(role)
-        casting_path = drama_dir / CASTING_FILE_NAME
+        casting_path = drama_layout.casting_md(drama_dir)
         if not casting_path.is_file():
             raise DramaNotFoundError(f"no casting.md at {self._rel(casting_path)}")
         entries = self._parse(casting_path)
@@ -231,14 +232,14 @@ class Casting:
                 continue
             if drama_dir.name.startswith("_"):
                 continue
-            casting_path = drama_dir / CASTING_FILE_NAME
+            casting_path = drama_layout.casting_md(drama_dir)
             if not casting_path.is_file():
                 continue
             entries = self._parse(casting_path)
             for e in entries:
                 if e.voice_id != voice_id:
                     continue
-                character_folder = drama_dir / "characters" / e.role
+                character_folder = drama_layout.characters_dir(drama_dir) / e.role
                 out.append(
                     {
                         "drama": drama_dir.name,
@@ -261,7 +262,7 @@ class Casting:
                 continue
             if drama_dir.name.startswith("_"):
                 continue
-            casting_path = drama_dir / CASTING_FILE_NAME
+            casting_path = drama_layout.casting_md(drama_dir)
             if not casting_path.is_file():
                 continue
             for entry in self._parse(casting_path):
@@ -289,14 +290,14 @@ class Casting:
                 continue
             if drama_dir.name.startswith("_"):
                 continue
-            casting_path = drama_dir / CASTING_FILE_NAME
+            casting_path = drama_layout.casting_md(drama_dir)
             if not casting_path.is_file():
                 continue
             entries = self._parse(casting_path)
             for e in entries:
                 if e.actor_id != actor_id:
                     continue
-                character_folder = drama_dir / "characters" / e.role
+                character_folder = drama_layout.characters_dir(drama_dir) / e.role
                 out.append(
                     {
                         "drama": drama_dir.name,
@@ -324,7 +325,7 @@ class Casting:
                 continue
             if drama_dir.name.startswith("_"):
                 continue
-            casting_path = drama_dir / CASTING_FILE_NAME
+            casting_path = drama_layout.casting_md(drama_dir)
             if not casting_path.is_file():
                 continue
             for entry in self._parse(casting_path):
@@ -351,7 +352,7 @@ class Casting:
                 continue
             if drama_dir.name.startswith("_"):
                 continue
-            casting_path = drama_dir / CASTING_FILE_NAME
+            casting_path = drama_layout.casting_md(drama_dir)
             if not casting_path.is_file():
                 continue
             entries = self._parse(casting_path)
@@ -392,7 +393,7 @@ class Casting:
         row is still authoritative. Atomic temp+replace; OSError swallowed
         (the casting.md row is the truth source).
         """
-        character_folder = drama_dir / "characters" / role
+        character_folder = drama_layout.characters_dir(drama_dir) / role
         if not character_folder.is_dir() or character_folder.is_symlink():
             return
         face_filename = self._actor_pool.actor_face_filename(actor_id) if actor_id else None
@@ -428,7 +429,7 @@ class Casting:
         Also clears the `cast/cast.jpg` mirror (and the `cast/` dir if empty)
         so a stale picture doesn't linger after unassign.
         """
-        character_folder = drama_dir / "characters" / role
+        character_folder = drama_layout.characters_dir(drama_dir) / role
         cast_path = character_folder / CAST_LINK_FILE_NAME
         try:
             cast_path.unlink(missing_ok=True)

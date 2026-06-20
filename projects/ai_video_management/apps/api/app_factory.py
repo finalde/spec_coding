@@ -96,9 +96,15 @@ from libs.domain.errors.frame__error import (
 from libs.domain.errors.subtitle__error import (
     BurnFailedError,
     EmptySubtitlesError,
+    InvalidBatchScopeError,
     InvalidSubtitleLangError,
-    SubtitleAlreadyExistsError,
+    NoBatchShotsError,
     SubtitleFileMissingError,
+)
+from libs.domain.errors.intro_card__error import (
+    IntroCardBurnFailedError,
+    IntroCardsFileMissingError,
+    NoCardForShotError,
 )
 from libs.domain.errors.media__error import (
     AlreadyArchivedError,
@@ -192,9 +198,14 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     # subtitle
     (SubtitleFileMissingError, 404, "subtitle_file_missing", True),
     (EmptySubtitlesError, 400, "empty_subtitles", True),
-    (SubtitleAlreadyExistsError, 409, "subtitles_already_exist", True),
     (BurnFailedError, 500, "burn_failed", True),
     (InvalidSubtitleLangError, 400, "invalid_subtitle_lang", True),
+    (InvalidBatchScopeError, 400, "invalid_batch_scope", True),
+    (NoBatchShotsError, 404, "no_batch_shots", True),
+    # intro card (11d)
+    (IntroCardsFileMissingError, 404, "intro_cards_file_missing", True),
+    (NoCardForShotError, 404, "no_card_for_shot", True),
+    (IntroCardBurnFailedError, 500, "intro_card_burn_failed", True),
     # media
     (InvalidMediaPathError, 400, "invalid_path", False),
     (NotMediaError, 400, "extension_not_allowed", False),

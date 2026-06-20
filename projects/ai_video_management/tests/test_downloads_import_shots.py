@@ -142,6 +142,74 @@ def test_scene_plate_routes_by_orientation_token(tmp_path: Path) -> None:
     assert (scene / "bg2_朝南_门" / "bg2_朝南_门.png").is_file()
 
 
+def test_scene_plate_routes_by_orientation_when_no_scene_token(tmp_path: Path) -> None:
+    """Real-world: kling truncates the download to the prompt's first ~10 chars.
+    For a plate prompt whose first line is the plate_id (`bg{N}_{方位}_…`) the
+    EARLY 方位 survives but the pinyin scene handle (`zhenbei_wangfu_zhengting`)
+    does NOT — so the filename has a 方位 token but no scene-name token. The
+    importer must still route it to the matching plate folder by 方位 alone."""
+    root = tmp_path / "repo"
+    scene = root / "ai_videos" / "wushen" / "2_世界观人设" / "scenes" / "zhenbei_wangfu_zhengting"
+    for p in ["bg1_朝北_高座主位", "bg2_朝南_厅门", "bg3_朝东_东侧列柱",
+              "bg4_朝西_西窗", "bg5_高位俯瞰", "bg6_座前_虚化背景"]:
+        (scene / p).mkdir(parents=True)
+    downloads = tmp_path / "Downloads"
+    # exact kling truncation shapes observed in the field (no scene handle):
+    _touch(downloads / "kling_20260619_IMAGE_bg1_朝北_高座主_3614_1.png")
+    _touch(downloads / "kling_20260619_IMAGE_bg2_朝南_厅门参_3610_6.png")
+    _touch(downloads / "kling_20260619_IMAGE_bg3_朝东_东侧列_3623_2.png")
+    _touch(downloads / "kling_20260619_IMAGE_bg4_朝西_西窗参_3604_2.png")
+    _touch(downloads / "kling_20260619_IMAGE_bg5_高位俯瞰参考_3609_4.png")
+    _touch(downloads / "kling_20260619_IMAGE_bg6_座前_虚化背_3619_1.png")
+
+    result = _make_importer(root, downloads).import_drama("ai_videos/wushen")
+
+    assert result.unmatched == [], result.unmatched
+    assert result.errors == []
+    assert {e["kind"] for e in result.moved} == {"scene_plate"}, result.moved
+    for p in ["bg1_朝北_高座主位", "bg2_朝南_厅门", "bg3_朝东_东侧列柱",
+              "bg4_朝西_西窗", "bg5_高位俯瞰", "bg6_座前_虚化背景"]:
+        assert (scene / p / f"{p}.png").is_file(), p
+
+
+def test_global_plate_image_with_scene_handle_lands_at_scene_root(tmp_path: Path) -> None:
+    """The 步骤一 全局立绘 prompt's first line is the pinyin scene handle. Even
+    truncated to `zhenbei_wangf…` the `zhenbei` scene token survives → routes to
+    scene root (no 方位 token → not deeper into a plate)."""
+    root = tmp_path / "repo"
+    scene = root / "ai_videos" / "wushen" / "2_世界观人设" / "scenes" / "zhenbei_wangfu_zhengting"
+    (scene / "bg1_朝北_高座主位").mkdir(parents=True)
+    downloads = tmp_path / "Downloads"
+    _touch(downloads / "kling_20260619_IMAGE_zhenbei_wangf_3511_1.png")
+
+    result = _make_importer(root, downloads).import_drama("ai_videos/wushen")
+
+    assert result.unmatched == [], result.unmatched
+    assert [e["kind"] for e in result.moved] == ["scene"], result.moved
+    # lands directly in scene root (not a bg plate sub-folder, not not_matched);
+    # the trailing rename pass may canonicalise the basename.
+    root_pngs = [p for p in scene.iterdir() if p.is_file() and p.suffix == ".png"]
+    assert len(root_pngs) == 1, root_pngs
+
+
+def test_orientation_fallback_ambiguous_across_scenes_is_not_matched(tmp_path: Path) -> None:
+    """When two scenes both own a `朝北` plate and the filename carries no scene
+    token, the 方位 is ambiguous → not_matched (never a silent misroute)."""
+    root = tmp_path / "repo"
+    base = root / "ai_videos" / "wushen" / "2_世界观人设" / "scenes"
+    (base / "hall_a" / "bg1_朝北_x").mkdir(parents=True)
+    (base / "hall_b" / "bg1_朝北_y").mkdir(parents=True)
+    downloads = tmp_path / "Downloads"
+    _touch(downloads / "kling_20260619_IMAGE_bg1_朝北_zzz_1_1.png")
+
+    result = _make_importer(root, downloads).import_drama("ai_videos/wushen")
+
+    assert {e["kind"] for e in result.moved} == set() or all(
+        e["kind"] != "scene_plate" for e in result.moved
+    )
+    assert len(result.unmatched) == 1, result.unmatched
+
+
 def test_scene_plate_reimport_overwrites_and_clears_numbered(tmp_path: Path) -> None:
     """A plate folder holds exactly one canonical image. Re-importing must
     OVERWRITE it and clear stale {plate}1/{plate}2 numbered leftovers (from a
