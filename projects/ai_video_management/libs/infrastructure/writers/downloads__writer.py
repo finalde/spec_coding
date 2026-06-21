@@ -82,6 +82,18 @@ _BASENAME_INVALID = re.compile(r"[\x00-\x1f/\\:*?\"<>|]")
 # cross-match; the 方位 words are mutually exclusive.
 _PLATE_PREFIX = re.compile(r"^bg\d+_")
 _PLATE_NON_DEST = frozenset({NOT_MATCHED_DIR_NAME, RENDERS_DIR_NAME, "frames", "archive"})
+PROPS_DIR_NAME = "props"
+# A character-matched download that is an intro-card nameplate (its prompt opens
+# with `{角色} · 出场名牌卡 …`, ai_video.md rule 11d) routes to the character
+# folder's canonical `intro_card.{ext}` rather than landing under its raw name.
+_INTRO_CARD_MARKER = re.compile(r"名牌|出场卡|intro[ _]?card")
+# A scene-ROOT asset (whole-scene 立绘 / 全局建场底图 / walk-through), as opposed
+# to a directional `bg{N}_{方位}_` plate. Its filename carries one of these
+# markers; it must stay at the scene root and NOT be routed into a plate
+# sub-folder even when a 方位 token (e.g. `庙内`) appears as a substring of the
+# scene description (`小神庙内部` → spurious `庙内` plate match).
+_SCENE_ROOT_MARKER = re.compile(r"场景立绘|全局|建场|底图|巡游|环视|walk")
+_IMAGE_EXTS_LC = frozenset({".png", ".webp", ".jpg", ".jpeg"})
 
 
 @dataclass(frozen=True)
@@ -160,19 +172,30 @@ class DownloadsImporter:
                     plate = self._match_scene_plate(src.name, chosen.folder)
                     if plate is not None:
                         dst_folder, kind = plate, "scene_plate"
+            # Canonical-named destinations (one image per folder): an intro-card
+            # nameplate matched to a character → `{char}/intro_card.{ext}`; a prop
+            # download → `props/{道具}/{道具}.{ext}`. Everything else keeps its
+            # original download name (shot renders,立绘, scene plates).
+            ext = src.suffix.lower()
+            dst_name = src.name
+            if kind == "character" and _INTRO_CARD_MARKER.search(src.name.lower()):
+                kind, dst_name = "intro_card", f"intro_card{ext}"
+            elif kind == "prop":
+                dst_name = f"{dst_folder.name}{ext}"
             try:
                 dst_folder.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
                 result.errors.append({"path": self._display_src(src), "message": f"mkdir_failed: {exc}"})
                 continue
             # Overwrite semantics: a scene-plate folder holds exactly ONE
-            # canonical image ({plate_id}.ext). On re-import, clear any existing
-            # image(s) first — including stale {plate}1/{plate}2 numbered
-            # leftovers from a prior move-then-rename collision — so the new
-            # download replaces rather than accumulating duplicates.
+            # canonical image ({plate_id}.ext) → clear stale media first. An
+            # intro card replaces only `intro_card.*` (NOT the立绘 etc. in the
+            # same character folder).
             if kind == "scene_plate":
                 self._clear_folder_media(dst_folder)
-            dst = dst_folder / src.name
+            elif kind == "intro_card":
+                self._clear_named_media(dst_folder, "intro_card")
+            dst = dst_folder / dst_name
             if dst.exists():
                 try:
                     dst.unlink()
@@ -396,6 +419,13 @@ class DownloadsImporter:
             for child in sorted(scenes_dir.iterdir()):
                 if child.is_dir() and not child.is_symlink():
                     out.append(_Candidate(folder=child, kind="scene", tokens=self._tokens(child.name)))
+        # Props (`2_世界观人设/props/{道具名}/`) — a sibling of characters/scenes;
+        # one canonical image per prop folder (e.g. `props/玉佩/玉佩.png`).
+        props_dir = drama_layout.characters_dir(drama_dir).parent / PROPS_DIR_NAME
+        if props_dir.is_dir():
+            for child in sorted(props_dir.iterdir()):
+                if child.is_dir() and not child.is_symlink():
+                    out.append(_Candidate(folder=child, kind="prop", tokens=self._tokens(child.name)))
         episodes_dir = drama_layout.episodes_dir(drama_dir)
         if episodes_dir.is_dir():
             for ep in sorted(episodes_dir.iterdir()):
@@ -468,7 +498,7 @@ class DownloadsImporter:
             for cand in candidates:
                 if cand.kind == "shot" and tag in cand.tokens:
                     return cand
-        kind_priority = {"shot": 3, "scene": 2, "character": 1}
+        kind_priority = {"shot": 4, "prop": 3, "scene": 2, "character": 1}
         best: tuple[int, int, str, _Candidate] | None = None  # (score, kind_rank, folder_name_lex, candidate)
         for cand in candidates:
             score = 0
@@ -500,6 +530,22 @@ class DownloadsImporter:
                 pass
 
     @staticmethod
+    def _clear_named_media(folder: Path, stem: str) -> None:
+        """Delete `{stem}.{img ext}` files in a folder (intro-card re-import:
+        replace only `intro_card.*`, never the character's other images)."""
+        try:
+            entries = list(folder.iterdir())
+        except OSError:
+            return
+        for child in entries:
+            try:
+                if (child.is_file() and not child.is_symlink()
+                        and child.stem == stem and child.suffix.lower() in _IMAGE_EXTS_LC):
+                    child.unlink()
+            except OSError:
+                pass
+
+    @staticmethod
     def _plate_orientation_token(folder_name: str) -> str | None:
         """The 方位 routing token of a `bg{N}_{方位}_{描述}` plate folder:
         the first `_`-segment after the `bg{N}_` prefix. Returns None for
@@ -514,7 +560,11 @@ class DownloadsImporter:
     def _match_scene_plate(cls, filename: str, scene_folder: Path) -> Path | None:
         """When a file matched a scene, route it deeper into the orientation
         plate sub-folder whose 方位 token appears in the filename. Files with
-        no 方位 token (e.g. the scene walk-through `.mp4`) stay at scene root."""
+        no 方位 token (e.g. the scene walk-through `.mp4`) — or whole-scene assets
+        (场景立绘 / 全局建场底图), whose description can spuriously contain a 方位
+        substring — stay at the scene root."""
+        if _SCENE_ROOT_MARKER.search(filename):
+            return None
         name = filename.lower()
         best: tuple[int, str, Path] | None = None
         try:

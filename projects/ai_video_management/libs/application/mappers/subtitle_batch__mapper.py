@@ -4,11 +4,13 @@ from __future__ import annotations
 from libs.application.dtos.subtitle__dto import (
     BatchShotOutcomeCdto,
     BurnDramaSubtitlesResultCdto,
+    BurnEpisodeSubtitlesResultCdto,
     ScaffoldEpisodeSubtitlesResultCdto,
 )
 from libs.infrastructure.writers.subtitle_batch__writer import (
     BatchShotOutcome,
     DramaBurnResult,
+    EpisodeBurnResult,
     EpisodeScaffoldResult,
 )
 
@@ -20,6 +22,14 @@ class SubtitleBatchMapper:
     ) -> ScaffoldEpisodeSubtitlesResultCdto:
         return ScaffoldEpisodeSubtitlesResultCdto(
             episode_rel=r.episode_rel,
+            outcomes=tuple(SubtitleBatchMapper._outcome(o) for o in r.outcomes),
+        )
+
+    @staticmethod
+    def to_burn_episode_cdto(r: EpisodeBurnResult) -> BurnEpisodeSubtitlesResultCdto:
+        return BurnEpisodeSubtitlesResultCdto(
+            episode_rel=r.episode_rel,
+            lang=r.lang,
             outcomes=tuple(SubtitleBatchMapper._outcome(o) for o in r.outcomes),
         )
 

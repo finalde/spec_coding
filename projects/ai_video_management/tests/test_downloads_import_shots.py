@@ -120,6 +120,55 @@ def test_shot_tag_wins_over_embedded_scene_name(tmp_path: Path) -> None:
     assert not list((drama / "scenes" / "s4_回忆庭院").rglob("*.mp4"))
 
 
+def test_intro_card_routes_to_character_and_survives_rename(tmp_path: Path) -> None:
+    """A character-matched nameplate download (filename has a 名牌 marker) lands
+    as the character folder's canonical `intro_card.png` and the rename pass must
+    NOT collapse it to `{folder}{N}.png` (ai_video.md rule 11d)."""
+    root = tmp_path / "repo"
+    char = root / "ai_videos" / "td" / "characters" / "c1_裴知秋"
+    _touch(char / "c1_裴知秋.png")  # existing 立绘
+    downloads = tmp_path / "Downloads"
+    _touch(downloads / "kling_20260620_IMAGE_裴知秋名牌卡___竖_1.png")
+
+    result = _make_importer(root, downloads).import_drama("ai_videos/td")
+
+    assert {e["kind"] for e in result.moved} == {"intro_card"}, result.moved
+    assert (char / "intro_card.png").is_file()
+    pngs = sorted(p.name for p in char.iterdir() if p.suffix == ".png")
+    assert pngs == ["c1_裴知秋.png", "intro_card.png"]  # intro_card NOT renamed
+
+
+def test_prop_download_routes_to_prop_folder(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    prop = root / "ai_videos" / "td" / "props" / "玉佩"
+    prop.mkdir(parents=True)
+    _touch(prop / "玉佩.md")  # prop spec already present
+    downloads = tmp_path / "Downloads"
+    _touch(downloads / "玉佩 道具参考图 半枚螭龙云纹古玉.png")
+
+    result = _make_importer(root, downloads).import_drama("ai_videos/td")
+
+    assert {e["kind"] for e in result.moved} == {"prop"}, result.moved
+    assert (prop / "玉佩.png").is_file()
+
+
+def test_scene_establishing_image_stays_at_root_not_plate(tmp_path: Path) -> None:
+    """A whole-scene 立绘 / 全局建场底图 whose description contains a 方位 substring
+    (`小神庙内部` → `庙内`) must stay at the scene root, not get routed into the
+    `bg1_庙内_…` plate folder (and clobber it)."""
+    root = tmp_path / "repo"
+    scene = root / "ai_videos" / "td" / "scenes" / "破庙"
+    (scene / "bg1_庙内_神像前").mkdir(parents=True)
+    downloads = tmp_path / "Downloads"
+    _touch(downloads / "破庙 场景立绘 荒废山野小神庙内部 全局建场底图.png")
+
+    result = _make_importer(root, downloads).import_drama("ai_videos/td")
+
+    assert {e["kind"] for e in result.moved} == {"scene"}, result.moved
+    assert (scene / "破庙.png").is_file()  # canonicalized at scene root
+    assert not any((scene / "bg1_庙内_神像前").glob("*.png"))  # plate untouched
+
+
 def test_scene_plate_routes_by_orientation_token(tmp_path: Path) -> None:
     """Scene background plates live in `scenes/{scene}/bg{N}_{方位}_{desc}/`.
     The out-of-image tool names the download from the prompt's 主体 line, which

@@ -19,5 +19,9 @@ class NoCardForShotError(IntroCardDomainError):
     """`intro_cards.md` exists but has no card for this shot."""
 
 
+class IntroCardImageMissingError(IntroCardDomainError):
+    """A shot's card references a PNG that is not in the library / sandbox."""
+
+
 class IntroCardBurnFailedError(IntroCardDomainError):
     """ffmpeg ran but failed to produce the carded mp4."""

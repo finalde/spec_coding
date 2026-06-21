@@ -3395,3 +3395,25 @@ details[open] > .prompt-preview-toggle::before {
   border-radius: 4px;
   font-size: 12px;
 }
+
+/* Episode BGM arrangement panel (BgmEpisodePanel) */
+.bgm-ep-panel { padding: 12px 16px; }
+.bgm-ep-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bgm-ep-header h2 { font-size: 16px; margin: 0; }
+.bgm-ep-burn-btn { padding: 6px 14px; font-size: 14px; cursor: pointer; border-radius: 6px;
+  border: 1px solid #c7a008; background: #fde68a; }
+.bgm-ep-burn-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.bgm-ep-status { font-size: 12px; color: #555; margin: 8px 0; }
+.bgm-ep-error { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5;
+  border-radius: 4px; padding: 6px 10px; font-size: 13px; }
+.bgm-ep-empty { color: #777; font-size: 13px; }
+.bgm-ep-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.bgm-ep-table th, .bgm-ep-table td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left;
+  vertical-align: middle; }
+.bgm-ep-table th { background: #f9fafb; font-weight: 600; }
+.bgm-ep-row-open { background: #fffdf5; }
+.bgm-ep-row-assigned { background: #f3fbf4; }
+.bgm-ep-params { white-space: nowrap; color: #555; }
+.bgm-ep-comment { color: #444; }
+.bgm-ep-hint { color: #b45309; font-size: 11px; }
+.bgm-ep-table audio { height: 28px; max-width: 180px; }

@@ -40,7 +40,7 @@ ai_videos/{name}/
 ├── 2_世界观人设/{world.md, characters/{角色}/…, scenes/{场景}/…, props/{物件}/…, casting.md, style_guide.md}
 ├── 3_大纲/arc_outline.md
 ├── 4_剧本/episodes/epNN/{script.md, dialogue.md}
-├── 5_6_分镜与prompt/episodes/epNN/{shotlist.md, shots/shotNN/shotNN.md, all_shot_prompts.md, shots/shotNN/subtitles.md}
+├── 5_6_分镜与prompt/episodes/epNN/{shotlist.md, shots/shotNN/shotNN.md, all_shot_prompts.md}   # subtitles.md 默认不生成（字幕烧录全流程默认关闭, ai_video.md 11c）
 └── README.md（中文，全剧门面）
 ```
 - 阶段 5、6 产物**合一在 shotNN.md**（先写运镜设计字段、再校五层 prompt 契约）。

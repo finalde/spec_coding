@@ -41,6 +41,11 @@ AI_VIDEOS_ROOT_NAME = "ai_videos"
 # to `ep{NN}{i}.mp4` (follow-up 128). Only `characters/`, `scenes/`, and scene
 # `bg*` plate folders are canonicalized by the rename pass.
 EPISODES_DIR_NAME = "episodes"
+# Reserved canonical filenames the folder-name rename must NOT touch: a character
+# folder's `intro_card.{ext}` (ai_video.md rule 11d) has a fixed name unrelated to
+# the folder name — without this guard it gets collapsed to `{folder}{N}.png` and
+# the intro-card burn can no longer find it (follow-up wushen_juexing intro-card).
+_RESERVED_STEMS = frozenset({"intro_card"})
 
 
 def _uniquify(target: Path) -> Path:
@@ -288,6 +293,8 @@ class MediaRenamer:
             return ops, skipped
         by_ext: dict[str, list[Path]] = {}
         for p in entries:
+            if p.stem.lower() in _RESERVED_STEMS:
+                continue  # leave intro_card.* etc. at their fixed canonical name
             ext = p.suffix.lower()
             if ext in MEDIA_EXTENSIONS:
                 by_ext.setdefault(ext, []).append(p)

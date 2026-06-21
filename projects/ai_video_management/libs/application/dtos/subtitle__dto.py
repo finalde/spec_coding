@@ -68,6 +68,20 @@ class ScaffoldEpisodeSubtitlesResultCdto:
 
 
 @dataclass(frozen=True)
+class BurnEpisodeSubtitlesResultCdto:
+    episode_rel: str
+    lang: str
+    outcomes: tuple[BatchShotOutcomeCdto, ...]
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "episode": self.episode_rel,
+            "lang": self.lang,
+            "outcomes": [o.to_payload() for o in self.outcomes],
+        }
+
+
+@dataclass(frozen=True)
 class BurnDramaSubtitlesResultCdto:
     drama_rel: str
     lang: str

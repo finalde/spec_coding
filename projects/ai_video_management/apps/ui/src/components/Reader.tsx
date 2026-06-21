@@ -11,6 +11,7 @@ import { CastingView } from "./CastingView";
 import { ActorView } from "./ActorView";
 import { VoiceView } from "./VoiceView";
 import { BgmView } from "./BgmView";
+import { BgmEpisodePanel } from "./BgmEpisodePanel";
 import { PerfScorePanel } from "./PerfScorePanel";
 import { ShotRegenButton } from "./ShotRegenButton";
 import { PerformanceSelector } from "./PerformanceSelector";
@@ -25,6 +26,7 @@ import { announceToast } from "../lib/announce";
 import {
   archiveMedia,
   burnDramaSubtitles,
+  burnEpisodeSubtitles,
   concatEpisode,
   concatShotCharacters,
   deleteMedia,
@@ -77,6 +79,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [copyingPrompts, setCopyingPrompts] = useState<boolean>(false);
   const [scaffoldEpBusy, setScaffoldEpBusy] = useState<boolean>(false);
   const [burnDramaBusy, setBurnDramaBusy] = useState<boolean>(false);
+  const [burnEpisodeBusy, setBurnEpisodeBusy] = useState<boolean>(false);
 
   const ext = path ? extOf(path) : "";
   const isPerfEntry = path ? /_performances\/[^/]+\/perf_\d{4}\/perf_\d{4}\.md$/.test(path) : false;
@@ -259,6 +262,27 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     }
   }, [path, onSaved]);
 
+  const onBurnEpisodeSubtitlesClick = useCallback(async (lang: SubtitleLang) => {
+    if (!path) return;
+    setBurnEpisodeBusy(true);
+    try {
+      const result = await burnEpisodeSubtitles(path, lang);
+      const ok = result.outcomes.filter((o) => o.ok).length;
+      const skipped = result.outcomes.filter((o) => !o.ok);
+      let summary = `已为本集 ${ok} 个镜头烧入${lang === "both" ? "中英" : lang === "en" ? "英文" : "中文"}字幕`;
+      if (skipped.length > 0) {
+        const names = skipped.map((s) => `${s.shot} (${s.reason})`).join(", ");
+        summary += ` · 跳过 ${skipped.length}: ${names}`;
+      }
+      announceToast(summary);
+      onSaved();
+    } catch (err) {
+      announceToast(`本集烧字幕失败: ${archiveErrorKind(err)}`);
+    } finally {
+      setBurnEpisodeBusy(false);
+    }
+  }, [path, onSaved]);
+
   const onCopyAllVideoPromptsClick = useCallback(async () => {
     if (!path) return;
     const epDir = episodeDirOf(path);
@@ -395,6 +419,9 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const isActor = isMarkdown && /^ai_videos\/_actors\/actor_[^/]+\/actor_[^/]+\.md$/.test(path);
   const isVoice = isMarkdown && /^ai_videos\/_voices\/voice_[^/]+\/voice_[^/]+\.md$/.test(path);
   const isBgm = isMarkdown && /^ai_videos\/_bgm\/[^/]+\/bgm_[^/]+\/bgm_[^/]+\.md$/.test(path);
+  // Episode BGM cue timeline: `…/episodes/ep{NN}/bgm/bgm.md` (the extra `bgm/`
+  // segment keeps it distinct from the episode-level `isEpisodeFile` files).
+  const isEpisodeBgm = isMarkdown && /^ai_videos\/[^_][^/]+\/(?:[^/]+\/)*episodes\/ep\d+\/bgm\/bgm\.md$/.test(path);
   const isShotMd = isMarkdown && SHOT_MD_RE.test(path);
   // Drama homepage (`ai_videos/{drama}/README.md`) — anchors the drama-wide
   // "burn subtitles into every shot of every episode" action.
@@ -447,7 +474,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             {scaffoldEpBusy ? "⏳ 重生中…" : "📝 重生本集字幕"}
           </button>
         ) : null}
-        {isDramaReadme || isShotlistTable ? (
+        {isDramaReadme ? (
           <span className="reader-episode-concat-group" role="group" aria-label="全剧烧字幕（按语言）">
             {([
               ["zh", "💬 全剧·中文字幕", "为全剧每集每镜取最新 render + subtitles.md 烧中文字幕 → shot{NN}_zh.mp4"],
@@ -459,6 +486,22 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
                 aria-label={`Burn ${lang} subtitles into every shot of every episode`}
                 title={`遍历全剧所有 episodes/ep*/shots/shot*，每镜取最新 render 烧入字幕（已存在则覆盖）。缺 render 或缺 subtitles.md 的镜头自动跳过。${title}`}>
                 {burnDramaBusy ? "⏳" : label}
+              </button>
+            ))}
+          </span>
+        ) : null}
+        {isShotlistTable ? (
+          <span className="reader-episode-concat-group" role="group" aria-label="本集烧字幕（按语言）">
+            {([
+              ["zh", "💬 本集·中文字幕", "为本集每镜取最新 render + subtitles.md 烧中文字幕 → shot{NN}_zh.mp4"],
+              ["en", "💬 本集·EN", "为本集每镜烧英文字幕 → shot{NN}_en.mp4"],
+              ["both", "💬 本集·中英", "为本集每镜烧中英字幕 → shot{NN}_zhen.mp4"],
+            ] as [SubtitleLang, string, string][]).map(([lang, label, title]) => (
+              <button key={lang} type="button" className="reader-episode-concat-btn"
+                onClick={() => onBurnEpisodeSubtitlesClick(lang)} disabled={burnEpisodeBusy}
+                aria-label={`Burn ${lang} subtitles into every shot of this episode only`}
+                title={`只遍历本集 episodes/ep{NN}/shots/shot*，每镜取最新 render 烧入字幕（已存在则覆盖）。缺 render 或缺 subtitles.md 的镜头自动跳过。${title}`}>
+                {burnEpisodeBusy ? "⏳" : label}
               </button>
             ))}
           </span>
@@ -591,6 +634,8 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             <VoiceView primaryFile={file} primaryPath={path} knownPaths={knownPaths} tree={tree} onSaved={onSaved} />
           ) : isBgm ? (
             <BgmView primaryFile={file} primaryPath={path} knownPaths={knownPaths} onSaved={onSaved} />
+          ) : isEpisodeBgm ? (
+            <BgmEpisodePanel path={path} onSaved={onSaved} />
           ) : isImageRef ? (
             <>
               <ImageRefView primaryFile={file} primaryPath={path} knownPaths={knownPaths} onSaved={onSaved} />

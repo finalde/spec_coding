@@ -41,3 +41,25 @@ Auto-updated:
 
 Verify: torch.cuda.is_available()=True；StableAudioPipeline 导入 OK；模型 model_info 可访问（token 已就绪）；真机 10s 生成测试进行中。
 No conflicts found in: final_specs/spec.md, findings/, validation/* (spec 写的是「自托管 Stable Audio 开源权重」，diffusers 加载器满足该意图；如需可在 findings/angle-musicgen-selfhost.md 追注加载器选择)
+
+## Follow-up 004 — 2026-06-20 16:23:12
+Source: user_input/follow_ups/004-20260620-162312-episode-bgm-cue-assign-burn.md
+Summary: Episode 级 BGM 编排——稀疏 cue 时间线 `episodes/epNN/bgm/bgm.md`（pipeline 人工写）+ webapp 像 casting 一样按情绪 assign 库内 bgm_NNNN + 一键烧录进带字幕整集视频 `ep{NN}_zh.mp4` → `ep{NN}_zh_bgm.mp4`（重烧覆盖、duck=on 台词让路、未分配 cue 跳过）。
+
+Auto-updated (new DDD slice `episode_bgm__*`):
+- libs/domain/value_objects/episode_bgm__valueobject.py — BgmCue + 稀疏 cue 行式 grammar(parse/serialize；slot=bgm_NNNN|-、cat=情绪、vol/duck/fade/注释)
+- libs/domain/errors/episode_bgm__error.py — 路径/cue/源缺失/track缺音频/ffmpeg/mux 命名错误
+- libs/domain/repositories/episode_bgm__repository.py — read/assign/unassign/burn 协议
+- libs/infrastructure/writers/episode_bgm__writer.py — EpisodeBgmManager：read、assign(改写 slot)、burn(多 cue ffmpeg filtergraph：aloop→atrim→volume→afade→adelay，duck 用源音轨 sidechaincompress，amix normalize=0，-c:v copy)
+- libs/infrastructure/writers/bgm__writer.py — BgmPool.audio_path_for(bgm_id)（公开按 id 解析 mp3 绝对路径）+ 协议同步
+- libs/application/{dtos,mappers,commands,queries}/episode_bgm__* — EpisodeBgmCommand(assign/unassign/burn) + EpisodeBgmQuery(read)
+- apps/api/routes/episode_bgm__route.py — GET /api/episode-bgm、POST/DELETE /assign、POST /burn；routes/__init__ 注册；container 接线 episode_bgm_manager/command/query；app_factory 注册 10 个 episode-bgm 错误
+- libs/infrastructure/readers/bgm_reference__reader.py — 反查扫描兼容 `episodes/epNN/bgm/bgm.md`（保留旧 `epNN/bgm.md`）
+- apps/ui/src/api.ts — readEpisodeBgm/assignBgmCue/unassignBgmCue/burnEpisodeBgm + 类型
+- apps/ui/src/components/BgmEpisodePanel.tsx — episode BGM 面板（cue 表 + 按情绪过滤的分配下拉 + 试听 + 🎵 烧录按钮）；Reader.tsx 在 `…/episodes/epNN/bgm/bgm.md` 挂载；styles.css 样式
+- tests/test_episode_bgm.py — parse/serialize、read、assign/unassign、未知 bgm 拒绝、窗口未命中、burn(跳过未分配/无分配报错/缺源报错)、filtergraph 形状、非 episode 路径（10 测试全过）
+- ai_videos/wushen_juexing/.../episodes/{ep01,ep02}/bgm/bgm.md — 按剧本人工产出的稀疏 cue 编排（ep01 7 条 / ep02 8 条，全待分配）
+- .claude/agent_refs/project/ai_video.md — 增补「episode 级 BGM cue + folder + 烧录」规则
+
+Verify: test_bgm_library + test_episode_bgm + test_episode_concat = 29 passed；UI tsc 通过 + vite build 通过；真 ffmpeg 多 cue mux 冒烟（duck+非duck）出片带音轨 OK。
+No conflicts found in: findings/, validation/* (烧录是 v1「mux 多 cue 留后续」的兑现，spec 的库结构/引用/删除契约不变；final_specs/spec.md §7 的 v1 单 BGM mux 仍在，episode 烧录是其多 cue 上位)

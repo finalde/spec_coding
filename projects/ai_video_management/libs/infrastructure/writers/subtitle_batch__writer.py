@@ -74,6 +74,20 @@ class EpisodeScaffoldResult:
 
 
 @dataclass(frozen=True)
+class EpisodeBurnResult:
+    episode_rel: str
+    lang: str
+    outcomes: tuple[BatchShotOutcome, ...]
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "episode": self.episode_rel,
+            "lang": self.lang,
+            "outcomes": [o.to_payload() for o in self.outcomes],
+        }
+
+
+@dataclass(frozen=True)
 class DramaBurnResult:
     drama_rel: str
     lang: str
@@ -114,6 +128,19 @@ class SubtitleBatchBurner:
                 BatchShotOutcome("", shot_dir.name, True, r.md_rel, r.cue_count, None)
             )
         return EpisodeScaffoldResult(self._rel(episode_dir), tuple(outcomes))
+
+    def burn_episode(self, rel: str, lang: str = "zh") -> EpisodeBurnResult:
+        if lang not in VALID_LANGS:
+            raise InvalidSubtitleLangError(lang)
+        episode_dir = self._episode_dir(rel)
+        shot_dirs = self._shot_dirs(episode_dir / _SHOTS_DIR_NAME)
+        if not shot_dirs:
+            raise NoBatchShotsError("episode has no shot folders")
+        outcomes = [
+            self._burn_one(episode_dir.name, shot_dir, lang)
+            for shot_dir in shot_dirs
+        ]
+        return EpisodeBurnResult(self._rel(episode_dir), lang, tuple(outcomes))
 
     def burn_drama(self, rel: str, lang: str = "zh") -> DramaBurnResult:
         if lang not in VALID_LANGS:

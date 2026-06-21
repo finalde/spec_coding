@@ -256,6 +256,27 @@ export async function scaffoldEpisodeSubtitles(
   return readJson<ScaffoldEpisodeSubtitlesResult>(response);
 }
 
+export interface BurnEpisodeSubtitlesResult {
+  episode: string;
+  lang: SubtitleLang;
+  outcomes: BatchShotOutcome[];
+}
+
+/** Burn the {lang} subtitle master for every shot in ONE episode (each shot's
+ * newest render + its subtitles.md). `path` may be any file under the episode
+ * folder. */
+export async function burnEpisodeSubtitles(
+  path: string,
+  lang: SubtitleLang = "zh",
+): Promise<BurnEpisodeSubtitlesResult> {
+  const response = await fetch("/api/burn-episode-subtitles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, lang }),
+  });
+  return readJson<BurnEpisodeSubtitlesResult>(response);
+}
+
 export interface BurnDramaSubtitlesResult {
   drama: string;
   lang: SubtitleLang;
@@ -1460,4 +1481,79 @@ export async function fetchBgmReferences(bgmId: string): Promise<BgmReferencesRe
     },
   );
   return readJson<BgmReferencesResult>(response);
+}
+
+// Episode BGM arrangement: a sparse per-episode cue timeline
+// (episodes/epNN/bgm/bgm.md). The user assigns a library bgm_NNNN to each cue
+// slot (by emotion category), then burns the assigned cues onto the subtitled
+// episode master ep{NN}_zh.mp4 → ep{NN}_zh_bgm.mp4 (re-burn overwrites).
+export interface BgmCueInfo {
+  start: number;
+  end: number;
+  category: string;
+  bgm_id: string | null;
+  assigned: boolean;
+  vol: number;
+  duck: boolean;
+  fade_in: boolean;
+  fade_out: boolean;
+  comment: string;
+}
+
+export interface EpisodeBgmRead {
+  episode: string;
+  cue_file: string;
+  cue_file_exists: boolean;
+  source: string;
+  source_exists: boolean;
+  output: string;
+  output_exists: boolean;
+  cues: BgmCueInfo[];
+}
+
+export interface BurnEpisodeBgmResult {
+  episode: string;
+  out: string;
+  used: Array<{ window: string; bgm_id: string; duck: boolean }>;
+  skipped: Array<{ window: string; reason: string }>;
+}
+
+export async function readEpisodeBgm(path: string): Promise<EpisodeBgmRead> {
+  const response = await fetch(`/api/episode-bgm?path=${encodeURIComponent(path)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  return readJson<EpisodeBgmRead>(response);
+}
+
+export async function assignBgmCue(
+  path: string, start: number, end: number, bgmId: string,
+): Promise<EpisodeBgmRead> {
+  const response = await fetch("/api/episode-bgm/assign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, start, end, bgm_id: bgmId }),
+  });
+  return readJson<EpisodeBgmRead>(response);
+}
+
+export async function unassignBgmCue(
+  path: string, start: number, end: number,
+): Promise<EpisodeBgmRead> {
+  const response = await fetch("/api/episode-bgm/assign", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, start, end }),
+  });
+  return readJson<EpisodeBgmRead>(response);
+}
+
+export async function burnEpisodeBgm(path: string): Promise<BurnEpisodeBgmResult> {
+  const response = await fetch("/api/episode-bgm/burn", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<BurnEpisodeBgmResult>(response);
 }

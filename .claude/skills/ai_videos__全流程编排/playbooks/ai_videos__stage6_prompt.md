@@ -103,7 +103,7 @@
 3. **每个说话镜补 `## 台词配音 prompt` 块**（每发声单元一块），voice_id 对齐 bible。
 3b. **带显著情绪 beat 的镜引用演技库**（§9b + 2026-06-18 演技库 amendment）：按 情绪大类+强度+时长 在 `_performances/` 匹配 top-N，选中条目把锁定文本块**融入（不照抄）**该镜 `动作:`/表情，并加 `表演库参考: perf_NNNN (情绪·强度·风格·载体) — 用于 <角色> <beat>` 标注行。webapp 可推荐候选 + 多选 + 一键重生（`POST /api/regen-shot-prompt`）。
 4. **生成全集汇编 `all_shot_prompts.md`**：自动汇编自各 shot 源，含每镜视频 prompt +（说话镜的）台词配音 prompt，顶部注「只读快照——改各 shot 源后重新汇编」。
-5. **人物出场定格字卡（rule 11d · 标准步骤）**：扫本集有无**重要角色首次登场**（主角/核心反派/关键长线配角；龙套·路人·系统不发卡，门槛见 ai_video.md 11d / style_guide §7）。有则 ① 该首登镜 `## Shot context` 加 `首登字卡:` 行（字卡文字**不入** `## 视频 prompt` ```text``` 块）；② 该集建 `episodes/epNN/intro_cards.md`（行式：`角色 | 首登shot | 定格点(秒) | 主名 | 副身份 | 字体/样式 | 位置 | 时长`，文案按角色 bible 拟、用户审）。同角色全剧仅首登发一次——本集若无重要新角色首登（如纯延续集）则**省此文件**。后期由 webapp「🪧 人物卡」(`POST /api/burn-intro-cards`) 按 intro_cards.md 定格亮相 + 烧名牌 → 生成 `shot{NN}.mp4`（落 shot 根目录、不覆盖 `renders/` 原片、二次烧录可覆盖）。
+5. **人物出场字卡（rule 11d · 标准步骤 · 图片合成）**：扫本集有无**重要角色首次登场**（主角/核心反派/关键长线配角；龙套·路人·系统不发卡，门槛见 ai_video.md 11d / style_guide §7）。有则 ① 该首登镜 `## Shot context` 加 `首登字卡:` 行（字卡文字**不入** `## 视频 prompt` ```text``` 块）；② 该集建 `episodes/epNN/intro_cards.md`（行式：`角色 | 首登shot | 出现点(秒) | 卡图 | 位置(右上/左上) | 显示时长(秒) | 宽度占比`）。**卡图＝用户用 Kling/即梦 做好的整张人物卡 PNG（透明底，含框+烫金名+身份），放本剧库 `2_世界观人设/intro_cards/`（中文同名：`{中文名}.md` 出图 prompt + `{中文名}.png` 成品）**（不程序化画图）；`卡图`列填裸中文名或路径。同角色全剧仅首登发一次——本集无重要新角色首登则**省此文件**。出现点=角色入场、显示时长 ≥3.5s（不够则加长其首句台词+beat）。后期由 webapp「🪧 人物卡」(`POST /api/burn-intro-cards`) 把卡图 fade 叠到镜头顶角 → 生成 `shot{NN}.mp4`（落 shot 根、不覆盖 `renders/` 原片、二次烧录可覆盖）。
 
 ---
 
@@ -114,6 +114,7 @@
 - 各 `shots/shotNN/shotNN.md`——补全后的 canonical shot 文件（YAML envelope → 小说原文/Chapter excerpt → H1 → `## Shot context` → `## 视频 prompt`（五层单块）→ `## 台词配音 prompt`）。`## 起始帧` / `## 结束帧` 静帧块已废止，不得出现。带显著情绪 beat 的镜按 §9b + 2026-06-18 演技库 amendment 加 `表演库参考: perf_NNNN (情绪·强度·风格·载体) — 用于 <角色> <beat>` 标注行（不另立段）。
 - `all_shot_prompts.md`——全集汇编快照。
 - `intro_cards.md`（**仅当本集有重要角色首次登场**，rule 11d）——人物出场定格字卡清单；对应首登镜 `## Shot context` 带 `首登字卡:` 行。
+- **不产出 `subtitles.md`（字幕烧录全流程默认关闭，rule 11c）**——pipeline 不生成任何 per-shot 字幕时间轴；字幕由用户后期自行添加。webapp 烧字幕功能为手动 opt-in，不属默认产物。
 
 ---
 

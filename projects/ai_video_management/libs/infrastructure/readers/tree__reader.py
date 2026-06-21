@@ -7,6 +7,7 @@ from typing import Any
 
 from libs.common.exposed_tree import ExposedTree, TREE_VISIBLE_EXTENSIONS
 from libs.common.sub_type_lookup import lookup as sub_type_lookup
+from libs.domain.value_objects.bgm__valueobject import CATEGORY_LABELS_ZH as BGM_CATEGORY_LABELS_ZH
 from libs.domain.value_objects.novel__valueobject import CANONICAL_NOVELS, categories as novel_categories
 
 _IMAGE_EXTENSIONS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
@@ -244,6 +245,9 @@ class TreeReader:
         2) Scene folders (staged pipeline `…/scenes/{pinyin}/`) hold the Chinese
            name in `{pinyin}.md`'s H1 (`# zhenbei_wangfu_zhengting（镇北王府正厅）`)
            — return the `（中文）` group.
+        3) BGM emotion-category folders (`_bgm/{category}/`) have no sidecar; the
+           Chinese label comes from the closed `BGM_CATEGORY_LABELS_ZH` enum
+           (`suspense` → 悬疑).
         None when no recognizable sidecar.
         """
         emotion = directory / "_emotion.md"
@@ -264,6 +268,10 @@ class TreeReader:
                 pass
         if directory.parent.name == "scenes":
             label = self._h1_zh(directory / f"{directory.name}.md")
+            if label:
+                return label
+        if directory.parent.name == "_bgm":
+            label = BGM_CATEGORY_LABELS_ZH.get(directory.name)
             if label:
                 return label
         return None

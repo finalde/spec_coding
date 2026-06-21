@@ -294,7 +294,7 @@ function MediaTile({
             onClick={() => onBurnIntroCards(path)}
             disabled={busy || cardBurning}
             aria-label={`Burn character intro card into ${filename}`}
-            title="按本集 intro_cards.md 把重要角色出场名牌字卡(定格亮相)烧进本镜 → 生成 shot{NN}.mp4 放在 shot 根目录 (renders/ 原视频保留、不覆盖；二次烧录覆盖该输出)。本镜无人物卡则提示。"
+            title="按本集 intro_cards.md 把重要角色的整张人物卡图(Kling 做的 PNG·放本剧 2_世界观人设/intro_cards/)淡入淡出叠到镜头顶角 → 生成 shot{NN}.mp4 放在 shot 根目录 (renders/ 原视频保留、不覆盖；二次烧录覆盖该输出)。本镜无人物卡/卡图缺失则提示。"
           >
             {cardBurning ? "⏳" : "🪧 人物卡"}
           </button>
@@ -552,7 +552,9 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
           ? "本镜无人物卡（intro_cards.md 没有该 shot 行）"
           : kind === "intro_cards_file_missing"
             ? "未找到本集 intro_cards.md（先在该集建卡）"
-            : kind;
+            : kind === "intro_card_image_missing"
+              ? "卡图缺失 — 请先把卡 PNG 放进本剧 2_世界观人设/intro_cards/（中文同名）"
+              : kind;
       announce(`烧人物卡失败: ${hint}`);
     } finally {
       setCardBurningPath(null);

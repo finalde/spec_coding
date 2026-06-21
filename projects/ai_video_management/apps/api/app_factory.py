@@ -73,6 +73,18 @@ from libs.domain.errors.episode__error import (
     NoShotVideosError,
     NotEpisodePathError,
 )
+from libs.domain.errors.episode_bgm__error import (
+    BgmCueNotFoundError,
+    BgmTrackAudioMissingError,
+    EpisodeBgmCueFileMissingError,
+    EpisodeBgmFfmpegMissingError,
+    EpisodeBgmMuxFailedError,
+    InvalidBgmCueError,
+    InvalidEpisodeBgmPathError,
+    NoAssignedBgmCuesError,
+    NotEpisodeBgmPathError,
+    SubtitledEpisodeMissingError,
+)
 from libs.domain.errors.prompt__error import (
     InvalidSuggestionRequestError,
     SuggestionGenerationFailedError,
@@ -103,6 +115,7 @@ from libs.domain.errors.subtitle__error import (
 )
 from libs.domain.errors.intro_card__error import (
     IntroCardBurnFailedError,
+    IntroCardImageMissingError,
     IntroCardsFileMissingError,
     NoCardForShotError,
 )
@@ -181,6 +194,17 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     (NoShotVideosError, 400, "no_shot_videos", False),
     (EpisodeFfmpegMissingError, 500, "ffmpeg_missing", True),
     (EpisodeConcatFailedError, 500, "concat_failed", True),
+    # episode bgm (sparse cue timeline + burn)
+    (InvalidEpisodeBgmPathError, 400, "invalid_path", False),
+    (NotEpisodeBgmPathError, 400, "not_an_episode", False),
+    (EpisodeBgmCueFileMissingError, 404, "bgm_cue_file_missing", True),
+    (BgmCueNotFoundError, 404, "bgm_cue_not_found", True),
+    (InvalidBgmCueError, 400, "invalid_bgm_cue", True),
+    (NoAssignedBgmCuesError, 400, "no_assigned_bgm_cues", True),
+    (SubtitledEpisodeMissingError, 404, "subtitled_episode_missing", True),
+    (BgmTrackAudioMissingError, 404, "bgm_track_audio_missing", True),
+    (EpisodeBgmFfmpegMissingError, 500, "ffmpeg_missing", True),
+    (EpisodeBgmMuxFailedError, 500, "bgm_mux_failed", True),
     # downloads
     # (DownloadsDirMissingError handled specially — payload key is `path`, not `message`.)
     # file
@@ -205,6 +229,7 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     # intro card (11d)
     (IntroCardsFileMissingError, 404, "intro_cards_file_missing", True),
     (NoCardForShotError, 404, "no_card_for_shot", True),
+    (IntroCardImageMissingError, 404, "intro_card_image_missing", True),
     (IntroCardBurnFailedError, 500, "intro_card_burn_failed", True),
     # media
     (InvalidMediaPathError, 400, "invalid_path", False),

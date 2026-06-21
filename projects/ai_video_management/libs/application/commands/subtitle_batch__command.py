@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from libs.application.dtos.subtitle__dto import (
     BurnDramaSubtitlesResultCdto,
+    BurnEpisodeSubtitlesResultCdto,
     ScaffoldEpisodeSubtitlesResultCdto,
 )
 from libs.application.mappers.subtitle_batch__mapper import SubtitleBatchMapper
@@ -21,6 +22,11 @@ class SubtitleBatchCommand:
     def scaffold_episode(self, rel_path: str) -> ScaffoldEpisodeSubtitlesResultCdto:
         return SubtitleBatchMapper.to_scaffold_episode_cdto(
             self._batch.scaffold_episode(rel_path)
+        )
+
+    def burn_episode(self, rel_path: str, lang: str = "zh") -> BurnEpisodeSubtitlesResultCdto:
+        return SubtitleBatchMapper.to_burn_episode_cdto(
+            self._batch.burn_episode(rel_path, lang)
         )
 
     def burn_drama(self, rel_path: str, lang: str = "zh") -> BurnDramaSubtitlesResultCdto:

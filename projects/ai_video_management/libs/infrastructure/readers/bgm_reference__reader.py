@@ -23,6 +23,7 @@ from libs.common.safe_resolve import SafeResolver
 from libs.domain.value_objects.bgm__valueobject import validate_bgm_id
 
 BGM_CUE_FILE_NAME: str = "bgm.md"
+BGM_CUE_DIR_NAME: str = "bgm"
 _BGM_TOKEN_RE = re.compile(r"\bbgm_\d{4,}\b")
 
 
@@ -62,7 +63,12 @@ class BgmReferenceReader:
                 for ep_dir in sorted(episodes.iterdir(), key=lambda p: p.name):
                     if not ep_dir.is_dir() or ep_dir.is_symlink():
                         continue
-                    ep_cue = ep_dir / BGM_CUE_FILE_NAME
+                    # Episode BGM cue timeline: the canonical location is the
+                    # per-episode `bgm/bgm.md` folder; a flat `episodes/epNN/
+                    # bgm.md` is still honoured for older layouts.
+                    ep_cue = ep_dir / BGM_CUE_DIR_NAME / BGM_CUE_FILE_NAME
+                    if not ep_cue.is_file():
+                        ep_cue = ep_dir / BGM_CUE_FILE_NAME
                     if ep_cue.is_file():
                         out.append((drama_dir.name, f"episodes/{ep_dir.name}", ep_cue))
         return out

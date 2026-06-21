@@ -175,6 +175,15 @@ class BgmPool:
         mp3 = _find_mp3(folder)
         return mp3.name if mp3 is not None else None
 
+    def audio_path_for(self, bgm_id: str) -> Path | None:
+        """Absolute path to `bgm_NNNN`'s rendered mp3 across any category, or
+        None if the track folder / mp3 is absent. Used by the episode BGM
+        muxer to resolve an assigned cue id to its audio file."""
+        folder = self._find_bgm_folder(bgm_id)
+        if folder is None:
+            return None
+        return _find_mp3(folder)
+
     def list_bgms(self) -> list[BgmInfo]:
         root = self.bgm_dir()
         if not root.is_dir():

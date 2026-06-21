@@ -107,6 +107,42 @@ def test_burn_drama_burns_every_shot_across_episodes(tmp_path: Path) -> None:
     assert by_key[("ep02", "shot02")].reason == "no_render_mp4"
 
 
+# --- burn_episode -------------------------------------------------------------
+
+def test_burn_episode_burns_only_named_episode(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    # ep01/shot01: render + subtitles → burns.
+    s1 = _shot(root, "ep01", "shot01", talk="重活一回。")
+    _make_render(s1)
+    (s1 / "subtitles.md").write_text(
+        "```text\n0-0.5 重活一回 || Lived again\n```\n", encoding="utf-8",
+    )
+    # ep02/shot01: render + subtitles, but a DIFFERENT episode → must be untouched.
+    s2 = _shot(root, "ep02", "shot01", talk="你们等着。")
+    _make_render(s2)
+    (s2 / "subtitles.md").write_text(
+        "```text\n0-1 你们等着 || Just wait\n```\n", encoding="utf-8",
+    )
+
+    result = _batch(root).burn_episode(
+        "ai_videos/td/episodes/ep01/shotlist.md", "zh"
+    )
+    assert result.lang == "zh"
+    by_shot = {o.shot: o for o in result.outcomes}
+    assert by_shot["shot01"].ok
+    assert (s1 / "shot01_zh.mp4").is_file()
+    # ep02 was outside scope → not burned.
+    assert not (s2 / "shot01_zh.mp4").exists()
+    assert len(result.outcomes) == 1
+
+
+def test_burn_episode_rejects_non_episode_path(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    (root / "ai_videos" / "td").mkdir(parents=True, exist_ok=True)
+    with pytest.raises(InvalidBatchScopeError):
+        _batch(root).burn_episode("ai_videos/td/README.md", "zh")
+
+
 def test_burn_drama_rejects_actor_root(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     (root / "ai_videos" / "_actors").mkdir(parents=True, exist_ok=True)

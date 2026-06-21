@@ -54,6 +54,17 @@ def scaffold_episode_subtitles(
     )
 
 
+@router.post("/api/burn-episode-subtitles")
+@inject
+def burn_episode_subtitles(
+    body: BurnSubtitlesBody,
+    command: SubtitleBatchCommand = Depends(Provide[Container.subtitle_batch_command]),
+) -> Response:
+    return JSONResponse(
+        status_code=200, content=command.burn_episode(body.path, body.lang).to_payload()
+    )
+
+
 @router.post("/api/burn-drama-subtitles")
 @inject
 def burn_drama_subtitles(
