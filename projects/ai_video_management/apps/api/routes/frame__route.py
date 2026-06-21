@@ -1,4 +1,4 @@
-"""Frame-aggregate routes: POST /api/extract-frames."""
+"""Frame-aggregate routes: POST /api/extract-frames, POST /api/extract-last-frame."""
 from __future__ import annotations
 
 from dependency_injector.wiring import Provide, inject
@@ -23,3 +23,14 @@ def extract_frames(
     command: FrameCommand = Depends(Provide[Container.frame_command]),
 ) -> Response:
     return JSONResponse(status_code=200, content=command.extract(body.path).to_payload())
+
+
+@router.post("/api/extract-last-frame")
+@inject
+def extract_last_frame(
+    body: ExtractFramesBody,
+    command: FrameCommand = Depends(Provide[Container.frame_command]),
+) -> Response:
+    return JSONResponse(
+        status_code=200, content=command.extract_last_frame(body.path).to_payload()
+    )

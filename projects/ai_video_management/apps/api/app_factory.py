@@ -35,7 +35,6 @@ from libs.domain.errors.bgm__error import (
     BgmDeleteFailedError,
     BgmDeleteTargetExistsError,
     BgmGenerationDirMissingError,
-    BgmNoDownloadAudioError,
     BgmNotFoundError,
     BgmReferenceScanFailedError,
     BgmSidecarUnreadableError,
@@ -264,7 +263,6 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     (StableAudioMissingError, 500, "stableaudio_missing", True),
     (StableAudioFailedError, 500, "stableaudio_failed", True),
     (BgmSidecarUnreadableError, 422, "bgm_sidecar_unreadable", True),
-    (BgmNoDownloadAudioError, 404, "bgm_no_download_audio", True),
     # prompt suggestions (follow-up 117)
     (InvalidSuggestionRequestError, 400, "invalid_suggestion_request", True),
     (SuggestionProviderUnavailableError, 503, "suggestion_unavailable", True),

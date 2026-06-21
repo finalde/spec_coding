@@ -117,6 +117,19 @@ def test_unreferenced_delete_is_soft_delete(tmp_path: Path) -> None:
     assert not (tmp_path / "ai_videos" / "_bgm" / "combat" / bid).exists()
 
 
+def test_deleted_id_is_not_reused(tmp_path: Path) -> None:
+    """A soft-deleted track's number must never be handed to a new track — else
+    any drama's bgm.md cue still referencing the retired id silently rebinds to
+    the new (different) track. Allocation counts the `_deleted` recycle bin too."""
+    cmd, _q, _p, _r = _make(tmp_path)
+    a = _gen(cmd, "tension")  # bgm_0001
+    b = _gen(cmd, "tragic")   # bgm_0002
+    assert (a, b) == ("bgm_0001", "bgm_0002")
+    cmd.delete(b)  # soft-delete bgm_0002 → _deleted/_bgm/tragic/bgm_0002
+    c = _gen(cmd, "tragic")
+    assert c == "bgm_0003"  # NOT bgm_0002 again, even though it's gone from the live lib
+
+
 def test_generation_failure_leaves_no_orphan(tmp_path: Path) -> None:
     cmd, _q, _p, _r = _make(tmp_path, stub_body=_FAIL_STUB)
     cdto = cmd.generate(GenerateBgmsInputCdto(count=1, category="daily", duration=3))
@@ -158,22 +171,26 @@ def test_generate_audio_renders_from_sidecar(tmp_path: Path) -> None:
     assert (tmp_path / "ai_videos" / "_bgm" / "warm" / bid / f"{bid}.mp3").is_file()
 
 
-def test_import_audio_moves_newest_download(tmp_path: Path) -> None:
-    """Step 2b: import_audio moves the newest Downloads audio into the track."""
-    cmd, _q, _p, _r = _make(tmp_path)
-    downloads = tmp_path / "Downloads"
-    downloads.mkdir()
-    (downloads / "suno-track-final.mp3").write_bytes(b"ID3externalrender")
-    os.environ["AI_VIDEO_MGMT_DOWNLOADS_DIR"] = str(downloads)
-    try:
-        bid = cmd.create_prompts(GenerateBgmsInputCdto(count=1, category="romance_pain", duration=3)).generated[0]["id"]
-        res = cmd.import_audio(bid).to_payload()
-        assert res["imported_from"] == "suno-track-final.mp3"
-        dst = tmp_path / "ai_videos" / "_bgm" / "romance_pain" / bid / f"{bid}.mp3"
-        assert dst.read_bytes() == b"ID3externalrender"
-        assert not (downloads / "suno-track-final.mp3").exists()  # moved, not copied
-    finally:
-        del os.environ["AI_VIDEO_MGMT_DOWNLOADS_DIR"]
+def test_prompt_is_long_and_detailed(tmp_path: Path) -> None:
+    """The generated prompt must be a long, detailed brief (≥ 1000 chars)."""
+    _c, qry, _p, _r = _make(tmp_path)
+    out = qry.preview_prompts(GenerateBgmsInputCdto(count=1, category="suspense", duration=30))
+    prompt = out.to_payload()["prompts"][0]["prompt"]
+    assert len(prompt) >= 1000
+    assert "instrumental" in prompt and "no vocals" in prompt
+
+
+def test_prompt_carries_key_line_and_readback_strips_it(tmp_path: Path) -> None:
+    """The sidecar prompt starts with the `bgm_NNNN` KEY line (for download
+    routing); the local read-back strips it before feeding the model."""
+    cmd, _q, pool, _r = _make(tmp_path)
+    bid = cmd.create_prompts(GenerateBgmsInputCdto(count=1, category="suspense", duration=3)).generated[0]["id"]
+    md = tmp_path / "ai_videos" / "_bgm" / "suspense" / bid / f"{bid}.md"
+    text = md.read_text(encoding="utf-8")
+    assert f"```\n{bid}\n" in text  # key is the first line inside the fence
+    model_prompt, _seed, _dur = BgmPool._read_sidecar_generation(md)
+    assert not model_prompt.startswith(bid)  # key line stripped for the model
+    assert "instrumental" in model_prompt
 
 
 def test_reaper_preserves_prompt_only_but_reaps_empty(tmp_path: Path) -> None:

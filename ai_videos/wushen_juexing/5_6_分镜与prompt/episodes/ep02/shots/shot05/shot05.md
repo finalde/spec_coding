@@ -20,6 +20,7 @@ confidence: high
 - **Characters**：地痞头目（+1-2 喽啰群像）、叫卖老者。
 - **Scene**：集市长街 · bg2_街角_摊位。
 - **Duration**：14s（地痞16字÷4s=4字/秒；老者慢嗓27字÷8s≈3.4字/秒、求饶拖腔不赶）。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：地痞头目 ref、叫卖老者 ref、集市长街 bg2_街角_摊位 ref。
 
 ## 视频 prompt

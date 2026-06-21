@@ -55,8 +55,6 @@ class BgmRepository(Protocol):
 
     def generate_audio(self, bgm_id: str) -> dict[str, object]: ...
 
-    def import_audio(self, bgm_id: str) -> dict[str, object]: ...
-
     def preview_prompts(
         self,
         attrs: BgmAttrs,

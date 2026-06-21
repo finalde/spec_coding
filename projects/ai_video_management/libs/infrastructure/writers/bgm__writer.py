@@ -36,7 +36,6 @@ from libs.domain.errors.bgm__error import (
     BgmDeleteFailedError,
     BgmDeleteTargetExistsError,
     BgmGenerationDirMissingError,
-    BgmNoDownloadAudioError,
     BgmNotFoundError,
     BgmSidecarUnreadableError,
     StableAudioFailedError,
@@ -52,15 +51,9 @@ from libs.domain.value_objects.bgm__valueobject import (
     validate_bgm_id,
     validate_category,
 )
-from libs.infrastructure.writers.bgm__prompt import build_bgm_prompt
+from libs.infrastructure.writers.bgm__prompt import build_bgm_prompt, build_bgm_prompt_keyed
 
 BGM_DIR_NAME: str = "_bgm"
-# Audio file extensions accepted by the per-track Downloads import (external
-# music platforms export one of these).
-_AUDIO_EXTENSIONS: frozenset[str] = frozenset({".mp3", ".wav", ".m4a", ".flac", ".ogg"})
-# Downloads scan window for per-track import (mirrors the drama importer).
-_IMPORT_WINDOW_SECONDS: float = 7 * 24 * 60 * 60
-_DOWNLOADS_ENV_VAR: str = "AI_VIDEO_MGMT_DOWNLOADS_DIR"
 _BGM_DIR_RE = re.compile(r"^bgm_(\d{4,})$")
 _BGM_ID_RE = re.compile(r"^bgm_\d{4,}$")
 _MAX_ID_ALLOC_SCAN: int = 1000
@@ -77,6 +70,27 @@ _GEN_TIMEOUT_S: int = 1800
 # the webapp's own interpreter for `--dry-run` / CI; production points it at
 # the tool's dedicated venv via env so torch stays out of the webapp env.
 _BGM_PYTHON_ENV: str = "BGM_PYTHON"
+
+
+def _fenced_block_under_header(text: str, header_token: str) -> str | None:
+    """Return the first fenced code block that appears under a markdown header
+    (`## …`) whose text contains `header_token`. None if no such header / fence.
+    Used to read back the 英文 (model) prompt independently of block order."""
+    lines = text.splitlines()
+    in_section = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            in_section = header_token in stripped
+            continue
+        if in_section and stripped.startswith("```"):
+            body: list[str] = []
+            for nxt in lines[i + 1:]:
+                if nxt.strip().startswith("```"):
+                    return "\n".join(body).strip()
+                body.append(nxt)
+            return "\n".join(body).strip()
+    return None
 
 
 @dataclass(frozen=True)
@@ -288,17 +302,21 @@ class BgmPool:
             except BgmGenerationDirMissingError as exc:
                 result.errors.append({"requested_id": "", "message": f"alloc_failed: {exc}"})
                 continue
-            prompt = build_bgm_prompt(asdict(attrs), slot_seed)
+            attrs_d = asdict(attrs)
+            prompt_model = build_bgm_prompt(attrs_d, slot_seed)
+            prompt_keyed = build_bgm_prompt_keyed(attrs_d, slot_seed, bgm_id)
             out_mp3 = folder / f"{bgm_id}.mp3"
             ok, err = self._run_stableaudio(
-                python_exe, script, prompt, slot_seed, attrs.duration, out_mp3
+                python_exe, script, prompt_model, slot_seed, attrs.duration, out_mp3
             )
             if not ok:
                 shutil.rmtree(folder, ignore_errors=True)
                 result.errors.append({"requested_id": bgm_id, "message": f"generate_failed: {err}"})
                 continue
             try:
-                sidecar_body = self._build_sidecar(bgm_id, attrs, prompt, slot_seed, out_mp3.name)
+                sidecar_body = self._build_sidecar(
+                    bgm_id, attrs, prompt_keyed, slot_seed, out_mp3.name
+                )
                 sidecar_path = folder / f"{bgm_id}.md"
                 self._atomic_write_text(sidecar_path, sidecar_body)
             except OSError as exc:
@@ -329,10 +347,11 @@ class BgmPool:
         slot_index: int | None = None,
     ) -> GenerateResult:
         """Two-step flow, step 1: allocate `count` track folders and write each
-        sidecar (carrying the resolved Stable Audio prompt + seed) WITHOUT any
-        audio generation. The user then per-track either generates locally on
-        GPU (`generate_audio`) or imports an externally-rendered file
-        (`import_audio`). Mirrors `generate_batch` minus the subprocess; each
+        sidecar (carrying the resolved prompt + seed) WITHOUT any audio
+        generation. The user then renders each track's audio externally
+        (ElevenLabs) and bulk-imports the downloads via the global Downloads
+        importer (`DownloadsImporter.import_bgms`), or generates locally on GPU
+        (`generate_audio`). Mirrors `generate_batch` minus the subprocess; each
         result entry is flagged `pending_audio: True` with `audio_path: None`."""
         validate_category(attrs.category)
         bgm_root = self.bgm_dir()
@@ -351,9 +370,12 @@ class BgmPool:
             except BgmGenerationDirMissingError as exc:
                 result.errors.append({"requested_id": "", "message": f"alloc_failed: {exc}"})
                 continue
-            prompt = build_bgm_prompt(asdict(attrs), slot_seed)
+            attrs_d = asdict(attrs)
+            prompt_keyed = build_bgm_prompt_keyed(attrs_d, slot_seed, bgm_id)
             try:
-                sidecar_body = self._build_sidecar(bgm_id, attrs, prompt, slot_seed, "")
+                sidecar_body = self._build_sidecar(
+                    bgm_id, attrs, prompt_keyed, slot_seed, ""
+                )
                 sidecar_path = folder / f"{bgm_id}.md"
                 self._atomic_write_text(sidecar_path, sidecar_body)
             except OSError as exc:
@@ -368,7 +390,7 @@ class BgmPool:
                     "sidecar_path": self._rel(sidecar_path),
                     "audio_path": None,
                     "pending_audio": True,
-                    "prompt": prompt,
+                    "prompt": prompt_keyed,
                     "attrs": asdict(attrs),
                     "seed": slot_seed,
                 }
@@ -394,28 +416,6 @@ class BgmPool:
             raise StableAudioFailedError(err)
         return {"id": bgm_id, "audio_path": self._rel(out_mp3)}
 
-    def import_audio(self, bgm_id: str) -> dict[str, object]:
-        """Two-step flow, step 2b: import the most-recent audio file from the
-        OS Downloads folder into an EXISTING track as `bgm_NNNN.mp3`
-        (overwriting any prior render). For the copy-prompt → external platform
-        → download workflow; the newest audio download is assumed to be the one
-        the user just rendered for this track."""
-        validate_bgm_id(bgm_id)
-        folder = self._find_bgm_folder(bgm_id)
-        if folder is None:
-            raise BgmNotFoundError(f"bgm folder not found: {bgm_id}")
-        src = self._newest_download_audio()
-        if src is None:
-            raise BgmNoDownloadAudioError("no recent audio file found in Downloads")
-        out_mp3 = folder / f"{bgm_id}.mp3"
-        # Clear any prior render(s) so the folder keeps exactly one audio file.
-        self._clear_audio(folder)
-        try:
-            shutil.move(str(src), str(out_mp3))
-        except OSError as exc:
-            raise StableAudioFailedError(f"move_failed: {exc}") from exc
-        return {"id": bgm_id, "audio_path": self._rel(out_mp3), "from": src.name}
-
     # ------------------------------------------------------------------ preview
     def preview_prompts(
         self,
@@ -431,13 +431,14 @@ class BgmPool:
         prompts: list[dict[str, object]] = []
         for i in range(count):
             slot_seed = seeds[i] if seeds is not None and i < len(seeds) else base_seed + i
+            attrs_d = asdict(attrs)
             prompts.append(
                 {
                     "seed": slot_seed,
-                    "prompt": build_bgm_prompt(asdict(attrs), slot_seed),
+                    "prompt": build_bgm_prompt(attrs_d, slot_seed),
                     "category": attrs.category,
                     "category_label": CATEGORY_LABELS_ZH.get(attrs.category, attrs.category),
-                    "attrs": asdict(attrs),
+                    "attrs": attrs_d,
                 }
             )
         return {"prompts": prompts}
@@ -465,50 +466,18 @@ class BgmPool:
             text = md_path.read_text(encoding="utf-8")
         except OSError as exc:
             raise BgmSidecarUnreadableError(str(exc)) from exc
-        m = re.search(r"```[\w-]*\n(.*?)```", text, re.DOTALL)
-        prompt = m.group(1).strip() if m is not None else ""
+        # Prefer the fenced block under the 英文 header; fall back to the first
+        # fence (legacy sidecars).
+        prompt = _fenced_block_under_header(text, "英文") or ""
+        if not prompt:
+            m = re.search(r"```[\w-]*\n(.*?)```", text, re.DOTALL)
+            prompt = m.group(1).strip() if m is not None else ""
         if not prompt:
             raise BgmSidecarUnreadableError(f"no 生成 prompt block in {md_path.name}")
-        return prompt, seed, attrs.duration
-
-    def _newest_download_audio(self) -> Path | None:
-        """The most-recently-modified audio file among Downloads' immediate
-        children within the import window (skips symlinks)."""
-        override = os.environ.get(_DOWNLOADS_ENV_VAR, "").strip()
-        downloads = Path(override) if override else Path.home() / "Downloads"
-        try:
-            entries = list(downloads.iterdir())
-        except OSError:
-            return None
-        cutoff = time.time() - _IMPORT_WINDOW_SECONDS
-        best: tuple[float, Path] | None = None
-        for child in entries:
-            try:
-                if child.is_symlink() or not child.is_file():
-                    continue
-                if child.suffix.lower() not in _AUDIO_EXTENSIONS:
-                    continue
-                mtime = child.stat().st_mtime
-            except OSError:
-                continue
-            if mtime < cutoff:
-                continue
-            if best is None or mtime > best[0]:
-                best = (mtime, child)
-        return best[1] if best is not None else None
-
-    @staticmethod
-    def _clear_audio(folder: Path) -> None:
-        try:
-            entries = list(folder.iterdir())
-        except OSError:
-            return
-        for child in entries:
-            try:
-                if child.is_file() and not child.is_symlink() and child.suffix.lower() in _AUDIO_EXTENSIONS:
-                    child.unlink()
-            except OSError:
-                pass
+        # Drop the leading `bgm_NNNN` KEY line (a copy/import routing token, not
+        # part of the music description) before handing the prompt to the model.
+        prompt = re.sub(r"^\s*bgm_\d{4,}\s*\n", "", prompt, count=1)
+        return prompt.strip(), seed, attrs.duration
 
     def _run_stableaudio(
         self,
@@ -577,15 +546,18 @@ class BgmPool:
             f"exhausted {_MAX_ID_ALLOC_SCAN} id-allocation attempts starting from bgm_{candidate:04d}"
         )
 
-    def _next_bgm_id_num(self) -> int:
-        """max+1 across every `bgm_NNNN` folder in EVERY category. A folder
-        counts as occupied regardless of mp3 presence."""
-        root = self.bgm_dir()
+    def _deleted_bgm_dir(self) -> Path:
+        return self._resolver.root / "ai_videos" / "_deleted" / BGM_DIR_NAME
+
+    @staticmethod
+    def _max_bgm_num_under(root: Path) -> int:
+        """Highest `bgm_NNNN` number under any category folder of `root` (0 if
+        none). A folder counts as occupied regardless of mp3 presence."""
         max_num = 0
         try:
             cat_dirs = list(root.iterdir())
         except OSError:
-            return 1
+            return 0
         for cat_dir in cat_dirs:
             if not cat_dir.is_dir() or cat_dir.is_symlink():
                 continue
@@ -604,7 +576,16 @@ class BgmPool:
                 n = int(m.group(1))
                 if n > max_num:
                     max_num = n
-        return max_num + 1
+        return max_num
+
+    def _next_bgm_id_num(self) -> int:
+        """max+1 across every `bgm_NNNN` folder in EVERY category — counting both
+        the LIVE library AND the `_deleted/_bgm` recycle bin, so a soft-deleted
+        track's number is never reused. Reuse would silently rebind any drama's
+        `bgm.md` cue that still references the retired id to a different track."""
+        live = self._max_bgm_num_under(self.bgm_dir())
+        retired = self._max_bgm_num_under(self._deleted_bgm_dir())
+        return max(live, retired) + 1
 
     @staticmethod
     def _reap_incomplete_folders(bgm_root: Path) -> None:
@@ -672,10 +653,13 @@ class BgmPool:
         instruments_display = attrs.instruments if attrs.instruments else "—"
         notes_display = attrs.notes if attrs.notes else "—"
         category_label = CATEGORY_LABELS_ZH.get(attrs.category, attrs.category)
+        # Single English prompt block (follow-up 2026-06-21): `prompt` carries a
+        # leading `bgm_NNNN` KEY line then the music description. Copied into
+        # ElevenLabs; the local read-back strips the key line before the model.
         return (
             f"# {bgm_id}\n"
             f"\n"
-            f"AI-generated background-music track (self-hosted Stable Audio). "
+            f"AI-generated background-music track. "
             f"全局唯一 id，可被任意剧的 bgm.md 按 `{bgm_id}` 引用。\n"
             f"\n"
             f"| 字段 | 值 |\n"
@@ -695,7 +679,7 @@ class BgmPool:
             f"| notes | {notes_display} |\n"
             f"| audio | {audio_filename} |\n"
             f"\n"
-            f"## 生成 prompt (Stable Audio)\n"
+            f"## 生成提示词（英文 · 复制到 ElevenLabs）\n"
             f"\n"
             f"```\n"
             f"{prompt}\n"

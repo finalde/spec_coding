@@ -20,6 +20,7 @@ confidence: high
 - **Characters**：裴知秋、叫卖老者。
 - **Scene**：集市长街 · bg2_街角_摊位。
 - **Duration**：15s（老者道谢约5秒避免吞字；主角"没事"后约0.5秒静默；OS 22字÷6.5s≈3.4字/秒）。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴知秋 ref、叫卖老者 ref、集市长街 bg2_街角_摊位 ref。
 
 ## 视频 prompt

@@ -20,6 +20,7 @@ confidence: high
 - **Characters**：裴知秋、地痞头目、2 喽啰（群像）、叫卖老者（后景缩避）。
 - **Scene**：集市长街 · bg2_街角_摊位。
 - **Duration**：13s。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴知秋 ref、地痞头目 ref、集市长街 bg2_街角_摊位 ref。
 
 ## 视频 prompt

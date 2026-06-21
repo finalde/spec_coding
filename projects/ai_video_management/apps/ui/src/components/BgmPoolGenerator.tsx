@@ -87,7 +87,7 @@ export function BgmPoolGenerator({ open, onClose, onGenerated }: BgmPoolGenerato
       const errs = result.errors.length;
       setToast({
         kind: errs > 0 ? "err" : "ok",
-        text: `已创建 ${result.generated.length} 条 prompt（待出音频）/ 失败 ${errs}`,
+        text: `已创建 ${result.generated.length} 条提示词（待出音频）/ 失败 ${errs}`,
       });
       onGenerated();
     } catch (err) {
@@ -104,7 +104,7 @@ export function BgmPoolGenerator({ open, onClose, onGenerated }: BgmPoolGenerato
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="生成 BGM 音乐">
       <div className="modal-panel voice-gen-panel">
         <header className="modal-header">
-          <h2>🎵 生成 BGM prompt</h2>
+          <h2>🎵 生成 BGM 提示词</h2>
           <button type="button" className="modal-close" aria-label="关闭" onClick={onClose} disabled={busy}>✕</button>
         </header>
         <form onSubmit={onSubmit} className="modal-body voice-gen-body">
@@ -144,20 +144,20 @@ export function BgmPoolGenerator({ open, onClose, onGenerated }: BgmPoolGenerato
 
           <div className="voice-gen-row">
             <label className="voice-gen-field">
-              <span className="voice-gen-label">氛围 mood（选填）</span>
+              <span className="voice-gen-label">氛围（选填）</span>
               <select value={moodPreset} onChange={(e) => setMoodPreset(e.target.value)} disabled={busy}>
                 <option value="">（不限）</option>
                 {BGM_MOOD_PRESETS.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </label>
             <label className="voice-gen-field">
-              <span className="voice-gen-label">或自定义 mood（优先，可空）</span>
+              <span className="voice-gen-label">或自定义氛围（优先，可空）</span>
               <input type="text" value={moodCustom} onChange={(e) => setMoodCustom(e.target.value)} disabled={busy} placeholder="自由中文，留空则用左侧" />
             </label>
           </div>
           <div className="voice-gen-row">
             <label className="voice-gen-field">
-              <span className="voice-gen-label">配器 instruments（选填）</span>
+              <span className="voice-gen-label">配器（选填）</span>
               <select value={instrumentsPreset} onChange={(e) => setInstrumentsPreset(e.target.value)} disabled={busy}>
                 <option value="">（不限）</option>
                 {BGM_INSTRUMENT_PRESETS.map((it) => <option key={it} value={it}>{it}</option>)}
@@ -169,18 +169,18 @@ export function BgmPoolGenerator({ open, onClose, onGenerated }: BgmPoolGenerato
             </label>
           </div>
           <label className="voice-gen-field voice-gen-field-block">
-            <span className="voice-gen-label">备注 notes（可空，≤ 500 字）</span>
+            <span className="voice-gen-label">备注（可空，≤ 500 字）</span>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} maxLength={500} rows={2} />
           </label>
 
           <p className="voice-empty-inline">
-            ① 这一步只<strong>生成 prompt</strong>，不渲染音频（很快）。② 之后到每条 BGM 详情页，选择「本地 GPU 生成」或把 prompt 复制到外部平台出音乐、下载后「导入下载」。
+            ① 这一步只<strong>生成提示词</strong>，不渲染音频（很快）。② 之后到每条 BGM 详情页，选择「本地 GPU 生成」或把提示词复制到外部平台出音乐、下载后「导入下载」。
           </p>
 
           {prompts ? (
             <div className="voice-gen-row voice-gen-field-block">
               <details className="voice-bulk-errlog" open>
-                <summary>预览 prompt ({prompts.length})</summary>
+                <summary>预览提示词 ({prompts.length})</summary>
                 <ul>
                   {prompts.map((p) => (
                     <li key={p.seed}>
@@ -201,7 +201,7 @@ export function BgmPoolGenerator({ open, onClose, onGenerated }: BgmPoolGenerato
           ) : null}
 
           {busy ? (
-            <div className="voice-toast voice-toast-ok" role="status">⏳ 正在创建 prompt…</div>
+            <div className="voice-toast voice-toast-ok" role="status">⏳ 正在创建提示词…</div>
           ) : null}
           {toast ? (
             <div className={`voice-toast voice-toast-${toast.kind}`} role="status">{toast.text}</div>
@@ -215,7 +215,7 @@ export function BgmPoolGenerator({ open, onClose, onGenerated }: BgmPoolGenerato
             onClick={() => void onPreview()}
             disabled={busy || previewing}
           >
-            {previewing ? "预览中…" : "👁 预览 prompt"}
+            {previewing ? "预览中…" : "👁 预览提示词"}
           </button>
           <button
             type="button"
@@ -223,7 +223,7 @@ export function BgmPoolGenerator({ open, onClose, onGenerated }: BgmPoolGenerato
             onClick={onSubmit as unknown as React.MouseEventHandler<HTMLButtonElement>}
             disabled={busy}
           >
-            {busy ? "生成中…" : `🎵 生成 ${countNum} 条 prompt`}
+            {busy ? "生成中…" : `🎵 生成 ${countNum} 条提示词`}
           </button>
         </footer>
       </div>

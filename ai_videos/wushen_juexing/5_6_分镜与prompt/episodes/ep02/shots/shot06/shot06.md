@@ -20,6 +20,7 @@ confidence: high
 - **Characters**：裴知秋、地痞头目、叫卖老者（身后侧）。
 - **Scene**：集市长街 · bg2_街角_摊位。
 - **Duration**：12s（主角17字÷5s≈3.4字/秒、地痞27字÷5.5s≈4.9字/秒，口型对白不赶）。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴知秋 ref、地痞头目 ref、叫卖老者 ref、集市长街 bg2_街角_摊位 ref。
 
 ## 视频 prompt

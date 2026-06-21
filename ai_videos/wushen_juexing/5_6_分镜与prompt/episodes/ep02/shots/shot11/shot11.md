@@ -20,6 +20,7 @@ confidence: high
 - **Characters**：裴知秋（单人）。
 - **Scene**：集市长街 · bg4_镇口_镇门。
 - **Duration**：8s。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴知秋 ref、集市长街 bg4_镇口_镇门 ref。
 
 ## 视频 prompt

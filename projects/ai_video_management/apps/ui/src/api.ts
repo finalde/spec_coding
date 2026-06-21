@@ -165,6 +165,23 @@ export async function extractFrames(path: string): Promise<ExtractFramesResult> 
   return readJson<ExtractFramesResult>(response);
 }
 
+export interface ExtractLastFrameResult {
+  src: string;
+  out: string;
+}
+
+/** Extract a shot render's FINAL frame to `{shot}/{shot}_lastframe.png` — the
+ * cross-shot continuity-frame source (承接 shot's first frame = previous shot's
+ * last frame). */
+export async function extractLastFrame(path: string): Promise<ExtractLastFrameResult> {
+  const response = await fetch("/api/extract-last-frame", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ExtractLastFrameResult>(response);
+}
+
 export interface ScenePlate {
   folder: string;
   direction: string;
@@ -1454,14 +1471,6 @@ export async function generateBgmAudio(bgmId: string): Promise<BgmAudioResult> {
   return readJson<BgmAudioResult>(response);
 }
 
-// Step 2b: import the newest Downloads audio file into an existing track.
-export async function importBgmAudio(bgmId: string): Promise<BgmAudioResult> {
-  const response = await fetch(`/api/bgms/${encodeURIComponent(bgmId)}/import-audio`, {
-    method: "POST",
-    headers: { Accept: "application/json" },
-  });
-  return readJson<BgmAudioResult>(response);
-}
 
 export async function deleteBgm(bgmId: string): Promise<DeleteBgmResult> {
   const response = await fetch("/api/bgms/delete", {

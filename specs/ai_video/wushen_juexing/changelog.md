@@ -1,5 +1,40 @@
 # Changelog — wushen_juexing
 
+## EP3 shot7 多声轨混乱修复（视频静音 + 全 mux）— 2026-06-21
+Source: 用户「shot7 的语言生成出来彻底混乱了，而且系统没有用上传的 MP4 里的声音」
+- **根因**：shot7 同镜有 系统×2（SYS-gold-01）+ 主角 OS（PR-hero-01）三条台词，靠 Seedance 单声轨从 `台词:` 文本 TTS → 多音色混在一起"彻底混乱"，且生不出上传的系统 MP4 锁定音色。
+- **修复**：本镜全部不对口型（系统=UI、主角=内心独白），改为**视频静音 + 全后期 mux**：`台词: 无`、负面词加人声抑制组、三条台词正文留在 `## 台词配音 prompt`（系统两句 SYS-gold-01、主角句 PR-hero-01），后期 `tools/mux_av.py` 分轨合。系统对话框内字属 diegetic 画面元素、照常视觉渲染。shot07.md + all_shot_prompts.md + Shot context + 台词配音 头注 同步。
+- **skill/ref 进化**：`ai_video.md` 新增「多声轨/系统音色镜→视频静音+全 mux」规则（明确 rule 704 单声轨 TTS 的边界）；`格式契约` 新增 **K22b** 机械校验（多 voice_id 或系统锁定音色镜须静音 mux；单声轨在画口型对话镜不适用）。
+- **玉佩去上画（用户确认：全程不上画·保留剧情线）**：EP3 玉佩**全集不上画、画面从不出现玉佩本体**，剧情线靠体感+OS 保留。
+  - shot6 由「掏出玉佩细看·上画特写」改为「隔衣按胸·收手垂眼·感知第二宝之疑·不掏出」（去 `玉佩=>` ref + 删玉佩外观描述符 + 镜头改面部特写 + 小说原文改隔衣感知版 + 负面词改"画面出现玉佩/掏出玉佩/玉佩外露"）。为避免与 shot5 按胸视觉重复，shot6 设计为「手自胸口收回→垂眼内省」的疑窦 beat（惊→疑分层）。
+  - shot7 回退我上一轮加的"收玉佩入衣襟"beat（既然 shot6 不再掏出，无物可收）。
+  - shot5 维持不上画（原就藏衣内骤热）；改掉"取出留 shot6"等指向掏出的旁注。shot2/shotlist/汇编头部玉佩轴统一为"全集不上画、无玉佩 ref、视觉揭示推迟到后续某集"。
+  - 第二宝 hook 现靠 shot5 骤热 + shot6 隔衣感知生疑 的体感与内心独白种下。
+
+## EP3 出片前 审查总编排 整集收尾（shot01–shot10）— 2026-06-21
+Source: 用户「好的」（同意整集跑审查总编排收尾）
+- 按 格式契约→台词→白话→站位朝向→运镜→动作→时长节奏→光线→特效→剧情连贯→全剧序列→立意安全 逐层过 EP3 全 10 镜。
+- **唯一 blocker（自查出·已修）**：shot9 的 `台词:` 槽被加了无人声旁注（上一轮 K22 误导）→ 违反 K21（台词槽 prose 会被烧成字幕，正是 shot9 当初的 bug）。已改回干净 `台词: 无`，无人声诉求全移到 `负面词:`（shot09.md + all_shot_prompts.md 同步）。
+- **连带修规则**：K22 + ai_video.md rule 705 早先「`台词: 无` 后加注」与 K21 自相矛盾 → 改为「人声抑制只进 `负面词:`、`台词:` 仍只写 无」。
+- 其余维度全 pass：暖金流光轴/玉佩轴单调一致、藏锋无外放、独角戏朝向(盘坐朝南·神像朝北)贯穿、景别有节奏、台词白话配速 ≤5 字/秒、零 hex/字幕铁律/锁定串 byte-identical 齐全、shot8→9→10 姿态承接(看手掌→起身→推门)。
+- 审计：`.audit/adhoc_agents/2026-06-21/wushen_juexing-20260621-070706/events.jsonl`。
+
+## EP3 shot9 去玉佩 + 静默镜无人声负面词（成片误念"裴知秋"）— 2026-06-21
+Source: 用户「shot9 就不需要出现玉佩了，还有命名没有台词、生成的视频主句却念了"裴知秋"三个字」
+- **shot9 去玉佩**：整镜移除玉佩（参考去 `玉佩=>`、删玉佩描述符/取出/收回 beat、删 jade 负面词、镜头收尾改"握拳+望门外"、小说原文去看玉佩句）。shot9 改为纯"收功起身·握拳·望庙门外深夜"的变强实感静默镜，承接 shot10 叠化天亮推门。**理由附带**：看玉佩"第二宝 hook"已在 shot6 种下，shot9 再看属重复 beat（N6/全剧序列），去掉同时消重。shot07.md + all_shot_prompts.md + shotlist.md 玉佩轴同步：本集玉佩**仅 shot6 上画一次**（shot6 掏出→shot7 收回衣内→shot8/9/10 藏衣内不上画）。
+- **静默镜误念角色名修复**：shot9 本是 `台词: 无`，成片却念出"裴知秋"——生成器从 `角色:`/`情节:` 抓角色名 TTS 成画外音，`台词: 无` 单独挡不住。已给 shot9 `负面词:` 加人声抑制组（人声/配音/旁白/念白/念出角色名或台词文字/任何生成人声音轨/no voiceover/no speech/no narration）+ `台词: 无` 后加注。**只对静默镜加**——有台词镜禁加（rule 704：Seedance 从 `台词:` 文本生成配音，加了会压哑台词）。EP3 仅 shot9 是静默镜，无需扫其余镜。
+- **skill/ref 进化**：`格式契约` 新增 **K22**（静默镜必带无人声负面词，且明确只对静默镜加）；`ai_video.md` rule 705 追加同条（带 EP3 shot9 实测来源 + 与 rule 704 的边界）。
+
+## EP3 shot7 系统 ref 补漏 + 玉佩跨镜状态连贯（shot6→7→8→9）— 2026-06-21
+Source: 用户「shot7 是不是应该由系统在参考里面，还有请确保和上一个 shot 的状态连贯性，好像上个 shot 手里是拿着玉佩的？各个人物物品的连贯性是你 always 应该检查的，每次更改都要」
+- **系统 ref 补漏（K20）**：shot7 系统对话框上画，`参考:` 漏 `系统=>`。已补 `系统=>` 至 shot07.md + all_shot_prompts.md 的 `参考:`，并把系统 UI 行改成 byte-identical 锁定描述符（`c2_系统` field 9：鎏金极简冷调半透明对话框 仅主角可见 冷白等线体 【】选项）。
+- **系统 UI 配色对齐锁定卡**：shot7 多处把系统框写成「半透青蓝/冷蓝 UI」，与 `c2_系统` field 3「半透明墨黑底」冲突。已全部改为「半透明墨黑底」（shot07.md 小说原文/情节/动作/光线、all_shot_prompts.md 同名行、shotlist.md 运镜锚）。
+- **玉佩跨镜状态轴修复（N6）**：shot6 末玉佩仍在手中细看，shot7 直接归拢丹田/破境、玉佩凭空消失（无收回 beat）。已给 shot7 开场加「先将掌中古玉顺红绳收回衣襟·藏入衣内贴胸（承 shot6）」beat（情节/走位/动作三处 + 聚合）。下游连带：shot9 原直接「摊掌看玉佩」缺取出 beat（shot7/8 已收衣内），补「探手入衣襟取出玉佩摊掌」beat。轴：shot6 掏出上画 → shot7 收回衣内 → shot8 衣内不上画 → shot9 取出上画·镜尾收回。
+- shotlist.md「玉佩 prop」锚加 S7（收功前先收回衣襟·不上画）；「系统 UI」锚补 S7 带 `系统=>` ref。
+- **skill 进化**：`格式契约` K20 从「道具 ref↔可见」扩成「**可锁定 on-画 元素（道具＋非实体 UI/法宝等）**ref↔可见双向一致」，明确系统 UI 也是 ref-bearing、上画镜必带 `系统=>`+锁定描述符（带本次教训来源）。
+- 连贯性已查：shot8 无玉佩字样（衣内·一致）；shot6↔7↔8↔9 玉佩态单调顺承、每次状态改变都有动作 beat。
+
+
 ## EP2 shot11 收玉佩动作太假修复（玉佩一碰胸口就进去）— 2026-06-20
 Source: 用户「2-11 收起玉佩时候的动作明显太假，玉佩一碰胸口就进去了」
 - **根因**：动作只写「顺着衣领塞回衣襟内贴胸」太笼统，模型渲成玉佩一触胸口即没入（穿胸/瞬移感）。
@@ -915,3 +950,364 @@ Auto-updated:
 - .claude/skills/ai_videos__剧情连贯/SKILL.md（N6）
 
 待用户侧：shot2 用新 prompt 重出片（去玉佩 ref 后玉佩不再画在胸口外）。
+
+## Follow-up 018 — 2026-06-21 00:02:00
+Source: 用户反馈（EP4 S3 执事台词不白话、拗口）
+Summary: EP4 S3 测资执事台词由一句塞满改写为三句白话（按石/七品名/分档），S3 9s→13s，总时长 101s→105s。
+
+Auto-updated:
+- 4_剧本/episodes/ep04/script.md — S3 台词三句化 + 时长 9s→13s；时长合计 101s→105s
+- 4_剧本/episodes/ep04/dialogue.md — S3 同步（13s）
+
+教训（可选进化·待用户确认）：规则/科普类长台词一句塞满多条信息易拗口，拆成「做什么/有哪些/怎么分」短句更白话——可固化进 ai_videos__白话大师 / 台词大师。
+
+## Follow-up 019 — 2026-06-21 00:03:00
+Source: user_input/follow_ups/019-20260621-000300-ep4-zongmen-paiwei-xiaozong-mingming.md
+Summary: EP4 一批细化——执事台词三句白话化 + 玄品档说详细 + 菜鸡少年点明所入宗门(青松派/铁剑门) + 新增「宗门排位」围观 shot；台词大师固化 D10。EP4 11镜/98s→12镜/117s。
+
+Auto-updated:
+- 4_剧本/episodes/ep04/script.md — S3(原)执事台词三句白话化+玄品详化；S4/S5 点明青松派/铁剑门；新增 S3 宗门排位围观 shot，原 S3–S11 后移 S4–S12；时长合计→117s、header→117s/12镜；三类台词清点/世界观铺垫锚/钩尾 shot 号全部后移
+- 4_剧本/episodes/ep04/dialogue.md — 同步：新增 S3、菜鸡少年/执事点明小宗、全段 renumber、声口提示裴霆 S7/S8→S8/S9
+- 2_世界观人设/world.md — §2.2 顶宗加剑道/御法分工 + 新增万象门(一流)/青松派/铁剑门(中小) + 宗门实力排位 bullet；§四 canon 加「宗门实力排位」行
+- 3_大纲/arc_outline.md — EP4 细纲 98s/11镜→117s/12镜；钩尾 S10–S11→S11–S12
+- .claude/skills/ai_videos__台词大师/SKILL.md — 新增 D10「长串规则/科普台词拆短句」+ frontmatter/工作流 D1–D9→D1–D10 + 范本表加 EP4 拆句例（common-level 进化）
+
+待用户拍板（未决）：① 裴昭=上品、云骁=王品 映射；② S10 主角 OS 两版打架（script「找个能安身的地方就够了」 vs dialogue「轮到我，还早」）择一对齐。
+
+No conflicts found in: characters/, EP1–EP3 产物, style_guide.md, 5_6 分镜(ep04 暂无 shotNN)
+
+## EP3 跨镜特效态轴(暖金流光重起) + shot2 彻底清除玉佩 — 2026-06-21
+Source: 用户「shot3 经脉暖金流光已流转、shot4 又从无到有重跑一遍 ramp，需 consistency，且同理 apply 之后所有 shot」+「shot2 手里怎么还有玉佩，这个 shot 不要出现玉佩」
+
+EP3 修正：
+- shot4：开场即承接 shot3 已流转的皮下暖金流光、继续走四肢百骸，不再 0-3s 无流光→3-6s 重起 ramp（动作 + 光线 改"承 shot3 延续·稳定不熄不重起"）
+- shot6：补"皮下暖金流光仍极淡未熄(承 shot3-5·尚未收功)"——杜绝 shot5 有→shot6 无→shot7 气劲 的闪烁；收功熄灭只发生在 shot7
+- shot2：上轮只删了玉佩 ref，但情节/动作/光线仍点名"古玉/玉佩位置"会 cue 模型 → 本轮彻底清除全部玉佩字样，按胸口改为纯 EP2 余悸手势(手中与画面均无玉佩)，负面词加"画面出现玉佩/手持玉佩/玉佩入画/胸前挂玉佩"
+- all_shot_prompts.md 头部新增「武神躯暖金流光时间轴」单一事实源(shot1/2 无→shot3 起 ramp→shot4-6 承接延续/极淡→shot7 收功熄灭→shot8-10 无；只 shot3 可演从无到有)；玉佩时间轴 shot2 改为"完全不出现"
+
+skill 进化：
+- ai_videos__剧情连贯 N6 从「道具/服装状态轴」扩为「跨镜状态轴——道具/服装/特效能量态/伤势」：新增 (iii) 特效/能量态(运功流光/灵气/破境气劲/法宝光/觉醒异象)——后镜禁把前镜已建立的效果从零重演 ramp、该延续不得凭空消失；明确"效果只 ramp 一次(首次出现镜)，后续镜承接已建立态、按轴单调变化(铺展/增强/减弱/收束)"；(iv) 伤势态。引 EP3 头部两条时间轴作范例
+
+Auto-updated:
+- ai_videos/wushen_juexing/5_6_分镜与prompt/episodes/ep03/shots/{shot02,shot04,shot06}/shotNN.md
+- ai_videos/wushen_juexing/5_6_分镜与prompt/episodes/ep03/all_shot_prompts.md（shot02/04/06 + 头部暖金流光时间轴 + 玉佩时间轴 shot2）
+- .claude/skills/ai_videos__剧情连贯/SKILL.md（N6 扩展到特效/能量态/伤势）
+
+待用户侧：shot2/4/6 用新 prompt 重出片（shot2 不再有玉佩；shot4/6 流光承接不重起）。
+
+## Follow-up 020 — 2026-06-21 00:04:00
+Source: 用户反馈（EP4 S2「了不起也就武王境」逻辑反了——武王本就是镇守一方的强者）
+Summary: EP4 S2 围观乙台词由「贬低武王」改为「赞叹武王到场」，对齐 world §1.1 武王=镇守一方的实力坐标。
+
+Auto-updated:
+- 4_剧本/episodes/ep04/script.md — S2 乙台词改「武王就已是镇守一方的大人物，今天竟来了好几位！」；情绪列加「赞武王到场」
+- 4_剧本/episodes/ep04/dialogue.md — S2 同步 + 注释更新
+
+连贯：与 S8 镇北王(武王境)亲自到场互相呼应，强化考核分量；S2 仍 10s、总时长不变 117s。
+
+教训（可选进化）：台词对设定内事物的评价/语气须与 world 实力坐标一致——别把设定里"很强"的境界/物件说成"也就/不过"，否则逻辑反。可固化进台词大师（D2 因果 / 设定一致性）。
+
+## Follow-up 021 — 2026-06-21 00:05:00
+Source: 用户连续反馈（台词大师 review EP4：S2武王逻辑/玄品拆句加圣子/裴霆困死改措辞/主角接话换句/裴霆人设不落井下石/删退人群镜/前置入城游览开场）
+Summary: EP4 一轮台词大师 review + 结构重排：境界逻辑修正、资质高阶档拆出圣子镜、裴霆措辞+人设修正、删藏锋退人群镜、新增入城游览开场(含说书支线埋妖患)。EP4 12镜/116s → 16镜/152s（偏长·待拆）。
+
+Auto-updated:
+- 4_剧本/episodes/ep04/script.md — 整体重写：①前置入城开场 S1–S4（城门/主街市集/街角说书支线埋妖患/人群涌动跟去）；②测资由1镜拆为 S8基础分档+S9高阶圣子（玄品以上"天之骄子/进核心/资源名师任挑/兴许成一宗圣子"两句）；③删原退人群·藏锋镜；④裴霆"困死在武王境"→"卡在武王境大半辈子"；⑤裴昭交锋镜：主角"用不着你管"→两句"用不着你操心。你这点嘴皮子，改不了什么"、裴霆"别理这种人，丢份"→"昭儿，当这么多人，别丢了王府的脸。走"(不落井下石)；⑥S2武王"了不起也就武王"→"武王就已是镇守一方的大人物，今天竟来了好几位"(上一轮)；⑦S7宗门排位精简节奏；全表 renumber S1–S16、时长合计152s、header/铺垫锚/三类台词清点/承接钩尾/待建卡同步；附「拆集建议」。
+- 4_剧本/episodes/ep04/dialogue.md — 整体重写同步：新增 S1–S4 + S5–S16 renumber + 各句注释 + 声口提示补说书先生/路人、裴霆人设钉。
+- 2_世界观人设/characters/c3_裴霆/c3_裴霆.md — §性格加「人设边界(不落井下石·冷待源于无法习武而非厌恶)」+ 说话风格禁忌补「不当众讥讽废长子」。
+- 2_世界观人设/world.md — §2.1 裴霆条加人设钉；§1.5② 核心/亲传补「宗门圣子」。
+- 3_大纲/arc_outline.md — EP4 116s/12镜→152s/16镜·偏长待拆；钩尾 S11–S12→S15–S16 + 拆集预案。
+- .claude/skills/ai_videos__台词大师/SKILL.md — （本轮调用台词大师 review；D10 已于 019 固化）。
+
+待用户拍板：① **EP4 偏长(152s/16镜)是否拆集**（建议：S1–S12 留 EP4、S13–S16 并入 EP5 群英录开场）；② 裴昭=上品、云骁=王品 映射是否 OK。
+
+No conflicts found in: c4/c5 卡, EP1–EP3 产物, style_guide.md, 5_6 分镜(ep04 暂无 shotNN)
+
+## Follow-up 022 — 2026-06-21 00:06:00
+Source: 用户拍板（EP4 拆两集；裴昭资质提到玄品）
+Summary: EP4(152s/16镜) 拆为 EP4(S1–S13·入城+考核铺垫·结家人到场悬念钩·123s) + 新建 EP5(家人交锋3镜+群英录待细化)；裴昭资质 上品→玄品（云骁仍王品·主角帝品）。EP6–EP9 编号不变。
+
+Auto-updated:
+- 4_剧本/episodes/ep04/script.md — trim 到 S1–S13（删原 S14–S16 交锋/前向钩/收束）；header/合计(123s)/三类台词清点/铺垫锚/钩尾(改为家人到场悬念钩)/留后/待建卡 同步；裴昭 上品→玄品；删凌虚子(移 EP5)
+- 4_剧本/episodes/ep04/dialogue.md — 同步 trim 到 S1–S13 + 声口提示去裴昭(移EP5)
+- 4_剧本/episodes/ep05/script.md — 新建：S1–S3 定稿（家人交锋+前向钩+凌虚子一瞥+收束·由原EP4拆出）+ S4 群英录待细化；承 EP4 S13 钩
+- 4_剧本/episodes/ep05/dialogue.md — 新建：S1–S3 台词 + 声口提示（裴昭刻薄归此、群英段待写）
+- 3_大纲/arc_outline.md — 第二幕概要 裴昭上品→玄品；EP4 条改 123s/13镜·家人到场钩；新增 EP5(家人交锋+群英录) 条；EP6–EP9 编号不变说明；episode 架构列表同步
+- 2_世界观人设/world.md — §四 新增「关键角色资质档」行（主角帝品残缺＞云骁王品＞裴昭玄品）
+
+待用户：EP5 群英录段（云骁/百里寒/江晚/女天骄登场）待推进到该集再细化（敏捷）。
+
+No conflicts found in: c3/c4/c5 卡, EP1–EP3 产物, style_guide.md, 5_6 分镜(ep04/ep05 暂无 shotNN)
+
+## Follow-up 023 — 2026-06-21 11:55:00
+Source: 用户「ep4 还行，帮我生成 shot 的 detail」（EP4 推进 stage4 → stage5/6）
+Summary: EP4(S1–S13·123s) 进 stage5/6——新建 2 张场景卡 + 13 个 canonical shotNN.md（分镜运镜 + 五层标准化 prompt 合一）+ all_shot_prompts.md 汇编 + intro_cards.md。4 个并行 worker 分段铺镜（S1–4/S5–8/S9–11/S12–13），全部 byte-identical 锁定串。已过复验（格式契约/锁定串一致/运镜跨镜/光线跨镜/站位朝向/测资灵石非体放/眼不发光）。
+
+Auto-updated / 新增:
+- 2_世界观人设/scenes/镇主街/镇主街.md — 新建场景卡（白日入城主街·城门/主街市集/街角茶棚 3 plate·与 EP2 暮夜集市长街不复用）
+- 2_世界观人设/scenes/镇演武场/镇演武场.md — 新建场景卡（白日露天考核大场·场口/全景旗台/测资灵石台/太虚冷台/人群骚动 5 plate·测资灵石发光非体放铁律）
+- 5_6_分镜与prompt/episodes/ep04/shots/shot01..13/shotNN.md — 新建 13 镜 canonical（YAML envelope + 小说原文 + Shot context + 视频 prompt 五层 + 台词配音）
+- 5_6_分镜与prompt/episodes/ep04/all_shot_prompts.md — 新建 13 镜汇编（跨镜状态轴：藏锋/玉佩不出/测资灵石非体放/场景轴/境界梯/裴霆人设钉）
+- 5_6_分镜与prompt/episodes/ep04/intro_cards.md — 新建字卡登记（裴霆/裴昭/沈婉 EP1 已发卡·本集不重发；群像不发卡）
+
+复验结论（validation.pass · .audit events.jsonl）:
+- 机械：零 hex / 无字幕污染 / 14 字段齐全 / 渲染样式 13 镜 byte-identical / 负向基线齐
+- 锁定串：裴知秋(S1-5/S12-13)·裴霆/裴昭/沈婉(仅S13) 标签 byte-identical；场景串分区正确(主街S1-4/演武场S5-13)
+- voice_id：递归角色一致（测资执事 KS-examiner-01 ×4 跨 worker 一致、裴知秋 PR-hero-01 ×7、裴霆 PT-patriarch-01）；群像一次性龙套(S12/S13 围观)通用音色无 id·可接受
+- 铁律：测资灵石光只在石面/石心、不溢人身、非体放 + 负面词「不要 灵石光染亮人身」；全员无金光瞳光；S13 四角色站位朝向写死(裴霆面朝裴昭·主角隔人海 OS·防雷同脸)
+- 运镜：景别节奏有起伏(全景铺陈→科普大场摇移→测资中近→S11快切对比→S12横移热冷切→S13全景→中→推近特写收悬念)；S6/S7 talking-head 已改镜头游走；白日暖白通透全集一致
+
+待后续（stage5/6 渲染前）:
+- 各场景 per-plate 图生图 prompt（镇主街 3 plate / 镇演武场 5 plate）+ 全局底图出图
+- 角色/场景 ref 图实际渲染（turntable + plate）
+- EP4 publish.md（平台元数据）
+
+No conflicts found in: EP1–EP3 产物, world.md, style_guide.md, c1/c3/c4/c5 卡, EP5 剧本
+
+## Follow-up 024 — 2026-06-21 12:05:00
+Source: user_input/follow_ups/024-20260621-120500-style-game-cg.md（小镇场景更丰富 + 画面转 3D 游戏 CG 唯美大片·景观享受；镇主街+镇演武场都要）
+Summary: 全剧视觉风格由「影视级真人写实 photorealism」改为 **3D 游戏 CG 唯美大片**（黑神话悟空/原神既视感·虚幻引擎次世代实时渲染·全局光照体积光·史诗级场景纵深）。用户经多选题明确选 B（知悉影响 style_guide + EP1–4 全部 + 后续，EP1–3 需重渲）。
+
+Auto-updated:
+- 2_世界观人设/style_guide.md — §1 渲染样式串整串换新（删「影视级真人写实/photorealism/工笔肤色/三庭五眼」，加「电影级CG大片质感·AAA游戏级唯美渲染·黑神话悟空与原神既视感·虚幻引擎次世代实时渲染·全局光照体积光·史诗级场景纵深·高精度次世代角色建模·唯美东方面孔·写实材质细腻不卡通」，保 9:16/浅景深/逆光描边/东方古风/反卡通/不烧字幕）+ §1 加 2026-06-21 风格切换注记 + §2 删负向「不要 CG渲染感/不要 3D游戏场景」改为「不要 低质感塑料感/不要 廉价手游画质」
+- 全局 byte-identical 刷新渲染样式串：26 文件（style_guide + EP3 10镜 + EP4 13镜 + ep01/ep03/ep04 三汇编中走锁的）
+- 2_世界观人设/scenes/镇主街/镇主街.md — 游戏CG大片重写：8字段描述符大幅丰富（高耸城门楼飞檐斗拱/极纵深青石长街/鳞次栉比唐宋楼阁/远山如黛/晨霭炊烟/丁达尔体积光）+ seed prompt 史诗化（广角纵深/体积光柱/全局光照/黑神话原神既视感）+ plate index 注 CG大片锚；≤30字一句话锁定保持稳定
+- 2_世界观人设/scenes/镇演武场/镇演武场.md — 游戏CG大片重写：8字段丰富（极开阔大校场/旗台如林巨幅旗幡/顶宗鎏金台阁雕梁画栋/青玉测资灵石巨台/群山环抱天高云阔/体积光柱/人海如潮）+ seed prompt 史诗化 + 测资灵石温润半透不暴闪铁律重申；一句话锁定稳定
+- 5_6_分镜与prompt/episodes/ep04/shots/shot01,02,05,06.md — 4 个核心景观镜增强 场景/镜头/光线：史诗构图（大全景仰拍/渺小行者衬恢弘）+ 丁达尔/体积光柱 + 远山如黛（S1入城/S2主街游览/S5抵场/S6演武场全景）
+- 5_6_分镜与prompt/episodes/ep04/all_shot_prompts.md — 重新汇编（头部加风格说明 + 反映新串与景观增强）
+
+复验: 13镜渲染样式新串 byte-identical 一致 / 旧串残留0 / 4景观镜增强标记齐 / 一句话场景锁定稳定（shot 仍 byte-identical 命中）/ 测资灵石非体放与藏锋无发光未被破坏。
+
+待办（用户已知悉）:
+- **EP01/EP02 为前锁定期 legacy**（各镜 bespoke 渲染串、已出片 mp4），未走 byte-identical 锁、本轮未自动换 → 待单独 restyle（保留各镜场景专属 token、基底换游戏CG串）+ 重渲
+- EP03 文本已换新串但旧 mp4 待重渲；EP04 各场景 per-plate 图生图 prompt 出图（按新 CG 大片锚）
+- EP05 剧本无渲染串（stage4），推进到 stage5/6 时直接用新串
+
+No conflicts found in: world.md, arc_outline, c1/c3/c4/c5 卡（角色锁定描述符未动·仅渲染层风格变）, EP4 台词/剧情/站位（未动）
+
+## Follow-up 025 — 2026-06-21 12:30:00
+Source: user_input/follow_ups/025-20260621-123000-seedance-compliance.md（Seedance 提示场景提示词不符合平台规则·research+改 prompt）
+Summary: Research（web + 项目 institutional）确认 Seedance/即梦 拒审两类主因：① **生成块点名商业游戏IP/引擎商标**（黑神话悟空/原神/虚幻引擎——字节因 Disney/奥特曼侵权函收紧 IP 拦截，web 实证）；② **暴力叙述触发词**（杀/刺/死伤/无数/血战/踏破，社区+实测确认）。全部换描述性/中性等价词。
+
+Auto-updated:
+- 2_世界观人设/style_guide.md — §1 渲染样式串去 IP/商标：黑神话悟空与原神既视感→3A级国风游戏唯美渲染+开放世界电影级既视感；虚幻引擎次世代实时渲染→次世代游戏引擎级实时渲染画质（+§1 切换注记同步去 IP 名）
+- 全局 byte-identical 刷 IP-free 渲染串：26 文件（style_guide + EP3 10镜 + EP4 13镜 + 汇编）
+- 2_世界观人设/scenes/{镇主街,镇演武场}.md — seed prompt [主体]/[风格] 行去 IP 名（→3A级国风游戏CG大片既视感/次世代游戏引擎级实时渲染）
+- 5_6_分镜与prompt/episodes/ep04/shots/shot03.md — 软化妖患叙述：小说原文/情节/台词「踏破→连破、血战死伤无数→节节败退」+ 配音块同步；3-way 同步 dialogue.md/script.md S3
+- 5_6_分镜与prompt/episodes/ep04/shots/shot09,10,11,13.md — 良性复合词软化（死寂→沉寂、血色正常→气色正常、暴闪→过曝乱闪、写死→固定）防误伤
+- 5_6_分镜与prompt/episodes/ep04/all_shot_prompts.md — 重新汇编（加平台合规说明 + 反映清洗）
+- .claude/agent_refs/project/ai_video.md — 2026-06-18 Seedance 审核 amendment 扩 §2b（游戏IP/引擎商标禁入+替换）+ §2c（暴力叙述词替换表）；流程级·所有 ai_video 项目
+
+复验: IP残留0（含汇编注记）/ EP4渲染面暴力触发词残留0 / 13镜渲染串IP-free byte-identical一致 / shot03台词3-way同步 / 测资灵石非体放与藏锋未破。
+注: script.md 铺垫锚/钩尾里「皇室选苗赴边疆杀妖」属 planning 剧情概念词、不送模型、保留。
+
+No conflicts found in: world.md, arc_outline, c1/c3/c4/c5 卡, EP4 剧情/站位/运镜（仅措辞合规层改）
+
+### 025 附记 — Seedance 创作提示采纳裁决（2026-06-21）
+Seedance 给的两条「创作提示」（非合规修复）裁决：
+- **「加古风摊贩细节」→ 采纳**：镇主街 seed prompt [主体]/[细节] 增补古风摊贩群（糖画担/馄饨汤摊/果蔬山货/卖花担/捏面人/字画卦摊/杂耍卖艺/货郎/铁匠铺火星/药铺晾药），堆「主角行于壮丽市井」景观纵深前景细节。
+- **「换黄昏暖调」→ 不采纳（保持白日晨光暖调）**：① 黄昏不解决合规（拒因＝IP名·已修）；② S4 人潮涌动→S5 抵演武场是连续同一时刻、时辰不能跳，改黄昏须连演武场 S5–S13 一起改、否则穿帮；③ 撞 EP2 集市长街暮夜暖调、对比变弱。现有「晨光金辉+丁达尔体积光柱」已是暖金大片感、零代价。用户拍板保持白日。
+
+## Follow-up 026 — 2026-06-21 12:45:00
+Source: 用户「要保留仙侠剧的唯美，不用 100% 写实」
+Summary: 风格再调一档——游戏 CG 大片底子上**仙侠唯美优先、不追 100% 写实**。强化唯美仙侠意境/仙气氤氲，去渲染串里「写实材质」过度写实信号，但保留「不卡通不塑料」避免廉价手游感。
+
+Auto-updated:
+- 2_世界观人设/style_guide.md — §1 渲染样式串：加「唯美仙侠意境 · 仙气氤氲」，「淡仙气薄雾」→「淡仙气薄雾氤氲」，「写实材质细腻不卡通」→「质感细腻唯美不卡通不塑料」；§1 注记补「仙侠唯美优先·不追求 100% 写实」
+- 全局 byte-identical 刷新渲染串：26 文件（style_guide + EP3 10镜 + EP4 13镜 + 汇编）
+- 2_世界观人设/scenes/{镇主街,镇演武场}.md — [风格] 行去「真实材质细腻不卡通」→「材质细腻唯美不卡通不塑料」+ 加唯美仙侠意境仙气氤氲
+
+复验: 13镜新唯美仙侠串 byte-identical 一致 / 写实材质信号残留0 / 汇编同步。
+说明: 仍保留次世代游戏引擎级实时渲染/全局光照体积光/史诗纵深（景观大片感）+ 不卡通不塑料（防廉价）；只是天平往仙侠唯美意境侧加重，去掉硬写实词。
+
+## Follow-up 027 — 2026-06-21 13:00:00
+Source: 用户「为什么镇主街下面没有 bg1/bg2 folder，跟其他 scene 不一致，这不是第一次，流程哪里有 issue？」
+Summary: 诊断＝**反复复发的流程 bug**：新建场景卡时把 v3 canonical scene template item 9 的 folder-per-plate 写成「待建（stage5/6 渲染前）」、从未补建；stage5/6 worker 交付清单不含 plate；无 QC 扫 plate 存在性。shot 却已 `参考: 镇主街_bg1_城门=>` 引用不存在的 plate。三处叠加致 scene 缺 bg 子文件夹。
+
+Auto-updated（实例修复）:
+- 2_世界观人设/scenes/镇主街/{bg1_城门,bg2_主街市集,bg3_街角茶棚}/*.md — 补建 3 个 per-plate 图生图 prompt（image→image·首行路由 handle·纯背景无人物·新仙侠唯美CG串·IP-free·合规）
+- 2_世界观人设/scenes/镇演武场/{bg1_场口,bg2_全景旗台,bg3_测资灵石台,bg4_太虚冷台,bg5_人群骚动}/*.md — 补建 5 个 per-plate prompt（测资灵石 plate 含温润半透不暴闪铁律）
+- 2_世界观人设/scenes/{镇主街,镇演武场}.md — index 尾注「待建」→「已创建·PNG 待渲」
+
+Auto-updated（流程根治·common-level）:
+- .claude/skills/ai_videos__格式契约/SKILL.md — 加 **K23**：场景 plate folder 完整性（index 行 ↔ {plate}/{plate}.md ↔ shot 参考 handle 三方一致），缺即 blocker、当场补建
+- .claude/agent_refs/project/ai_video.md — v3 scene template 加 **2026-06-21 amendment「folder-per-plate 当场建·禁待建」**：建卡同一步必须创建全部 plate .md、禁用「待建（stage5/6 渲染前）」推迟 prompt（PNG 可推迟、.md 不可）；挂 K23 gate
+
+复验: EP4 全部 shot 的 8 个 plate handle ↔ plate 文件三方对齐 ✓；镇主街3/镇演武场5 plate 文件齐。
+根因留档: 此 bug 复发是因 plate 创建既非 worker 显式交付项、又无 QC 把关、且卡模板用「待建」语言诱导推迟——K23 + amendment 同时堵住「漏建」与「待建话术」两个口子。
+
+No conflicts found in: shot 内容, world.md, 其他 scene
+
+## Follow-up 028 — 2026-06-21 13:20:00
+Source: 用户「为什么街角茶棚导入失败？」
+Summary: 诊断＝plate 命名违约定致 DownloadsImporter 路由失败。`bg3_街角茶棚` 漏切 `bg{N}_{方位}_{描述}` → 方位 token 变整坨"街角茶棚"⊃"街角"，撞 EP2 `集市长街/bg2_街角_摊位` 的方位"街角"→ importer 查到 2 候选无法消歧 → not_matched（downloads__writer.py `_match_plate_any_scene` 防误投返回 None）。其余 7 plate 同样违约定(单 blob 方位)、隐患同源。
+
+Auto-updated（实例修复·重命名为合规三段式 + 方位互斥）:
+- 2_世界观人设/scenes/镇主街/{bg1_城门→bg1_城门_入城, bg2_主街市集→bg2_主街_市集, bg3_街角茶棚→bg3_茶棚_说书}（folder+内层md+首行handle）
+- 2_世界观人设/scenes/镇演武场/{bg1_场口→bg1_场口_入场, bg2_全景旗台→bg2_旗台_全景, bg3_测资灵石台→bg3_灵石台_测资, bg4_太虚冷台→bg4_冷台_太虚, bg5_人群骚动→bg5_人潮_让道}
+- 同步 16 文件的 handle 引用：EP4 全 shot `参考:`/Shot context + 两场景卡 index/关键态 + all_shot_prompts
+- 方位 token 选取避让全 drama 现有(街角/顺街/庙内/镇口/朝北…)：城门/主街/茶棚/场口/旗台/灵石台/冷台/人潮——模拟 importer 验证 8 个全唯一命中、撞车0
+
+Auto-updated（流程根治·common-level）:
+- .claude/skills/ai_videos__格式契约/SKILL.md — 加 **K23b**：plate 命名三段式 `bg{N}_{方位}_{描述}` + 方位 token 跨 drama 互斥（importer 路由约束），违即 blocker
+- .claude/agent_refs/project/ai_video.md — 2026-06-21 folder-per-plate amendment 补 (d)：命名三段式 + 方位短且跨 drama 互斥 + 建卡前列已有方位避让
+
+复验: 8 shot handle ↔ plate 三方对齐 ✓；8 方位 token 模拟 importer 全唯一命中、撞车0 ✓。茶棚现可正常导入。
+根因链: K23(存在性) 堵了"漏建"，但没堵"命名错/方位撞车"——K23b 补上；两条 QC 合起来覆盖 plate 的"建没建 + 名对不对 + 能不能路由"。
+
+No conflicts found in: shot 内容/剧情, 其他 scene, world.md
+
+## Follow-up 029 — 2026-06-21 13:35:00
+Source: 用户「又下载了5张图（镇演武场 plate）在 Downloads，确保都能正常导入」
+Summary: 用真实 importer 逻辑模拟 5 个下载文件名（ElevenLabs gpt-image-2 渲的 bg1_场口/bg2_全景旗台/bg3_测资灵石台/bg4_太虚冷台/bg5_人群骚动）。发现 4/5 命中（新方位 token ⊂ 旧名仍路由）、**bg5 失败**——上一轮我把 bg5 方位「人群」→「人潮」，而下载文件名是旧「人群骚动」、不含「人潮」→ 0 命中 not_matched。
+
+Auto-updated:
+- 2_世界观人设/scenes/镇演武场/bg5_人潮_让道 → bg5_人群_让道（方位改回「人群」：既在已下载文件名内、又跨 drama 唯一）+ 同步 3 文件 handle（shots + 场景卡）
+- .claude/agent_refs/project/ai_video.md — folder-per-plate amendment 补 (e)：改名兼容已渲图——新方位 token 应仍是旧名子串，否则已下载文件失配须重渲
+
+复验: 5/5 模拟全部唯一命中（bg1→场口_入场 / bg2→旗台_全景 / bg3→灵石台_测资 / bg4→冷台_太虚 / bg5→人群_让道）；shot handle 三方对齐。
+
+## Follow-up 030 — 2026-06-21 13:55:00
+Source: 用户「整体风格不要太CG，要3A游戏的唯美细节、但还是真人剧」+「重新审视所有 scene/shot 确保」+「风格全部改为真人实拍、不要 CG 风格」
+Summary: 风格最终定调＝**影视级真人实拍剧**（photorealism·真实皮肤毛孔与布料肌理·电影胶片质感），借 3A 游戏级唯美场景细节/光影/美术做画面质感参考、但**渲染风格真人实拍、不要 CG/游戏引擎渲染/3D建模感**。撤销 024 的「转 3D 游戏 CG 大片」。
+
+Auto-updated:
+- 2_世界观人设/style_guide.md — §1 渲染样式串改真人实拍（影视级真人实拍质感·photorealism·真实皮肤毛孔与布料肌理·电影胶片质感·3A游戏级唯美场景细节与美术·…去掉 CG大片/游戏引擎渲染/次世代建模）；§1 注记重写为 030 settled 定调（含历史 024→026→030）；§2 负向「反 CG/画质控制」组每镜必挂（不要 CG渲染感/游戏引擎画面感/3D建模感/游戏过场CG/卡通渲染…）
+- 全局 byte-identical 刷真人实拍渲染串：26 文件（style_guide + EP3 10镜 + EP4 13镜 + 汇编）
+- 2_世界观人设/scenes/{镇主街,镇演武场}.md + 全 11 plate（含 3 镇主街 + 8 镇演武场）— [风格]/seed/[主体]/header 去 CG 措辞（3D游戏CG/电影级CG/游戏引擎渲染/CG大片既视感 → 真人实拍·3A唯美场景细节）；seed 负向补 anti-CG
+- 5_6_分镜与prompt/episodes/ep04/shots/shot01–13 — 渲染样式真人实拍化；场景行 3D游戏CG→真人实拍·3A唯美细节（S1/S2/S5）；负向 13/13 补「不要 CG渲染感/游戏引擎画面感/3D建模感」
+- all_shot_prompts.md — 重聚合 + 真人实拍风格说明头
+
+复验: 全 drama 零 CG 正向措辞（EP01–04 全 shot + 所有 scene + 角色卡）；汇编 13 镜真人实拍串一致、CG 残留 0；EP01/EP02 本就「影视级真人写实」（前锁定期 bespoke·从未 CG）。**全剧现统一真人实拍。**
+说明: 3A 游戏「唯美细节」保留为画面质感/美术参考（场景细节·光影·体积光·史诗纵深），非渲染风格；渲染风格＝真人实拍 photorealism。
+
+No conflicts found in: 剧情/台词/站位/运镜（仅渲染风格层改）, world.md, arc_outline
+
+## Follow-up 031 — 2026-06-21 14:20:00
+Source: 用户「shot11/shot13 平台审核未过」+「镇演武场像西方格斗场·要仙侠气质·测资灵石着重描写·按手要特效·要不要单独 prop」
+Summary: ① 修 shot11/shot13 Seedance 拒审；② 镇演武场重写为中式仙侠（去斗兽场感）；③ 测资灵石建独立 prop 卡 + 七档按手特效。
+
+A. 平台审核修复（shot11/shot13 + 同隐患 shot02/05/06/07/12）:
+- shot11 拒因＝「像死了一般」（死亡意象·小说原文+情节）→「如顽石般沉寂无波」
+- shot13 拒因＝「挎刀带剑」（武器·围观武者群像·命中 K17）→「各色粗布劲装的江湖习武之人」
+- 全 EP4 武器词扫平（shot02 满街挎刀带剑→满街都是练家子·保武为尊世风去刀剑名词、shot05 兵器碰撞声→习武吆喝声、shot06/07/12/13 围观武者去挎刀带剑、挎刀新手/带剑老手→新手/老手）；shot02 台词 3-way 同步 dialogue/script
+- 10 文件扫平、武器/死亡词残留 0
+
+B. 镇演武场仙侠化重写（病灶＝「夯土大校场+四周高墙环列」斗兽场感）:
+- 2_世界观人设/scenes/镇演武场/镇演武场.md — 视觉目标/锁定#2#3/seed[主体][细节]/主色 全改中式仙侠：青石演武法坛（非夯土斗兽场）+ 四周飞檐宗门阁楼朱漆牌坊旗幡环抱（中式楼阁·非环形看台高墙）+ 场心青玉测灵碑为焦点 + 远景云雾仙峰飞檐楼阁 + 仙气氤氲；主色 夯土黄褐→青石灰
+
+C. 测资灵石 prop（决策：建·rule 4b 重要复用法器）:
+- 2_世界观人设/props/测资灵石/测资灵石.md — 新建：青玉测灵碑锁定描述符（顶圆微拱·莲台座·测灵符箓云雷纹·静置不发光）+ 七档按手特效表（废=死寂/下=明灭微光/中=碑心柔光/上=灵气环碑/玄=成束/王=漩涡震颤/帝=冲天光柱异象/帝残=缺一块裂一道·主角EP9）+ 藏锋铁律（碑光不染人身·非体放）+ Seedream ref 图 prompt + 用法/出场登记
+
+待续（prop 接线）: bg3_灵石台_测资 plate 补测灵碑细节；EP4 S8–S11 shot 补 `测资灵石=>` ref + re-paste 描述符 + 按手特效（S10 下品/S11 废+中）；测资灵石 ref 图实渲。
+
+No conflicts found in: 其他 scene, world.md（七档特效本就 canon·prop 卡据其落地）
+
+### 031 补完 — 测资灵石 prop 接线（2026-06-21）
+- EP4 S8–S11 shot 已接线：`参考:` 加 `测资灵石=>` + 情节 re-paste 青玉测灵碑描述符（顶圆微拱·莲台青石座·测灵符箓云雷纹·温润半透苍青·静置不发光）；按手特效 S10（下品·碑面明灭微光）/ S11（废品·碑面沉寂无光 / 中品·碑心稳定柔光）已落地、碑光不染人身。S8/S9＝执事讲规则·碑静置不发光。
+- 验证：S8–S11 参考行均含 `测资灵石=>` ✓（K20 ref↔可见双向一致）。
+待续（实渲层）：`测资灵石.png` ref 图实渲（用 prop 卡 Seedream prompt）；bg3 plate 可选补测灵碑前景细节。
+
+## Follow-up 032 — 2026-06-21 14:50:00
+Source: 用户「确定所有 shot 的 CG 风格都修复了吗？之前生成视频太假、一点不真人」
+Summary: 诚实复审发现 030 的真人实拍化**不彻底**——渲染串与各 shot `光线/场景` 字段仍散落大量致假词（审计：体积光97×/全局光照76×/游戏63×/工笔61×/3A游戏60×/唯美56×/史诗级63× 等，共~255处/55文件）。这些「游戏/全局光照/体积光/工笔/唯美/CG」是把模型推向游戏CG/插画/磨皮假脸的元凶。032 全量清除、纯真人实拍化。
+
+Auto-updated:
+- 2_世界观人设/style_guide.md — §1 渲染串彻底重写为纯真人影视实拍词汇：`真人实拍电影质感 · 影视剧实景拍摄 · photorealism 照片级写实 · 真人演员出演 · 真实皮肤纹理与毛孔 · 真实布料织物质感 · 电影胶片颗粒 · 自然光影 · 35mm电影镜头 · 浅景深 · 古装仙侠剧 · 古风实景置景考究丰富 · 东方古风 · 精致真实的古风服饰纹样 · 真实东方面孔 · 自然淡雾薄霭 · 真实质感不卡通不塑料不假 · 画面不烧任何字幕文字`；§1 注记重写为 032 纯真人实拍定调；§2 负向加「不要 游戏感/渲染感/磨皮/假脸/失真塑料感」
+- 全局致假词扫平：55+9 文件——渲染串整串换；字段内 体积光柱→丁达尔天光/天光、全局光照→自然光影、3A游戏级唯美场景细节→考究丰富的实景置景细节、工笔质感→真实质感、唯美仙侠意境仙气氤氲→古装仙侠剧实拍质感、逆光描边→自然逆光、史诗级→恢弘、唯美→真实；EP1 王府场景 古风工笔→古风真人实拍
+- 范围：EP3+EP4 全 shot + 所有 scenes（含 EP1 王府正厅 plate/卡）+ style_guide + 汇编
+- all_shot_prompts.md 重写（修一处聚合重复 651→331 行）+ 真人实拍说明头
+
+复审: 致假词（3A游戏/全局光照/体积光/工笔/唯美/史诗级/仙气氤氲）正向字段**零残留**；13 镜真人实拍串 byte-identical 一致。
+教训（institutional·待固化 ai_video.md）：真人剧风格 prompt **禁词清单**＝游戏/3A游戏/游戏引擎/全局光照/体积光/次世代/CG/工笔/插画/磨皮/唯美渲染——这些即便配 photorealism 也会把输出拽向假/CG。真人实拍靠：真人演员/实景拍摄/35mm/真实皮肤毛孔/胶片颗粒/自然光 + 负向 不要游戏感/渲染感/磨皮/假脸。
+
+No conflicts found in: 剧情/台词/站位（仅渲染风格词汇层）, world.md
+
+## Follow-up 026 — 2026-06-21 13:00:00
+Source: user_input/follow_ups/026-20260621-130000-ep3-shot7-system-voice-female-and-congrats-front.md
+Summary: EP3 shot7 系统音「恭喜宿主」移到最前(去逗号)、删「废了丹田也能重上武道」、readout 丰富成 2 句；全剧系统音锁定女声。
+
+Auto-updated:
+- 5_6_分镜与prompt/episodes/ep03/shots/shot07/shot07.md — 系统 UI 文本/情节/动作/两条系统配音块重排(恭喜宿主置最前)+女声+readout 改 2 句；Summary 同步
+- 5_6_分镜与prompt/episodes/ep03/all_shot_prompts.md — 同步 ep03 shot7 聚合(系统UI/情节/动作/配音行)
+- 2_世界观人设/characters/c2_系统/c2_系统.md — 声线由「无性别中性」改「冰冷清冽女声」(全剧锁定女声·对齐上传 MP4)
+- 5_6_分镜与prompt/episodes/ep01/shots/shot06/shot06.md、shot09/shot09.md、ep02/shots/shot02/shot02.md — 系统音色/情绪描述符改女声
+- 5_6_分镜与prompt/episodes/ep01/all_shot_prompts.md — 同步 3 处系统音色/情绪改女声
+- 4_剧本/episodes/ep03/{script.md,dialogue.md} — S7 系统两句重排(恭喜宿主置前)+女声+readout 2 句
+- 4_剧本/episodes/ep02/dialogue.md — 系统声口改女声
+
+No conflicts found in: shot07 小说原文(原著节选·保留原措辞不动)，其余 EP，站位/朝向/运镜/光线。
+
+## Follow-up 033 — 2026-06-21 15:05:00
+Source: 用户「EP4 为什么没有 shotlist」
+Summary: 诊断＝EP4 stage5/6 生成时漏建 `shotlist.md`（EP1/EP2/EP3 都有·标准每集交付件）。与漏 plate folder 同源——stage5/6 每集交付清单无强制校验。
+
+Auto-updated:
+- 5_6_分镜与prompt/episodes/ep04/shotlist.md — 新建：13 镜清单总表（镜｜内容(情绪目的)｜出场角色｜景别+运动｜时长｜标记）+ 头部集信息（场景/角色/voice_id/prop/真人实拍贯穿/合规）+ 运镜锚（情绪→机位/景别节奏/测资灵石prop特效/主角藏锋主线/字卡）；反映当前状态（真人实拍·青玉测灵碑prop·中式仙侠演武场·武器词已去）
+- .claude/skills/ai_videos__格式契约/SKILL.md — 加 K24：每集 stage5/6 交付件完整性（shotlist.md / all_shot_prompts.md / shots/ / intro_cards.md 对照同 drama 其它集自检·漏件 blocker）
+
+复验: EP4 交付件现与 EP1–3 对齐（shotlist + all_shot_prompts + intro_cards + shots×13）。
+根因链: 漏 plate folder(K23)→漏命名约定(K23b)→漏每集交付件(K24)，三条 QC 合起来覆盖 stage5/6 产物完整性。
+
+No conflicts found in: shot 内容, 其它集
+
+## Follow-up — 2026-06-21 EP3 shot07 prompt 简化 + 系统女声确认
+Source: 用户口头指令（重写 shot7·系统声女声·简化 prompt·≤2000字）
+
+Auto-updated:
+- 5_6_分镜与prompt/episodes/ep03/shots/shot07/shot07.md — 视频 prompt 大幅精简（1199 字，去空白 1149，≤2000）；系统两句台词配音显式标注「女声·SYS-gold-01」；剧情/走位/动作时间轴/台词/时长(9s)全等，仅压缩冗余措辞；保留 load-bearing 契约（S7=收功熄灭点·暖金流光轴、diegetic 系统框非字幕、多声轨静音后期 mux、藏锋无瞳光）
+- 5_6_分镜与prompt/episodes/ep03/all_shot_prompts.md — 同步 shot07 段为精简版 + 女声标注
+
+复验（连贯·暖金流光轴 N6）: shot6(极淡未熄)→shot7(收功一记即收→归无)→shot8(承已收尽)，唯一熄灭点仍在 S7，轴不破；玉佩本集不上画，S7 不涉，无影响。
+
+No conflicts found in: shot07 剧情内容, 其它镜, 其它集
+
+## Follow-up 034 — 2026-06-21 16:00:00 — EP4 全面重构（放慢+丰富+真人实拍）
+Source: 用户连续密集实测反馈（shot1→2/3→4 硬切·shot2台词↔画面不一致·shot6短发不像古人·shot9观众同脸·shot10台词归属错·shot11废品要有反应+中品谁要交涉·shot12太虚给老剑仙特写当结尾·shot13话太快拆镜·整体语速太快·"编剧/情节大师要改改"·整体review放慢丰富）
+Summary: EP4 从 13 镜重构为 **15 镜 / 171s**（放慢节奏·正常语速≤3.5字/秒·超15s拆镜·丰富情节）。**结构改**：结尾从「家人到场悬念钩」改为「太虚冷台+老剑仙凌虚子特写·暗线hook」；**家人到场整段移 EP5 开场**。
+
+Auto-updated（spec 重构）:
+- 4_剧本/episodes/ep04/script.md — 重写为 15 镜表（入城4 + 科普3 + 测资段8放慢有反应 + 太虚老剑仙收尾）；原 S8 长台词拆 S8+S9；菜鸡测试拆 S11少年怔/S12招走/S13废品不甘/S14中品谁要交涉；S15 太虚+老剑仙凌虚子
+- 4_剧本/episodes/ep04/dialogue.md — 同步 15 镜台词（废品汉子"再让我试一次"+中品"谁要→铁剑门要→道谢"等新交涉台词）
+- 2_世界观人设/characters/c8_凌虚子/c8_凌虚子.md — 新建角色卡（老剑仙·扫地剑仙·拄秃竹扫帚·邋遢·暗线=EP2暗处目光·藏锋无剑气外放·S15特写首登发字卡·voice LX-swordsage-01）
+- 5_6_分镜与prompt/episodes/ep04/shots/shot01..15 — **4 worker 并行重铺**（S1-4/S5-9/S10-13/S14-15）：真人实拍·中式仙侠·古装群像多样·过渡接点·台词↔画面一致·测灵碑特效·受测者反应·台词归属写死·正常语速（进行中）
+- 5_6_分镜与prompt/episodes/ep05/_staging_from_ep04/ — 旧 shot13(家人到场)暂存待移 EP5
+
+Auto-updated（流程·"大师改改"）:
+- .claude/agent_refs/project/ai_video.md — 加「2026-06-21 真人古装仙侠剧出片铁律」7条（真人实拍零致假词/中式非西方/群像古装发型+面孔多样/相邻镜过渡铺垫禁硬切/台词↔画面一致/功能角色有反应别走过场/正常语速超15s拆镜）·编剧·情节·分镜大师 + 生成默认遵守
+
+待续: ① 4 worker 完成后复验 15 镜 + 重生 shotlist.md/all_shot_prompts.md/intro_cards.md（含凌虚子字卡）；② EP5 开场并入家人到场段（接现有交锋）；③ 把 7 条铁律分发到 剧情连贯/运镜/时长节奏/动作表演 各 skill 的检查项。
+
+No conflicts found in: world.md（七档/凌虚子 canon 本就有）, EP1-3
+
+## Follow-up 035 — 2026-06-21 16:40:00 — 多镜复用角色漏建卡（测资执事等）
+Source: 用户「测资执事出现很多回为什么不建character·流程哪出问题」+「是不是还有其他人物漏了」
+Summary: 诊断＝**角色没套用"≥2镜复用就立档"门槛**（场景有此门槛、角色漏）。多镜功能配角被默认"群像内联·不锁定"→无角色卡无 ref 图→跨镜面孔漂。漏建：测资执事(6镜)、菜鸡少年(2镜)、围观武者甲/乙(2镜)。1镜龙套(说书先生/路人/废品汉子/中品青年/招人执事)豁免。
+
+Auto-updated:
+- 2_世界观人设/characters/{c9_测资执事,c10_菜鸡少年,c11_围观武者甲,c12_围观武者乙}/ — 新建 4 张轻量角色卡（8字段锁定描述符 + voice_id + 真人实拍 Seedream ref 立绘 prompt·古装束发非现代短发）
+- 5_6_分镜与prompt/episodes/ep04/shots/shot06-14（9镜）— `参考:` 行接线 cN ref handle（c9 测资执事→S8-14·c10 菜鸡少年→S11/12·c11/c12 围观甲乙→S6/7），ref 图锁面孔防漂
+- all_shot_prompts.md 重聚合（角色 ref 入汇编）
+
+Auto-updated（流程根治）:
+- .claude/agent_refs/project/ai_video.md — 加「角色≥2镜复用就立档」amendment（对称场景门槛·任一角色含episode-local配角出现≥2镜必建卡+ref·1镜龙套豁免·角色卡≠出场字卡）
+- .claude/skills/ai_videos__格式契约/SKILL.md — 加 K25：角色≥2镜必有卡+ref+参考handle+byte-identical标签·缺即blocker
+
+复验: 测资执事/菜鸡少年/围观甲乙 4 卡建齐；9 镜参考行已带 cN ref。
+角色卡累计 c1–c12（c6/c7 EP2群像·c9-12 EP4群像·同一立档门槛）。
+
+No conflicts found in: shot 内容/剧情, world.md
+
+## Follow-up 036 — 2026-06-21 17:20:00 — prompt 字数 K10 自检 + 固化
+Source: 用户「确保每个 prompt <2000 字」+「这点每次新建/改 prompt 你应自己 check 不要每次提醒」
+Summary: 扫全 drama 271 个生成块查 K10(≤2000字)——EP4 worker 重铺的 shot14(2481→压)/shot15(2858→压)超标(老剑仙/中品交涉写太丰富)。压缩冗余字段至 ≤2000，并把「生成后默认自检字数」固化成铁律。
+
+Auto-updated:
+- 5_6_分镜与prompt/episodes/ep04/shots/shot14,shot15 — 压缩超长字段(去重复藏锋句、精简走位/动作/光线/镜头、负向去重~45→32项、测灵碑描述符精简)至 ≤2000 字；信息无损(blocking/藏锋/特效全保留)
+- all_shot_prompts.md 重聚合
+- .claude/agent_refs/project/ai_video.md — 真人古装剧铁律加第8条「生成/改 prompt 后默认自跑格式契约 K10 字数自检·fan-out worker 产出 parent 必补检·不待用户提醒」
+
+复验: EP4 全 15 镜视频prompt + 角色/prop/场景 ref 块全 ≤2000 字。
+待办: EP5 暂存 old_shot13(2323·porting时trim)、EP1 shot03(2129·legacy)——非本次范围、各自处理时修。
+
+No conflicts found in: EP4 剧情/锁定串

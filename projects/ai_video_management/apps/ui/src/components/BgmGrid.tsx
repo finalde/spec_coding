@@ -84,7 +84,7 @@ export function BgmGrid({ onChange }: BgmGridProps): JSX.Element {
     async (bgmId: string) => {
       if (deletingId) return;
       const ok = window.confirm(
-        `Delete ${bgmId}? Moves folder to _deleted/_bgm/. Refuses if referenced.`,
+        `删除 ${bgmId}？将把文件夹移到 _deleted/_bgm/；被剧本引用时会拒绝。`,
       );
       if (!ok) return;
       setDeletingId(bgmId);

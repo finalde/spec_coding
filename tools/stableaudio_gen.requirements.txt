@@ -24,3 +24,6 @@ sentencepiece
 protobuf
 soundfile
 imageio-ffmpeg
+# StableAudio's CosineDPMSolverMultistepScheduler needs torchsde (the SDE
+# diffusion sampler); diffusers does NOT pull it transitively.
+torchsde

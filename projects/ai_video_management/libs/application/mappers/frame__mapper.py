@@ -3,13 +3,18 @@ from __future__ import annotations
 
 from libs.application.dtos.frame__dto import (
     ExtractFramesResultCdto,
+    ExtractLastFrameResultCdto,
     FrameFailureCdto,
     FrameRowCdto,
 )
-from libs.infrastructure.writers.frame__writer import ExtractResult
+from libs.infrastructure.writers.frame__writer import ExtractResult, LastFrameResult
 
 
 class FrameMapper:
+    @staticmethod
+    def last_frame_to_cdto(r: LastFrameResult) -> ExtractLastFrameResultCdto:
+        return ExtractLastFrameResultCdto(src_rel=r.src_rel, out_rel=r.out_rel)
+
     @staticmethod
     def to_cdto(r: ExtractResult) -> ExtractFramesResultCdto:
         rows = tuple(

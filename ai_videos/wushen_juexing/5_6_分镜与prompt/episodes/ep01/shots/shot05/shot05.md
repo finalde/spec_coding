@@ -20,6 +20,7 @@ confidence: high
 - **Characters**：裴知秋（单人面部特写）。
 - **Scene**：bg6 座前虚化背景 · 镇北王府正厅。
 - **Duration**：9s。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴知秋 ref 图、bg6 座前虚化背景图。
 
 ## 视频 prompt

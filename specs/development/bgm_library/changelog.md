@@ -63,3 +63,81 @@ Auto-updated (new DDD slice `episode_bgm__*`):
 
 Verify: test_bgm_library + test_episode_bgm + test_episode_concat = 29 passed；UI tsc 通过 + vite build 通过；真 ffmpeg 多 cue mux 冒烟（duck+非duck）出片带音轨 OK。
 No conflicts found in: findings/, validation/* (烧录是 v1「mux 多 cue 留后续」的兑现，spec 的库结构/引用/删除契约不变；final_specs/spec.md §7 的 v1 单 BGM mux 仍在，episode 烧录是其多 cue 上位)
+
+## Follow-up 005 — 2026-06-21 00:00:00
+Source: user_input/follow_ups/005-20260621-000000-chinese-kling-prompt-dual-language.md
+Summary: BGM 提示词改双语——中文「Kling 出 BGM」版（复制进 Kling，画面黑屏只取音乐）+ 英文「Stable Audio 本地模型」版；UI 文案全中文。本地 SIGILL/torchsde/torchcodec/ffmpeg 生成链路修复（HF_HUB_DISABLE_XET、soundfile 存盘、imageio-ffmpeg）。
+
+Auto-updated:
+- tools/stableaudio_gen.py — HF_HUB_DISABLE_XET=1（绕开 hf_xet 原生扩展 SIGILL）；改用 soundfile 存 WAV（替代依赖 torchcodec 的 torchaudio.save）
+- tools/stableaudio_gen.requirements.txt — 增 torchsde（CosineDPMSolverMultistepScheduler 必需）
+- libs/infrastructure/writers/bgm__prompt.py — _CATEGORY_TEMPLATE_ZH/_INTENSITY_ADJ_ZH + _compose(zh) + build_bgm_prompt_zh / build_bgm_prompt_kling（中文乐曲描述 + KLING_BGM_NOTE 尾注）
+- libs/infrastructure/writers/bgm__writer.py — sidecar 双段（中文 Kling / 英文模型）；_read_sidecar_generation 按「英文」表头回读模型用英文；_fenced_block_under_header 辅助；generate_batch/create_prompts_batch/preview_prompts 同出中英两版（prompt=中文、prompt_en=英文）
+- libs/application/dtos/bgm__dto.py + mappers/bgm__mapper.py — BgmPreviewPromptQdto 增 prompt_en 透传
+- apps/ui/src/components/{BgmPoolGenerator,BgmView,BgmGrid,BgmEpisodePanel}.tsx — BGM 文案全中文（prompt→提示词 等）
+- apps/ui/src/api.ts — BgmPreviewSlot 增 prompt_en?
+- libs/infrastructure/readers/tree__reader.py — _bgm/{category} 文件树显示中文（悬疑 等）
+- ai_videos/_bgm/*/bgm_000{1..6}/*.md — 6 条既有 sidecar 迁移为双段（英文段 byte 不变）
+
+Verify: test_bgm_library 13 passed；UI tsc 通过；bgm_0001 本地 GPU 端到端出 mp3 成功（841KB）；6 条 sidecar 回读英文段 assert 通过。
+No conflicts found in: findings/, final_specs/spec.md（库结构/引用/删除契约不变，提示词内容由单语变双语属生成细节）, validation/*
+
+## Follow-up 005 addendum — 2026-06-21（prompt 细化 + key + MP4→MP3）
+- libs/infrastructure/writers/bgm__prompt.py — 中英模板大幅细化（速度/动态/织体/空间/情绪用途）；build_bgm_prompt_kling 增 bgm_id 参数：Kling 中文 prompt 首行放 KEY（bgm_NNNN），便于下载文件按 key 路由回正确轨道
+- libs/infrastructure/writers/bgm__writer.py — _newest_download(extensions, prefer_key) 通用取件（文件名含 key 优先于更新的无关文件）；import_video(bgm_id) = MP4→MP3（取最新视频、ffmpeg 抽音轨到 bgm_NNNN.mp3、源视频留在 Downloads）；_extract_audio_to_mp3 + _ffmpeg_exe(imageio-ffmpeg)；_VIDEO_EXTENSIONS
+- libs/domain/errors/bgm__error.py — BgmNoDownloadVideoError / BgmAudioExtractFailedError
+- libs/domain/repositories/bgm__repository.py + libs/application/commands/bgm__command.py — import_video
+- apps/api/routes/bgm__route.py — POST /api/bgms/{id}/import-video；app_factory 注册两个新错误（404 bgm_no_download_video / 500 bgm_audio_extract_failed）
+- apps/ui/src/{api.ts, components/BgmView.tsx} — importBgmVideo + 「🎬 从视频提取(MP4→MP3)」按钮（有/无音频两态都有）
+- ai_videos/_bgm/suspense/bgm_000{1,2} — 现存轨道再迁移（细化模板 + 首行 key）
+- tests/test_bgm_library.py — +test_import_audio_prefers_keyed_download、+test_import_video_extracts_audio（15 passed）
+
+Verify: test_bgm_library 15 passed；UI tsc 通过；真 ffmpeg 抽音轨冒烟（mp4→mp3 15KB）OK。
+注：会话中用户经 webapp 删除了旧 bgm_0001–0006（软删到 _deleted/_bgm/，可恢复）并新建了 2 条 prompt-only 轨；非脚本所为。
+
+## Follow-up 006 — 2026-06-21 01:00:00
+Source: user_input/follow_ups/006-20260621-010000-simplify-elevenlabs-english-prompt.md
+Summary: 简化流程——只出单一英文 prompt（供 ElevenLabs），保留首行 KEY 便于一键导入；mood/配器中文预设译英；删除 Kling/MP4→MP3 全链路。
+
+Auto-updated:
+- libs/infrastructure/writers/bgm__prompt.py — 改单一英文 build_bgm_prompt（细化模板保留）+ build_bgm_prompt_keyed（首行 bgm_NNNN KEY）；新增 _MOOD_EN/_INSTRUMENTS_EN 预设译英；删除中文模板/形容词/Kling 函数/KLING_BGM_NOTE/_compose(zh)
+- libs/infrastructure/writers/bgm__writer.py — sidecar 单段「英文 · 复制到 ElevenLabs」；_read_sidecar_generation strip 首行 KEY 再喂模型；删除 import_video/_extract_audio_to_mp3/_ffmpeg_exe/_VIDEO_EXTENSIONS；generate/create/preview 用 keyed/英文
+- libs/domain/errors/bgm__error.py — 删 BgmNoDownloadVideoError/BgmAudioExtractFailedError
+- libs/domain/repositories/bgm__repository.py + application/commands/bgm__command.py — 删 import_video
+- apps/api/routes/bgm__route.py — 删 POST import-video；app_factory 删两错误注册
+- libs/application/dtos/bgm__dto.py + mappers/bgm__mapper.py — 删 BgmPreviewPromptQdto.prompt_en
+- apps/ui/src/api.ts — 删 importBgmVideo + BgmPreviewSlot.prompt_en
+- apps/ui/src/components/BgmView.tsx — 删「🎬 从视频提取(MP4→MP3)」按钮 + onImportVideo + import_video busy 态
+- ai_videos/_bgm/*/bgm_000{1..5} — 现存轨道迁移为单段英文 + key
+- tests/test_bgm_library.py — 删 import_video 测试；+test_prompt_carries_key_line_and_readback_strips_it；preview 测试改断言英文
+
+Verify: test_bgm_library 15 passed；UI tsc 通过；无悬挂引用（grep 干净）。
+
+## Follow-up 007 — 2026-06-21 02:00:00
+Source: user_input/follow_ups/007-20260621-020000-global-import-and-longer-prompt.md
+Summary: 清空现有 BGM 重生成；导入改为左侧导航全局一键（像 _actor）；删每页单独导入；prompt 重写为 ≥1000 字符结构化长文。
+
+Auto-updated:
+- ai_videos/_bgm/* + _deleted/_bgm — 删除全部现有轨道（清空重生成）
+- libs/infrastructure/writers/bgm__prompt.py — build_bgm_prompt 重写为结构化长 brief（风格/情绪/能量/编曲结构/动态/制作混音/用途/纯音乐约束/时长，~1700+ 字符）+ _CATEGORY_SCENE/_INTENSITY_DYNAMICS
+- libs/infrastructure/writers/downloads__writer.py — 新增 import_bgms（按 bgm_NNNN key 全局归位音频）+ _collect_bgm_folders + _clear_audio_files + BGM 常量
+- libs/application/commands/downloads__command.py — drama_name=_bgm → import_bgms 分发
+- libs/infrastructure/writers/bgm__writer.py — 删 import_audio/_newest_download/_clear_audio + 死常量(_AUDIO_EXTENSIONS/_IMPORT_WINDOW_SECONDS/_DOWNLOADS_ENV_VAR)；docstring 更新
+- libs/domain/{errors/bgm__error.py(删 BgmNoDownloadAudioError), repositories/bgm__repository.py(删 import_audio)}
+- libs/application/commands/bgm__command.py — 删 import_audio
+- apps/api/routes/bgm__route.py(删 import-audio 路由) + app_factory.py(删 BgmNoDownloadAudioError 注册)
+- apps/ui/src/api.ts — 删 importBgmAudio
+- apps/ui/src/components/BgmView.tsx — 删每页导入按钮+handler+busy 态；空态提示改指向左侧全局导入
+- apps/ui/src/components/Sidebar.tsx — _bgm 根新增「📥 导入下载音乐」按钮（onRenameClick → /api/import-from-downloads）
+- tests/ — 删 2 个 import_audio 测试；+test_prompt_is_long_and_detailed(≥1000)；+test_downloads_import_bgms.py(3 测试：按 key 归位/未匹配+非音频跳过/覆盖)
+
+Verify: test_bgm_library + test_downloads_import_bgms + test_boot_smoke = 24 passed；UI tsc 通过；prompt 实测 ~1700–1800 字符；grep 无悬挂引用。
+
+## Follow-up 008 — 2026-06-21 03:00:00
+Summary: BGM 编排页解锁分配——每条 cue 先选类型(默认 cue 情绪/已分配轨道类型，含「全部类型」)再选 BGM，不再锁死只能选 cue 指定类型下的轨道。
+
+Auto-updated:
+- apps/ui/src/components/BgmEpisodePanel.tsx — 每行新增类型下拉(pickCat 状态)；BGM 列表按所选类型(或全部)过滤；已分配轨道即使跨类型也保留可见；选项显示带类型标签
+- apps/ui/src/styles.css — .bgm-ep-cat-select 间距
+
+Verify: UI tsc 通过。后端 assign 本就不校验类型匹配(仅校验轨道存在+有音频)，无需改动。

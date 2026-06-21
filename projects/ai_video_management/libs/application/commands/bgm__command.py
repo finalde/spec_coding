@@ -73,12 +73,6 @@ class BgmCommand:
         validate_bgm_id(bgm_id)
         return BgmMapper.audio_to_cdto(self._pool.generate_audio(bgm_id))
 
-    def import_audio(self, bgm_id: str) -> BgmAudioResultCdto:
-        """Two-step flow step 2b: import the newest Downloads audio file into an
-        existing track."""
-        validate_bgm_id(bgm_id)
-        return BgmMapper.audio_to_cdto(self._pool.import_audio(bgm_id))
-
     def delete(self, bgm_id: str) -> DeleteBgmResultCdto:
         """Soft-delete a track folder; refuses when any drama's bgm.md still
         references this track id (stage-5 sign-off: 有引用则拒删)."""

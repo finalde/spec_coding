@@ -61,8 +61,3 @@ class BgmSidecarUnreadableError(BgmDomainError):
     """The track's `.md` sidecar is missing or its 生成 prompt block cannot be
     parsed — local audio generation needs the prompt / seed / duration it
     carries."""
-
-
-class BgmNoDownloadAudioError(BgmDomainError):
-    """Per-track import found no recent audio file in the Downloads folder to
-    move into this track."""

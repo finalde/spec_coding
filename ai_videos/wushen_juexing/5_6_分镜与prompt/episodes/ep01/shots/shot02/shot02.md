@@ -22,6 +22,7 @@ confidence: high
 - **Characters**：裴霆（高座主位·施压方）、裴知秋（阶下半跪·受责方·本镜不开口）。
 - **Scene**：bg1 朝北高座主位 · 镇北王府正厅（相机自南看北，仰拍）。
 - **Duration**：14s。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴霆 ref 图、裴知秋 ref 图、bg1_朝北_高座主位 ref 图、**裴霆出场卡**（`characters/c3_裴霆/intro_card.png`，首登镜引入人物卡作参考、用户上传）。
 - **首登字卡**：裴霆 首次登场 → 卡图 `2_世界观人设/characters/c3_裴霆/intro_card.png`（右上角、~0.5s 起、淡入淡出）。**最终 `shot02.mp4` = 本镜 render + 该卡图合成**（webapp 点「🪧 人物卡」即融入；视频不停顿、字卡文字不入下方 prompt 块）。镜头已为右上角留负空间。
 

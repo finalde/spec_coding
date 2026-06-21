@@ -21,6 +21,7 @@ import {
   burnSubtitles,
   extractCharacterViews,
   extractFrames,
+  extractLastFrame,
   extractScenePlates,
   mediaUrl,
   scaffoldSubtitles,
@@ -147,6 +148,7 @@ interface MediaTileProps {
   extracting: boolean;
   extractingViews: boolean;
   extractingPlates: boolean;
+  extractingLastFrame: boolean;
   burning: boolean;
   scaffolding: boolean;
   cardBurning: boolean;
@@ -156,6 +158,7 @@ interface MediaTileProps {
   onArchive: (path: string) => void;
   onUnarchive: (path: string) => void;
   onExtractFrames: (path: string) => void;
+  onExtractLastFrame: (path: string) => void;
   onExtractScenePlates: (path: string) => void;
   onExtractCharacterViews: (path: string) => void;
   onBurnSubtitles: (path: string, lang: SubtitleLang) => void;
@@ -176,6 +179,7 @@ function MediaTile({
   extracting,
   extractingViews,
   extractingPlates,
+  extractingLastFrame,
   burning,
   scaffolding,
   cardBurning,
@@ -185,6 +189,7 @@ function MediaTile({
   onArchive,
   onUnarchive,
   onExtractFrames,
+  onExtractLastFrame,
   onExtractScenePlates,
   onExtractCharacterViews,
   onBurnSubtitles,
@@ -256,6 +261,18 @@ function MediaTile({
             title="按方位时间点(北1.5s/东4.5s/南7.5s/西10.5s/中13.5s)截帧，生成到各 bg{N}_{方位}_ 文件夹作 shot 背景板——视频朝向须与这些时间点一致"
           >
             {extractingPlates ? "⏳ 截取中…" : "🧭 截取方向背景图"}
+          </button>
+        ) : null}
+        {isShotVideo && !archived ? (
+          <button
+            type="button"
+            className="sibling-media-extract-btn"
+            onClick={() => onExtractLastFrame(path)}
+            disabled={busy || extractingLastFrame}
+            aria-label={`Extract last frame from ${filename}`}
+            title="截取本镜成片的最后一帧 → shot{NN}_lastframe.png (放 shot 根目录)。用作下一个「承接镜」的首帧参考图上传 (跨镜首帧承接)；二次点击覆盖。"
+          >
+            {extractingLastFrame ? "⏳ 截取中…" : "⏮ 生成末帧"}
           </button>
         ) : null}
         {isShotVideo && !archived ? (
@@ -392,6 +409,7 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
   const [extractingPath, setExtractingPath] = useState<string | null>(null);
   const [extractingViewsPath, setExtractingViewsPath] = useState<string | null>(null);
   const [extractingPlatesPath, setExtractingPlatesPath] = useState<string | null>(null);
+  const [extractingLastFramePath, setExtractingLastFramePath] = useState<string | null>(null);
   const [burningPath, setBurningPath] = useState<string | null>(null);
   const [cardBurningPath, setCardBurningPath] = useState<string | null>(null);
   const [scaffoldingPath, setScaffoldingPath] = useState<string | null>(null);
@@ -456,6 +474,19 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
       announce(`Extract frames failed: ${errorKind(err)}`);
     } finally {
       setExtractingPath(null);
+    }
+  };
+
+  const handleExtractLastFrame = async (path: string): Promise<void> => {
+    setExtractingLastFramePath(path);
+    try {
+      const result = await extractLastFrame(path);
+      announce(`已截取末帧 → ${basename(result.out)}（上传作下一承接镜的首帧）`);
+      onChange?.();
+    } catch (err) {
+      announce(`截取末帧失败: ${errorKind(err)}`);
+    } finally {
+      setExtractingLastFramePath(null);
     }
   };
 
@@ -655,6 +686,7 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
                 extracting={extractingPath === p}
                 extractingViews={extractingViewsPath === p}
                 extractingPlates={extractingPlatesPath === p}
+                extractingLastFrame={extractingLastFramePath === p}
                 burning={burningPath === p}
                 scaffolding={scaffoldingPath === p}
                 cardBurning={cardBurningPath === p}
@@ -664,6 +696,7 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
                 onArchive={handleArchive}
                 onUnarchive={handleUnarchive}
                 onExtractFrames={handleExtractFrames}
+                onExtractLastFrame={handleExtractLastFrame}
                 onExtractScenePlates={handleExtractScenePlates}
                 onExtractCharacterViews={handleExtractCharacterViews}
                 onBurnSubtitles={handleBurnSubtitles}
@@ -696,6 +729,7 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
                 extracting={extractingPath === p}
                 extractingViews={extractingViewsPath === p}
                 extractingPlates={extractingPlatesPath === p}
+                extractingLastFrame={extractingLastFramePath === p}
                 burning={burningPath === p}
                 scaffolding={scaffoldingPath === p}
                 cardBurning={cardBurningPath === p}
@@ -705,6 +739,7 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
                 onArchive={handleArchive}
                 onUnarchive={handleUnarchive}
                 onExtractFrames={handleExtractFrames}
+                onExtractLastFrame={handleExtractLastFrame}
                 onExtractScenePlates={handleExtractScenePlates}
                 onExtractCharacterViews={handleExtractCharacterViews}
                 onBurnSubtitles={handleBurnSubtitles}
@@ -737,6 +772,7 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
                 extracting={extractingPath === p}
                 extractingViews={extractingViewsPath === p}
                 extractingPlates={extractingPlatesPath === p}
+                extractingLastFrame={extractingLastFramePath === p}
                 burning={burningPath === p}
                 scaffolding={scaffoldingPath === p}
                 cardBurning={cardBurningPath === p}
@@ -746,6 +782,7 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
                 onArchive={handleArchive}
                 onUnarchive={handleUnarchive}
                 onExtractFrames={handleExtractFrames}
+                onExtractLastFrame={handleExtractLastFrame}
                 onExtractScenePlates={handleExtractScenePlates}
                 onExtractCharacterViews={handleExtractCharacterViews}
                 onBurnSubtitles={handleBurnSubtitles}

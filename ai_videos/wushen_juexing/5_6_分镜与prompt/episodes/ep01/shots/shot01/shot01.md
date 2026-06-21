@@ -21,6 +21,7 @@ confidence: high
 - **Characters**：裴知秋（玄黑雨点暗纹交领布袍、清瘦病气少年）。
 - **Scene**：bg6 座前虚化背景 · 镇北王府正厅。
 - **Duration**：13s。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴知秋、bg6_座前_虚化背景、**裴知秋出场卡**（`characters/c1_裴知秋/intro_card.png`，首登镜引入人物卡作参考、用户上传）。
 - **首登字卡**：裴知秋 首次登场 → 卡图 `2_世界观人设/characters/c1_裴知秋/intro_card.png`（右上角、~0.5s 起、淡入淡出）。**最终 `shot01.mp4` = 本镜 render + 该卡图合成**（webapp 点「🪧 人物卡」即融入；视频不停顿、字卡文字不入下方 prompt 块）。镜头已为右上角留负空间。
 

@@ -29,6 +29,7 @@ ffmpeg binary is supplied by the `imageio-ffmpeg` wheel — no system install.
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,6 +66,10 @@ CANONICAL_FRAMES: tuple[tuple[float, str, str, int], ...] = (
 
 _FFMPEG_TIMEOUT_S: int = 30
 FRAMES_SUBDIR: str = "frames"
+RENDERS_DIR_NAME: str = "renders"
+_SHOT_DIR_RE = re.compile(r"^shot\d+$", re.IGNORECASE)
+# Decode only the tail of the clip; `-sseof -N` seeks N seconds before EOF.
+_LASTFRAME_TAIL_S: int = 3
 
 
 @dataclass(frozen=True)
@@ -102,10 +107,68 @@ class ExtractResult:
         }
 
 
+@dataclass(frozen=True)
+class LastFrameResult:
+    src_rel: str
+    out_rel: str
+
+    def to_payload(self) -> dict[str, object]:
+        return {"src": self.src_rel, "out": self.out_rel}
+
+
 class FrameExtractor:
     def __init__(self, exposed: ExposedTree, resolver: SafeResolver) -> None:
         self._exposed = exposed
         self._resolver = resolver
+
+    def extract_last_frame(self, rel: str) -> LastFrameResult:
+        """Extract the FINAL frame of a shot render to `{shot}/{shot}_lastframe.png`.
+
+        This is the cross-shot continuity-frame source (ai_video.md 2026-06-21
+        跨镜首帧承接): a 承接 shot's first frame = the previous shot's rendered
+        last frame. The PNG lands at the shot-folder ROOT so the user can upload
+        it as the next shot's first frame. A re-extract overwrites it.
+
+        ffmpeg trick: `-sseof -N` decodes only the last N seconds; `-update 1`
+        rewrites the same PNG for every decoded frame, so the file is left
+        holding the LAST decoded frame = the actual final frame."""
+        src = self._validate_video_source(rel)
+        try:
+            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception as exc:  # imageio_ffmpeg raises various on failure
+            raise FfmpegMissingError(str(exc)) from exc
+        shot_folder = self._shot_folder(src)
+        out_path = shot_folder / f"{shot_folder.name}_lastframe.png"
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-sseof", f"-{_LASTFRAME_TAIL_S}",
+            "-i", str(src),
+            "-update", "1",
+            "-q:v", "1",
+            "-loglevel", "error",
+            str(out_path),
+        ]
+        try:
+            completed = subprocess.run(
+                cmd, capture_output=True, timeout=_FFMPEG_TIMEOUT_S, check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise FrameExtractFailedError("ffmpeg_timeout") from exc
+        if completed.returncode != 0 or not out_path.is_file():
+            err = completed.stderr.decode("utf-8", errors="replace").strip()[:200]
+            raise FrameExtractFailedError(err or "ffmpeg_failed")
+        return LastFrameResult(src_rel=self._rel(src), out_rel=self._rel(out_path))
+
+    def _shot_folder(self, src: Path) -> Path:
+        """Nearest `shotNN` ancestor (output lands at the shot ROOT, never under
+        `renders/`). Falls back to the source's own folder for non-shot videos."""
+        for anc in (src.parent, *src.parent.parents):
+            if _SHOT_DIR_RE.match(anc.name):
+                return anc
+        if src.parent.name == RENDERS_DIR_NAME:
+            return src.parent.parent
+        return src.parent
 
     def extract(self, rel: str) -> ExtractResult:
         src = self._validate_video_source(rel)

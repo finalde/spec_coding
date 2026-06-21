@@ -74,17 +74,6 @@ def bgms_generate_audio(
     return JSONResponse(status_code=200, content=cdto.to_payload())
 
 
-@router.post("/api/bgms/{bgm_id}/import-audio")
-@inject
-def bgms_import_audio(
-    bgm_id: str,
-    command: BgmCommand = Depends(Provide[Container.bgm_command]),
-) -> Response:
-    """Step 2b: import the newest Downloads audio file into an existing track."""
-    cdto = command.import_audio(bgm_id)
-    return JSONResponse(status_code=200, content=cdto.to_payload())
-
-
 @router.post("/api/bgms/preview-prompts")
 @inject
 def bgms_preview_prompts(

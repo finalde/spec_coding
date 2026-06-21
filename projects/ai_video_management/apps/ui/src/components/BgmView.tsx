@@ -5,7 +5,6 @@ import {
   deleteBgm,
   fetchBgmReferences,
   generateBgmAudio,
-  importBgmAudio,
   mediaUrl,
   type BgmReference,
 } from "../api";
@@ -53,7 +52,7 @@ export function BgmView({ primaryFile, primaryPath, knownPaths, onSaved }: BgmVi
   // Audio rendered/imported this session (sidecar's knownPaths won't refresh
   // until the parent re-fetches the tree); used to show the player immediately.
   const [localAudioPath, setLocalAudioPath] = useState<string | null>(null);
-  const [audioBusy, setAudioBusy] = useState<"gpu" | "import" | null>(null);
+  const [audioBusy, setAudioBusy] = useState<"gpu" | null>(null);
   const effectiveAudio = audioPath ?? localAudioPath;
 
   const onGenerateAudio = useCallback(async () => {
@@ -69,30 +68,6 @@ export function BgmView({ primaryFile, primaryPath, knownPaths, onSaved }: BgmVi
       const msg = err instanceof ApiError
         ? `本地生成失败: ${String(err.detail?.message ?? err.detail?.kind ?? err.status)}`
         : `本地生成失败: ${err instanceof Error ? err.message : String(err)}`;
-      setToast({ kind: "err", text: msg });
-    } finally {
-      setAudioBusy(null);
-    }
-  }, [bgmId, audioBusy, onSaved]);
-
-  const onImportAudio = useCallback(async () => {
-    if (!bgmId || audioBusy) return;
-    setAudioBusy("import");
-    setToast(null);
-    try {
-      const r = await importBgmAudio(bgmId);
-      setLocalAudioPath(r.audio_path);
-      setToast({ kind: "ok", text: `已导入下载：${r.imported_from ?? r.audio_path.split("/").pop()}` });
-      if (onSaved) onSaved();
-    } catch (err) {
-      let msg: string;
-      if (err instanceof ApiError && err.detail?.kind === "bgm_no_download_audio") {
-        msg = "Downloads 里没找到最近的音频文件（mp3/wav/m4a/flac/ogg）";
-      } else if (err instanceof ApiError) {
-        msg = `导入失败: ${String(err.detail?.message ?? err.detail?.kind ?? err.status)}`;
-      } else {
-        msg = `导入失败: ${err instanceof Error ? err.message : String(err)}`;
-      }
       setToast({ kind: "err", text: msg });
     } finally {
       setAudioBusy(null);
@@ -122,13 +97,13 @@ export function BgmView({ primaryFile, primaryPath, knownPaths, onSaved }: BgmVi
       setCopyTick(true);
       setTimeout(() => setCopyTick(false), 1500);
     } catch {
-      setToast({ kind: "err", text: "复制失败 — 浏览器拒绝了 clipboard 访问" });
+      setToast({ kind: "err", text: "复制失败 — 浏览器拒绝了剪贴板访问" });
     }
   }, [promptText]);
 
   const onDelete = useCallback(async () => {
     if (!bgmId || deleting) return;
-    const ok = window.confirm(`Delete ${bgmId}? Moves folder to _deleted/_bgm/.`);
+    const ok = window.confirm(`删除 ${bgmId}？将把文件夹移到 _deleted/_bgm/。`);
     if (!ok) return;
     setDeleting(true);
     try {
@@ -188,20 +163,14 @@ export function BgmView({ primaryFile, primaryPath, knownPaths, onSaved }: BgmVi
             <audio controls src={mediaUrl(effectiveAudio)} preload="metadata" className="voice-audio-player" />
             <div className="voice-audio-actions">
               <span className="voice-audio-filename">{effectiveAudio.split("/").pop()}</span>
-              <button type="button" className="voice-btn voice-btn-secondary" disabled={audioBusy !== null} onClick={() => void onImportAudio()}>
-                {audioBusy === "import" ? "导入中…" : "♻ 重新导入下载"}
-              </button>
             </div>
           </div>
         ) : (
           <div className="voice-audio-panel">
-            <p className="voice-empty-inline">尚未渲染音频。可二选一：本地 GPU 生成，或把下方 prompt 复制到外部平台出音乐、下载后导入。</p>
+            <p className="voice-empty-inline">尚未渲染音频。把下方提示词复制到 ElevenLabs 出音乐，下载后到左侧导航 <strong>_bgm</strong> 的「📥 导入下载音乐」一键全局导入（按 bgm 编号自动归位）。也可本地 GPU 生成。</p>
             <div className="voice-audio-actions">
               <button type="button" className="voice-btn voice-btn-primary" disabled={audioBusy !== null} onClick={() => void onGenerateAudio()}>
                 {audioBusy === "gpu" ? "⏳ 本地生成中…（数分钟）" : "🎧 本地 GPU 生成"}
-              </button>
-              <button type="button" className="voice-btn voice-btn-secondary" disabled={audioBusy !== null} onClick={() => void onImportAudio()}>
-                {audioBusy === "import" ? "导入中…" : "📥 导入下载音乐"}
               </button>
             </div>
           </div>
@@ -222,18 +191,18 @@ export function BgmView({ primaryFile, primaryPath, knownPaths, onSaved }: BgmVi
         </section>
 
         <section className="voice-section voice-section-prompt">
-          <h2 className="voice-section-title">📝 生成 prompt</h2>
+          <h2 className="voice-section-title">📝 生成提示词</h2>
           {promptText !== null ? (
             <div className="voice-prompt-card">
               <div className="voice-prompt-actions">
                 <button type="button" className="voice-copy-btn" onClick={onCopy}>
-                  {copyTick ? "✓ Copied" : "📋 Copy"}
+                  {copyTick ? "✓ 已复制" : "📋 复制"}
                 </button>
               </div>
               <pre className="voice-prompt-pre">{promptText}</pre>
             </div>
           ) : (
-            <p className="voice-empty-inline">未找到 prompt 代码块。</p>
+            <p className="voice-empty-inline">未找到提示词代码块。</p>
           )}
         </section>
       </div>

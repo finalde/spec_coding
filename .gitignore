@@ -240,6 +240,10 @@ ai_videos/**/*.webp
 ai_videos/**/*.gif
 ai_videos/**/*.bmp
 
+# Audio — all mp3 are heavy binaries, never tracked (global).
+*.mp3
+*.MP3
+
 # Recycle bin — soft-deleted content awaiting hard purge. Nothing under it is
 # ever tracked (the webapp's "清空回收站" purge wipes it from disk anyway).
 ai_videos/_deleted/

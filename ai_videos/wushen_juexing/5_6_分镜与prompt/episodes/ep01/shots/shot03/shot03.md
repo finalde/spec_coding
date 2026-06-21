@@ -22,6 +22,7 @@ confidence: high
 - **Characters**：裴昭(PZ-brat-01)、裴知秋(PR-hero-01)、沈婉(PW-consort-01)
 - **Scene**：bg3 朝东列柱 · 镇北王府正厅东墙甲胄仪仗玄铁立柱
 - **Duration**：15s
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴昭 ref / 裴知秋 ref / 沈婉 ref / bg3_朝东_东侧列柱 / **裴昭出场卡**（`characters/c4_裴昭/intro_card.png`）/ **沈婉出场卡**（`characters/c5_沈婉/intro_card.png`）（两位首登、引入人物卡作参考、用户上传）
 - **首登字卡**：裴昭 + 沈婉 两位首次登场 → **最终 `shot03.mp4` = 本镜 render + 两张卡图合成**（webapp 点「🪧 人物卡」即融入；不停顿视频；字卡文字不入下方 prompt 块）。裴昭（东侧）卡 `2_世界观人设/characters/c4_裴昭/intro_card.png` ~0.8s 起、右上角；沈婉（西侧）卡 `2_世界观人设/characters/c5_沈婉/intro_card.png` ~8.7s 起、左上角（出现点错开、分置左右顶角不撞）。镜头已为左右两顶角留负空间。沈婉焦点 beat 已加长到 ~5s（8.5–13.5s）保证其卡可读。
 

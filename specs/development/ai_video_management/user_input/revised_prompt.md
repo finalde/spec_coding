@@ -10196,3 +10196,20 @@ severity: low
 - 新文件 `apps/ui/src/lib/videoPrompts.ts`：`extractVideoPromptBody` / `episodeDirOf` / `shotMdPathsInEpisode`，含单测 `test/videoPrompts.test.ts`（7 例）。
 - CSS `.reader-copy-prompts-btn`（镜像 `.reader-episode-concat-btn`）。
 - 校验：tsc --noEmit 通过；vitest 全绿（30 旧 + 7 新）。
+
+---
+
+# Follow-up 132 — 2026-06-21 · 一键生成末帧图片按钮
+
+---
+target_stage: 6
+severity: low
+---
+
+## 指令
+给每个 shot 渲染视频 tile 加「⏮ 生成末帧」按钮——一键截取该镜成片最后一帧成 `shot{NN}_lastframe.png`（落 shot 根），供下一承接镜作首帧上传。配合新「跨镜首帧承接」流程（ai_video.md 2026-06-21）。
+
+## 实现（复用 frame 聚合 + ffmpeg 模式）
+- 后端 `FrameExtractor.extract_last_frame`（`-sseof -3` + `-update 1` 取末帧、落最近 shotNN 根）→ `FrameCommand.extract_last_frame` → `ExtractLastFrameResultCdto` → `POST /api/extract-last-frame`（加进 frame__route，复用 ExtractFramesBody，container 无需改、复用既有 frame 错误 handler）。
+- 前端 `extractLastFrame` api + `SiblingMedia.tsx` 按钮（gated isShotVideoPath，shot 按钮组首位）。
+- 测试 `tests/test_frame_last_frame.py`（5 例）；pytest 26 绿；apps/ui tsc 干净。

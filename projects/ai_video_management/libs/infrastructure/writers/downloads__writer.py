@@ -69,6 +69,14 @@ PERF_LIBRARY_DIR_NAME = "_performances"
 # lands in the filename and routes the file.
 _PERF_TAG = re.compile(r"演(\d{4})(始)?")
 _PERF_FOLDER_RE = re.compile(r"^perf_(\d{4})$")
+# BGM library import: each track's prompt opens with its `bgm_NNNN` id as the
+# first line (the routing KEY), so a downloaded music file named after the
+# prompt head carries that tag. Route the file to `_bgm/{cat}/bgm_NNNN/`.
+BGM_LIBRARY_DIR_NAME = "_bgm"
+BGM_NOT_MATCHED_DIR_NAME = "_not_matched"
+_BGM_TAG = re.compile(r"bgm_(\d{4,})")
+_BGM_FOLDER_RE = re.compile(r"^bgm_(\d{4,})$")
+_BGM_AUDIO_EXTS = frozenset({".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac"})
 DEFAULT_TIME_WINDOW_SECONDS = 7 * 24 * 60 * 60
 DOWNLOADS_ENV_VAR = "AI_VIDEO_MGMT_DOWNLOADS_DIR"
 _BASENAME_INVALID = re.compile(r"[\x00-\x1f/\\:*?\"<>|]")
@@ -350,6 +358,102 @@ class DownloadsImporter:
                     continue
                 result.unmatched.append({"from": self._display_src(src), "to": self._rel(dst), "kind": "unmatched"})
         return result
+
+    def import_bgms(self, rel_path: str) -> ImportResult:
+        """One-click GLOBAL import for the BGM library (`ai_videos/_bgm`).
+
+        Counterpart to prompt-only BGM generation: each track's prompt opens
+        with its `bgm_NNNN` id as the first line, which ElevenLabs carries into
+        the downloaded filename. This routes each recent audio download back to
+        its `_bgm/{category}/bgm_NNNN/` folder by that tag, naming it
+        `bgm_NNNN.{ext}` (one audio file per track — prior audio is cleared).
+        Unmatched files go to `_bgm/_not_matched/`. No folder-rename pass: bgm
+        folders are id-named and stable."""
+        bgm_root = (self._exposed.root / "ai_videos" / BGM_LIBRARY_DIR_NAME).resolve()
+        if not self._downloads_dir.is_dir():
+            raise DownloadsDirMissingError(str(self._downloads_dir))
+        folders = self._collect_bgm_folders(bgm_root)
+        cutoff = time.time() - self._window
+        result = ImportResult()
+        not_matched_dir = bgm_root / BGM_NOT_MATCHED_DIR_NAME
+        for src in self._iter_downloads(cutoff):
+            if src.suffix.lower() not in _BGM_AUDIO_EXTS:
+                continue
+            if not self._is_safe_basename(src.name):
+                result.errors.append({"path": self._display_src(src), "message": "invalid_basename"})
+                continue
+            tag = _BGM_TAG.search(src.name)
+            num = tag.group(1) if tag is not None else None
+            matched = num is not None and num in folders
+            if matched:
+                bgm_dir = folders[num]
+                self._clear_audio_files(bgm_dir)
+                dst_folder, dst = bgm_dir, bgm_dir / f"bgm_{num}{src.suffix.lower()}"
+                kind = "bgm_audio"
+            else:
+                dst_folder, dst = not_matched_dir, not_matched_dir / src.name
+                kind = "unmatched"
+            try:
+                dst_folder.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                result.errors.append({"path": self._display_src(src), "message": f"mkdir_failed: {exc}"})
+                continue
+            if dst.exists():
+                try:
+                    dst.unlink()
+                except OSError as exc:
+                    result.errors.append({"path": self._display_src(src), "message": f"overwrite_failed: {exc}"})
+                    continue
+            try:
+                shutil.move(str(src), str(dst))
+            except OSError as exc:
+                result.errors.append({"path": self._display_src(src), "message": f"move_failed: {exc}"})
+                continue
+            entry = {"from": self._display_src(src), "to": self._rel(dst), "kind": kind}
+            if matched:
+                result.moved.append(entry)
+            else:
+                result.unmatched.append(entry)
+        return result
+
+    @staticmethod
+    def _collect_bgm_folders(bgm_root: Path) -> dict[str, Path]:
+        """Map each track's numeric id (as string) to its
+        `_bgm/{category}/bgm_NNNN/` folder, across all categories."""
+        folders: dict[str, Path] = {}
+        try:
+            cats = sorted(bgm_root.iterdir(), key=lambda p: p.name)
+        except OSError:
+            return folders
+        for cat in cats:
+            if not cat.is_dir() or cat.is_symlink() or cat.name.startswith("_"):
+                continue
+            try:
+                tracks = sorted(cat.iterdir(), key=lambda p: p.name)
+            except OSError:
+                continue
+            for t in tracks:
+                if not t.is_dir() or t.is_symlink():
+                    continue
+                m = _BGM_FOLDER_RE.match(t.name)
+                if m:
+                    folders[m.group(1)] = t
+        return folders
+
+    @staticmethod
+    def _clear_audio_files(folder: Path) -> None:
+        """Delete top-level audio files in a track folder (one canonical audio
+        per track — overwrite on re-import)."""
+        try:
+            entries = list(folder.iterdir())
+        except OSError:
+            return
+        for child in entries:
+            try:
+                if child.is_file() and not child.is_symlink() and child.suffix.lower() in _BGM_AUDIO_EXTS:
+                    child.unlink()
+            except OSError:
+                pass
 
     @staticmethod
     def _collect_actor_folders(actors_root: Path) -> dict[int, Path]:

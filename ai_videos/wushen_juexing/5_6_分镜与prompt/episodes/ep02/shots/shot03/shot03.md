@@ -20,6 +20,7 @@ confidence: high
 - **Characters**：裴知秋（主体）、路人/摊贩（市井背景群像·不具名个体）。
 - **Scene**：集市长街 · bg1_顺街_全景。
 - **Duration**：8s。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴知秋 ref、集市长街 bg1_顺街_全景 ref。
 
 ## 视频 prompt

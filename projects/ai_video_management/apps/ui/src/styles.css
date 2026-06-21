@@ -3416,4 +3416,5 @@ details[open] > .prompt-preview-toggle::before {
 .bgm-ep-params { white-space: nowrap; color: #555; }
 .bgm-ep-comment { color: #444; }
 .bgm-ep-hint { color: #b45309; font-size: 11px; }
+.bgm-ep-cat-select { margin-right: 6px; }
 .bgm-ep-table audio { height: 28px; max-width: 180px; }

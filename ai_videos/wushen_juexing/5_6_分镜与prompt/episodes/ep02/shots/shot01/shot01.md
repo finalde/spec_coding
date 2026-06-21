@@ -20,6 +20,7 @@ confidence: high
 - **Characters**：裴知秋（单人·玄黑雨点暗纹交领布袍清瘦病气少年）。
 - **Scene**：暮色荒道 · bg1_顺路_远山（顺官道向纵深、远山残阳）。
 - **Duration**：11s（OS 36字÷10.5s≈3.4字/秒、留独白气口）。
+- **衔接**：硬切（独立首帧·无承接帧）。
 - **Reference uploads**：裴知秋 ref 图、暮色荒道 bg1_顺路_远山 ref 图。
 
 ## 视频 prompt

@@ -33,10 +33,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# The HF "Xet" download backend (hf_xet, a Rust native extension) crashes with
+# an illegal instruction (Windows STATUS_ILLEGAL_INSTRUCTION / SIGILL) on CPUs
+# whose instruction set it doesn't support, killing the whole process inside
+# `from_pretrained`'s download. stable-audio-open-1.0 is Xet-backed on HF, so
+# force the plain-HTTPS fallback. Must be set before any huggingface_hub import
+# (all heavy imports are lazy in `_generate`). `setdefault` lets the caller
+# re-enable Xet by exporting HF_HUB_DISABLE_XET=0 once the wheel is fixed.
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 SAMPLE_RATE_FALLBACK: int = 44100
 
@@ -75,8 +85,8 @@ def _encode_wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
 
 def _generate(args: argparse.Namespace) -> int:
     # Lazy heavy imports — only on the real generation path.
+    import soundfile as sf
     import torch
-    import torchaudio
     from diffusers import StableAudioPipeline
 
     # bgm__writer passes the bare checkpoint name (`stable-audio-open-1.0`);
@@ -106,7 +116,10 @@ def _generate(args: argparse.Namespace) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         wav_path = Path(tmp) / "raw.wav"
-        torchaudio.save(str(wav_path), audio, sample_rate)
+        # soundfile wants (frames, channels); `audio` is (channels, samples).
+        # Used instead of torchaudio.save, which in torch>=2.x delegates to the
+        # optional torchcodec backend (extra native FFmpeg-libs dependency).
+        sf.write(str(wav_path), audio.numpy().T, sample_rate)
         _encode_wav_to_mp3(wav_path, out_path)
     sys.stdout.write(f"wrote {out_path}\n")
     return 0

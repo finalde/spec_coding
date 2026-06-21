@@ -432,6 +432,16 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                   <button
                     type="button"
                     className="drama-rename-btn"
+                    aria-label="从 Downloads 导入近 7 天的背景音乐，按 bgm_编号 tag 归位到对应轨道"
+                    disabled={renamingPath !== null}
+                    title="ElevenLabs 出乐后用：从 Downloads 按 bgm_编号 tag 导入近 7 天的音频，归位到对应 bgm 文件夹"
+                    onClick={(e) => onRenameClick(e, item.node.path)}
+                  >
+                    {isRenamingThis ? "导入中…" : "📥 导入下载音乐"}
+                  </button>
+                  <button
+                    type="button"
+                    className="drama-rename-btn"
                     aria-label="在网格视图中查看所有 BGM"
                     title="网格视图：情绪分类筛选 + 一键试听"
                     onClick={(e) => { e.stopPropagation(); navigate("/bgm"); }}

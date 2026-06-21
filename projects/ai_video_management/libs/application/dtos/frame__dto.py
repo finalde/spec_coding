@@ -46,3 +46,12 @@ class ExtractFramesResultCdto:
             "frames": [f.to_payload() for f in self.frames],
             "failures": [f.to_payload() for f in self.failures],
         }
+
+
+@dataclass(frozen=True)
+class ExtractLastFrameResultCdto:
+    src_rel: str
+    out_rel: str
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"src": self.src_rel, "out": self.out_rel}
