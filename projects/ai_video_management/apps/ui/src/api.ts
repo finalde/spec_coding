@@ -168,11 +168,14 @@ export async function extractFrames(path: string): Promise<ExtractFramesResult> 
 export interface ExtractLastFrameResult {
   src: string;
   out: string;
+  /** The same frame copied into the next shot as `{nextshot}_firstframe.png`,
+   * or null when there is no next shot. */
+  first_frame: string | null;
 }
 
 /** Extract a shot render's FINAL frame to `{shot}/{shot}_lastframe.png` — the
  * cross-shot continuity-frame source (承接 shot's first frame = previous shot's
- * last frame). */
+ * last frame) — and copy it into the next shot as `{nextshot}_firstframe.png`. */
 export async function extractLastFrame(path: string): Promise<ExtractLastFrameResult> {
   const response = await fetch("/api/extract-last-frame", {
     method: "POST",
@@ -960,6 +963,8 @@ export async function extractCharacterViews(path: string): Promise<ExtractCharac
 export interface EpisodeShotUsed {
   shot: string;
   video: string;
+  /** Seconds of held first-frame trimmed off this 承接 shot's seam (0 = none). */
+  trimmed_s: number;
 }
 
 export interface EpisodeShotSkipped {

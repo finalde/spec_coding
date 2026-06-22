@@ -205,6 +205,8 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
       let summary: string;
       if (result.out) {
         summary = `已合成 ${result.out.split("/").pop()} — 拼接 ${result.used.length} 个镜头`;
+        const smoothed = result.used.filter((u) => u.trimmed_s > 0).length;
+        if (smoothed > 0) summary += ` · 抹平 ${smoothed} 处承接接缝`;
         if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
       } else {
         const noun = lang === "original" ? "renders/ mp4" : `shot{NN}_${lang === "both" ? "zhen" : lang}.mp4`;

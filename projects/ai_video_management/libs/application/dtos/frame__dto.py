@@ -52,6 +52,11 @@ class ExtractFramesResultCdto:
 class ExtractLastFrameResultCdto:
     src_rel: str
     out_rel: str
+    first_frame_rel: str | None
 
     def to_payload(self) -> dict[str, Any]:
-        return {"src": self.src_rel, "out": self.out_rel}
+        return {
+            "src": self.src_rel,
+            "out": self.out_rel,
+            "first_frame": self.first_frame_rel,
+        }

@@ -10213,3 +10213,138 @@ severity: low
 - 后端 `FrameExtractor.extract_last_frame`（`-sseof -3` + `-update 1` 取末帧、落最近 shotNN 根）→ `FrameCommand.extract_last_frame` → `ExtractLastFrameResultCdto` → `POST /api/extract-last-frame`（加进 frame__route，复用 ExtractFramesBody，container 无需改、复用既有 frame 错误 handler）。
 - 前端 `extractLastFrame` api + `SiblingMedia.tsx` 按钮（gated isShotVideoPath，shot 按钮组首位）。
 - 测试 `tests/test_frame_last_frame.py`（5 例）；pytest 26 绿；apps/ui tsc 干净。
+
+---
+
+# Follow-up 133 — 2026-06-21 · 整集 concat 承接接缝自动抹平
+
+---
+target_stage: 6
+severity: medium
+---
+
+## 指令
+整集 concat（click「中文」等四个 🎬）时，只在承接镜接缝自动检测裁掉 incoming 镜头头部的重复定格帧，让承接处 smooth、观众看不出；硬切镜不动（声音用户自理）。
+
+## 实现
+- `EpisodeConcatBuilder`：`_is_continuity_shot`（读 shotNN.md `衔接:`，先判硬切）+ `_detect_head_freeze`/`_parse_head_freeze`（freezedetect 头 1.5s、头部起冻才裁、capped 0.6s、fail-open）+ 承接镜 concat filter `trim/atrim=start={t}`。`ShotClip.trimmed_s` 透传，前端 toast 报「抹平 N 处承接接缝」。
+- 测试 test_episode_concat.py +8；pytest 47 绿；apps/ui tsc 干净。
+
+---
+
+# Follow-up 134 — 2026-06-22 · 承接接缝结构性重复帧保底裁除
+
+---
+target_stage: 6
+severity: medium
+---
+
+## 指令
+首尾帧链接 + freeze-trim 后承接接缝仍有 ~1 帧 micro-stutter（结构性重复帧低于 freezedetect 阈值漏检）。concat 时承接镜 head_trim 改 `max(detected, _SEAM_MIN_HEAD_TRIM_S=0.08s)` 保底裁掉重复帧；硬切/首镜不裁。Button(concat)端处理、零 prompt 改动。「前后延长0.1s」方向反了（延长=更卡，应裁不应延）。残留速度突变型 hitch 可再加承接 seam 短 crossfade（escalation，未做）。
+- episode__writer.py +常量 +max() 逻辑；test +1；pytest 22 绿。
+
+---
+
+# Follow-up 135 — 2026-06-22 · 承接 seam 短交叉淡化（crossfade）
+
+---
+target_stage: 6
+severity: medium
+---
+
+## 指令
+裁重复帧后承接 seam 残留"速度突变"型 hitch → concat 改左折叠：承接 seam 用 `xfade` ~0.12s 交叉淡化（近似帧零鬼影、抹速度差），硬切 seam butt-join `concat`。Button 端、零 prompt 改动。
+- `_ffmpeg_concat` 重写左折叠（xfade/acrossfade 承接、concat=n=2 硬切；xfade offset 跟踪运行时间线）；+`_SEAM_XFADE_S=0.12`/`_probe_duration`/`_CLIP_DURATION_RE`；audio-less 镜各自 anullsrc 静音轨（修潜在双消费 bug）；build() 传 continuity。叠加 134 保底裁。
+- 真 ffmpeg 集成测试 +1；pytest 31 绿。
+
+---
+
+# Follow-up 136 — 2026-06-22 · 撤销承接 seam 交叉淡化，回到干净 butt-join
+
+---
+target_stage: 6
+severity: medium
+---
+
+## 指令
+follow-up 135 的 xfade 交叉淡化效果不行——两镜间出现一瞬间"图片转换/溶解"，明显不契合（裁帧后两帧已不同，dissolve 反而出戏）。撤销 xfade 左折叠，整集 concat 回到单次 butt-join `concat=n=N:v=1:a=1`：承接 seam 仅靠裁掉重复头帧实现干净连续切，硬切 seam 同为干净切。零 crossfade、零 prompt 改动。
+- `_ffmpeg_concat` 去掉左折叠/xfade/acrossfade，删 `continuity` 形参与 `_SEAM_XFADE_S`；build() 不再传 continuity。
+- 保留 follow-up 134 保底裁 + audio-less 镜各自 anullsrc + 本轮真 bug 修复（`_probe_duration` 测视频流时长，修「少了很多内容」）。
+- 真跑 EP1：zh + original 均 129.4s 全 12 镜；fake_concat 签名去 continuity；xfade 命名测试改 butt-join 语义。pytest 25 绿。
+
+---
+
+# Follow-up 137 — 2026-06-22 · 承接接缝两侧裁速度坡道（消 0.2s 卡顿）
+
+---
+target_stage: 6
+severity: medium
+---
+
+## 指令
+butt-join 后承接接缝仍 ~0.2s 卡顿——根因是**两侧速度坡道**（出镜减速进末帧、入镜从静止加速），非重复帧定格，紧阈值 freezedetect 漏检。修：承接接缝两侧都裁——入镜头部用 -45dB freezedetect+floor，出镜尾部固定裁一小段（尾部减速碎片化、检测会过裁，故确定性裁）；两侧 floor `_SEAM_MIN_EDGE_TRIM_S=0.15`。仍 butt-join，硬切不裁。
+- 常量：noise -55→-45dB；`_SEAM_MIN_HEAD_TRIM_S`→`_SEAM_MIN_EDGE_TRIM_S=0.15`；`_HEAD_EPS`→`_EDGE_EPS`。build() 设 head_trims（承接镜，detect+floor）+ tail_trims[前一镜]=0.15；`_ffmpeg_concat` +tail_trims，每 clip `trim=start=H:end=(dur-T)`。
+- 真跑 EP1：zh+original 均 127.6s 全 12 镜，承接镜两侧都裁（shot06 头 0.22+尾 0.15）。pytest 25 绿。零 prompt 改动。
+
+---
+
+# Follow-up 138 — 2026-06-22 · 合成帧率跟随源（消 24→30 pulldown judder）
+
+---
+target_stage: 6
+severity: high
+---
+
+## 指令
+整体「还是不顺」根因不在接缝——是**强制 30fps 上变换**：shot render ~24fps（VFR），硬转 30 每 5 帧复制 1 帧，全片 ~30% 复制帧＝整片 judder。改：合成输出帧率跟随源——`_ffmpeg_concat` 探测各 clip fps、取中位、snap 到最近标准帧率（24/25/30/50/60，容差 1.5），探测全失败才回落 30。
+- 常量 `_CONCAT_TARGET_FPS=30`→`_CONCAT_FALLBACK_FPS=30`+`_STANDARD_FPS`+`_FPS_SNAP_TOL`+`_FPS_RE`；新增 `_target_fps`/`_probe_fps`/`_snap_fps`；filter `fps={target_fps}`。
+- 真跑 EP1：输出 23.89fps（原生）、复制帧 30%→3%。测试 +3（snap 边界/24源→24/回落 30）。pytest 28 绿。零 prompt 改动。
+
+---
+
+# Follow-up 139 — 2026-06-22 · 合成时自动去死帧（mpdecimate 压掉镜头内卡死段）
+
+---
+target_stage: 6
+severity: high
+---
+
+## 指令
+「明显的一秒跳跃」确认是源 clip 内部 1–3s 长近静止段（i2v 卡住，shot06 ~3.6s/shot08 ~2.4s/shot09 ~1s，均在镜头中部非接缝）。用户选自动去死帧：concat 每 clip 加 `mpdecimate`(hi=64*24:lo=64*12:frac=0.2) 丢近静止帧 + `setpts=N/{fps}/TB` 重排，压掉死气（clip 变短而非 hold）。自适应：卡死镜削 ~26%、运动镜仅 ~3%。concat 转 video-only + 单条 anullsrc 静音轨(-shortest)（去死帧后逐 clip a/v 无法对齐；真台词/BGM 后期 mux）。删 `_probe_has_audio`。保留 137/135c/138/136。
+- 真跑 EP1：zh 127.6→113.3s、original→113.5s，24fps 12 镜，压 ~14s 死气；长 hold 从 ~10s+ 降到 1.8s(zh)。测试 clip 加 `noise` 逐帧运动防被 decimate 收掉。pytest 28 绿。零 prompt 改动。
+
+---
+
+# Follow-up 140 — 2026-06-22 · 去死帧后恢复同步音轨（修「没声音」回归）
+
+---
+target_stage: 6
+severity: high
+---
+
+## 指令
+去死帧(139)把 concat 改 video-only+静音轨 → 视频没声音（回归）。源 render 全带 AAC 音轨、要保留。修：测每镜去死帧后时长 ldur，把该镜音轨 `atempo=window/ldur` 压到 ldur 保持同步（卡死镜音频略快但同步、无卡死镜 tempo≈1 no-op），concat 恢复 v=1:a=1。
+- 抽 `_video_chain`（去死帧链构建一次、测时长与 seg 共用）；+`_decimated_duration`（跑链到 null 读 time=）；+`_atempo_chain`（>2 拆 ≤2 乘积）；恢复 `_probe_has_audio`（无音轨镜 anullsrc 定长 ldur）。
+- 真跑 EP1：zh video 113.9/audio 114.0、original 114.0/114.0，has_audio=True、漂移 0.08s。pytest 28 绿。零 prompt 改动。
+- 注：shot11→12 仍跳=两段独立生成的近静止背身镜位姿对不齐（生成侧问题，concat 不可消），需重生成/改硬切/加运动。
+
+---
+
+# Follow-up 141 — 2026-06-22 · 撤销去死帧+变速，回到忠实拼接
+
+---
+target_stage: 6
+severity: high
+---
+
+## 指令
+「语速明显比原视频快」+「整体秒数跟原来不一致」都是去死帧(139)+变速(140)副作用。查证：视频卡住段仍在说话（冻画≠静音，shot06 视频 3.1–5.9s 冻结但音频非静音）→ atempo 把整镜音频加速=语速快、去死帧压短=时长不符。去死帧与本素材根本冲突。用户选回到忠实拼接：撤销 139+140，每镜原速原长（含音频，无 atempo），只留 承接 seam 两侧裁(137)+帧率跟随源(138)+butt-join(136)。
+- 删 `_DECIMATE`/`_video_chain`/`_decimated_duration`/`_atempo_chain`；视频回 `...fps={target}`、音频回 `atrim→asetpts→aresample→aformat`（无 atempo）；anullsrc 按 eff 定长。还原测试 noise。
+- 真跑 EP1：源合计 130.2s，输出 129.6s（差 0.6s＝seam 微裁），has_audio=True 自然语速。pytest 28 绿。
+- 遗留生成侧：镜头内边说话边卡画、shot11→12 近静止跳切——需重生成对应镜头。
+
+## Follow-up 142 — 2026-06-22 · 合成加交叉叠化柔化硬切
+合成成片镜头交接处「画面先跳一下才切」、硬切切换感强。`_ffmpeg_concat` 由 butt-join concat 改为 xfade(视频)+acrossfade(音频)交叉叠化链（`_XFADE_DUR=0.25`，xdur 钳到 min(eff)/2）。柔化硬切并盖住 i2v 尾部安定抖动。与 follow-up 136 回退的承接近同帧叠化不同（这里叠化两段不同镜头，标准用途）。代价：总时长缩短 (n-1)·xdur（EP1 130.2→126.7s），语速不变。测试阈值随之调整，28 passed。
+
+## Follow-up 143 — 2026-06-22 · 撤销交叉叠化，退回硬拼接
+用户反馈交叉叠化(142)没变柔和、还不如硬切，revert。`_ffmpeg_concat` 恢复 butt-join concat（删 xfade/acrossfade + _XFADE_DUR）。教训：i2v 短剧素材接缝干净硬切读感最好，两次转场实验(135/136 承接近同帧叠化、142/143 整集叠化)均失败；尾部跳帧是生成缺陷，靠重生成根治、不在合成层做转场。28 passed，EP1 130.7s。

@@ -10,9 +10,10 @@ from typing import Any
 class EpisodeShotUsedCdto:
     shot: str
     video_rel: str
+    trimmed_s: float = 0.0
 
     def to_payload(self) -> dict[str, Any]:
-        return {"shot": self.shot, "video": self.video_rel}
+        return {"shot": self.shot, "video": self.video_rel, "trimmed_s": self.trimmed_s}
 
 
 @dataclass(frozen=True)

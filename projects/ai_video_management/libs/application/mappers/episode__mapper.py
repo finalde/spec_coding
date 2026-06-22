@@ -13,7 +13,8 @@ class EpisodeMapper:
     @staticmethod
     def concat_to_cdto(r: EpisodeConcatResult) -> ConcatEpisodeResultCdto:
         used = tuple(
-            EpisodeShotUsedCdto(shot=c.shot, video_rel=c.video_rel) for c in r.used
+            EpisodeShotUsedCdto(shot=c.shot, video_rel=c.video_rel, trimmed_s=c.trimmed_s)
+            for c in r.used
         )
         skipped = tuple(
             EpisodeShotSkippedCdto(shot=s.shot, reason=s.reason) for s in r.skipped

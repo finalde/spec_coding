@@ -270,7 +270,7 @@ function MediaTile({
             onClick={() => onExtractLastFrame(path)}
             disabled={busy || extractingLastFrame}
             aria-label={`Extract last frame from ${filename}`}
-            title="截取本镜成片的最后一帧 → shot{NN}_lastframe.png (放 shot 根目录)。用作下一个「承接镜」的首帧参考图上传 (跨镜首帧承接)；二次点击覆盖。"
+            title="截取本镜成片的最后一帧 → shot{NN}_lastframe.png (放 shot 根目录)，并自动复制到下一镜 shot{NN+1}_firstframe.png 作本镜首帧 (跨镜首帧承接)；二次点击覆盖。"
           >
             {extractingLastFrame ? "⏳ 截取中…" : "⏮ 生成末帧"}
           </button>
@@ -481,7 +481,11 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
     setExtractingLastFramePath(path);
     try {
       const result = await extractLastFrame(path);
-      announce(`已截取末帧 → ${basename(result.out)}（上传作下一承接镜的首帧）`);
+      announce(
+        result.first_frame
+          ? `已截取末帧 → ${basename(result.out)}，并复制到下一镜首帧 ${basename(result.first_frame)}`
+          : `已截取末帧 → ${basename(result.out)}（无下一镜，未复制首帧）`,
+      );
       onChange?.();
     } catch (err) {
       announce(`截取末帧失败: ${errorKind(err)}`);

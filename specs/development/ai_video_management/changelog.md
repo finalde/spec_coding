@@ -3887,3 +3887,175 @@ Auto-updated:
 - 前端：Reader isCasting/isEpisodeFile 正则放开 stage 段；dramas.ts +findAssetDir（characters/scenes 根或 2_世界观人设/ 下找）。
 - tests/test_drama_layout.py（5 例全过）。
 校验：wushen(staged)/nvdi(root) 解析正确；tsc 干净；casting/character_video/downloads/tree 测试过。既有 stale wukong fixture 失败与本修复无关。
+
+## Follow-up 132 — 2026-06-21 18:00:50
+Source: user_input/follow_ups/132-20260621-180050-extract-last-frame-button.md
+Summary: webapp 加「⏮ 生成末帧」按钮——一键 ffmpeg 截 shot 成片末帧成 PNG，作下一承接镜首帧（配合 ai_video.md 2026-06-21 跨镜首帧承接）。
+
+Auto-updated:
+- libs/infrastructure/writers/frame__writer.py — 新增 LastFrameResult + FrameExtractor.extract_last_frame（-sseof -3 + -update 1 取末帧）+ _shot_folder（落最近 shotNN 根）。
+- libs/application/dtos/frame__dto.py — 新增 ExtractLastFrameResultCdto（{src,out}）。
+- libs/application/mappers/frame__mapper.py — 新增 last_frame_to_cdto。
+- libs/application/commands/frame__command.py — 新增 FrameCommand.extract_last_frame。
+- apps/api/routes/frame__route.py — 新增 POST /api/extract-last-frame（复用 ExtractFramesBody；container 无需改、frame_command 已 wired；复用既有 frame 错误 handler）。
+- apps/ui/src/api.ts — 新增 extractLastFrame + ExtractLastFrameResult。
+- apps/ui/src/components/SiblingMedia.tsx — 新增 ⏮ 生成末帧 按钮（gated isShotVideoPath）+ state/handler/prop 三处 MediaTile wiring。
+- tests/test_frame_last_frame.py — 新增 5 例（_shot_folder 分支 + 真 ffmpeg 截帧落 shot 根 + 校验错误路径）。
+- README — 加「生成末帧」按钮说明。
+
+校验: pytest 26 绿（boot smoke + scene_plate + intro_card + 本测试）；apps/ui tsc -b 干净。
+No conflicts found in: 既有 frame extract / intro_card burn / 其余路由。
+
+## Follow-up 133 — 2026-06-21 19:02:00
+Source: user_input/follow_ups/133-20260621-190200-concat-seam-destutter.md
+Summary: 整集 concat 时自动抹平承接镜接缝的 ~0.2s 重复定格帧卡顿（freezedetect 检测 + 裁头部静止段），硬切镜不动。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — 新增 _is_continuity_shot（读 衔接: 行·先判硬切）+ _detect_head_freeze + _parse_head_freeze（freezedetect 头部静止检测）+ _ffmpeg_exe；build() 对每个承接镜(i>0)算 head_trims、_ffmpeg_concat 在 filter 里 trim/atrim 裁头；ShotClip 加 trimmed_s。
+- libs/application/dtos/episode__dto.py — EpisodeShotUsedCdto 加 trimmed_s。
+- libs/application/mappers/episode__mapper.py — 透传 trimmed_s。
+- apps/ui/src/api.ts — EpisodeShotUsed 加 trimmed_s。
+- apps/ui/src/components/Reader.tsx — concat toast 加「抹平 N 处承接接缝」。
+- tests/test_episode_concat.py — fake_concat 签名更新；+8 例（_parse_head_freeze 4 确定性 + 真 ffmpeg static-head 检测 + 承接裁/硬切不裁 build + _is_continuity_shot 硬切优先）。
+- README — 合成本集视频 bullet 加承接接缝抹平说明。
+
+修复（本次发现的真 bug）: 硬切文案「硬切（独立首帧·无承接帧）」含子串「承接」，_is_continuity_shot 必须先判「硬切」再判「承接」，否则所有硬切镜被误判为承接 → 会误裁。已由 test_is_continuity_shot 覆盖。
+校验: pytest 47 绿；apps/ui tsc -b 干净。
+No conflicts found in: 既有 concat 选片/排序/跳过/输出命名（原有 7 例全过）、frame/intro/subtitle 路径。
+
+## Follow-up 134 — 2026-06-21 19:20:00
+Source: 用户「把上限调整到1s吧」（承接接缝抹平裁帧上限）。
+Summary: 承接接缝 head-freeze 裁帧上限 `_SEAM_MAX_TRIM_S` 0.6s → 1.0s（个别承接镜首帧静止段较长、0.6s 裁不净）。
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — _SEAM_MAX_TRIM_S 0.6→1.0。
+- tests/test_episode_concat.py — test_parse_head_freeze_caps_long_freeze 改断言 cap=1.0。
+- README + ai_video.md (F) — capped 0.6s → 1s。
+校验: test_episode_concat.py 14 绿。
+
+## Follow-up 134 — 2026-06-22 00:05:30
+Source: user_input/follow_ups/134-20260622-000530-seam-min-trim-duplicate-frame.md
+Summary: 承接接缝残留 ~1 帧 micro-stutter（结构性重复帧 freezedetect 漏检）→ concat 承接镜 head_trim 保底裁 0.08s。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — 新增 _SEAM_MIN_HEAD_TRIM_S=0.08；build() 承接镜 head_trim=max(detected_freeze, min)，保底去结构性重复帧；docstring 注根因。
+- tests/test_episode_concat.py — +test_build_承接_min_trims_structural_duplicate_when_no_freeze（detector stub=0 → 承接 trimmed_s==min、硬切/首镜=0）。
+
+校验: pytest 22 绿（episode 15 + boot smoke）。
+说明: 纯 concat/button 端、零 prompt 改动。残留速度突变型 hitch 留待 escalation（承接 seam 短 crossfade ~0.12s，未做）。
+No conflicts found in: 既有 freeze-trim / 选片 / 硬切不裁 逻辑。
+
+## Follow-up 135 — 2026-06-22 00:15:00
+Source: user_input/follow_ups/135-20260622-001500-seam-crossfade.md
+Summary: 承接 seam 残留速度突变 hitch → concat 加短 crossfade(~0.12s)；硬切 seam 仍硬切。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — `_ffmpeg_concat` 重写为左折叠：xfade/acrossfade 在承接 seam、concat=n=2 在硬切 seam；新增 `_SEAM_XFADE_S=0.12`、`_probe_duration`、`_CLIP_DURATION_RE`；audio-less 镜各自 anullsrc 静音轨（修原 ≥2 无音轨镜潜在双消费 filtergraph bug）；build() 计算并传 continuity 列表；docstring 更新。
+- tests/test_episode_concat.py — fake_concat 签名 +continuity；+test_real_concat_xfade_at_承接_and_cut_at_硬切（真 ffmpeg 跑 xfade+concat 混合 filtergraph、3 无音轨 clip、产物合法 + 时长缩短 + 承接裁/硬切不裁）。
+- README — 合成本集视频 bullet 加 xfade 折叠/anullsrc 说明。
+
+校验: pytest 31 绿（episode 16 + boot smoke + frame_last_frame）。零 prompt 改动。
+说明: 与 follow-up 134 保底裁叠加——先裁重复帧/hold（去定格卡顿），再 xfade（抹速度差）。
+No conflicts found in: 选片/排序/跳过/输出命名/lang 变体（原 7 例全过）。
+
+## Follow-up 135b — 2026-06-22 · 修 xfade 真机失败（timebase 不匹配）
+来源: 用户实测「合成本集视频失败」。
+根因: xfade 输出微秒 timebase(1/1000000)，但 normalize 后的 clip 是 1/30；**连续承接 seam（xfade→xfade）** 时第 2 个 xfade 的累加器(AVTB) 与下一 clip(1/30) timebase 不匹配 → ffmpeg `timebase do not match` 报错。先前集成测试只有 xfade→concat（concat 对 tb 宽容），漏掉 xfade→xfade。
+修法: 每个 clip 视频链尾加 `settb=AVTB`，把所有输入与 xfade 输出统一到同一 timebase。
+校验: 真跑 EP1 实拍 renders concat（zh + original 都 OK，12 镜 60s、承接镜裁 0.08 + xfade）；新增 `test_real_concat_consecutive_承接_xfades`（两连续承接→xfade→xfade 跑通）。pytest 32 绿。
+
+## Follow-up 135c — 2026-06-22 · 修「concat 少了很多内容」（xfade offset 用错时长）
+来源: 用户「为什么这次 concat 起来的视频少了很多内容」（EP1 ~129s 实际只出 60s）。
+根因: xfade 的 `offset` 用了 `_probe_duration` 的**容器 Duration**，而容器时长取的是**更长的音轨**长度（实拍 render 音>视）。视频时间线被高估 → 第 1 个承接 seam 的 xfade offset 落到累加视频的真实末尾**之后** → xfade 只输出第一路、丢弃其后全部 → 输出截到 ~60s（shot06–12 全丢）。合成里的硬切 concat 对此宽容、故只在 xfade 暴露。
+修法: ① `_probe_duration` 改测**视频流时长**（`-map 0:v:0 -c copy -f null -` 取末尾 `time=`，demux 不解码、快），不再用容器 Duration；② xfade offset 减一帧 epsilon，确保转场严格落在累加流内。
+校验: 真跑 EP1 实拍 → zh + original 均 **127.4s 全 12 镜**（不再 60s）；新增回归测试 `test_real_concat_preserves_length_when_audio_longer_than_video`（音>视的 clip + 双连续承接 xfade，断言不被截断）——旧合成测试用纯视频 testsrc（容器==视频）复现不出此 bug。pytest 全绿（episode 18 + boot/frame/intro）。
+
+## Follow-up 136 — 2026-06-22 · 撤销承接 seam 交叉淡化，回到干净 butt-join
+来源: user_input/follow_ups/136-20260622-003000-revert-seam-crossfade.md（用户「效果不行，两个shot中间有一瞬间图片的转换，明显不契合」）。
+根因: follow-up 135 的 xfade 把承接 seam 两帧 dissolve，但保底裁帧后两帧已不再相同，溶解被肉眼读成"一瞬间图片切换"，比顿挫更出戏。交叉淡化是错的工具——承接要的是去重复帧后的干净连续切。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — `_ffmpeg_concat` 去掉 xfade 左折叠，改回单次 `concat=n=N:v=1:a=1`；删 `continuity` 形参与 `_SEAM_XFADE_S` 常量、改注释；build() 不再计算/传 continuity。保留 134 保底裁 + audio-less anullsrc + `_probe_duration` 测视频流时长（修「少了很多内容」）。
+- tests/test_episode_concat.py — fake_concat 签名去掉 continuity；两个 xfade 命名的真 ffmpeg 集成测试改名/改 docstring 为 butt-join 语义（仍校验连续承接产物合法 + 音>视不截断）。
+
+校验: 真跑 EP1（wushen_juexing）zh + original 均 129.4s 全 12 镜（撤前 bug 截到 60s）。pytest 25 绿（episode + boot smoke）。零 prompt 改动。
+No conflicts found in: 选片/排序/跳过/输出命名/lang 变体/首尾帧承接裁帧（保留）。
+
+## Follow-up 137 — 2026-06-22 · 承接接缝两侧裁速度坡道（消 0.2s 卡顿）
+来源: user_input/follow_ups/137-20260622-010000-seam-trim-both-sides-velocity-ramp.md（用户「还是有一瞬间的卡顿估计0.2秒左右」）。
+根因: butt-join 去掉重复帧后仍卡顿——卡顿是**两侧速度坡道**（i2v 出镜减速收束到末帧、入镜从该静止帧加速），帧在慢变非定格，-55dB freezedetect 漏检；且原先只裁入镜单侧。松阈值实测：入镜头慢帧 0.13–0.22s、出镜尾慢帧 0.12–0.20s。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — 承接接缝两侧裁：入镜头部 freezedetect(-45dB)+floor、出镜尾部固定 0.15 裁（尾部碎片化检测会过裁故确定性裁）。常量 noise -55→-45dB、`_SEAM_MIN_HEAD_TRIM_S(0.08)`→`_SEAM_MIN_EDGE_TRIM_S(0.15)`、`_HEAD_EPS`→`_EDGE_EPS`；删除短暂加过的 tail-freeze 检测助手（碎片化不可靠）。build() 计算 head_trims+tail_trims；`_ffmpeg_concat` +tail_trims，每 clip `trim=start=H:end=(dur-T)`、eff/anullsrc 同步。
+- tests/test_episode_concat.py — fake_concat +tail_trims；承接 trim 断言改为"前驱尾部也裁 _SEAM_MIN_EDGE_TRIM_S"；import 常量改名。
+- README — 承接接缝 bullet 改为"两侧裁速度坡道"，去 xfade 残留描述。
+
+校验: 真跑 EP1（wushen_juexing）zh + original 均 127.6s 全 12 镜；承接镜 06/07/11/12 头部裁、前驱 05/10 拿 0.15 尾裁——两侧都裁实锤。pytest 25 绿。零 prompt 改动。是否真消感知卡顿待用户肉眼确认。
+No conflicts found in: 选片/排序/跳过/输出命名/lang 变体/视频流时长探测（保留）。
+
+## Follow-up 138 — 2026-06-22 · 合成帧率跟随源（消 24→30 pulldown judder）
+来源: user_input/follow_ups/138-20260622-013000-concat-match-source-fps-no-pulldown-judder.md（用户「还是不顺」）。
+根因: 前三轮只动接缝但始终不顺——真因是合成把 ~24fps（VFR）源硬转 30fps，4:5 pulldown 每 5 帧复制 1 帧，mpdecimate 实测 30fps 输出 ~30% 是复制帧＝全片 judder，与接缝无关。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — 输出帧率改为跟随源：新增 `_target_fps`(中位+snap+回落)/`_probe_fps`(解析 `ffmpeg -i` "NN fps")/`_snap_fps`(取最近标准帧率、容差 1.5 内才 snap)。常量 `_CONCAT_TARGET_FPS=30`→`_CONCAT_FALLBACK_FPS=30`+`_STANDARD_FPS=(24,25,30,50,60)`+`_FPS_SNAP_TOL=1.5`+`_FPS_RE`。`_ffmpeg_concat` 算 target_fps 并用于 fps 滤镜。
+- tests/test_episode_concat.py — +3 测试（_snap_fps 边界含 24/25 重叠取最近、_target_fps 24源→24 不上变、不可探测回落 30）。
+
+校验: 真跑 EP1（wushen_juexing）zh 输出 23.89fps（≈24 原生）、12 镜 127.6s；复制帧 ~30%→~3%（剩为真静止内容）。pytest 28 绿。零 prompt 改动。感知是否真顺待用户确认；若仍残留接缝感属 i2v 两段运动轨迹不连续（生成侧问题，裁帧/帧率不可消）。
+No conflicts found in: 选片/排序/跳过/输出命名/lang 变体/承接两侧裁/视频流时长探测（均保留）。
+
+## Follow-up 139 — 2026-06-22 · 合成时自动去死帧（mpdecimate 压掉镜头内卡死段）
+来源: user_input/follow_ups/139-20260622-020000-concat-defreeze-mpdecimate.md（用户「还是有明显的一秒跳跃」→ 诊断为源 clip 内部长近静止段 → 用户选「合成时自动去死帧」）。
+根因: 前四轮只动接缝/全局帧率治不了，因为卡顿是镜头**内部**的 1–3s 长近静止段（i2v 生成卡住），freezedetect 严阈值看不出（慢漂移非定格）。实测 shot06 源 ~3.6s、shot08 ~2.4s、shot09 ~1s 近静止，且都在镜头中部。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — 每 clip 视频链加去死帧：`{_DECIMATE},setpts=N/{target_fps}/TB`（替原 fps 滤镜），`_DECIMATE="mpdecimate=hi=64*24:lo=64*12:frac=0.2"`（自适应：卡死镜削~26%、运动镜~3%）。concat 转 video-only（a=0[outv]）+ 额外 lavfi anullsrc 输入映射为静音轨 + -shortest。删 per-clip 音频段构建与 `_probe_has_audio`（去死帧后 a/v 无法逐 clip 对齐；真台词/BGM 后期 mux，本音轨 throwaway）。保留 seam 两侧裁/视频流时长探测/帧率跟随源/butt-join。
+- tests/test_episode_concat.py — `_silent_clip`/`_clip_audio_longer` 加 `noise=alls=40:allf=t+u` 逐帧运动（否则近静止 testsrc 被 decimate 收掉、时长断言失效）。
+
+校验: 真跑 EP1（wushen_juexing）zh 127.6→113.3s、original→113.5s，均 24.01fps 12 镜；压掉 ~14s 死气；长 hold(≥0.35s) 从 ~10s+ 降到 zh 1.8s/original 3.6s。pytest 28 绿。零 prompt 改动。残留散点 hold 若仍卡可调 lo=64*16/frac=0.15。
+No conflicts found in: 选片/排序/跳过/输出命名/lang 变体/承接两侧裁（保留）。
+
+## Follow-up 140 — 2026-06-22 · 去死帧后恢复同步音轨（修「没声音」回归）
+来源: user_input/follow_ups/140-20260622-024500-defreeze-keep-synced-audio.md（用户「有一个新的 bug 是出来的视频没声音了」）。
+根因: follow-up 139 去死帧时为绕开音画错位，把 concat 改成 video-only + 单条静音轨。但 12 个源 render 全带 AAC 音轨（i2v 自带环境音/人声），用户预览要听 → 误判为 throwaway 导致没声音。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — 恢复每镜真音轨并保持同步：测每镜去死帧后时长 ldur，音轨 `atempo=window/ldur` 时间匹配（卡死镜音频略快但同步；无卡死 tempo≈1 no-op）。concat 恢复 v=1:a=1[outv][outa]，去掉单条 anullsrc 输入。抽出 `_video_chain`（去死帧链构建一次、供测时长与 seg 共用保证帧数一致）；+`_decimated_duration`（跑链到 null 读末尾 time=）；+`_atempo_chain`（单 atempo 仅 [0.5,2]，>2 拆 ≤2 乘积）；恢复 `_probe_has_audio`（无音轨镜走 anullsrc 定长 ldur）。_DECIMATE 注释更新（不再说 a/v 不可同步）。保留 139/138/137/135c/136。
+- (无测试改动；28 测试仍绿，含合成 noise clip)
+
+校验: 真跑 EP1（wushen_juexing）zh video=113.9s/audio=114.0s、original 114.0/114.0，has_audio=True、漂移 0.08s（同步）。pytest 28 绿。零 prompt 改动。
+另记: shot11→12 仍有明显跳，查证为两段独立生成的"背身朝窗"近静止镜位姿对不齐（无运动遮掩→跳切感），属生成侧内容问题，裁帧/去死帧/帧率均不可消；建议重生成 shot12（真从 shot11 末帧承接）或改硬切或加运动。
+No conflicts found in: 选片/排序/跳过/输出命名/lang 变体/去死帧阈值/帧率跟随源（均保留）。
+
+## Follow-up 141 — 2026-06-22 · 撤销去死帧+变速，回到忠实拼接
+来源: user_input/follow_ups/141-20260622-031500-revert-defreeze-faithful-concat.md（用户「为什么拼接好的视频有些地方语速明显比原视频快了很多」+「感觉整体秒数跟原来不一致」）。
+根因: 去死帧(139)删镜头内长近静止段、变速(140)把整镜音频 atempo 到去死帧后时长。但卡死段**压着台词**（freezedetect 视频区间与 silencedetect 音频区间不重合，shot06 视频 3.1–5.9s 冻结时音频非静音）→ atempo 对整镜音频统一加速含说话部分=语速明显快；去死帧压短总时长(EP1 130→113s)=与原始不符。去死帧与"卡顿压台词"素材根本冲突，是错的工具。用户选回到忠实拼接。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — 撤销 139/140：删 `_DECIMATE` 常量 + `_video_chain`/`_decimated_duration`/`_atempo_chain` 方法。`_ffmpeg_concat` 回到忠实拼接：每镜视频 `trim→setpts→scale→pad→setsar→fps={target}`（去 mpdecimate/setpts=N/FR/TB），音频 `atrim(window)→asetpts→aresample→aformat`（无 atempo，自然语速原长），anullsrc 按 eff=end-h 定长，concat v=1:a=1。保留 seam 两侧裁(137)/帧率跟随源(138)/视频流时长探测(135c)/butt-join(136)/`_probe_has_audio`。
+- tests/test_episode_concat.py — 还原 `_silent_clip`/`_clip_audio_longer` 的 `noise`（仅去死帧需要、已删）+ docstring。
+
+校验: 真跑 EP1（wushen_juexing）：源 clip 合计 130.2s，输出 zh/original 均 129.6s（差 0.6s＝承接 seam 微裁），has_audio=True、自然语速。pytest 28 绿。零 prompt 改动。
+遗留（生成侧，concat 不可修，需重生成对应镜头）: 镜头内「边说话边卡画」的停顿（shot06/08 等）；shot11→12 近静止背身镜位姿对不齐的跳切。
+No conflicts found in: 选片/排序/跳过/输出命名/lang 变体/帧率跟随源/承接两侧裁（均保留）。
+
+## Follow-up 142 — 2026-06-22 21:15:00
+Source: user_input/follow_ups/142-20260622-211500-concat-crossdissolve-soften-cuts.md
+Summary: 合成镜头交接「先跳一下才切」/硬切感强 → 每对相邻 clip 加交叉叠化(xfade+acrossfade)柔化并盖住尾部跳帧。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — _ffmpeg_concat 由 concat 改 xfade+acrossfade 链；新增 _XFADE_DUR=0.25 + xdur 钳制；map 改最终标签
+- tests/test_episode_concat.py — preserves_length 阈值 2.0→1.4(叠化重叠)、consecutive_承接 docstring 更新
+- README.md — 合成本集视频 段落更新为交叉叠化
+
+No conflicts found in: final_specs/spec.md, validation/*, 其余 routes/commands/dtos
+
+## Follow-up 143 — 2026-06-22 21:30:00
+Source: user_input/follow_ups/143-20260622-213000-revert-crossdissolve-back-to-hardcut.md
+Summary: 撤销 142 交叉叠化（用户：没变柔和、还不如硬切），退回忠实硬拼接(=141 状态)。
+
+Auto-updated:
+- libs/infrastructure/writers/episode__writer.py — _ffmpeg_concat 恢复 concat butt-join + map [outv]/[outa]；删 _XFADE_DUR；seam 注释记两次叠化均回退
+- tests/test_episode_concat.py — preserves_length 阈值 1.4→2.0 回退、consecutive_承接 docstring 回退
+- README.md — 合成本集视频 段落删交叉叠化、恢复忠实拼接描述
+
+No conflicts found in: final_specs/spec.md, validation/*, routes/commands/dtos

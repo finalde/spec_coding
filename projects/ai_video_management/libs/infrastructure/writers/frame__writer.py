@@ -30,6 +30,7 @@ ffmpeg binary is supplied by the `imageio-ffmpeg` wheel — no system install.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -111,9 +112,16 @@ class ExtractResult:
 class LastFrameResult:
     src_rel: str
     out_rel: str
+    # The same PNG copied into the NEXT shot's folder as its first frame, or
+    # None when there is no next shot (last shot of the episode).
+    first_frame_rel: str | None
 
     def to_payload(self) -> dict[str, object]:
-        return {"src": self.src_rel, "out": self.out_rel}
+        return {
+            "src": self.src_rel,
+            "out": self.out_rel,
+            "first_frame": self.first_frame_rel,
+        }
 
 
 class FrameExtractor:
@@ -128,6 +136,10 @@ class FrameExtractor:
         跨镜首帧承接): a 承接 shot's first frame = the previous shot's rendered
         last frame. The PNG lands at the shot-folder ROOT so the user can upload
         it as the next shot's first frame. A re-extract overwrites it.
+
+        It is ALSO copied into the next shot's folder as `{nextshot}_firstframe.png`
+        so the 承接 hand-off happens in one click — no manual copy. When there is
+        no next shot (last shot of the episode), only the lastframe is written.
 
         ffmpeg trick: `-sseof -N` decodes only the last N seconds; `-update 1`
         rewrites the same PNG for every decoded frame, so the file is left
@@ -158,7 +170,49 @@ class FrameExtractor:
         if completed.returncode != 0 or not out_path.is_file():
             err = completed.stderr.decode("utf-8", errors="replace").strip()[:200]
             raise FrameExtractFailedError(err or "ffmpeg_failed")
-        return LastFrameResult(src_rel=self._rel(src), out_rel=self._rel(out_path))
+        first_frame_rel = self._copy_to_next_shot_firstframe(shot_folder, out_path)
+        return LastFrameResult(
+            src_rel=self._rel(src),
+            out_rel=self._rel(out_path),
+            first_frame_rel=first_frame_rel,
+        )
+
+    def _copy_to_next_shot_firstframe(
+        self, shot_folder: Path, last_frame: Path
+    ) -> str | None:
+        """Copy the just-written last frame into the next shot's folder as
+        `{nextshot}_firstframe.png`. Returns its rel path, or None when there is
+        no `shotNN` / no next shot folder."""
+        next_shot = self._next_shot_folder(shot_folder)
+        if next_shot is None:
+            return None
+        dest = next_shot / f"{next_shot.name}_firstframe.png"
+        try:
+            shutil.copy2(str(last_frame), str(dest))
+        except OSError as exc:
+            raise FrameExtractFailedError(f"firstframe copy failed: {exc}") from exc
+        return self._rel(dest)
+
+    def _next_shot_folder(self, shot_folder: Path) -> Path | None:
+        """Sibling `shotNN` folder whose number is exactly one more than
+        `shot_folder`'s. Matches by numeric value, so zero-padding differences
+        (shot09 → shot10) resolve correctly. None if `shot_folder` is not a
+        `shotNN` dir or no such next sibling exists."""
+        m = re.match(r"^shot(\d+)$", shot_folder.name, re.IGNORECASE)
+        if m is None:
+            return None
+        target = int(m.group(1)) + 1
+        try:
+            siblings = list(shot_folder.parent.iterdir())
+        except OSError:
+            return None
+        for sib in siblings:
+            if not sib.is_dir() or sib.is_symlink():
+                continue
+            sm = re.match(r"^shot(\d+)$", sib.name, re.IGNORECASE)
+            if sm is not None and int(sm.group(1)) == target:
+                return sib
+        return None
 
     def _shot_folder(self, src: Path) -> Path:
         """Nearest `shotNN` ancestor (output lands at the shot ROOT, never under

@@ -13,7 +13,9 @@ from libs.infrastructure.writers.frame__writer import ExtractResult, LastFrameRe
 class FrameMapper:
     @staticmethod
     def last_frame_to_cdto(r: LastFrameResult) -> ExtractLastFrameResultCdto:
-        return ExtractLastFrameResultCdto(src_rel=r.src_rel, out_rel=r.out_rel)
+        return ExtractLastFrameResultCdto(
+            src_rel=r.src_rel, out_rel=r.out_rel, first_frame_rel=r.first_frame_rel
+        )
 
     @staticmethod
     def to_cdto(r: ExtractResult) -> ExtractFramesResultCdto:

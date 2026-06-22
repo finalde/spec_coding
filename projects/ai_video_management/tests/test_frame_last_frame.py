@@ -26,10 +26,12 @@ def _ext(root: Path) -> FrameExtractor:
     return FrameExtractor(ExposedTree(root), SafeResolver(root))
 
 
-def _make_shot_video(tmp_path: Path, *, in_renders: bool = True) -> tuple[Path, str]:
+def _make_shot_video(
+    tmp_path: Path, *, in_renders: bool = True, shot: str = "shot01"
+) -> tuple[Path, str]:
     root = tmp_path / "repo"
-    shot = root / "ai_videos" / "td" / "episodes" / "ep01" / "shots" / "shot01"
-    folder = shot / "renders" if in_renders else shot
+    shot_dir = root / "ai_videos" / "td" / "episodes" / "ep01" / "shots" / shot
+    folder = shot_dir / "renders" if in_renders else shot_dir
     folder.mkdir(parents=True, exist_ok=True)
     mp4 = folder / "take.mp4"
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
@@ -64,6 +66,33 @@ def test_extract_last_frame_writes_png_at_shot_root(tmp_path: Path) -> None:
     assert out.read_bytes()[:8] == _PNG_MAGIC
     # original render untouched
     assert (root / rel).is_file()
+
+
+def test_last_frame_copied_into_next_shot_as_firstframe(tmp_path: Path) -> None:
+    root, rel = _make_shot_video(tmp_path, in_renders=True, shot="shot01")
+    # the next shot must already exist for the copy to land
+    (root / "ai_videos" / "td" / "episodes" / "ep01" / "shots" / "shot02").mkdir()
+    result = _ext(root).extract_last_frame(rel)
+    assert result.first_frame_rel is not None
+    assert result.first_frame_rel.endswith("shots/shot02/shot02_firstframe.png")
+    ff = root / result.first_frame_rel
+    assert ff.read_bytes() == (root / result.out_rel).read_bytes()  # identical copy
+
+
+def test_no_next_shot_skips_firstframe_copy(tmp_path: Path) -> None:
+    # only shot01 exists → nothing to copy into
+    root, rel = _make_shot_video(tmp_path, in_renders=True, shot="shot01")
+    result = _ext(root).extract_last_frame(rel)
+    assert result.first_frame_rel is None
+
+
+def test_firstframe_copy_resolves_zero_padding(tmp_path: Path) -> None:
+    # shot09 → shot10 (numeric match, not string prefix)
+    root, rel = _make_shot_video(tmp_path, in_renders=False, shot="shot09")
+    (root / "ai_videos" / "td" / "episodes" / "ep01" / "shots" / "shot10").mkdir()
+    result = _ext(root).extract_last_frame(rel)
+    assert result.first_frame_rel is not None
+    assert result.first_frame_rel.endswith("shots/shot10/shot10_firstframe.png")
 
 
 def test_extract_last_frame_from_shot_root_source(tmp_path: Path) -> None:
