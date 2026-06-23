@@ -980,20 +980,27 @@ export interface ConcatEpisodeResult {
   used: EpisodeShotUsed[];
   skipped: EpisodeShotSkipped[];
   lang: EpisodeLang;
+  /** RIFE motion-bridge stitch was applied at the 承接 seams. */
+  rife_used: boolean;
+  /** Number of 承接 seams actually bridged with synthesised motion. */
+  rife_bridges: number;
 }
 
 /** Stitch each shot's clip into one ep{NN}[_{lang}].mp4 in the episode folder
  * (overwrites). `lang` "original" uses each shot's newest renders/ mp4; zh/en/
  * both use each shot's burned `shot{NN}_{zh|en|zhen}.mp4` language master.
- * `path` may be any file under the episode folder. */
+ * `path` may be any file under the episode folder. When `rife` is true, the
+ * 承接 (continuous) seams are bridged with RIFE-synthesised motion instead of
+ * butt-joined (slower; needs the rife-ncnn-vulkan exe on the server). */
 export async function concatEpisode(
   path: string,
   lang: EpisodeLang = "original",
+  rife: boolean = false,
 ): Promise<ConcatEpisodeResult> {
   const response = await fetch("/api/concat-episode", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ path, lang }),
+    body: JSON.stringify({ path, lang, rife }),
   });
   return readJson<ConcatEpisodeResult>(response);
 }

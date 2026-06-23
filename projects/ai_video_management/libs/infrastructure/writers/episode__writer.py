@@ -31,10 +31,13 @@ ffmpeg binary supplied by `imageio-ffmpeg` — no system install required.
 """
 from __future__ import annotations
 
+import importlib.util
+import os
 import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 import imageio_ffmpeg
 
@@ -103,6 +106,18 @@ _SEAM_MIN_EDGE_TRIM_S: float = 0.15  # ≈4–5 frames @30fps, each side of the 
 # the two (post-trim, near-identical) 承接 seam frames read as a flash (follow-up
 # 135/136), and a whole-episode cross-dissolve between different shots did not read
 # as softer than a clean cut — it looked worse (follow-up 142/143). Plain concat.
+# RIFE seam bridging (opt-in, button checkbox). Instead of butt-joining the two
+# trimmed 承接 frames, an external RIFE interpolator synthesises the deleted
+# motion so the velocity hitch is filled rather than cut. The bridge logic is the
+# repo tool `tools/seam_concat.py` — reused as the single source of truth (loaded
+# by path off the sandbox root) rather than duplicated here. 硬切 seams stay
+# untouched. Only runs when the exe resolves; the path comes from
+# RIFE_NCNN_VULKAN_EXE or the default install location.
+_RIFE_ENV_VAR: str = "RIFE_NCNN_VULKAN_EXE"
+_RIFE_DEFAULT_EXE: str = (
+    r"C:\tools\rife\rife-ncnn-vulkan-20221029-windows\rife-ncnn-vulkan.exe"
+)
+_RIFE_SEAM_TRIM_S: float = 0.10   # per-side bite seam_concat trims at each bridge seam
 _FREEZE_START_RE = re.compile(r"freeze_start:\s*([0-9.]+)")
 _FREEZE_END_RE = re.compile(r"freeze_end:\s*([0-9.]+)")
 _CLIP_DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
@@ -141,6 +156,8 @@ class EpisodeConcatResult:
     used: tuple[ShotClip, ...]
     skipped: tuple[ShotSkip, ...]
     lang: str
+    rife_used: bool = False     # RIFE motion-bridge stitch applied at 承接 seams
+    rife_bridges: int = 0       # number of seams actually bridged
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -149,6 +166,8 @@ class EpisodeConcatResult:
             "used": [u.to_payload() for u in self.used],
             "skipped": [s.to_payload() for s in self.skipped],
             "lang": self.lang,
+            "rife_used": self.rife_used,
+            "rife_bridges": self.rife_bridges,
         }
 
 
@@ -157,7 +176,9 @@ class EpisodeConcatBuilder:
         self._exposed = exposed
         self._resolver = resolver
 
-    def build(self, rel: str, lang: str = "original") -> EpisodeConcatResult:
+    def build(
+        self, rel: str, lang: str = "original", rife: bool = False
+    ) -> EpisodeConcatResult:
         if lang not in VALID_EPISODE_LANGS:
             raise InvalidEpisodePathError(f"unknown episode lang: {lang!r}")
         episode_dir, episode_slug = self._validate_episode(rel)
@@ -194,10 +215,12 @@ class EpisodeConcatBuilder:
         # a 硬切 (intended cut); the first clip has no predecessor.
         head_trims: list[float] = [0.0] * len(used_dirs)
         tail_trims: list[float] = [0.0] * len(used_dirs)
+        cont_flags: list[bool] = [False] * len(used_dirs)
         for i, shot_dir in enumerate(used_dirs):
             is_cont = (
                 i > 0 and self._is_continuity_shot(shot_dir) and inputs[i] is not None
             )
+            cont_flags[i] = is_cont
             if not is_cont:
                 continue
             # Incoming head: freezedetect (catches the duplicate frame + the
@@ -218,20 +241,73 @@ class EpisodeConcatBuilder:
 
         suffix = "" if lang == "original" else f"_{_LANG_SUFFIX[lang]}"
         out_path = episode_dir / f"{episode_slug}{suffix}{_MP4_EXT}"
-        self._ffmpeg_concat(
-            ffmpeg=ffmpeg,
-            inputs=inputs,  # type: ignore[arg-type]
-            out_path=out_path,
-            head_trims=head_trims,
-            tail_trims=tail_trims,
-        )
+
+        rife_used = False
+        rife_bridges = 0
+        # seam j (between clip j and j+1) is a 承接 bridge iff clip j+1 is a
+        # continuity shot. RIFE bridging needs every input resolved.
+        seams = [cont_flags[j + 1] for j in range(len(inputs) - 1)]
+        if rife and any(seams) and all(p is not None for p in inputs):
+            rife_bridges = self._rife_stitch(inputs, out_path, seams)  # type: ignore[arg-type]
+            rife_used = True
+        else:
+            self._ffmpeg_concat(
+                ffmpeg=ffmpeg,
+                inputs=inputs,  # type: ignore[arg-type]
+                out_path=out_path,
+                head_trims=head_trims,
+                tail_trims=tail_trims,
+            )
         return EpisodeConcatResult(
             episode_rel=self._rel(episode_dir),
             out_rel=self._rel(out_path),
             used=tuple(used),
             skipped=tuple(skipped),
             lang=lang,
+            rife_used=rife_used,
+            rife_bridges=rife_bridges,
         )
+
+    def _rife_stitch(
+        self, inputs: list[Path], out_path: Path, seams: list[bool]
+    ) -> int:
+        """Stitch via the repo tool `tools/seam_concat.py` with RIFE bridges on
+        the 承接 seams. Returns the bridge count. Raises EpisodeConcatFailedError
+        when the RIFE exe is absent (explicit — never a silent butt-join fallback)
+        or the stitch fails."""
+        rife_exe = self._resolve_rife_exe()
+        if rife_exe is None:
+            raise EpisodeConcatFailedError(
+                f"rife_exe_not_found — install rife-ncnn-vulkan or set ${_RIFE_ENV_VAR}"
+            )
+        seam_mod = self._load_seam_concat(self._resolver.root)
+        try:
+            return int(
+                seam_mod.seam_concat(
+                    list(inputs), out_path, _RIFE_SEAM_TRIM_S, rife_exe, 0, seams
+                )
+            )
+        except Exception as exc:  # tool raises RuntimeError on any ffmpeg/RIFE failure
+            raise EpisodeConcatFailedError(f"rife_concat_failed: {exc}") from exc
+
+    @staticmethod
+    def _resolve_rife_exe() -> str | None:
+        """The rife-ncnn-vulkan exe path from ${_RIFE_ENV_VAR} or the default
+        install location, or None when neither exists."""
+        cand = os.environ.get(_RIFE_ENV_VAR, "").strip() or _RIFE_DEFAULT_EXE
+        return cand if Path(cand).is_file() else None
+
+    @staticmethod
+    def _load_seam_concat(root: Path) -> ModuleType:
+        """Load `tools/seam_concat.py` (the tested CLI) as a module off the
+        sandbox root, so the button reuses the exact stitch logic the CLI runs."""
+        path = root / "tools" / "seam_concat.py"
+        spec = importlib.util.spec_from_file_location("seam_concat_tool", path)
+        if spec is None or spec.loader is None:
+            raise EpisodeConcatFailedError(f"seam_concat tool not found at {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
 
     @staticmethod
     def _ffmpeg_exe() -> str:

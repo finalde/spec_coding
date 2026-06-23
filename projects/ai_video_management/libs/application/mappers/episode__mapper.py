@@ -25,4 +25,6 @@ class EpisodeMapper:
             used=used,
             skipped=skipped,
             lang=r.lang,
+            rife_used=r.rife_used,
+            rife_bridges=r.rife_bridges,
         )

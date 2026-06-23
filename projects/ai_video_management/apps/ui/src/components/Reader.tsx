@@ -76,6 +76,14 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [extractingPlates, setExtractingPlates] = useState<boolean>(false);
   const [concatBusy, setConcatBusy] = useState<boolean>(false);
   const [episodeConcatBusy, setEpisodeConcatBusy] = useState<boolean>(false);
+  // RIFE motion-bridge the 承接 seams when合成本集视频 (persisted, default on).
+  const [rifeSeams, setRifeSeams] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("ai_video.episode_concat.rife.v1") !== "0";
+    } catch {
+      return true;
+    }
+  });
   const [copyingPrompts, setCopyingPrompts] = useState<boolean>(false);
   const [scaffoldEpBusy, setScaffoldEpBusy] = useState<boolean>(false);
   const [burnDramaBusy, setBurnDramaBusy] = useState<boolean>(false);
@@ -200,13 +208,17 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     if (!path) return;
     setEpisodeConcatBusy(true);
     try {
-      const result = await concatEpisode(path, lang);
+      const result = await concatEpisode(path, lang, rifeSeams);
       const skippedNames = result.skipped.map((s) => `${s.shot} (${s.reason})`).join(", ");
       let summary: string;
       if (result.out) {
         summary = `已合成 ${result.out.split("/").pop()} — 拼接 ${result.used.length} 个镜头`;
-        const smoothed = result.used.filter((u) => u.trimmed_s > 0).length;
-        if (smoothed > 0) summary += ` · 抹平 ${smoothed} 处承接接缝`;
+        if (result.rife_used) {
+          summary += ` · RIFE 补帧 ${result.rife_bridges} 处承接缝`;
+        } else {
+          const smoothed = result.used.filter((u) => u.trimmed_s > 0).length;
+          if (smoothed > 0) summary += ` · 抹平 ${smoothed} 处承接接缝`;
+        }
         if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
       } else {
         const noun = lang === "original" ? "renders/ mp4" : `shot{NN}_${lang === "both" ? "zhen" : lang}.mp4`;
@@ -220,7 +232,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     } finally {
       setEpisodeConcatBusy(false);
     }
-  }, [path, onSaved]);
+  }, [path, onSaved, rifeSeams]);
 
   const onScaffoldEpisodeSubtitlesClick = useCallback(async () => {
     if (!path) return;
@@ -523,6 +535,16 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
                 {episodeConcatBusy ? "⏳" : label}
               </button>
             ))}
+            <label className="reader-episode-rife-toggle"
+              title="承接缝用 RIFE 补帧（把删掉的运动补回去，过渡更顺；较慢，需服务器装 rife-ncnn-vulkan）。硬切缝不受影响。">
+              <input type="checkbox" checked={rifeSeams} disabled={episodeConcatBusy}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setRifeSeams(on);
+                  try { localStorage.setItem("ai_video.episode_concat.rife.v1", on ? "1" : "0"); } catch { /* ignore */ }
+                }} />
+              🪄 RIFE 补帧
+            </label>
           </span>
         ) : null}
         {/* Per follow-up 2026-05-30: hide whole-file Edit for ai_videos paths.

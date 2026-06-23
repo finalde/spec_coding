@@ -4059,3 +4059,42 @@ Auto-updated:
 - README.md — 合成本集视频 段落删交叉叠化、恢复忠实拼接描述
 
 No conflicts found in: final_specs/spec.md, validation/*, routes/commands/dtos
+
+## Follow-up 144 — 2026-06-22 22:00:00
+Source: user_input/follow_ups/144-20260622-220000-seam-concat-tool-trim-dedup-rife.md
+Summary: 新增 tools/seam_concat.py 处理 Seedance 首尾帧链式拼接的接缝顿挫(trim+去重复帧默认 / --rife 光流补帧 opt-in)。
+
+Auto-updated:
+- tools/seam_concat.py — 新建独立工具
+
+No conflicts found in: episode__writer.py(webapp 保持忠实硬拼接不动), final_specs/spec.md, validation/*
+
+## Follow-up 144b — 2026-06-22 22:30:00 (amend)
+Source: 同 144（用户反馈 trim+dedup「还差一点」）
+Summary: 残留为缓动速度落差，需补帧。给用户「先调大 --trim(0.18/0.25)」即时手段；把 seam_concat.py 的 RIFE 调用由 dir-mode -n 改为最稳的单帧对 -0/-1/-o 递归(3 中间帧)。
+
+Auto-updated:
+- tools/seam_concat.py — _rife_bridge 改单帧对递归 + 新增 _rife_mid 助手（本机无 RIFE 二进制，按文档接口编写、失败安全退化）
+
+## Follow-up 145 — 2026-06-22 23:30:00
+Source: user_input/follow_ups/145-20260622-233000-rife-audio-fix-and-wire-into-episode-concat-button.md
+Summary: 装好 RIFE 并本机实测 EP1 承接缝补帧获认可；seam_concat 加回音轨 + 逐缝承接/硬切控制(--seams)；把 RIFE 补帧接进 webapp「合成本集视频」button(默认开复选框，承接缝走 RIFE、硬切不动)。
+
+Auto-updated:
+- tools/seam_concat.py — _render_body/桥段保留+静音补齐音轨、末段 concat v=1:a=1、新增 --seams 逐缝承接/硬切、seam_concat() 返回 bridge 数、main() stdout utf-8
+- episode__writer.py — build(rel,lang,rife)、_is_continuity_shot 自动生成 seam 谱、rife 时按 sandbox root 路径复用 tools/seam_concat.py、exe 缺失明确报错、结果加 rife_used/rife_bridges
+- episode__dto.py / episode__mapper.py / episode__command.py / episode__route.py — 透传 rife 入参 + rife_used/rife_bridges 出参
+- apps/ui/src/api.ts — concatEpisode(path,lang,rife) + 结果类型加 rife 字段
+- apps/ui/src/components/Reader.tsx — 「🪄 RIFE 补帧」复选框(localStorage 持久化默认开)、toast 显示补帧缝数
+- apps/ui/src/styles.css — .reader-episode-rife-toggle 行内对齐样式
+
+No conflicts found in: final_specs/spec.md, validation/*, tests/test_episode_concat.py(21 项全过，rife 默认 False)
+
+## Follow-up 145b — 2026-06-23 (amend)
+Source: 同 145（用户反馈：声音恢复后效果反不如无声版——seam1 出现明显停顿、seam2 出现乱码）。
+Diagnose（抽帧实证）: seam1(shot10→11) 两端帧近乎重复(mean|Δ|≈11/255)→RIFE 补出近静止桥=停顿(且我塞的静音空洞放大为死寂)；seam2(shot11→12) 是景别/机位跳变(mean|Δ|≈73/255)→RIFE 把整个人缩放morф=乱码。结论：RIFE 只在「中段运动」可用，太像→停顿、太不像→乱码。
+Fix:
+- tools/seam_concat.py — _rife_bridge 加**运动门限**：用 ffmpeg blend=difference→signalstats YAVG 量两端帧 mean|Δ|，落在 [20,55] 才补帧，否则退回干净 trim+butt-join（seam2=74 跳变被挡）。桥段音频改为**真·被裁掉的接缝内容**(前镜尾[dur-trim,dur]+后镜头[0,trim]，取自原始 clip、apad/atrim 到桥长)——连续环境声、非死寂(去 seam1 停顿感)、非 body 音频回声、且长度=桥长不破同步。门限/桥音频对 webapp button 自动生效(builder 复用本工具)。
+- 既有 21+49 项测试全过；EP1 实测：seam2 自动硬接、seam1 补 1 桥带连续环境声、含 aac 44100 stereo。
+
+No conflicts found in: episode__writer.py(逻辑不变，仅复用更新后的 tool), dto/mapper/route/UI(rife_bridges 现因门限可能为更小值，语义不变)

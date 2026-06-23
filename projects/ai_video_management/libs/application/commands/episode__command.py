@@ -17,6 +17,8 @@ class EpisodeCommand:
         self._builder = builder
 
     def concat(
-        self, rel_path: str, lang: str = "original"
+        self, rel_path: str, lang: str = "original", rife: bool = False
     ) -> ConcatEpisodeResultCdto:
-        return EpisodeMapper.concat_to_cdto(self._builder.build(rel_path, lang))
+        return EpisodeMapper.concat_to_cdto(
+            self._builder.build(rel_path, lang, rife)
+        )

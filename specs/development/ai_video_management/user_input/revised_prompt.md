@@ -10348,3 +10348,6 @@ severity: high
 
 ## Follow-up 143 — 2026-06-22 · 撤销交叉叠化，退回硬拼接
 用户反馈交叉叠化(142)没变柔和、还不如硬切，revert。`_ffmpeg_concat` 恢复 butt-join concat（删 xfade/acrossfade + _XFADE_DUR）。教训：i2v 短剧素材接缝干净硬切读感最好，两次转场实验(135/136 承接近同帧叠化、142/143 整集叠化)均失败；尾部跳帧是生成缺陷，靠重生成根治、不在合成层做转场。28 passed，EP1 130.7s。
+
+## Follow-up 144 — 2026-06-22 · seam_concat.py 接缝处理工具
+新增 `tools/seam_concat.py`：处理 Seedance 首尾帧链式两段视频 concat 的接缝顿挫。默认 trim 缓动尾/头 + 去重复共享帧(可靠, ffmpeg-only)；`--rife <exe>` 走外部 RIFE 光流补帧(失败退 butt-join+warn, 无声造假禁止)。实测 ffmpeg minterpolate 不能在两张静帧间重建运动, 故不内置。仅适用连续接缝, 不改 webapp(经 141/143 定为忠实硬拼接)。

@@ -292,6 +292,11 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 .reader-episode-concat-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .reader-episode-concat-btn:disabled { cursor: progress; opacity: 0.55; }
+.reader-episode-rife-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.85em; color: var(--text); cursor: pointer; user-select: none;
+}
+.reader-episode-rife-toggle input { cursor: pointer; margin: 0; }
 .reader-copy-prompts-btn {
   background: var(--bg-toolbar); color: var(--text);
   border: 1px solid var(--border); border-radius: 4px; padding: 4px 12px;
