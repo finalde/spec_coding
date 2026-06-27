@@ -21,10 +21,13 @@ from libs.application.commands.actor__command import ActorCommand
 from libs.application.commands.bgm__command import BgmCommand
 from libs.application.commands.casting__command import CastingCommand
 from libs.application.commands.character_video__command import CharacterVideoCommand
+from libs.application.queries.character__query import CharacterQuery
 from libs.application.commands.downloads__command import DownloadsCommand
 from libs.application.commands.episode__command import EpisodeCommand
 from libs.application.commands.episode_bgm__command import EpisodeBgmCommand
 from libs.application.commands.episode_takes__command import EpisodeTakesCommand
+from libs.application.commands.drama_takes__command import DramaTakesCommand
+from libs.application.queries.drama_episodes__query import DramaEpisodesQuery
 from libs.application.commands.episode_subtitle__command import EpisodeSubtitleCommand
 from libs.application.commands.file__command import FileCommand
 from libs.application.commands.frame__command import FrameCommand
@@ -33,6 +36,7 @@ from libs.application.commands.intro_card__command import IntroCardCommand
 from libs.application.commands.media__command import MediaCommand
 from libs.application.commands.novel__command import NovelCommand
 from libs.application.commands.perf_score__command import PerfScoreCommand
+from libs.application.commands.production__command import ProductionCommand
 from libs.application.commands.subtitle__command import SubtitleCommand
 from libs.application.commands.subtitle_batch__command import SubtitleBatchCommand
 from libs.application.commands.voice__command import VoiceCommand
@@ -60,6 +64,7 @@ from libs.infrastructure.readers.file__reader import FileReader
 from libs.infrastructure.readers.perf_check__reader import PerfCheckPromptReader
 from libs.infrastructure.readers.performance_library__reader import PerformanceLibraryReader
 from libs.infrastructure.readers.shot_regen__reader import ShotRegenPromptReader
+from libs.infrastructure.readers.character__reader import CharacterReader
 from libs.infrastructure.readers.tree__reader import TreeReader
 from libs.infrastructure.writers.actor__writer import ActorPool
 from libs.infrastructure.writers.bgm__writer import BgmPool
@@ -73,6 +78,8 @@ from libs.infrastructure.writers.downloads__writer import DownloadsImporter
 from libs.infrastructure.writers.episode__writer import EpisodeConcatBuilder
 from libs.infrastructure.writers.episode_bgm__writer import EpisodeBgmManager
 from libs.infrastructure.writers.episode_takes__writer import EpisodeTakesSelector
+from libs.infrastructure.writers.drama_takes__writer import DramaTakesSelector
+from libs.infrastructure.readers.drama_episodes__reader import DramaEpisodesReader
 from libs.infrastructure.writers.episode_subtitle__writer import EpisodeSubtitleBurner
 from libs.infrastructure.writers.file__writer import FileWriter
 from libs.infrastructure.writers.frame__writer import FrameExtractor
@@ -84,6 +91,7 @@ from libs.infrastructure.writers.subtitle_batch__writer import SubtitleBatchBurn
 from libs.infrastructure.writers.media__writer import MediaArchiver, MediaRenamer
 from libs.infrastructure.writers.novel__writer import NovelDownloader
 from libs.infrastructure.writers.perf_score__writer import PerfScorer
+from libs.infrastructure.writers.production__writer import ProductionExporter
 from libs.infrastructure.writers.voice__writer import VoicePool
 
 
@@ -137,6 +145,9 @@ class Container(containers.DeclarativeContainer):
     perf_scorer: providers.Singleton[PerfScorer] = providers.Singleton(
         PerfScorer, exposed=exposed_tree, resolver=safe_resolver
     )
+    production_exporter: providers.Singleton[ProductionExporter] = providers.Singleton(
+        ProductionExporter, exposed=exposed_tree, resolver=safe_resolver
+    )
     shot_regen_reader: providers.Singleton[ShotRegenPromptReader] = providers.Singleton(
         ShotRegenPromptReader, exposed=exposed_tree, resolver=safe_resolver
     )
@@ -187,11 +198,23 @@ class Container(containers.DeclarativeContainer):
     character_view_extractor: providers.Singleton[CharacterViewExtractor] = providers.Singleton(
         CharacterViewExtractor, exposed=exposed_tree, resolver=safe_resolver
     )
+    character_reader: providers.Singleton[CharacterReader] = providers.Singleton(
+        CharacterReader, exposed=exposed_tree, resolver=safe_resolver
+    )
     episode_concat_builder: providers.Singleton[EpisodeConcatBuilder] = providers.Singleton(
         EpisodeConcatBuilder, exposed=exposed_tree, resolver=safe_resolver
     )
     episode_takes_selector: providers.Singleton[EpisodeTakesSelector] = providers.Singleton(
         EpisodeTakesSelector, exposed=exposed_tree, resolver=safe_resolver
+    )
+    drama_takes_selector: providers.Singleton[DramaTakesSelector] = providers.Singleton(
+        DramaTakesSelector,
+        exposed=exposed_tree,
+        resolver=safe_resolver,
+        episode_selector=episode_takes_selector,
+    )
+    drama_episodes_reader: providers.Singleton[DramaEpisodesReader] = providers.Singleton(
+        DramaEpisodesReader, exposed=exposed_tree, resolver=safe_resolver
     )
     episode_subtitle_burner: providers.Singleton[EpisodeSubtitleBurner] = providers.Singleton(
         EpisodeSubtitleBurner,
@@ -254,6 +277,9 @@ class Container(containers.DeclarativeContainer):
     perf_score_command: providers.Factory[PerfScoreCommand] = providers.Factory(
         PerfScoreCommand, scorer=perf_scorer
     )
+    production_command: providers.Factory[ProductionCommand] = providers.Factory(
+        ProductionCommand, exporter=production_exporter
+    )
     shot_regen_query: providers.Factory[ShotRegenPromptQuery] = providers.Factory(
         ShotRegenPromptQuery, reader=shot_regen_reader
     )
@@ -277,11 +303,20 @@ class Container(containers.DeclarativeContainer):
         builder=shot_concat_builder,
         extractor=character_view_extractor,
     )
+    character_query: providers.Factory[CharacterQuery] = providers.Factory(
+        CharacterQuery, reader=character_reader
+    )
     episode_command: providers.Factory[EpisodeCommand] = providers.Factory(
         EpisodeCommand, builder=episode_concat_builder
     )
     episode_takes_command: providers.Factory[EpisodeTakesCommand] = providers.Factory(
         EpisodeTakesCommand, selector=episode_takes_selector
+    )
+    drama_takes_command: providers.Factory[DramaTakesCommand] = providers.Factory(
+        DramaTakesCommand, selector=drama_takes_selector
+    )
+    drama_episodes_query: providers.Factory[DramaEpisodesQuery] = providers.Factory(
+        DramaEpisodesQuery, reader=drama_episodes_reader
     )
     episode_subtitle_command: providers.Factory[EpisodeSubtitleCommand] = providers.Factory(
         EpisodeSubtitleCommand, burner=episode_subtitle_burner

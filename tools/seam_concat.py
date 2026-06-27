@@ -92,6 +92,18 @@ def _probe(ffmpeg: str, src: Path) -> tuple[float, float, int, int]:
     return max(0.1, dur), fps, w, h
 
 
+def _audio_dur(ffmpeg: str, src: Path) -> float:
+    """Audio-stream duration in seconds (0.0 when the source is mute)."""
+    out = _run(
+        [ffmpeg, "-i", str(src), "-map", "0:a:0", "-c", "copy", "-f", "null", "-"]
+    ).stderr.decode("utf-8", "replace")
+    times = _TIME_RE.findall(out)
+    if not times:
+        return 0.0
+    t = times[-1]
+    return int(t[0]) * 3600 + int(t[1]) * 60 + float(t[2])
+
+
 def _norm(w: int, h: int, fps: int) -> str:
     """The shared normalisation tail so every segment has identical params (a
     must for concat without re-scaling surprises)."""
@@ -110,6 +122,17 @@ _AR: int = 44100   # uniform audio rate/layout across every segment (concat need
 # fixed bridge length, so no global drift).
 _SEAM_FADE_S: float = 0.010   # ~10ms boundary micro-fade (inaudible, kills clicks)
 _BRIDGE_XFADE_S: float = 0.05  # crossfade between the bridge's prev-tail & next-head halves
+# Below this trim, the removed seam slice is empty — so don't reuse predecessor/
+# successor ambient (atrim of an empty window breaks acrossfade); the bridge runs
+# on silence instead. Lets the user pick "RIFE, no trim" (trim=0) and still get a
+# real bridge rather than a silent fall-back to butt-join (follow-up 149).
+_SEAM_TRIM_EPS: float = 0.02
+# Keep audio that runs past the video's last frame on an untrimmed (butt) tail —
+# a TTS 末字 (e.g. 「了」) is often voiced a beat after the picture ends, and
+# cutting the segment to the VIDEO length would drop it. Cap the overhang so a
+# stuck / pathologically over-long audio track can't balloon the segment
+# (follow-up 135c). The last video frame is held for the overhang (follow-up 152).
+_AUDIO_TAIL_KEEP_S: float = 1.0
 
 
 def _has_audio(ffmpeg: str, src: Path) -> bool:
@@ -139,12 +162,31 @@ def _render_body(
     """Re-encode `src` minus its ease head/tail (the head trim also drops the
     duplicated shared seam frame) to a uniform segment, carrying the matching
     slice of audio (or silence when the source is mute) so the final concat keeps
-    sound and every segment has an identical a/v layout."""
-    end = max(head + 0.05, dur - tail)
-    vf = f"trim=start={head:.3f}:end={end:.3f},setpts=PTS-STARTPTS,{_norm(w, h, fps)}"
-    if _has_audio(ffmpeg, src):
+    sound and every segment has an identical a/v layout.
+
+    On a butt tail (`tail`≈0) the audio is kept to its FULL length even when it
+    runs past the last video frame (a TTS 末字 like 「了」 voiced after the picture
+    ends), capped at `_AUDIO_TAIL_KEEP_S`; the last frame is held to cover the
+    overhang so nothing is cut. At a seam-trimmed tail the audio is cut with the
+    video (the removed ease applies to both)."""
+    has_a = _has_audio(ffmpeg, src)
+    end_v = max(head + 0.05, dur - tail)
+    end_a = end_v
+    if has_a and tail <= 0.005:
+        a_dur = _audio_dur(ffmpeg, src)
+        if a_dur > end_v:
+            end_a = min(a_dur, end_v + _AUDIO_TAIL_KEEP_S)
+    vpad = max(0.0, end_a - end_v)
+    vf = f"trim=start={head:.3f}:end={end_v:.3f},setpts=PTS-STARTPTS,{_norm(w, h, fps)}"
+    if vpad > 0.005:
+        # _norm ends with `fps=…`, which tpad needs to convert `stop_duration`
+        # into a frame count — so the hold MUST come after it (before it, tpad
+        # silently no-ops in this ffmpeg build). Holds the last frame so the
+        # video matches the kept audio tail (a/v stay in sync).
+        vf += f",tpad=stop_mode=clone:stop_duration={vpad:.3f}"
+    if has_a:
         af = (
-            f"atrim=start={head:.3f}:end={end:.3f},asetpts=PTS-STARTPTS,"
+            f"atrim=start={head:.3f}:end={end_a:.3f},asetpts=PTS-STARTPTS,"
             f"aresample={_AR}"
         )
         cmd = [
@@ -292,12 +334,16 @@ def _rife_bridge(
     pads: list[str] = []
     ai = 1
     fmt = f"aresample={_AR},aformat=sample_fmts=fltp:channel_layouts=stereo"
-    if _has_audio(ffmpeg, src_prev):
+    # Reuse the genuinely-removed seam ambient only when trim actually removed a
+    # window; at trim≈0 both slices are empty (atrim of a zero window) so we run
+    # the bridge on silence instead of letting acrossfade fail → butt-join.
+    reuse_ambient = trim >= _SEAM_TRIM_EPS
+    if reuse_ambient and _has_audio(ffmpeg, src_prev):
         cmd += ["-i", str(src_prev)]
         fc.append(f"[{ai}:a]atrim=start={max(0.0, dur_prev - trim):.3f},"
                   f"asetpts=N/SR/TB,{fmt}[ap]")
         pads.append("[ap]"); ai += 1
-    if _has_audio(ffmpeg, src_next):
+    if reuse_ambient and _has_audio(ffmpeg, src_next):
         cmd += ["-i", str(src_next)]
         fc.append(f"[{ai}:a]atrim=start=0:end={trim:.3f},asetpts=N/SR/TB,{fmt}[an]")
         pads.append("[an]"); ai += 1
@@ -332,8 +378,12 @@ def seam_concat(
     `plan` (length n-1, one entry per seam) is the explicit per-seam decision from
     the UI seam-planner; when given it OVERRIDES both `seams` and the auto motion
     gate (the user has chosen). Each entry: {bridge: bool, trim: float|None,
-    depth: int|None}. `seams` (b/c) + the auto gate remain the default when no
-    plan is supplied."""
+    depth: int|None, rife: bool|None}. `rife` (default True) lets a seam be a
+    TRIM-BUTT 承接 join — trim the ease/duplicate-frame off both sides and butt-join,
+    WITHOUT a RIFE bridge — even when the global `rife` exe is supplied for OTHER
+    seams. So one concat can mix RIFE seams ({bridge:True, rife:True, depth:N}),
+    trim-butt seams ({bridge:True, rife:False}) and hard cuts ({bridge:False}).
+    `seams` (b/c) + the auto gate remain the default when no plan is supplied."""
     ffmpeg = _ffmpeg_exe()
     probes = [_probe(ffmpeg, p) for p in inputs]
     fps = fps_override or max(1, round(probes[0][1]))
@@ -348,6 +398,7 @@ def seam_concat(
     trims = [trim] * (n - 1)
     depths: list[int | None] = [None] * (n - 1)
     gated = [True] * (n - 1)
+    do_rife = [True] * (n - 1)   # per-seam: may a RIFE bridge be inserted here?
     if plan is not None:
         if len(plan) != n - 1:
             raise RuntimeError(f"plan needs {n - 1} entries, got {len(plan)}")
@@ -356,6 +407,7 @@ def seam_concat(
             if e.get("trim") is not None:
                 trims[j] = float(e["trim"])
             depths[j] = e.get("depth")
+            do_rife[j] = bool(e.get("rife", True))
             gated[j] = False  # explicit user choice — no auto gate
     elif seams is not None:
         if len(seams) != n - 1:
@@ -377,7 +429,7 @@ def seam_concat(
         bridged = 0
         for i in range(n):
             segments.append(bodies[i])
-            if rife and i < n - 1 and bridge_seam[i]:
+            if rife and i < n - 1 and bridge_seam[i] and do_rife[i]:
                 br = tmp / f"bridge_{i:03d}.mp4"
                 ok = _rife_bridge(ffmpeg, rife, bodies[i], bodies[i + 1],
                                   inputs[i], inputs[i + 1], probes[i][0],

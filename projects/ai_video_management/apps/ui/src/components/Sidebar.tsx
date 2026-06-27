@@ -1,13 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { deleteActor, deleteVoice, importFromDownloads } from "../api";
+import { deleteActor, importFromDownloads } from "../api";
 import { ApiError, type TreeNode } from "../types";
-import { ActorPoolGenerator } from "./ActorPoolGenerator";
-import { VoicePoolGenerator } from "./VoicePoolGenerator";
-import { BgmPoolGenerator } from "./BgmPoolGenerator";
 
 const ACTOR_ID_RE = /^actor_\d{4,}$/;
-const VOICE_ID_RE = /^voice_\d{4,}$/;
 
 export interface SidebarProps {
   tree: TreeNode | null;
@@ -26,11 +22,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameToast, setRenameToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
-  const [generatorOpen, setGeneratorOpen] = useState<boolean>(false);
-  const [voiceGeneratorOpen, setVoiceGeneratorOpen] = useState<boolean>(false);
-  const [bgmGeneratorOpen, setBgmGeneratorOpen] = useState<boolean>(false);
   const [deletingActorId, setDeletingActorId] = useState<string | null>(null);
-  const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
 
   const onRenameClick = useCallback(
     async (e: React.MouseEvent, dramaPath: string) => {
@@ -42,7 +34,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
         const result = await importFromDownloads(dramaPath);
         const errorCount = result.errors.length + result.rename.errors.length;
         const summary =
-          `已导入 ${result.moved.length} / 未分类 ${result.unmatched.length} ` +
+          `已导入 ${result.moved.length} / 未导入 ${result.unmatched.length} ` +
           `/ 已重命名 ${result.rename.renamed.length} / 失败 ${errorCount}`;
         setRenameToast({ kind: errorCount > 0 ? "err" : "ok", text: summary });
         if (onTreeReload) onTreeReload();
@@ -87,32 +79,6 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
       }
     },
     [deletingActorId, onTreeReload],
-  );
-
-  const onVoiceDeleteClick = useCallback(
-    async (e: React.MouseEvent, voiceId: string) => {
-      e.stopPropagation();
-      if (deletingVoiceId) return;
-      const ok = window.confirm(
-        `Delete ${voiceId}? Moves folder to _deleted/_voices/. Refuses if assigned.`,
-      );
-      if (!ok) return;
-      setDeletingVoiceId(voiceId);
-      setRenameToast(null);
-      try {
-        await deleteVoice(voiceId);
-        setRenameToast({ kind: "ok", text: `已删除 ${voiceId}` });
-        if (onTreeReload) onTreeReload();
-      } catch (err) {
-        const msg = err instanceof ApiError
-          ? `删除失败: ${err.detail?.kind ?? err.status}`
-          : `删除失败: ${err instanceof Error ? err.message : String(err)}`;
-        setRenameToast({ kind: "err", text: msg });
-      } finally {
-        setDeletingVoiceId(null);
-      }
-    },
-    [deletingVoiceId, onTreeReload],
   );
 
   useEffect(() => {
@@ -276,7 +242,6 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
           const isSystemFolder = isAiVideoChild && dramaPathParts[1].startsWith("_");
           const isDrama = isAiVideoChild && !isSystemFolder;
           const isActorsRoot = isAiVideoChild && dramaPathParts[1] === "_actors";
-          const isVoicesRoot = isAiVideoChild && dramaPathParts[1] === "_voices";
           const isBgmRoot = isAiVideoChild && dramaPathParts[1] === "_bgm";
           const isPerformancesRoot = isAiVideoChild && dramaPathParts[1] === "_performances";
           const isDeletedRoot = isAiVideoChild && dramaPathParts[1] === "_deleted";
@@ -288,16 +253,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
             ACTOR_ID_RE.test(dramaPathParts[2]) &&
             !dramaPathParts.includes("_deleted");
           const actorId = isActorEntry ? dramaPathParts[2] : null;
-          const isVoiceEntry =
-            item.node.type === "voice" &&
-            dramaPathParts.length >= 3 &&
-            dramaPathParts[0] === "ai_videos" &&
-            dramaPathParts[1] === "_voices" &&
-            VOICE_ID_RE.test(dramaPathParts[2]) &&
-            !dramaPathParts.includes("_deleted");
-          const voiceId = isVoiceEntry ? dramaPathParts[2] : null;
           const isDeletingThis = actorId !== null && deletingActorId === actorId;
-          const isDeletingVoiceThis = voiceId !== null && deletingVoiceId === voiceId;
           const isRenamingThis = renamingPath === item.node.path;
           return (
             <div
@@ -315,6 +271,13 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
               onClick={(e) => {
                 e.stopPropagation();
                 if (isLeaf) { onSelect(item.node.path); return; }
+                // A drama node does double duty: open its main page on the right
+                // AND toggle the dropdown (per follow-up — "不仅是 dropdown"). The
+                // shared library folders (_actors / _bgm) likewise open their
+                // own library main page on click.
+                if (isDrama) navigate(`/drama?drama=${encodeURIComponent(item.node.path)}`);
+                else if (isActorsRoot) navigate("/actors");
+                else if (isBgmRoot) navigate("/bgm");
                 if (hasChildren) toggle(item.node.path);
               }}
             >
@@ -328,9 +291,7 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
               {item.node.type === "video" ? <span aria-hidden="true" className="tree-icon">🎬</span> : null}
               {item.node.type === "audio" ? <span aria-hidden="true" className="tree-icon">🎵</span> : null}
               {item.node.type === "actor" ? <span aria-hidden="true" className="tree-icon">🎭</span> : null}
-              {item.node.type === "voice" ? <span aria-hidden="true" className="tree-icon">🎙</span> : null}
               {isActorsRoot ? <span aria-hidden="true" className="tree-icon">🎭</span> : null}
-              {isVoicesRoot ? <span aria-hidden="true" className="tree-icon">🎙</span> : null}
               {isBgmRoot ? <span aria-hidden="true" className="tree-icon">🎵</span> : null}
               {isPerformancesRoot ? <span aria-hidden="true" className="tree-icon">🎬</span> : null}
               <span className="tree-label">{item.node.display_name || item.node.name}</span>
@@ -340,29 +301,9 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                   {subType === "novel" ? "剧" : "短"}
                 </span>
               ) : null}
-              {isDrama ? (
-                <button
-                  type="button"
-                  className="drama-rename-btn"
-                  aria-label={`从 Downloads 导入近 7 天的图片/视频到 ${item.node.name} 并按 parent folder 重命名`}
-                  disabled={renamingPath !== null}
-                  title="从 Downloads 按文件名分类导入近 7 天的图片/视频，并按 parent folder 重命名"
-                  onClick={(e) => onRenameClick(e, item.node.path)}
-                >
-                  {isRenamingThis ? "导入并重命名中…" : "📥 导入 + 重命名"}
-                </button>
-              ) : null}
-              {isDrama ? (
-                <button
-                  type="button"
-                  className="drama-rename-btn"
-                  aria-label={`查看 ${item.node.name} 的角色画廊`}
-                  title="角色画廊：所有角色缩略图 + 一键重生全部三视图/前2s"
-                  onClick={(e) => { e.stopPropagation(); navigate(`/characters?drama=${encodeURIComponent(item.node.path)}`); }}
-                >
-                  🎭 角色画廊
-                </button>
-              ) : null}
+              {/* Drama-level actions (导入+重命名 / 角色画廊 / 导出 production / 全剧字幕)
+                  moved off the left nav into the drama main page (DramaPage),
+                  opened by clicking the drama node. Keeps the nav uncluttered. */}
               {isPerformancesRoot ? (
                 <button
                   type="button"
@@ -374,92 +315,6 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                 >
                   {isRenamingThis ? "导入中…" : "📥 导入检验视频"}
                 </button>
-              ) : null}
-              {isActorsRoot ? (
-                <>
-                  <button
-                    type="button"
-                    className="drama-rename-btn"
-                    aria-label="生成新一批 AI 演员人脸"
-                    title="调用 Kling text-to-image 生成一批新演员人脸，按属性 label 入库"
-                    onClick={(e) => { e.stopPropagation(); setGeneratorOpen(true); }}
-                  >
-                    🎭 生成演员
-                  </button>
-                  <button
-                    type="button"
-                    className="drama-rename-btn"
-                    aria-label="从 Downloads 导入近 7 天的外部出图，按 id{编号}{f|b} tag 归位到对应 actor 文件夹"
-                    disabled={renamingPath !== null}
-                    title="prompt-only 出图后用：从 Downloads 按 id{编号}{f|b} tag 导入近 7 天的人脸/全身图，转码为规范名归位到 actor 文件夹"
-                    onClick={(e) => onRenameClick(e, item.node.path)}
-                  >
-                    {isRenamingThis ? "导入中…" : "📥 导入演员"}
-                  </button>
-                  <button
-                    type="button"
-                    className="drama-rename-btn"
-                    aria-label="在网格视图中查看所有演员"
-                    title="网格视图：一屏多图对比，分页浏览"
-                    onClick={(e) => { e.stopPropagation(); navigate("/actors"); }}
-                  >
-                    🔲 网格
-                  </button>
-                </>
-              ) : null}
-              {isVoicesRoot ? (
-                <>
-                  <button
-                    type="button"
-                    className="drama-rename-btn"
-                    aria-label="生成新一批配音 prompt"
-                    title="本地合成 Chinese 配音 prompt，粘贴入外部 AI 配音模型"
-                    onClick={(e) => { e.stopPropagation(); setVoiceGeneratorOpen(true); }}
-                  >
-                    🎙 生成配音
-                  </button>
-                  <button
-                    type="button"
-                    className="drama-rename-btn"
-                    aria-label="在网格视图中查看所有配音"
-                    title="网格视图：archetype 筛选 + 一键试听"
-                    onClick={(e) => { e.stopPropagation(); navigate("/voices"); }}
-                  >
-                    🔲 网格
-                  </button>
-                </>
-              ) : null}
-              {isBgmRoot ? (
-                <>
-                  <button
-                    type="button"
-                    className="drama-rename-btn"
-                    aria-label="生成新一批 BGM 背景音乐"
-                    title="调用 Stable Audio 生成一批背景音乐（耗时较长），按情绪分类入库"
-                    onClick={(e) => { e.stopPropagation(); setBgmGeneratorOpen(true); }}
-                  >
-                    🎵 生成 BGM
-                  </button>
-                  <button
-                    type="button"
-                    className="drama-rename-btn"
-                    aria-label="从 Downloads 导入近 7 天的背景音乐，按 bgm_编号 tag 归位到对应轨道"
-                    disabled={renamingPath !== null}
-                    title="ElevenLabs 出乐后用：从 Downloads 按 bgm_编号 tag 导入近 7 天的音频，归位到对应 bgm 文件夹"
-                    onClick={(e) => onRenameClick(e, item.node.path)}
-                  >
-                    {isRenamingThis ? "导入中…" : "📥 导入下载音乐"}
-                  </button>
-                  <button
-                    type="button"
-                    className="drama-rename-btn"
-                    aria-label="在网格视图中查看所有 BGM"
-                    title="网格视图：情绪分类筛选 + 一键试听"
-                    onClick={(e) => { e.stopPropagation(); navigate("/bgm"); }}
-                  >
-                    🔲 网格
-                  </button>
-                </>
               ) : null}
               {isDeletedRoot ? (
                 <button
@@ -484,37 +339,10 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                   {isDeletingThis ? "删除中…" : "🗑"}
                 </button>
               ) : null}
-              {isVoiceEntry && voiceId ? (
-                <button
-                  type="button"
-                  className="actor-delete-btn"
-                  aria-label={`软删除 ${voiceId}`}
-                  title="软删除 voice — 移到 _deleted/_voices/（已分配的 voice 会拒绝删除）"
-                  disabled={deletingVoiceId !== null}
-                  onClick={(e) => onVoiceDeleteClick(e, voiceId)}
-                >
-                  {isDeletingVoiceThis ? "删除中…" : "🗑"}
-                </button>
-              ) : null}
             </div>
           );
         })}
       </div>
-      <ActorPoolGenerator
-        open={generatorOpen}
-        onClose={() => setGeneratorOpen(false)}
-        onGenerated={() => { if (onTreeReload) onTreeReload(); }}
-      />
-      <VoicePoolGenerator
-        open={voiceGeneratorOpen}
-        onClose={() => setVoiceGeneratorOpen(false)}
-        onGenerated={() => { if (onTreeReload) onTreeReload(); }}
-      />
-      <BgmPoolGenerator
-        open={bgmGeneratorOpen}
-        onClose={() => setBgmGeneratorOpen(false)}
-        onGenerated={() => { if (onTreeReload) onTreeReload(); }}
-      />
     </nav>
   );
 }

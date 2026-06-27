@@ -344,10 +344,10 @@ And fixture Downloads dir (env AI_VIDEO_MGMT_DOWNLOADS_DIR) containing:
 When POST /api/import-from-downloads with body {path: "ai_videos/{tmp_drama}"}
 Then 响应 200
 And response.moved 含 3 项：kling_c1_aaa_test.mp4 → characters/c1_aaa (kind=character)，scene_s1_bbb_v2.png → scenes/s1_bbb (kind=scene)，ep01_shot01_seedance.mp4 → episodes/ep01/prompts/shot01 (kind=shot)
-And response.unmatched 含 1 项：random_unrelated.mp4 → ai_videos/{tmp_drama}/not_matched/random_unrelated.mp4 (kind=unmatched)
+And response.unmatched 含 1 项：random_unrelated.mp4 (kind=unmatched，仅含 from、无 to——未匹配文件不导入)
 And response.errors[] 不含 old_stuff.mp4 / trailer_doc.pdf / a_symlink.mp4（这些被 window/ext/symlink 静默跳过，不计入 errors）
-And response.rename = {renamed:[...重命名前 3 个 + 不含 not_matched 内的文件...], skipped:[], errors:[]}
-And 磁盘上 ai_videos/{tmp_drama}/not_matched/random_unrelated.mp4 保留原文件名（未被 rename 触及）
+And response.rename = {renamed:[...重命名前 3 个...], skipped:[], errors:[]}
+And 磁盘上 random_unrelated.mp4 仍原地留在 Downloads（未被导入、未创建 ai_videos/{tmp_drama}/not_matched/）
 And 磁盘上 ai_videos/{tmp_drama}/characters/c1_aaa/c1_aaa.mp4 已被 rename
 When 第二次 POST /api/import-from-downloads 对同一 drama（Downloads 已空）
 Then 响应 200 + moved=[] + unmatched=[] + errors=[] + rename.renamed=[]

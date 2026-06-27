@@ -9,10 +9,13 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ATTR_OPTIONS, castingAssign, deleteActor, listActors, mediaUrl, type ActorInfo } from "../api";
+import { ATTR_OPTIONS, castingAssign, deleteActor, importFromDownloads, listActors, mediaUrl, type ActorInfo } from "../api";
 import { extractDramas, type DramaChoice } from "../lib/dramas";
 import { announceToast } from "../lib/announce";
 import { ApiError, type TreeNode } from "../types";
+import { ActorPoolGenerator } from "./ActorPoolGenerator";
+
+const ACTORS_LIBRARY_PATH = "ai_videos/_actors";
 
 const PAGE_SIZE = 50;
 const FILTER_ALL = "__all__";
@@ -30,6 +33,10 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
   const [reloadKey, setReloadKey] = useState<number>(0);
   const [selectMode, setSelectMode] = useState<boolean>(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Library toolbar (relocated off the left nav, follow-up): generate-pool modal
+  // + import-from-Downloads.
+  const [generatorOpen, setGeneratorOpen] = useState<boolean>(false);
+  const [importBusy, setImportBusy] = useState<boolean>(false);
   const [busyBulk, setBusyBulk] = useState<boolean>(false);
   const [assignOpen, setAssignOpen] = useState<boolean>(false);
   const [filterEthnicity, setFilterEthnicity] = useState<string>(FILTER_ALL);
@@ -179,6 +186,25 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
     onChange();
   }, [busyBulk, exitSelectMode, onChange, selectedIds]);
 
+  const onImportClick = useCallback(async () => {
+    if (importBusy) return;
+    setImportBusy(true);
+    try {
+      const result = await importFromDownloads(ACTORS_LIBRARY_PATH);
+      const errorCount = result.errors.length + result.rename.errors.length;
+      announceToast(
+        `已导入 ${result.moved.length} / 未导入 ${result.unmatched.length} / 失败 ${errorCount}`,
+      );
+      setReloadKey((k) => k + 1);
+      onChange();
+    } catch (err) {
+      const kind = err instanceof ApiError ? (err.detail?.kind ?? `HTTP ${err.status}`) : String(err);
+      announceToast(`导入演员失败: ${kind}`);
+    } finally {
+      setImportBusy(false);
+    }
+  }, [importBusy, onChange]);
+
   if (error) {
     return (
       <div className="actor-grid-page">
@@ -202,11 +228,28 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
     return (
       <div className="actor-grid-page">
         <div className="actor-grid-header">
-          <h2>🎭 演员池 (0)</h2>
+          <h2>🎭 演员库 (0)</h2>
+          <div className="actor-grid-header-actions">
+            <button type="button" onClick={() => setGeneratorOpen(true)}
+              title="调用 Kling text-to-image 生成一批新演员人脸，按属性 label 入库">
+              🎭 生成演员
+            </button>
+            <button type="button" onClick={onImportClick} disabled={importBusy}
+              title="prompt-only 出图后用：从 Downloads 按 tag 导入近 7 天的人脸/全身图">
+              {importBusy ? "⏳ 导入中…" : "📥 导入演员"}
+            </button>
+          </div>
         </div>
         <div className="actor-grid-empty">
-          演员池为空 — 在 sidebar 的 <code>_actors/</code> 行点 "🎭 生成演员" 来生成第一批。
+          演员库为空 — 点上方 "🎭 生成演员" 生成第一批，或 "📥 导入演员" 从 Downloads 导入。
         </div>
+        {generatorOpen ? (
+          <ActorPoolGenerator
+            open={generatorOpen}
+            onClose={() => setGeneratorOpen(false)}
+            onGenerated={() => { setReloadKey((k) => k + 1); onChange(); }}
+          />
+        ) : null}
       </div>
     );
   }
@@ -214,8 +257,16 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
   return (
     <div className="actor-grid-page">
       <div className="actor-grid-header">
-        <h2>🎭 演员池 ({filteredActors.length} / {actors.length})</h2>
+        <h2>🎭 演员库 ({filteredActors.length} / {actors.length})</h2>
         <div className="actor-grid-header-actions">
+          <button type="button" onClick={() => setGeneratorOpen(true)}
+            title="调用 Kling text-to-image 生成一批新演员人脸，按属性 label 入库">
+            🎭 生成演员
+          </button>
+          <button type="button" onClick={onImportClick} disabled={importBusy}
+            title="prompt-only 出图后用：从 Downloads 按 id{编号}{f|b} tag 导入近 7 天的人脸/全身图，转码为规范名归位到 actor 文件夹">
+            {importBusy ? "⏳ 导入中…" : "📥 导入演员"}
+          </button>
           {selectMode ? (
             <button type="button" onClick={exitSelectMode}>✕ 退出选择</button>
           ) : (
@@ -387,6 +438,13 @@ export function ActorGrid({ tree, onChange }: ActorGridProps): JSX.Element {
       ) : null}
       {zoomActor ? (
         <ActorImageLightbox actor={zoomActor} onClose={() => setZoomActor(null)} />
+      ) : null}
+      {generatorOpen ? (
+        <ActorPoolGenerator
+          open={generatorOpen}
+          onClose={() => setGeneratorOpen(false)}
+          onGenerated={() => { setReloadKey((k) => k + 1); onChange(); }}
+        />
       ) : null}
     </div>
   );

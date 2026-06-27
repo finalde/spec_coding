@@ -106,6 +106,7 @@ def test_import_unmatched_goes_to_not_matched(tmp_path: Path) -> None:
 
     assert imp.moved == []
     assert {e["kind"] for e in imp.unmatched} == {"unmatched"}
-    nm = root / "ai_videos" / "_actors" / "_not_matched"
-    assert (nm / "no_tag_image.png").is_file()
-    assert (nm / "id9999f_ghost.png").is_file()
+    # Unmatched downloads are NOT imported — left in Downloads, no _not_matched/.
+    assert not (root / "ai_videos" / "_actors" / "_not_matched").exists()
+    assert (downloads / "no_tag_image.png").is_file()
+    assert (downloads / "id9999f_ghost.png").is_file()

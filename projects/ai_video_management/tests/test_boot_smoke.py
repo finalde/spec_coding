@@ -108,6 +108,8 @@ def test_all_post_endpoints_registered() -> None:
         ("POST", "/api/casting/assign"),
         ("DELETE", "/api/casting/assign"),
         ("GET", "/api/casting"),
+        ("POST", "/api/list-drama-episodes"),
+        ("POST", "/api/select-drama-takes"),
     }
     missing = expected - registered
     assert not missing, f"endpoints missing from app.routes: {sorted(missing)}"

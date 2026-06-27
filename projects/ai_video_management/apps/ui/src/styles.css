@@ -293,6 +293,74 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .reader-episode-concat-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .reader-episode-concat-btn:disabled { cursor: progress; opacity: 0.55; }
 
+/* Drama-level main page (DramaDashboard) — follow-up 148 */
+.drama-dashboard {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-toolbar); padding: 14px 16px; margin: 0 0 18px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.drama-dashboard-title { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--text); }
+.drama-dashboard-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.drama-dashboard-group-label {
+  font-size: 0.8rem; color: var(--text-muted, #888); min-width: 60px;
+}
+.drama-dashboard-btn {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 5px 13px;
+  cursor: pointer; font-family: inherit; font-size: 0.9rem;
+}
+.drama-dashboard-btn:hover:not(:disabled) { background: var(--bg-hover); }
+.drama-dashboard-btn:disabled { cursor: progress; opacity: 0.55; }
+.drama-dashboard-btn-primary {
+  border-color: var(--accent, #3a7afe); color: var(--accent, #3a7afe); font-weight: 600;
+}
+
+/* Per-episode list with one-click 拼接成片 (concat) per row. */
+.drama-dashboard-episodes { align-items: flex-start; }
+.drama-episode-list {
+  list-style: none; margin: 0; padding: 0; width: 100%;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.drama-episode-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 4px 0; border-bottom: 1px solid var(--border);
+}
+.drama-episode-name { font-weight: 600; color: var(--text); min-width: 56px; }
+.drama-episode-meta { font-size: 0.8rem; color: var(--text-muted, #888); flex: 1; }
+.drama-episode-concat-btn { white-space: nowrap; }
+
+/* Drama main page (DramaPage, route /drama) — opened by clicking a drama node */
+.drama-page { padding: 20px 24px; max-width: 980px; }
+.drama-page-header {
+  display: flex; align-items: center; gap: 14px; margin: 0 0 18px;
+}
+.drama-page-header h1 { margin: 0; font-size: 1.4rem; font-weight: 700; color: var(--text); }
+.drama-page-link-btn {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 4px 11px;
+  cursor: pointer; font-family: inherit; font-size: 0.85rem;
+}
+.drama-page-link-btn:hover { background: var(--bg-hover); }
+.drama-page-empty { color: var(--text-muted, #888); padding: 12px 0; }
+.drama-page-section {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-toolbar); padding: 14px 16px; margin: 0 0 18px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.drama-page-section-title {
+  margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--text);
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+}
+.drama-page-section-note { font-size: 0.8rem; font-weight: 400; color: var(--text-muted, #888); }
+.drama-episode-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.drama-episode-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.drama-episode-name { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 64px; color: var(--text); }
+.drama-episode-badge {
+  font-size: 0.78rem; padding: 1px 8px; border-radius: 10px;
+  border: 1px solid var(--accent, #3a7afe); color: var(--accent, #3a7afe);
+}
+.drama-episode-badge-none { border-color: var(--border); color: var(--text-muted, #888); }
+
 /* Seam-plan modal */
 .seam-modal-backdrop {
   position: fixed; inset: 0; z-index: 1000;
@@ -326,6 +394,77 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .seam-legend strong { color: var(--text); }
 .seam-modal-loading, .seam-modal-error { padding: 24px; text-align: center; color: var(--text-muted); }
 .seam-modal-error { color: #e06c6c; }
+
+/* ── Seam score dashboard ───────────────────────────────────────────── */
+.seam-score-modal { width: min(860px, 96vw); }
+.seam-score-head-actions { display: flex; align-items: center; gap: 8px; }
+.grade-a { --g: #3ba55d; } .grade-b { --g: #c5a93b; }
+.grade-c { --g: #d98a3b; } .grade-d { --g: #d95757; }
+.seam-score-summary { display: flex; gap: 10px; margin: 6px 0 12px; }
+.seam-score-big {
+  flex: 1; border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; text-align: center; display: flex; flex-direction: column; gap: 2px;
+}
+.seam-score-big.ceiling { border-style: dashed; }
+.seam-score-big-num { font-size: 2em; font-weight: 700; color: var(--g, var(--text)); line-height: 1.1; }
+.seam-score-big-grade { font-size: 0.85em; color: var(--g, var(--text)); }
+.seam-score-big-cap { font-size: 0.72em; color: var(--text-muted); }
+.seam-score-defs { font-size: 0.78em; color: var(--text-muted); margin: 4px 0 12px;
+  background: var(--bg-toolbar); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+.seam-score-defs summary { cursor: pointer; color: var(--text); }
+.seam-score-defs ul { margin: 6px 0 2px; padding-left: 16px; line-height: 1.6; }
+.seam-score-defs strong { color: var(--text); }
+.seam-score-def-thr { color: var(--text-muted); margin-left: 4px; }
+.seam-score-seam { margin: 0 0 14px; }
+.seam-score-seam-head { font-weight: 600; margin: 8px 0 4px; padding-bottom: 2px; border-bottom: 1px solid var(--border); }
+.seam-score-method { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 4px 0; }
+.seam-score-method.chosen { border-color: var(--accent, #5b8def); }
+.seam-score-method.best { background: rgba(59, 165, 93, 0.08); }
+.seam-score-method.err { color: #e06c6c; font-size: 0.85em; }
+.seam-score-method-head { display: flex; align-items: center; gap: 8px; }
+.seam-score-rank { width: 18px; height: 18px; border-radius: 50%; background: var(--bg-toolbar);
+  border: 1px solid var(--border); font-size: 0.72em; display: inline-flex; align-items: center; justify-content: center; }
+.seam-score-label { flex: 1; font-size: 0.85em; font-family: var(--mono, monospace); }
+.seam-score-tag { font-size: 0.68em; padding: 1px 6px; border-radius: 10px; border: 1px solid var(--border); }
+.seam-score-tag.best { color: #3ba55d; border-color: #3ba55d; }
+.seam-score-tag.chosen { color: var(--accent, #5b8def); border-color: var(--accent, #5b8def); }
+.seam-score-total { font-size: 1.1em; color: var(--g, var(--text)); min-width: 42px; text-align: right; }
+.seam-score-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; margin-top: 6px; }
+.seam-score-metric { display: flex; align-items: center; gap: 6px; font-size: 0.75em; }
+.seam-score-metric-id { color: var(--text-muted); width: 20px; }
+.seam-score-metric-raw { color: var(--text-muted); width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+.seam-score-bar { position: relative; flex: 1; height: 12px; background: var(--bg-toolbar);
+  border-radius: 6px; overflow: hidden; }
+.seam-score-bar-fill { height: 100%; background: var(--g, #888); border-radius: 6px; transition: width 0.3s; }
+.seam-score-bar-num { position: absolute; right: 4px; top: -1px; font-size: 0.85em; color: var(--text); }
+.seam-score-foot-note { font-size: 0.72em; color: var(--text-muted); flex: 1; line-height: 1.4; }
+.seam-score-compare { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8em; color: var(--text-muted); cursor: pointer; }
+.seam-score-seam-time { font-size: 0.78em; color: var(--text-muted); font-weight: 400; margin-left: 8px; }
+
+/* ── Inline always-on seam score panel (episode page) ───────────────── */
+.seam-panel { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0 12px;
+  background: var(--bg-toolbar); padding: 8px 12px; font-size: 0.85em; }
+.seam-panel--empty { color: var(--text-muted); display: flex; align-items: center; gap: 2px; }
+.seam-panel-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.seam-panel-title { font-weight: 600; }
+.seam-panel-overall { font-size: 1.25em; font-weight: 700; color: var(--g, var(--text)); }
+.seam-panel-overall small { font-size: 0.6em; }
+.seam-panel-time { font-size: 0.78em; color: var(--text-muted); }
+.seam-panel-link { margin-left: auto; background: none; border: 1px solid var(--border);
+  border-radius: 5px; padding: 2px 8px; color: var(--accent, #5b8def); cursor: pointer; font-size: 0.85em; }
+.seam-panel-seams { display: flex; flex-direction: column; gap: 4px; }
+.seam-panel-seam { display: flex; flex-direction: column; gap: 2px; padding: 4px 6px;
+  border: 1px solid var(--border); border-radius: 6px; }
+.seam-panel-seam.err { color: #e06c6c; }
+.seam-panel-seam-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seam-panel-seam-name { font-family: var(--mono, monospace); }
+.seam-panel-seam-time { font-size: 0.82em; color: var(--text-muted); }
+.seam-panel-seam-method { font-size: 0.78em; color: var(--text-muted); font-family: var(--mono, monospace); }
+.seam-panel-seam-score { margin-left: auto; font-size: 1.1em; color: var(--g, var(--text)); min-width: 40px; text-align: right; }
+.seam-panel-metrics { display: flex; gap: 12px; flex-wrap: wrap; }
+.seam-panel-metric { display: inline-flex; align-items: center; gap: 4px; font-size: 0.82em; }
+.seam-panel-metric-id { color: var(--text-muted); }
+.seam-panel-metric-val { font-weight: 600; color: var(--g, var(--text)); }
 .seam-row {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 0; border-bottom: 1px solid var(--border);
@@ -357,6 +496,8 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; font-family: inherit;
 }
 .seam-params select { width: 84px; }
+.seam-rife-toggle { flex-direction: row; align-items: center; gap: 4px; cursor: pointer; align-self: end; }
+.seam-rife-toggle input { width: auto; }
 .seam-locked { font-size: 0.85em; color: var(--text-muted); }
 .seam-btn {
   background: var(--bg-toolbar); color: var(--text);
@@ -2253,6 +2394,12 @@ details[open] > .prompt-preview-toggle::before {
   align-items: baseline;
   gap: 12px;
 }
+.voice-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .voice-page-title h1 {
   margin: 0;
   font-size: 20px;
@@ -3517,4 +3664,40 @@ details[open] > .prompt-preview-toggle::before {
 .character-tile-novideo {
   color: #c0392b;
   opacity: 0.85;
+}
+/* Character gallery tile: inline newest-mp4 preview + action-button row.
+   Mirrors .actor-tile chrome but is a div (not a clickable button) so the
+   video plays and the per-tile buttons each handle their own action. */
+.character-tile {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.character-tile:hover {
+  border-color: var(--accent, var(--border-strong));
+}
+.character-tile-media {
+  aspect-ratio: 9 / 16;
+  background: #000;
+}
+.character-tile-media > video,
+.character-tile-media > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.character-tile-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0.35rem 0.4rem 0.45rem;
+}
+.character-tile-actions > button {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.2rem;
+  white-space: nowrap;
 }

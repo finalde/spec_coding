@@ -1,5 +1,5 @@
 /** Reader: render-mode dispatch by file extension + path pattern. */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Breadcrumb } from "./Breadcrumb";
 import { ParseFallback } from "./ParseFallback";
@@ -25,7 +25,6 @@ import { episodeDirOf, extractVideoPromptBody, shotMdPathsInEpisode } from "../l
 import { announceToast } from "../lib/announce";
 import {
   archiveMedia,
-  burnDramaSubtitles,
   burnEpisodeSubtitles,
   burnEpisodeSubtitlesWhole,
   concatShotCharacters,
@@ -43,6 +42,8 @@ import {
 import type { EpisodeLang, SubtitleLang } from "../api";
 import { ApiError, type FileResult, type TreeNode } from "../types";
 import { SeamPlanModal } from "./SeamPlanModal";
+import { SeamScoreDashboard } from "./SeamScoreDashboard";
+import { SeamScorePanel } from "./SeamScorePanel";
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const VIDEO_EXTS = new Set([".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"]);
@@ -73,15 +74,16 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [conflict, setConflict] = useState<{ current_mtime: string } | null>(null);
   const [archiving, setArchiving] = useState<boolean>(false);
   const [deleting, setDeleting] = useState<boolean>(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [extracting, setExtracting] = useState<boolean>(false);
   const [extractingViews, setExtractingViews] = useState<boolean>(false);
   const [extractingPlates, setExtractingPlates] = useState<boolean>(false);
   const [concatBusy, setConcatBusy] = useState<boolean>(false);
   // Clicking a 合成本集视频 lang button opens the per-seam planner for that lang.
   const [seamLang, setSeamLang] = useState<EpisodeLang | null>(null);
+  const [scoreLang, setScoreLang] = useState<EpisodeLang | null>(null);
   const [copyingPrompts, setCopyingPrompts] = useState<boolean>(false);
   const [scaffoldEpBusy, setScaffoldEpBusy] = useState<boolean>(false);
-  const [burnDramaBusy, setBurnDramaBusy] = useState<boolean>(false);
   const [burnEpisodeBusy, setBurnEpisodeBusy] = useState<boolean>(false);
   const [selectTakesBusy, setSelectTakesBusy] = useState<boolean>(false);
   const [burnWholeBusy, setBurnWholeBusy] = useState<boolean>(false);
@@ -164,6 +166,17 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     const name = path.split("/").pop() ?? path;
     if (!window.confirm(`Move ${name} to _deleted/?`)) return;
     setDeleting(true);
+    // Release the preview stream FIRST: while a <video> is loaded it streams through
+    // the server, which then holds an open handle on the file and a rename/delete on
+    // Windows fails with "资源忙". Unloading the element drops the browser's request so
+    // the server closes the handle; the backend's retry-through-lock then succeeds.
+    const v = videoRef.current;
+    if (v) {
+      try { v.pause(); } catch { /* ignore */ }
+      v.removeAttribute("src");
+      v.load();
+      await new Promise((r) => setTimeout(r, 250));
+    }
     try {
       const result = await deleteMedia(path);
       announceToast(`Deleted ${name}`);
@@ -226,27 +239,6 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
       announceToast(`重生本集字幕失败: ${archiveErrorKind(err)}`);
     } finally {
       setScaffoldEpBusy(false);
-    }
-  }, [path, onSaved]);
-
-  const onBurnDramaSubtitlesClick = useCallback(async (lang: SubtitleLang) => {
-    if (!path) return;
-    setBurnDramaBusy(true);
-    try {
-      const result = await burnDramaSubtitles(path, lang);
-      const ok = result.outcomes.filter((o) => o.ok).length;
-      const skipped = result.outcomes.filter((o) => !o.ok);
-      let summary = `已为 ${ok} 个镜头烧入${lang === "both" ? "中英" : lang === "en" ? "英文" : "中文"}字幕`;
-      if (skipped.length > 0) {
-        const names = skipped.map((s) => `${s.episode}/${s.shot} (${s.reason})`).join(", ");
-        summary += ` · 跳过 ${skipped.length}: ${names}`;
-      }
-      announceToast(summary);
-      onSaved();
-    } catch (err) {
-      announceToast(`全剧烧字幕失败: ${archiveErrorKind(err)}`);
-    } finally {
-      setBurnDramaBusy(false);
     }
   }, [path, onSaved]);
 
@@ -437,6 +429,9 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   // episode-level md: `…/episodes/ep{NN}/{file}.md`, where `episodes/` is at
   // the drama root (legacy) OR under a stage folder (`4_剧本/episodes/`).
   const isEpisodeFile = isMarkdown && /^ai_videos\/[^_][^/]+\/(?:[^/]+\/)?episodes\/ep\d+\/[^/]+\.md$/.test(path);
+  // The stitched episode reel itself (ep{NN}.mp4 / ep{NN}_zh.mp4 …) — the seam scorecard
+  // is shown here too so it sits right with the video it describes.
+  const isEpisodeReel = /\/episodes\/ep\d+\/ep\d+(?:_[a-z]+)*\.mp4$/.test(path);
   const isImageRef = (isMarkdown && /\/ref_images\/[^/]+_seedream\.md$/.test(path));
   // casting.md sits at the drama root (legacy) OR under a stage folder
   // (staged pipeline: `2_世界观人设/casting.md`). Match it anywhere under a
@@ -449,9 +444,6 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   // segment keeps it distinct from the episode-level `isEpisodeFile` files).
   const isEpisodeBgm = isMarkdown && /^ai_videos\/[^_][^/]+\/(?:[^/]+\/)*episodes\/ep\d+\/bgm\/bgm\.md$/.test(path);
   const isShotMd = isMarkdown && SHOT_MD_RE.test(path);
-  // Drama homepage (`ai_videos/{drama}/README.md`) — anchors the drama-wide
-  // "burn subtitles into every shot of every episode" action.
-  const isDramaReadme = isMarkdown && /^ai_videos\/[^_][^/]+\/README\.md$/i.test(path);
 
   const filename = path.split("/").pop() ?? path;
   const pathParts = path.split("/");
@@ -500,22 +492,10 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
             {scaffoldEpBusy ? "⏳ 重生中…" : "📝 重生本集字幕"}
           </button>
         ) : null}
-        {isDramaReadme ? (
-          <span className="reader-episode-concat-group" role="group" aria-label="全剧烧字幕（按语言）">
-            {([
-              ["zh", "💬 全剧·中文字幕", "为全剧每集每镜取最新 render + subtitles.md 烧中文字幕 → shot{NN}_zh.mp4"],
-              ["en", "💬 全剧·EN", "为全剧每集每镜烧英文字幕 → shot{NN}_en.mp4"],
-              ["both", "💬 全剧·中英", "为全剧每集每镜烧中英字幕 → shot{NN}_zhen.mp4"],
-            ] as [SubtitleLang, string, string][]).map(([lang, label, title]) => (
-              <button key={lang} type="button" className="reader-episode-concat-btn"
-                onClick={() => onBurnDramaSubtitlesClick(lang)} disabled={burnDramaBusy}
-                aria-label={`Burn ${lang} subtitles into every shot of every episode`}
-                title={`遍历全剧所有 episodes/ep*/shots/shot*，每镜取最新 render 烧入字幕（已存在则覆盖）。缺 render 或缺 subtitles.md 的镜头自动跳过。${title}`}>
-                {burnDramaBusy ? "⏳" : label}
-              </button>
-            ))}
-          </span>
-        ) : null}
+        {/* Drama-level actions (全剧烧字幕 / 导出 production / 导入+重命名 / 角色画廊)
+            live on the dedicated drama main page (DramaPage, route /drama),
+            opened by clicking the drama node in the left nav — not in this
+            per-file toolbar (follow-up 148; relocated to DramaPage). */}
         {isShotlistTable ? (
           <span className="reader-episode-concat-group" role="group" aria-label="本集烧字幕（按语言）">
             {([
@@ -546,6 +526,12 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
               title="② 拼接成片：把各 shot{NN}.mp4（缺则回退 renders/ 最新）干净无字幕地拼成 ep{NN}.mp4，并写出 ep{NN}.segments.json（每镜在成片里的真实起止）。打开拼接方案逐个衔接处选硬拼/RIFE。第③步字幕按 segments 对齐，不再受拼接/裁帧影响。">
               ② 🔗 拼接成片
             </button>
+            <button type="button" className="reader-episode-concat-btn"
+              onClick={() => setScoreLang("original")}
+              aria-label="Seam quality scorecard: optical-flow + SSIM metrics per 承接 seam"
+              title="📊 接缝评分：用光流+SSIM 对每个承接缝客观打分（M1速度连贯/M2无冻结/M3无跳变/M4结构连续），并把硬拼/裁切/RIFE 多种接法并排排名，告诉你当前 plan 多少分、最优能到多少。">
+              📊 接缝评分
+            </button>
             <span className="reader-episode-concat-group" role="group" aria-label="③ 整集字幕（按语言）">
               {([
                 ["zh", "③ 💬 中文", "对 ep{NN}.mp4 按 segments 烧中文字幕 → ep{NN}_zh.mp4"],
@@ -566,6 +552,10 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
           <SeamPlanModal path={path} lang={seamLang}
             onClose={() => setSeamLang(null)} onDone={onEpisodeSeamDone} />
         ) : null}
+        {scoreLang && path ? (
+          <SeamScoreDashboard path={path} lang={scoreLang}
+            onClose={() => setScoreLang(null)} />
+        ) : null}
         {/* Per follow-up 2026-05-30: hide whole-file Edit for ai_videos paths.
             Users must edit prompts via the per-code-block ✏ Edit affordance
             inside Renderer / CopyableCode (which opens PromptStructuredEditor).
@@ -580,6 +570,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
           </button>
         ) : null}
       </div>
+      {(isEpisodeFile || isEpisodeReel) && path ? <SeamScorePanel path={path} /> : null}
       {editing && !isImage && !isVideo && !isAudio && !isShotPair && !isImageRef && !isCasting && !isActor ? (
         <Editor
           initialContent={file.content} filename={filename}
@@ -593,7 +584,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
         <div className="reader-body">
           {isVideo ? (
             <div className="media-view">
-              <video controls preload="metadata" src={mediaUrl(path)} />
+              <video ref={videoRef} controls preload="metadata" src={mediaUrl(path)} />
               {!isDeletedFile ? (
                 <div className="reader-media-actions">
                   {!isArchivedFile ? (

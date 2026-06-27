@@ -62,6 +62,41 @@ def _uniquify(target: Path) -> Path:
     return candidate
 
 
+# A media file that is being previewed in the browser is streamed THROUGH this same
+# server process (range requests), so the process holds an open read handle on it. On
+# Windows that makes an immediate rename fail with "在使用中/Device or resource busy".
+# The handle releases the instant the player stops/unloads, so retry across a short
+# window: the frontend unloads the <video> right before calling delete, and these
+# retries cover the few-hundred-ms it takes the OS to drop the handle.
+_DELETE_RETRIES: int = 15
+_DELETE_RETRY_DELAY_S: float = 0.2
+
+
+def _rename_through_lock(src: Path, target: Path) -> None:
+    """Move `src` → `target`, retrying through a transient share-lock (a browser
+    preview stream releasing). Last resort: copy + unlink. Raises MediaMoveFailedError
+    only if the file is still locked after the whole retry window."""
+    last: OSError | None = None
+    for _ in range(_DELETE_RETRIES):
+        try:
+            src.rename(target)
+            return
+        except OSError as exc:
+            last = exc
+            time.sleep(_DELETE_RETRY_DELAY_S)
+    # Fallback: copy then remove the original (a read-shared handle still allows the
+    # copy; the unlink then succeeds once the writer/preview handle has dropped).
+    try:
+        shutil.copy2(src, target)
+        src.unlink()
+        return
+    except OSError:
+        target.unlink(missing_ok=True)  # don't leave a half/duplicate copy behind
+    raise MediaMoveFailedError(
+        f"{src.name} 仍被占用（重试 {_DELETE_RETRIES} 次后仍锁定）: {last}"
+    )
+
+
 @dataclass(frozen=True)
 class MoveResult:
     src_rel: str
@@ -131,10 +166,7 @@ class MediaArchiver:
         except OSError as exc:
             raise MediaMoveFailedError(str(exc)) from exc
         target = _uniquify(target)
-        try:
-            src.rename(target)
-        except OSError as exc:
-            raise MediaMoveFailedError(str(exc)) from exc
+        _rename_through_lock(src, target)
         return MoveResult(src_rel=self._rel(src), dst_rel=self._rel(target))
 
     def hard_delete(self, rel: str) -> str:

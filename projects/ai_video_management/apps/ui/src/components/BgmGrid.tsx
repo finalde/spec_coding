@@ -4,13 +4,17 @@ import {
   BGM_CATEGORY_LABELS_ZH,
   BGM_CATEGORY_OPTIONS,
   deleteBgm,
+  importFromDownloads,
   listBgms,
   mediaUrl,
   type BgmInfo,
 } from "../api";
 import { ApiError } from "../types";
+import { BgmPoolGenerator } from "./BgmPoolGenerator";
+import { announceToast } from "../lib/announce";
 
 const PAGE_SIZE = 50;
+const BGM_LIBRARY_PATH = "ai_videos/_bgm";
 
 export interface BgmGridProps {
   onChange: () => void;
@@ -27,6 +31,29 @@ export function BgmGrid({ onChange }: BgmGridProps): JSX.Element {
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  // Library toolbar (relocated off the left nav, follow-up): generate-pool modal
+  // + import-from-Downloads.
+  const [generatorOpen, setGeneratorOpen] = useState<boolean>(false);
+  const [importBusy, setImportBusy] = useState<boolean>(false);
+
+  const onImportClick = useCallback(async () => {
+    if (importBusy) return;
+    setImportBusy(true);
+    try {
+      const result = await importFromDownloads(BGM_LIBRARY_PATH);
+      const errorCount = result.errors.length + result.rename.errors.length;
+      announceToast(
+        `已导入 ${result.moved.length} / 未导入 ${result.unmatched.length} / 失败 ${errorCount}`,
+      );
+      setReloadKey((k) => k + 1);
+      onChange();
+    } catch (err) {
+      const kind = err instanceof ApiError ? (err.detail?.kind ?? `HTTP ${err.status}`) : String(err);
+      announceToast(`导入音乐失败: ${kind}`);
+    } finally {
+      setImportBusy(false);
+    }
+  }, [importBusy, onChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,10 +141,20 @@ export function BgmGrid({ onChange }: BgmGridProps): JSX.Element {
     <div className="voice-page">
       <header className="voice-page-header">
         <div className="voice-page-title">
-          <h1>🎵 BGM 音乐库</h1>
+          <h1>🎵 背景音乐库</h1>
           <span className="voice-page-count">
             {filtered.length} <span className="voice-page-count-sep">/</span> {bgms?.length ?? 0}
           </span>
+        </div>
+        <div className="voice-page-actions">
+          <button type="button" className="voice-btn" onClick={() => setGeneratorOpen(true)}
+            title="调用 Stable Audio 生成一批背景音乐（耗时较长），按情绪分类入库">
+            🎵 生成 BGM
+          </button>
+          <button type="button" className="voice-btn" onClick={onImportClick} disabled={importBusy}
+            title="ElevenLabs 出乐后用：从 Downloads 按 bgm_编号 tag 导入近 7 天的音频，归位到对应 bgm 文件夹">
+            {importBusy ? "⏳ 导入中…" : "📥 导入下载音乐"}
+          </button>
         </div>
         <div className="voice-filters">
           <label className="voice-gen-field voice-gen-field-narrow">
@@ -149,9 +186,9 @@ export function BgmGrid({ onChange }: BgmGridProps): JSX.Element {
       {bgms !== null && bgms.length === 0 ? (
         <div className="voice-empty">
           <div className="voice-empty-icon">🎵</div>
-          <p>BGM 音乐库为空。</p>
+          <p>背景音乐库为空。</p>
           <p className="voice-empty-hint">
-            点击侧边栏 <code>_bgm/</code> 旁的「🎵 生成 BGM」按钮开始。
+            点上方「🎵 生成 BGM」生成第一批，或「📥 导入下载音乐」从 Downloads 导入。
           </p>
         </div>
       ) : null}
@@ -222,6 +259,14 @@ export function BgmGrid({ onChange }: BgmGridProps): JSX.Element {
           <button type="button" onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}>›</button>
           <button type="button" onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1}>»</button>
         </nav>
+      ) : null}
+
+      {generatorOpen ? (
+        <BgmPoolGenerator
+          open={generatorOpen}
+          onClose={() => setGeneratorOpen(false)}
+          onGenerated={() => { setReloadKey((k) => k + 1); onChange(); }}
+        />
       ) : null}
     </div>
   );

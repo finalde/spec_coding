@@ -13,8 +13,10 @@ from fastapi import APIRouter
 from apps.api.routes.actor__route import router as _actor_router
 from apps.api.routes.bgm__route import router as _bgm_router
 from apps.api.routes.casting__route import router as _casting_router
+from apps.api.routes.character__route import router as _character_router
 from apps.api.routes.character_video__route import router as _character_video_router
 from apps.api.routes.downloads__route import router as _downloads_router
+from apps.api.routes.drama__route import router as _drama_router
 from apps.api.routes.episode__route import router as _episode_router
 from apps.api.routes.episode_bgm__route import router as _episode_bgm_router
 from apps.api.routes.file__route import router as _file_router
@@ -26,6 +28,7 @@ from apps.api.routes.novel__route import router as _novel_router
 from apps.api.routes.perf_check__route import router as _perf_check_router
 from apps.api.routes.perf_score__route import router as _perf_score_router
 from apps.api.routes.performance__route import router as _performance_router
+from apps.api.routes.production__route import router as _production_router
 from apps.api.routes.prompt__route import router as _prompt_router
 from apps.api.routes.shot_regen__route import router as _shot_regen_router
 from apps.api.routes.subtitle__route import router as _subtitle_router
@@ -42,6 +45,7 @@ router.include_router(_downloads_router)
 router.include_router(_actor_router)
 router.include_router(_bgm_router)
 router.include_router(_casting_router)
+router.include_router(_character_router)
 router.include_router(_character_video_router)
 router.include_router(_episode_router)
 router.include_router(_episode_bgm_router)
@@ -54,3 +58,5 @@ router.include_router(_performance_router)
 router.include_router(_shot_regen_router)
 router.include_router(_subtitle_router)
 router.include_router(_intro_card_router)
+router.include_router(_production_router)
+router.include_router(_drama_router)

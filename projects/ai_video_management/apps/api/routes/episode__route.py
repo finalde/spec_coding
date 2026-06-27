@@ -23,9 +23,9 @@ class SeamPlanEntry(BaseModel):
 
     from_: str = Field(alias="from")  # "from" is a Python keyword
     to: str
-    method: str = "butt"      # "butt" | "rife"
+    method: str = "butt"      # "butt"(硬拼) | "trim"(裁切平滑) | "rife"(补帧)
     trim: float | None = None
-    depth: int | None = None  # 补帧密度 override (None = auto)
+    depth: int | None = None  # 补帧密度 override (None = auto; rife only)
 
 
 class ConcatEpisodeBody(BaseModel):
@@ -38,6 +38,12 @@ class ConcatEpisodeBody(BaseModel):
 class EpisodeSeamsBody(BaseModel):
     path: str
     lang: str = "original"
+
+
+class EpisodeSeamMetricsBody(BaseModel):
+    path: str
+    lang: str = "original"
+    compare: bool = True  # also score+rank the standard method panel (slower)
 
 
 @router.post("/api/concat-episode")
@@ -75,3 +81,25 @@ def episode_seams(
         status_code=200,
         content=query.analyze_seams(body.path, body.lang).to_payload(),
     )
+
+
+@router.post("/api/episode-seam-metrics")
+@inject
+def episode_seam_metrics(
+    body: EpisodeSeamMetricsBody,
+    query: EpisodeQuery = Depends(Provide[Container.episode_query]),
+) -> Response:
+    return JSONResponse(
+        status_code=200,
+        content=query.score_seams(body.path, body.lang, body.compare),
+    )
+
+
+@router.post("/api/episode-seam-scores")
+@inject
+def episode_seam_scores(
+    body: EpisodeSeamsBody,
+    query: EpisodeQuery = Depends(Provide[Container.episode_query]),
+) -> Response:
+    """Read the persisted scorecard sidecar (last build) — instant, no recompute."""
+    return JSONResponse(status_code=200, content=query.read_seam_scores(body.path))

@@ -42,6 +42,7 @@ import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 
@@ -197,8 +198,8 @@ class SeamInfo:
     to_shot: str
     link: str            # "handoff" (承接, RIFE-eligible) | "hardcut" (硬切, butt only)
     diff: float | None   # mean-abs frame diff (handoff only; suggestion guide)
-    suggest: str         # "rife" | "butt" — auto recommendation
-    method: str          # "rife" | "butt" — current choice (saved plan or suggestion)
+    suggest: str         # "trim" | "rife" | "butt" — auto recommendation
+    method: str          # "trim" | "rife" | "butt" — current choice (saved plan/suggest)
     trim: float
     depth: int | None    # 补帧密度 override (None = auto)
     thumb_a: str         # data-URI base64 JPEG of predecessor tail frame
@@ -313,8 +314,8 @@ class EpisodeConcatBuilder:
             # planner always reloads their last choices.
             self._save_plan(episode_dir, plan)
             tool_plan = self._plan_for_used(plan, used)
-            rife_bridges = self._rife_stitch(inputs, out_path, None, tool_plan)  # type: ignore[arg-type]
-            rife_used = any(e["bridge"] for e in tool_plan)
+            rife_bridges = self._stitch_with_plan(inputs, out_path, tool_plan)  # type: ignore[arg-type]
+            rife_used = any(e.get("rife") and e["bridge"] for e in tool_plan)
             eff = self._approx_eff(ffmpeg, inputs, head_trims, tail_trims)  # type: ignore[arg-type]
         elif rife and all_resolved and any(
             cont_flags[j + 1] for j in range(len(inputs) - 1)
@@ -340,6 +341,9 @@ class EpisodeConcatBuilder:
                 eff = list(ret)
                 approx_eff = False
         segments_rel = self._write_segments(out_path, used, eff, approx_eff)
+        # Persist the seam scorecard for THIS build so the dashboard shows the last
+        # generation's score with no recompute when the page opens (best-effort).
+        self._write_seam_scores(episode_dir, lang)
         return EpisodeConcatResult(
             episode_rel=self._rel(episode_dir),
             out_rel=self._rel(out_path),
@@ -375,25 +379,56 @@ class EpisodeConcatBuilder:
         except Exception as exc:  # tool raises RuntimeError on any ffmpeg/RIFE failure
             raise EpisodeConcatFailedError(f"rife_concat_failed: {exc}") from exc
 
+    def _stitch_with_plan(
+        self, inputs: list[Path], out_path: Path, tool_plan: list[dict]
+    ) -> int:
+        """Stitch via `tools/seam_concat.py` with an explicit per-seam plan that may
+        mix RIFE bridges, trim-butt 承接 joins and hard cuts. The RIFE exe is required
+        ONLY when some seam actually requests a bridge — a pure trim-butt / hard-cut
+        plan stitches with no GPU. Returns the bridge count; raises on any failure
+        (explicit — never a silent fallback)."""
+        needs_rife = any(e.get("rife") and e["bridge"] for e in tool_plan)
+        rife_exe = self._resolve_rife_exe() if needs_rife else None
+        if needs_rife and rife_exe is None:
+            raise EpisodeConcatFailedError(
+                f"rife_exe_not_found — install rife-ncnn-vulkan or set ${_RIFE_ENV_VAR}"
+            )
+        seam_mod = self._load_seam_concat(self._resolver.root)
+        try:
+            return int(
+                seam_mod.seam_concat(
+                    list(inputs), out_path, _RIFE_SEAM_TRIM_S, rife_exe, 0, None, tool_plan
+                )
+            )
+        except Exception as exc:  # tool raises RuntimeError on any ffmpeg/RIFE failure
+            raise EpisodeConcatFailedError(f"plan_concat_failed: {exc}") from exc
+
     def _plan_for_used(
         self, plan: list[dict], used: list[ShotClip]
     ) -> list[dict]:
         """Map the UI plan (entries keyed by from/to shot) onto the n-1 consecutive
-        used-clip seams the tool expects: {bridge, trim, depth}. A seam with no
-        matching entry defaults to a clean butt-join."""
+        used-clip seams the tool expects: {bridge, rife, trim, depth}. Three 承接
+        join types: "rife" → trim both sides + RIFE motion-bridge (bridge+rife);
+        "trim" → trim the ease/duplicate-frame off both sides + butt-join, NO RIFE
+        (bridge, rife False) — the smoothest choice for an already-continuous seam;
+        "butt"/hardcut → plain hard cut (no trim). A seam with no matching entry
+        defaults to a clean butt-join."""
         by_pair = {(e.get("from"), e.get("to")): e for e in plan}
         tool_plan: list[dict] = []
         for i in range(len(used) - 1):
             e = by_pair.get((used[i].shot, used[i + 1].shot))
             if e is None:
-                tool_plan.append({"bridge": False, "trim": _RIFE_SEAM_TRIM_S, "depth": None})
+                tool_plan.append({"bridge": False, "rife": False,
+                                  "trim": _RIFE_SEAM_TRIM_S, "depth": None})
                 continue
+            method = e.get("method")
             trim = e.get("trim")
             depth = e.get("depth")
             tool_plan.append({
-                "bridge": e.get("method") == "rife",
+                "bridge": method in ("rife", "trim"),
+                "rife": method == "rife",
                 "trim": float(trim) if trim is not None else _RIFE_SEAM_TRIM_S,
-                "depth": int(depth) if depth is not None else None,
+                "depth": int(depth) if depth is not None and method == "rife" else None,
             })
         return tool_plan
 
@@ -464,7 +499,10 @@ class EpisodeConcatBuilder:
                     if diff is not None and (
                         seam_mod._BRIDGE_MIN_DIFF <= diff <= seam_mod._BRIDGE_MAX_DIFF
                     ):
-                        suggest = "rife"
+                        # In-band 承接 seam: a trim-butt join (trim the ease/dup-frame,
+                        # no RIFE) is the smoothest default — RIFE only adds blips on an
+                        # already-continuous seam (empirically; tune with seam_tune.py).
+                        suggest = "trim"
                 sv = saved.get((fn, tn)) if saved else None
                 method = sv.get("method") if sv else suggest
                 if link == "hardcut":
@@ -512,6 +550,77 @@ class EpisodeConcatBuilder:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
+
+    @staticmethod
+    def _load_seam_metrics(root: Path) -> ModuleType:
+        """Load `tools/seam_metrics.py` (the objective seam scorer) off the sandbox
+        root, so the dashboard reuses the exact metric the CLI computes."""
+        path = root / "tools" / "seam_metrics.py"
+        spec = importlib.util.spec_from_file_location("seam_metrics_tool", path)
+        if spec is None or spec.loader is None:
+            raise EpisodeConcatFailedError(f"seam_metrics tool not found at {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def score_seams(
+        self, rel: str, lang: str = "original", compare: bool = True
+    ) -> dict:
+        """Score every 首尾帧承接 seam of the episode (optical-flow + SSIM metrics) and,
+        when `compare`, rank a standard method panel — returning the structured
+        scorecard the dashboard renders. RIFE-needing panel rows are skipped when no
+        RIFE exe is present (the chosen/trim/hardcut rows still score)."""
+        if lang not in VALID_EPISODE_LANGS:
+            raise InvalidEpisodePathError(f"unknown episode lang: {lang!r}")
+        episode_dir, _ = self._validate_episode(rel)
+        if not (episode_dir / _SEAM_PLAN_FILE).is_file():
+            raise NoShotsError("episode has no seam_plan.json to score")
+        metrics = self._load_seam_metrics(self._resolver.root)
+        return metrics.compute_scorecard(
+            episode_dir, lang, compare, self._resolve_rife_exe()
+        )
+
+    def read_seam_scores(self, rel: str) -> dict | None:
+        """The persisted scorecard sidecar (last generation's score), or None when the
+        episode has not been scored yet. Instant — no recompute — so the dashboard shows
+        the last build's result the moment the page opens."""
+        episode_dir, _ = self._validate_episode(rel)
+        metrics = self._load_seam_metrics(self._resolver.root)
+        path = metrics.scorecard_path(episode_dir)
+        if not path.is_file():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _write_seam_scores(self, episode_dir: Path, lang: str) -> None:
+        """Score the just-built episode's 首尾帧承接 seams and persist the sidecar so the
+        dashboard renders the last generation instantly — but do it on a BACKGROUND
+        thread so it never adds to the concat's response time. Scoring rebuilds isolated
+        seam pairs + runs optical flow (~tens of seconds); running it inline would make
+        每次「拼接成片」感觉卡住/超时. The reel (ep{NN}.mp4) is already written by the time
+        this is spawned; the score sidecar simply appears a little later."""
+        if not (episode_dir / _SEAM_PLAN_FILE).is_file():
+            return
+        import threading
+
+        root = self._resolver.root
+        rife_exe = self._resolve_rife_exe()
+
+        def _job() -> None:
+            try:
+                metrics = self._load_seam_metrics(root)
+                card = metrics.compute_scorecard(episode_dir, lang, False, rife_exe)
+                if card.get("seams"):
+                    metrics.save_scorecard(
+                        episode_dir, card,
+                        datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    )
+            except Exception:  # scoring is a nicety; never let it surface anywhere
+                return
+
+        threading.Thread(target=_job, name="seam-score", daemon=True).start()
 
     @staticmethod
     def _ffmpeg_exe() -> str:

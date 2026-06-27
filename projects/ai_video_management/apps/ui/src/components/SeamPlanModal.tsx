@@ -26,13 +26,18 @@ const DEPTH_OPTIONS: { value: string; label: string }[] = [
 
 const TRIM_HELP =
   "裁切：从接缝两侧各裁掉多少秒的「减速/加速」尾巴，再用补帧把这段运动接回。" +
-  "越大(如 0.16)裁得越狠、去顿挫更彻底但丢的原片更多；越小(如 0.10)更保守。默认 0.10。";
+  "越大(如 0.16)裁得越狠、去顿挫更彻底但丢的原片更多；越小(如 0.10)更保守。默认 0.10。" +
+  "0 = 不裁切，仅在接缝处插补帧平滑、不丢任何原片。";
 const DEPTH_HELP =
   "补帧密度：桥接处插入的帧数。最疏(1)=插1帧，最密(4)=插15帧。" +
   "越密过渡越平滑、渲染越慢；两帧差异大时过密反而易糊。自动=按裁切量估算。";
+const RIFE_HELP =
+  "RIFE 补帧：在裁切后的接缝处用光流插出中间帧，把运动接回。" +
+  "勾选=裁切+补帧（两帧差异较大时用）；不勾=只裁切平接、不补帧（承接缝已基本连续时最平滑）。" +
+  "裁切秒=0 则不裁切、仅补帧。";
 
 interface SeamChoice {
-  method: "butt" | "rife";
+  method: "butt" | "trim" | "rife";
   trim: number;
   depth: number | null;
 }
@@ -88,6 +93,10 @@ export function SeamPlanModal({ path, lang, onClose, onDone }: Props) {
     () => Object.values(choices).filter((c) => c.method === "rife").length,
     [choices],
   );
+  const trimCount = useMemo(
+    () => Object.values(choices).filter((c) => c.method === "trim").length,
+    [choices],
+  );
 
   const setChoice = useCallback((index: number, patch: Partial<SeamChoice>) => {
     setChoices((prev) => ({ ...prev, [index]: { ...prev[index], ...patch } }));
@@ -104,7 +113,8 @@ export function SeamPlanModal({ path, lang, onClose, onDone }: Props) {
           from: s.from,
           to: s.to,
           method: c.method,
-          trim: c.method === "rife" ? c.trim : null,
+          // 裁切 & RIFE both carry a trim; only RIFE carries 补帧密度.
+          trim: c.method === "butt" ? null : c.trim,
           depth: c.method === "rife" ? c.depth : null,
         };
       });
@@ -131,7 +141,7 @@ export function SeamPlanModal({ path, lang, onClose, onDone }: Props) {
             <strong>拼接方案 · {LANG_LABEL[lang]}</strong>
             {seams && (
               <span className="seam-modal-sub">
-                {seams.length} 个衔接 · 承接 {handoffCount} · 本次 RIFE {rifeCount}
+                {seams.length} 个衔接 · 承接 {handoffCount} · 本次 裁切 {trimCount} · RIFE {rifeCount}
                 {hadSavedPlan ? " · 已载入保存的方案" : ""}
               </span>
             )}
@@ -143,17 +153,18 @@ export function SeamPlanModal({ path, lang, onClose, onDone }: Props) {
         <div className="seam-modal-body">
           <div className="seam-legend">
             <p>
-              <strong>硬拼</strong>：直接拼接（硬切缝只能硬拼）。
-              <strong> RIFE</strong>：在接缝处补出中间帧，把删掉的运动接回，过渡更顺
-              —— 仅<strong>承接缝</strong>（有首尾帧）可用。
+              <strong>硬拼</strong>：直接拼接、不裁不补（硬切缝只能硬拼）。
+              <strong> 不硬拼</strong>：裁掉接缝两侧的减速/加速尾巴+重复帧（裁切秒），
+              可再勾 <strong>RIFE 补帧</strong> 把运动接回 —— 仅<strong>承接缝</strong>（有首尾帧）可用。
             </p>
             <p>
-              <strong>裁切(秒)</strong>：从两侧各裁掉多少「减速/加速」尾巴再补回；
-              <strong>0.10</strong> 保守、<strong>0.16</strong> 更狠（去顿挫更彻底，丢的原片更多）。
+              <strong>裁切(秒)</strong>：从两侧各裁掉多少「减速/加速」尾巴；
+              <strong>0.10</strong> 保守、<strong>0.16</strong> 更狠（丢的原片更多）、
+              <strong>0</strong>=不裁切仅补帧。承接缝已基本连续时不勾 RIFE 最平滑。
             </p>
             <p>
-              <strong>密度</strong>：补几帧。<strong>最疏=1帧</strong>（短、最省）、
-              <strong>最密=15帧</strong>（最平滑、最慢，两帧差异大时易糊）；
+              <strong>RIFE / 密度</strong>：勾 RIFE 才补中间帧；密度=补几帧，
+              <strong>最疏=1帧</strong>、<strong>最密=15帧</strong>（两帧差异大时过密易糊），
               <strong>自动</strong>按裁切量估算。
             </p>
           </div>
@@ -181,7 +192,11 @@ export function SeamPlanModal({ path, lang, onClose, onDone }: Props) {
                   {isHandoff ? (
                     <div className="seam-hint">
                       帧差 {s.diff == null ? "?" : s.diff.toFixed(0)} · 建议
-                      {s.suggest === "rife" ? " RIFE 补帧" : " 硬拼"}
+                      {s.suggest === "rife"
+                        ? " 不硬拼 + RIFE 补帧"
+                        : s.suggest === "trim"
+                          ? " 不硬拼 · 裁切平滑"
+                          : " 硬拼"}
                     </div>
                   ) : (
                     <div className="seam-hint">无首尾帧 · 仅硬拼</div>
@@ -197,30 +212,39 @@ export function SeamPlanModal({ path, lang, onClose, onDone }: Props) {
                           硬拼
                         </button>
                         <button type="button"
-                          className={c.method === "rife" ? "active" : ""}
-                          onClick={() => setChoice(s.index, { method: "rife" })}>
-                          RIFE
+                          className={c.method !== "butt" ? "active" : ""}
+                          onClick={() => setChoice(s.index,
+                            { method: c.method === "butt" ? "trim" : c.method })}>
+                          不硬拼
                         </button>
                       </div>
-                      {c.method === "rife" && (
+                      {c.method !== "butt" && (
                         <div className="seam-params">
                           <label title={TRIM_HELP}>裁切秒 ⓘ
-                            <input type="number" min={0.04} max={0.4} step={0.02}
+                            <input type="number" min={0} max={0.4} step={0.02}
                               value={c.trim} title={TRIM_HELP}
                               onChange={(e) =>
                                 setChoice(s.index, { trim: Number(e.target.value) })} />
                           </label>
-                          <label title={DEPTH_HELP}>密度 ⓘ
-                            <select value={c.depth == null ? "" : String(c.depth)}
-                              title={DEPTH_HELP}
-                              onChange={(e) => setChoice(s.index, {
-                                depth: e.target.value === "" ? null : Number(e.target.value),
-                              })}>
-                              {DEPTH_OPTIONS.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
+                          <label className="seam-rife-toggle" title={RIFE_HELP}>
+                            <input type="checkbox" checked={c.method === "rife"}
+                              onChange={(e) => setChoice(s.index,
+                                { method: e.target.checked ? "rife" : "trim" })} />
+                            RIFE 补帧 ⓘ
                           </label>
+                          {c.method === "rife" && (
+                            <label title={DEPTH_HELP}>密度 ⓘ
+                              <select value={c.depth == null ? "" : String(c.depth)}
+                                title={DEPTH_HELP}
+                                onChange={(e) => setChoice(s.index, {
+                                  depth: e.target.value === "" ? null : Number(e.target.value),
+                                })}>
+                                {DEPTH_OPTIONS.map((o) => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
                         </div>
                       )}
                     </>

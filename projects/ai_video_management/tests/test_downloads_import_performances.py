@@ -59,7 +59,9 @@ def test_import_routes_by_tag(tmp_path: Path) -> None:
     assert {e["kind"] for e in result.moved} == {"performance_video", "performance_startframe"}
 
 
-def test_unmatched_goes_to_perf_not_matched(tmp_path: Path) -> None:
+def test_unmatched_is_not_imported(tmp_path: Path) -> None:
+    """Unmatched downloads are reported but NOT imported — left in Downloads,
+    no `_not_matched/` folder is created."""
     root = tmp_path / "repo"
     _perf_root(root)
     downloads = tmp_path / "Downloads"
@@ -71,8 +73,9 @@ def test_unmatched_goes_to_perf_not_matched(tmp_path: Path) -> None:
     assert result.moved == []
     assert {e["kind"] for e in result.unmatched} == {"unmatched"}
     base = root / "ai_videos" / "_performances"
-    assert (base / "_not_matched" / "random_clip.mp4").is_file()
-    assert (base / "_not_matched" / "演9999克_x.mp4").is_file()
+    assert not (base / "_not_matched").exists()
+    assert (downloads / "random_clip.mp4").is_file()
+    assert (downloads / "演9999克_x.mp4").is_file()
 
 
 def test_reimport_overwrites_startframe_canonical(tmp_path: Path) -> None:

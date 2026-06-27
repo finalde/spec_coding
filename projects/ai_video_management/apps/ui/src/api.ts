@@ -318,6 +318,36 @@ export async function burnDramaSubtitles(
   return readJson<BurnDramaSubtitlesResult>(response);
 }
 
+export interface ExportedEpisode {
+  lang: "zh" | "en" | "zhen";
+  folder: string;   // 中文 | 英文 | 中英
+  episode: string;  // ep01
+  src: string;
+  out: string;
+}
+
+export interface ExportProductionResult {
+  drama: string;
+  production: string;
+  exported: ExportedEpisode[];
+  /** per-folder copied counts, keyed by 中文 / 英文 / 中英. */
+  by_lang: Record<string, number>;
+}
+
+/** Copy every subtitled episode master (`ep{NN}_{zh|en|zhen}.mp4`) across ALL
+ * episodes of a drama into `ai_videos/{drama}/production/{中文|英文|中英}/ep{NN}.mp4`
+ * (language implied by the sub-folder, so the suffix is stripped). Overwrites;
+ * nothing-to-export is a valid empty result. `path` may be any file under the
+ * drama folder. */
+export async function exportProduction(path: string): Promise<ExportProductionResult> {
+  const response = await fetch("/api/export-production", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ExportProductionResult>(response);
+}
+
 export interface BurnIntroCardsResult {
   src: string;
   out: string;
@@ -479,7 +509,8 @@ export async function perfScore(input: {
 
 export interface ImportFromDownloadsResult {
   moved: { from: string; to: string; kind: string }[];
-  unmatched: { from: string; to: string; kind: string }[];
+  // Unmatched files are NOT imported — left in Downloads, only reported (no `to`).
+  unmatched: { from: string; kind: string }[];
   errors: { path: string; message: string }[];
   rename: RenameMediaResult;
 }
@@ -960,6 +991,24 @@ export async function extractCharacterViews(path: string): Promise<ExtractCharac
   return readJson<ExtractCharacterViewsResult>(response);
 }
 
+export interface CharacterVideoListing {
+  folder: string;
+  /** Newest turntable mp4 in the folder (rel path), or null when none rendered yet. */
+  latest_video: string | null;
+}
+
+export async function listCharacterVideos(
+  path: string,
+): Promise<{ items: CharacterVideoListing[] }> {
+  // no-store: after a render/import the gallery must reflect the newest mp4.
+  const response = await fetch(`/api/character-videos?path=${encodeURIComponent(path)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  return readJson<{ items: CharacterVideoListing[] }>(response);
+}
+
 export interface ExtractAllCharacterViewsItem {
   folder: string;
   status: "ok" | "skipped" | "error";
@@ -1021,10 +1070,10 @@ export interface SeamInfo {
   to: string;
   link: "handoff" | "hardcut";   // 承接 (RIFE-eligible) | 硬切 (butt only)
   diff: number | null;           // mean-abs frame diff (handoff only)
-  suggest: "butt" | "rife";      // auto recommendation
-  method: "butt" | "rife";       // current choice (saved plan or suggestion)
+  suggest: "butt" | "trim" | "rife";  // auto recommendation
+  method: "butt" | "trim" | "rife";   // current choice (saved plan or suggestion)
   trim: number;
-  depth: number | null;          // 补帧密度 override (null = auto)
+  depth: number | null;          // 补帧密度 override (null = auto; rife only)
   thumb_a: string;               // data-URI JPEG of predecessor tail frame
   thumb_b: string;               // data-URI JPEG of successor head frame
 }
@@ -1040,7 +1089,7 @@ export interface EpisodeSeamsResult {
 export interface SeamPlanEntry {
   from: string;
   to: string;
-  method: "butt" | "rife";
+  method: "butt" | "trim" | "rife";
   trim?: number | null;
   depth?: number | null;
 }
@@ -1133,6 +1182,64 @@ export async function burnEpisodeSubtitlesWhole(
     body: JSON.stringify({ path, lang }),
   });
   return readJson<BurnEpisodeWholeResult>(response);
+}
+
+// ============================================================================
+// Drama-level production console (main page DramaDashboard).
+// ============================================================================
+
+/** One episode's status in the drama production console. `episode_rel` is the
+ * ep folder path — pass it straight to `concatEpisode` for per-episode 拼接. */
+export interface DramaEpisodeInfo {
+  episode: string;       // "ep04"
+  episode_rel: string;   // ai_videos/{drama}/.../episodes/ep04
+  shots: number;
+  locked: number;        // shots already 定版-locked (shot{NN}.mp4 present)
+  has_master: boolean;   // stitched ep{NN}.mp4 exists
+}
+
+export interface DramaEpisodesResult {
+  drama: string;
+  episodes: DramaEpisodeInfo[];
+}
+
+/** List a drama's episodes (shot count, 定版-locked count, master flag) to drive
+ * the dashboard's per-episode 拼接成片 rows. `path` may be any file/folder under
+ * the drama. */
+export async function listDramaEpisodes(path: string): Promise<DramaEpisodesResult> {
+  const response = await fetch("/api/list-drama-episodes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<DramaEpisodesResult>(response);
+}
+
+/** One episode's outcome from a drama-wide 定版 pass. */
+export interface DramaTakesOutcome {
+  episode: string;
+  episode_rel: string;
+  ok: boolean;
+  selected: number;       // shots locked (ok only)
+  skipped: number;        // shots without a render (ok only)
+  reason: string | null;  // failure kind (ok=false only)
+}
+
+export interface DramaTakesResult {
+  drama: string;
+  outcomes: DramaTakesOutcome[];
+}
+
+/** 全局定版: lock every episode's newest takes to shot{NN}.mp4 in one pass
+ * (drama-wide counterpart to selectEpisodeTakes). Does NOT concat. `path` may be
+ * any file/folder under the drama. */
+export async function selectDramaTakes(path: string): Promise<DramaTakesResult> {
+  const response = await fetch("/api/select-drama-takes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<DramaTakesResult>(response);
 }
 
 // ============================================================================
@@ -1707,4 +1814,97 @@ export async function burnEpisodeBgm(path: string): Promise<BurnEpisodeBgmResult
     body: JSON.stringify({ path }),
   });
   return readJson<BurnEpisodeBgmResult>(response);
+}
+
+/** One scored metric within a seam method's result (M1–M4). */
+export interface SeamMetric {
+  score: number;
+  [k: string]: number; // raw measurement fields (vel_break_pxf, min_ratio, peak_ratio, ssim…)
+}
+
+/** One method's score for a seam (chosen plan or a panel candidate). */
+export interface SeamMethodScore {
+  score?: number;
+  label?: string;
+  method?: string;
+  trim?: number;
+  depth?: number | null;
+  M1_velocity?: SeamMetric;
+  M2_no_freeze?: SeamMetric;
+  M3_no_jump?: SeamMetric;
+  M4_junction_ssim?: SeamMetric;
+  frames?: number;
+  error?: string;
+}
+
+/** Where a seam lands in the final ep timeline (for scrubbing to it). */
+export interface SeamTime {
+  at_s: number;
+  start_s: number;
+  end_s: number;
+}
+
+export interface SeamScored {
+  seam: string;
+  time?: SeamTime | null;
+  chosen: SeamMethodScore;
+  panel: SeamMethodScore[];
+}
+
+export interface SeamMetricDef {
+  id: string;
+  key: string;
+  name: string;
+  en: string;
+  weight: number;
+  unit: string;
+  desc: string;
+  good: string;
+  bad: string;
+}
+
+/** Full seam-quality scorecard from /api/episode-seam-metrics. */
+export interface SeamMetricsResult {
+  episode: string;
+  lang: EpisodeLang;
+  weights: Record<string, number>;
+  metric_defs: SeamMetricDef[];
+  seams: SeamScored[];
+  overall: number | null;
+  overall_grade: string | null;
+  ceiling: number | null;
+  ceiling_grade: string | null;
+  weakest: number | null;
+  n_seams: number;
+  generated_at?: string;     // ISO time the sidecar was persisted (last build)
+  persisted?: false;         // present (false) only when no sidecar exists yet
+}
+
+/** Read the PERSISTED scorecard from the last build — instant, no recompute. The
+ * dashboard auto-loads this on page open. Returns {persisted:false} if not scored yet. */
+export async function readEpisodeSeamScores(
+  path: string,
+  lang: EpisodeLang = "original",
+): Promise<SeamMetricsResult> {
+  const response = await fetch("/api/episode-seam-scores", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, lang }),
+  });
+  return readJson<SeamMetricsResult>(response);
+}
+
+/** Score every 承接 seam (optical-flow + SSIM metrics) and, when `compare`, rank a
+ * standard method panel. Heavy (decodes + flow per seam) — call on demand. */
+export async function scoreEpisodeSeams(
+  path: string,
+  lang: EpisodeLang = "original",
+  compare: boolean = true,
+): Promise<SeamMetricsResult> {
+  const response = await fetch("/api/episode-seam-metrics", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, lang, compare }),
+  });
+  return readJson<SeamMetricsResult>(response);
 }

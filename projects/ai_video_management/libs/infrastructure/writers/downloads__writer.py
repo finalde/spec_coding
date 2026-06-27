@@ -15,8 +15,9 @@ tool names the download from the prompt's `主体:` line, which opens with that
 walk-through `.mp4` (no 方位 token) stays at scene root. A scene-plate folder
 holds exactly one canonical image, so re-importing OVERWRITES it: existing
 media in the plate folder (including stale `{plate}1/{plate}2` numbered
-leftovers) is cleared before the new download is moved in. Unmatched files land in `<drama>/not_matched/` for manual
-triage. (Shot folders were renamed `prompts/` → `shots/` per ai_video rule
+leftovers) is cleared before the new download is moved in. Unmatched files
+are NOT imported at all — they are left untouched in Downloads and only
+reported back as `unmatched` entries (no `not_matched/` dumping ground). (Shot folders were renamed `prompts/` → `shots/` per ai_video rule
 2 v3; the legacy `prompts/` name is still accepted for unmigrated trees.) Only Downloads' immediate children are scanned, restricted to media
 extensions with mtime within the last 7 days; symlinks are skipped.
 
@@ -52,10 +53,7 @@ from libs.infrastructure.writers.actor__writer import (
 )
 from libs.infrastructure.writers.media__writer import MediaRenamer, RenameResult
 
-ACTOR_NOT_MATCHED_DIR_NAME = "_not_matched"
-
 NOT_MATCHED_DIR_NAME = "not_matched"
-PERF_NOT_MATCHED_DIR_NAME = "_not_matched"
 RENDERS_DIR_NAME = "renders"
 PERF_LIBRARY_DIR_NAME = "_performances"
 # Performance-library import tag, written as the first line of every render
@@ -73,7 +71,6 @@ _PERF_FOLDER_RE = re.compile(r"^perf_(\d{4})$")
 # first line (the routing KEY), so a downloaded music file named after the
 # prompt head carries that tag. Route the file to `_bgm/{cat}/bgm_NNNN/`.
 BGM_LIBRARY_DIR_NAME = "_bgm"
-BGM_NOT_MATCHED_DIR_NAME = "_not_matched"
 _BGM_TAG = re.compile(r"bgm_(\d{4,})")
 _BGM_FOLDER_RE = re.compile(r"^bgm_(\d{4,})$")
 _BGM_AUDIO_EXTS = frozenset({".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac"})
@@ -156,7 +153,6 @@ class DownloadsImporter:
         candidates = self._collect_candidates(drama_dir)
         cutoff = time.time() - self._window
         result = ImportResult()
-        not_matched_dir = drama_dir / NOT_MATCHED_DIR_NAME
         for src in self._iter_downloads(cutoff):
             if not self._is_safe_basename(src.name):
                 result.errors.append({"path": self._display_src(src), "message": "invalid_basename"})
@@ -170,12 +166,14 @@ class DownloadsImporter:
                 # the scene handle does not. Route by 方位 to the unique matching
                 # plate folder across the drama's scenes.
                 plate = self._match_plate_any_scene(src.name, drama_dir)
-                if plate is not None:
-                    dst_folder, kind, unmatched = plate, "scene_plate", False
-                else:
-                    dst_folder, kind, unmatched = not_matched_dir, "unmatched", True
+                if plate is None:
+                    # Truly unmatched → NOT imported: leave the file in Downloads
+                    # untouched, only report it back (no not_matched/ folder).
+                    result.unmatched.append({"from": self._display_src(src), "kind": "unmatched"})
+                    continue
+                dst_folder, kind = plate, "scene_plate"
             else:
-                dst_folder, kind, unmatched = chosen.folder, chosen.kind, False
+                dst_folder, kind = chosen.folder, chosen.kind
                 if chosen.kind == "scene":
                     plate = self._match_scene_plate(src.name, chosen.folder)
                     if plate is not None:
@@ -215,11 +213,7 @@ class DownloadsImporter:
             except OSError as exc:
                 result.errors.append({"path": self._display_src(src), "message": f"move_failed: {exc}"})
                 continue
-            entry = {"from": self._display_src(src), "to": self._rel(dst), "kind": kind}
-            if unmatched:
-                result.unmatched.append(entry)
-            else:
-                result.moved.append(entry)
+            result.moved.append({"from": self._display_src(src), "to": self._rel(dst), "kind": kind})
         rename_result = self._renamer.rename_drama(
             rel_drama_path,
             excluded_folder_names=frozenset({NOT_MATCHED_DIR_NAME, RENDERS_DIR_NAME, "frames"}),
@@ -235,9 +229,9 @@ class DownloadsImporter:
         download filename (Kling/Seedance name the file from the prompt's first
         chars, where the tag lives). The file lands in `{emotion}/perf_{NNNN}/`
         renamed to its canonical name (`perf_{NNNN}__kling.mp4` /
-        `__seedance.mp4` / `__startframe.png`). Unmatched files go to
-        `_performances/_not_matched/`. No folder-name rename pass — perf folders
-        are ID-named and stable.
+        `__seedance.mp4` / `__startframe.png`). Unmatched files are left in
+        Downloads untouched (not imported), only reported. No folder-name
+        rename pass — perf folders are ID-named and stable.
         """
         perf_root = self._renamer.validate_drama(rel_path)
         if not self._downloads_dir.is_dir():
@@ -245,31 +239,29 @@ class DownloadsImporter:
         perf_folders = self._collect_perf_folders(perf_root)
         cutoff = time.time() - self._window
         result = ImportResult()
-        not_matched_dir = perf_root / PERF_NOT_MATCHED_DIR_NAME
         for src in self._iter_downloads(cutoff):
             if not self._is_safe_basename(src.name):
                 result.errors.append({"path": self._display_src(src), "message": "invalid_basename"})
                 continue
             tag = _PERF_TAG.search(src.name)
             matched = tag is not None and tag.group(1) in perf_folders
-            if matched:
-                num, is_startframe = tag.group(1), tag.group(2) == "始"
-                perf_dir = perf_folders[num]
-                if is_startframe:
-                    # single canonical reference frame
-                    dst_folder = perf_dir
-                    dst = perf_dir / f"perf_{num}__startframe{src.suffix.lower()}"
-                    kind = "performance_startframe"
-                else:
-                    # generic test video → renders/ keeping the original name so
-                    # multiple models' renders for the same entry coexist.
-                    dst_folder = perf_dir / RENDERS_DIR_NAME
-                    dst = dst_folder / src.name
-                    kind = "performance_video"
+            if not matched:
+                # Unmatched → NOT imported: left in Downloads, only reported.
+                result.unmatched.append({"from": self._display_src(src), "kind": "unmatched"})
+                continue
+            num, is_startframe = tag.group(1), tag.group(2) == "始"
+            perf_dir = perf_folders[num]
+            if is_startframe:
+                # single canonical reference frame
+                dst_folder = perf_dir
+                dst = perf_dir / f"perf_{num}__startframe{src.suffix.lower()}"
+                kind = "performance_startframe"
             else:
-                dst_folder = not_matched_dir
-                dst = not_matched_dir / src.name
-                kind = "unmatched"
+                # generic test video → renders/ keeping the original name so
+                # multiple models' renders for the same entry coexist.
+                dst_folder = perf_dir / RENDERS_DIR_NAME
+                dst = dst_folder / src.name
+                kind = "performance_video"
             try:
                 dst_folder.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
@@ -287,11 +279,7 @@ class DownloadsImporter:
             except OSError as exc:
                 result.errors.append({"path": self._display_src(src), "message": f"move_failed: {exc}"})
                 continue
-            entry = {"from": self._display_src(src), "to": self._rel(dst), "kind": kind}
-            if matched:
-                result.moved.append(entry)
-            else:
-                result.unmatched.append(entry)
+            result.moved.append({"from": self._display_src(src), "to": self._rel(dst), "kind": kind})
         return result
 
     def import_actors(self, rel_path: str) -> ImportResult:
@@ -305,8 +293,9 @@ class DownloadsImporter:
         `{ethnicity}__{gender}__{age_range}.jpg` (face) or `...__body.jpg`
         (body) — the names `_find_actor_jpg` / `list_actors` look for — so an
         externally-rendered actor surfaces in the pool exactly like a
-        Kling-generated one. Unmatched files go to `_actors/_not_matched/`.
-        No folder-name rename pass: actor folders are ID-named and stable.
+        Kling-generated one. Unmatched files are left in Downloads untouched
+        (not imported), only reported. No folder-name rename pass: actor
+        folders are ID-named and stable.
         """
         actors_root = (self._exposed.root / "ai_videos" / ACTORS_DIR_NAME).resolve()
         if not self._downloads_dir.is_dir():
@@ -314,7 +303,6 @@ class DownloadsImporter:
         actor_folders = self._collect_actor_folders(actors_root)
         cutoff = time.time() - self._window
         result = ImportResult()
-        not_matched_dir = actors_root / ACTOR_NOT_MATCHED_DIR_NAME
         for src in self._iter_downloads(cutoff):
             if not self._is_safe_basename(src.name):
                 result.errors.append({"path": self._display_src(src), "message": "invalid_basename"})
@@ -322,41 +310,25 @@ class DownloadsImporter:
             tag = _ACTOR_IMPORT_TAG.search(src.name)
             num = int(tag.group(1)) if tag is not None else None
             matched = num is not None and num in actor_folders
-            if matched:
-                is_body = tag.group(2).lower() == "b"
-                actor_dir = actor_folders[num]
-                attrs = ActorPool._parse_sidecar(actor_dir / f"{actor_dir.name}.md")
-                if attrs is None:
-                    result.errors.append({"path": self._display_src(src), "message": "sidecar_unreadable"})
-                    continue
-                fname = _attrs_to_body_filename(attrs) if is_body else _attrs_to_filename(attrs)
-                dst = actor_dir / fname
-                kind = "actor_body" if is_body else "actor_face"
-                try:
-                    self._reencode_to_jpeg(src, dst)
-                except (OSError, ValueError) as exc:
-                    result.errors.append({"path": self._display_src(src), "message": f"convert_failed: {exc}"})
-                    continue
-                result.moved.append({"from": self._display_src(src), "to": self._rel(dst), "kind": kind})
-            else:
-                try:
-                    not_matched_dir.mkdir(parents=True, exist_ok=True)
-                except OSError as exc:
-                    result.errors.append({"path": self._display_src(src), "message": f"mkdir_failed: {exc}"})
-                    continue
-                dst = not_matched_dir / src.name
-                if dst.exists():
-                    try:
-                        dst.unlink()
-                    except OSError as exc:
-                        result.errors.append({"path": self._display_src(src), "message": f"overwrite_failed: {exc}"})
-                        continue
-                try:
-                    shutil.move(str(src), str(dst))
-                except OSError as exc:
-                    result.errors.append({"path": self._display_src(src), "message": f"move_failed: {exc}"})
-                    continue
-                result.unmatched.append({"from": self._display_src(src), "to": self._rel(dst), "kind": "unmatched"})
+            if not matched:
+                # Unmatched → NOT imported: left in Downloads, only reported.
+                result.unmatched.append({"from": self._display_src(src), "kind": "unmatched"})
+                continue
+            is_body = tag.group(2).lower() == "b"
+            actor_dir = actor_folders[num]
+            attrs = ActorPool._parse_sidecar(actor_dir / f"{actor_dir.name}.md")
+            if attrs is None:
+                result.errors.append({"path": self._display_src(src), "message": "sidecar_unreadable"})
+                continue
+            fname = _attrs_to_body_filename(attrs) if is_body else _attrs_to_filename(attrs)
+            dst = actor_dir / fname
+            kind = "actor_body" if is_body else "actor_face"
+            try:
+                self._reencode_to_jpeg(src, dst)
+            except (OSError, ValueError) as exc:
+                result.errors.append({"path": self._display_src(src), "message": f"convert_failed: {exc}"})
+                continue
+            result.moved.append({"from": self._display_src(src), "to": self._rel(dst), "kind": kind})
         return result
 
     def import_bgms(self, rel_path: str) -> ImportResult:
@@ -367,15 +339,14 @@ class DownloadsImporter:
         the downloaded filename. This routes each recent audio download back to
         its `_bgm/{category}/bgm_NNNN/` folder by that tag, naming it
         `bgm_NNNN.{ext}` (one audio file per track — prior audio is cleared).
-        Unmatched files go to `_bgm/_not_matched/`. No folder-rename pass: bgm
-        folders are id-named and stable."""
+        Unmatched files are left in Downloads untouched (not imported), only
+        reported. No folder-rename pass: bgm folders are id-named and stable."""
         bgm_root = (self._exposed.root / "ai_videos" / BGM_LIBRARY_DIR_NAME).resolve()
         if not self._downloads_dir.is_dir():
             raise DownloadsDirMissingError(str(self._downloads_dir))
         folders = self._collect_bgm_folders(bgm_root)
         cutoff = time.time() - self._window
         result = ImportResult()
-        not_matched_dir = bgm_root / BGM_NOT_MATCHED_DIR_NAME
         for src in self._iter_downloads(cutoff):
             if src.suffix.lower() not in _BGM_AUDIO_EXTS:
                 continue
@@ -385,14 +356,14 @@ class DownloadsImporter:
             tag = _BGM_TAG.search(src.name)
             num = tag.group(1) if tag is not None else None
             matched = num is not None and num in folders
-            if matched:
-                bgm_dir = folders[num]
-                self._clear_audio_files(bgm_dir)
-                dst_folder, dst = bgm_dir, bgm_dir / f"bgm_{num}{src.suffix.lower()}"
-                kind = "bgm_audio"
-            else:
-                dst_folder, dst = not_matched_dir, not_matched_dir / src.name
-                kind = "unmatched"
+            if not matched:
+                # Unmatched → NOT imported: left in Downloads, only reported.
+                result.unmatched.append({"from": self._display_src(src), "kind": "unmatched"})
+                continue
+            bgm_dir = folders[num]
+            self._clear_audio_files(bgm_dir)
+            dst_folder, dst = bgm_dir, bgm_dir / f"bgm_{num}{src.suffix.lower()}"
+            kind = "bgm_audio"
             try:
                 dst_folder.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
@@ -409,11 +380,7 @@ class DownloadsImporter:
             except OSError as exc:
                 result.errors.append({"path": self._display_src(src), "message": f"move_failed: {exc}"})
                 continue
-            entry = {"from": self._display_src(src), "to": self._rel(dst), "kind": kind}
-            if matched:
-                result.moved.append(entry)
-            else:
-                result.unmatched.append(entry)
+            result.moved.append({"from": self._display_src(src), "to": self._rel(dst), "kind": kind})
         return result
 
     @staticmethod

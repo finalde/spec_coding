@@ -21,3 +21,19 @@ class EpisodeQuery:
         return EpisodeMapper.analysis_to_qdto(
             self._builder.analyze_seams(rel_path, lang)
         )
+
+    def score_seams(
+        self, rel_path: str, lang: str = "original", compare: bool = True
+    ) -> dict:
+        """Objective seam-quality scorecard (optical-flow + SSIM) for the dashboard.
+        The payload is the seam_metrics tool's structured result — a dynamic nested
+        dict (per-seam metric breakdowns + a ranked method panel + metric defs), so
+        it passes through verbatim rather than through a fixed DTO."""
+        return self._builder.score_seams(rel_path, lang, compare)
+
+    def read_seam_scores(self, rel_path: str) -> dict:
+        """The persisted scorecard from the last build (instant, no recompute) — the
+        payload the dashboard auto-loads on page open. `{persisted: false}` when the
+        episode has not been scored yet."""
+        card = self._builder.read_seam_scores(rel_path)
+        return card if card is not None else {"persisted": False}

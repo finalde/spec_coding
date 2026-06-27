@@ -4179,3 +4179,195 @@ Fix（纯音频侧，画面/补帧逻辑不动）:
 
 ## 注（外部改动观察）
 VALID_EPISODE_LANGS 被外部改为 ("original",)（疑随"字幕默认关/弃 _zh 集变体"方向）。影响：concat-episode / episode-seams 的 lang=zh|en|both 现会 400；SeamPlanModal 的中文/EN/中英按钮需相应改走 original，或前端隐藏这些 lang。本条仅记录，未改（属另一方向，待用户确认）。
+
+## Follow-up 148 — 2026-06-27 16:33:30
+Source: user_input/follow_ups/148-20260627-163330-export-production-folder-and-drama-dashboard.md
+Summary: ① 一键导出 production——把一部剧所有带字幕 ep 成片拷到 ai_videos/{drama}/production/（中文/英文/中英 子文件夹·去后缀命名）。② 新增剧 level dashboard 主页（点 left nav 剧→右侧 main page 放剧级按钮+展示，解决 toolbar 放不下）。
+
+Auto-updated:
+- `libs/infrastructure/writers/production__writer.py`（新增 ProductionExporter：解析 drama root + 走 episodes/ep* 两 layout，把 ep{NN}_{zh|en|zhen}.mp4 → production/{中文|英文|中英}/ep{NN}.mp4，shutil.copy2 覆盖、去后缀、nothing-to-export 为空结果非错误）
+- `libs/application/{dtos/production__dto.py, mappers/production__mapper.py, commands/production__command.py}`（薄 application seam）
+- `apps/api/routes/production__route.py`（POST /api/export-production {path}）+ `routes/__init__.py` 注册 + `container.py`（production_exporter singleton + production_command factory）
+- `apps/ui/src/api.ts`（exportProduction + ExportProductionResult/ExportedEpisode 类型）
+- `apps/ui/src/components/DramaDashboard.tsx`（新增·剧级 main page「剧集制作台」：📦 导出 production + 💬 全剧烧字幕 zh/en/both）
+- `apps/ui/src/components/Reader.tsx`（drama README 页 body 顶部渲染 DramaDashboard；移除 toolbar 的全剧烧字幕群组 + 迁走 onBurnDramaSubtitlesClick/burnDramaBusy/burnDramaSubtitles import 进 dashboard）
+- `apps/ui/src/styles.css`（.drama-dashboard* 样式）
+- `tests/test_production_export.py`（新增：按语言路由+去后缀、空结果、scope 拒绝）
+
+Verified:
+- 后端 pytest test_production_export.py 3 passed；全量 181 passed（5 项预存无关失败：wukong 数据 / put_file loopback）；container 构建 + /api/export-production 注册确认。
+- 前端 tsc --noEmit 0 错；vite build 成功（重建 backend/static）；vitest 37 passed。
+
+设计说明（采纳用户建议）：剧级按钮放不进 left-nav toolbar → 新增**剧级 main page（DramaDashboard）**，以 drama README 页为锚在右侧呈现，承载剧级动作（导出 production + 全剧烧字幕）；后续剧级功能都往这放。导出落点 `ai_videos/{drama}/production/{中文|英文|中英}/ep{NN}.mp4`（lang 由子文件夹表示、文件去后缀）。
+
+No conflicts found in: interview/qa.md、findings/、final_specs/spec.md、validation/*（本次为新增 UI/后端功能，不改既有契约；导出复用既有带字幕成片 ep{NN}_{zh|en|zhen}.mp4）。
+
+## Follow-up 149 — 2026-06-27 17:09:04
+Source: user_input/follow_ups/149-20260627-170904-seam-trim-allow-zero-rife-without-trim.md
+Summary: 拼接功能裁切秒允许从 0 开始（min 0.04→0），即可「只选 RIFE 但不裁切」（trim=0）。
+
+Auto-updated:
+- `apps/ui/src/components/SeamPlanModal.tsx` — 裁切 input `min={0.04}`→`min={0}`（step 0.02/max 0.4 不变）；TRIM_HELP 补「0=不裁切，仅在接缝处插补帧平滑、不丢原片」。
+- `tools/seam_concat.py` — 新增 `_SEAM_TRIM_EPS=0.02`；`_rife_bridge` 音频复用加 `reuse_ambient = trim >= _SEAM_TRIM_EPS` 守卫：trim≈0 时两侧 atrim 切片为空会让 acrossfade 失败→静默回退 butt-join，故 trim<eps 不复用环境声、改走 anullsrc 静音桥，保证 trim=0 仍出 RIFE 桥（depth 默认 1 帧，用户可用「密度」控件加帧）。
+
+Verified:
+- seam_concat.py 语法 OK；UI tsc 0 错 + vite build 成功（重建 bundle）；pytest test_episode_concat.py 23 passed（plan 路径未 floor trim 已确认：trims[j]=float(e["trim"])）。
+
+No conflicts found in: 后端 plan 路径本就接受任意 trim、episode__writer 不 floor plan trim；本次仅放开 UI 下限 + 修 trim≈0 的桥段音频回退。
+
+## Follow-up 150 — 2026-06-27 17:26:40
+Source: user_input/follow_ups/150-20260627-172640-seam-butt-shows-rife-stale-bundle-and-trimbutt.md
+Summary: 拼接「硬拼仍出 rife」根因＝构建/服务路径错配：app 服务 apps/api/static（空·.gitkeep），vite.config outDir 却是 apps/backend/static（backend→api 重构遗留）。用户已把拼接升级成三态（硬拼/裁切平接/RIFE）逻辑正确，但前端改动从未进入被服务 bundle → prod 跑旧 UI、硬拼仍出 rife。
+
+Auto-updated:
+- `apps/ui/vite.config.ts` + `apps/ui/vite.config.js` — build.outDir `apps/backend/static` → `apps/api/static`（app_factory.py 实际服务目录、Makefile clean 与 README 亦指此）。
+- 重建 `apps/api/static`（index.html + assets 落位）→ 用户已实现的三态拼接前端（SeamPlanModal/api.ts）现真正被服务。
+
+Verified:
+- npm run build 成功、apps/api/static 现含 index.html + index-*.js；episode__writer.py 语法 OK、pytest test_episode_concat.py 23 passed（三态 _plan_for_used/_stitch_with_plan 已由用户并行实现、本次未改其逻辑）。
+
+Note: 三态拼接（butt/trim/rife）的后端(_plan_for_used emit {bridge,rife}/_stitch_with_plan 仅在真 bridge 时要 RIFE exe) 与前端(method "butt"|"trim"|"rife") 为用户并行实现、已完整；本 follow-up 仅修构建落点使其生效。旧 `apps/backend/static/` 产物作废可后续清理。
+
+No conflicts found in: 后端三态逻辑（已正确）、tests。
+
+## Follow-up — 2026-06-27 承接缝新增「裁切平滑(trim)」第三接法 + seam_tune 调参工具
+Source: 用户——「重要的是 persist 调好的参数，让我在 UI 上也能看见最优参数；这套找最优参数+拼接流程做成可频繁调用的工具，跑后续所有 ep」。
+背景：seam_tune 实测发现 locked-frame 重生后承接缝近连续时，「裁切两侧 ease/重复帧 + 硬拼、不补帧」(trim-butt) 比 RIFE 更平滑，但旧 seam 计划只有 rife / butt(硬切) 两态，无法持久化/显示"裁切但不 RIFE"——会被当硬切丢掉 trim。
+common-level 工具（仓库级）：
+- 新增 `tools/seam_tune.py`——按 ep 文件夹自动调参：读 seam_plan.json、对每个承接缝扫 trim×depth + 裁切硬拼基线、客观度量(接缝逐帧亮度差对参考速度的最大偏离·罚 freeze/spike)选最平滑、--apply 回写计划、--build 出片；承接帧差超可桥接带([3,40])即报"prompt 问题(承接帧不匹配·无参数可救)"。可频繁调用于后续所有 ep。
+- `tools/seam_concat.py`：plan 条目新增 `rife` 键(默认 True)——令某缝可「裁切+硬拼、不补帧」(bridge True, rife False)，与 RIFE 缝/硬切缝在同一次 concat 混用。
+webapp（端到端三态：硬拼 / 裁切平滑 / RIFE 补帧）：
+- episode__writer：`_plan_for_used` 产 {bridge,rife,trim,depth}（method∈rife/trim→bridge；rife=method==rife；depth 仅 rife）；新增 `_stitch_with_plan`——仅当确有 RIFE 缝才要 rife exe，纯裁切/硬切计划无需 GPU 即可拼；analyze_seams 对带内承接缝 suggest 由 rife 改 trim(经验最优默认)；SeamInfo.method/suggest 注释三态。
+- episode__route：SeamPlanEntry.method 注释三态（route 不枚举校验，trim 直通）。
+- ui：api.ts SeamInfo/SeamPlanEntry method/suggest 加 "trim"；SeamPlanModal 承接缝三按钮(硬拼/裁切/RIFE)、裁切&RIFE 都显示「裁切秒」(可见并可改持久化参数)、密度仅 RIFE、图例/建议提示/头部计数加裁切。
+验证：pytest seam/episode 48 passed（全量 5 个失败与本改无关·wukong_juexing 子类型/tree_walker/api_security）；UI tsc 0 错 + vite build 成功(重建 bundle 落 apps/api/static)；ep01 saved plan→tool_plan 映射实跑确认两承接缝=trim-butt 0.14、硬切=plain。
+
+## Follow-up 151 — 2026-06-27 17:41:35
+Source: user_input/follow_ups/151-20260627-174135-seam-ux-hardcut-vs-soft-with-trim-and-rife.md
+Summary: ① 拼接 UI 改两级结构：硬拼 / 不硬拼；不硬拼下 裁切 与 RIFE 并存可调。② 诊断 ep4 shot11→12「硬拼不像硬拼」= stale render（非代码 bug）。
+
+Auto-updated:
+- `apps/ui/src/components/SeamPlanModal.tsx` — 承接缝控件由三互斥按钮(硬拼/裁切/RIFE)改为：硬拼/不硬拼 两按钮 + 不硬拼时展开 裁切秒 input(始终)+ RIFE 补帧 checkbox + 密度 select(勾 RIFE 时)；「不硬拼」active = method≠butt，点不硬拼默认置 trim，RIFE 勾选切 trim↔rife。新增 RIFE_HELP；legend + 建议 hint 文案同步两级模型。method 仍发 butt/trim/rife（后端三态不变）。
+- `apps/ui/src/styles.css` — `.seam-rife-toggle`（checkbox 行内对齐）。
+
+Verified:
+- tsc 0 错；vite build 成功（已落 apps/api/static·含本次 UI）；vitest 37 passed。
+
+ep4 shot11→12 诊断：seam_plan.json `shot11->shot12 method=butt`（保存正确）；shot11 硬切 / shot12 承接 shot11 → 承接缝；后端 butt→{bridge:False}=纯硬拼。看到的「rife/发软」是 vite 修复前旧 bundle/旧 render 的产物（前端改动此前从未被服务）→ 重启后端 + 硬刷新 + 重生 ep4 即正常；承接缝想干净接用「不硬拼+裁切」。无代码 bug。
+
+No conflicts found in: 后端三态(butt/trim/rife)逻辑、tests。
+
+## Follow-up 152 — 2026-06-27 18:00:00
+Source: user_input/follow_ups/152-20260627-180000-unmatched-downloads-not-imported.md
+Summary: 未匹配的下载文件不再导入到 not_matched/，而是原地留在 Downloads、仅作 unmatched 上报。
+
+Auto-updated:
+- libs/infrastructure/writers/downloads__writer.py — 四个导入入口(import_drama/performances/actors/bgms)统一改为未匹配即跳过(不移动、仅 result.unmatched 上报 from)；删除 ACTOR/PERF/BGM_NOT_MATCHED_DIR_NAME 常量与模块/方法 docstring 中的 not_matched 描述。
+- apps/ui/src/api.ts — ImportFromDownloadsResult.unmatched 去掉 to 字段。
+- apps/ui/src/components/{Sidebar,DramaPage}.tsx — 导入 toast「未分类」→「未导入」。
+- tests/{test_downloads_import_shots,test_downloads_import_bgms,test_downloads_import_performances,test_actor_prompt_only_roundtrip}.py — 断言改为「文件留在 Downloads、不创建 not_matched/」。22 passed。
+- ai_videos/wushen_juexing/not_matched/ — 删除整个文件夹(12 个文件)。
+
+No conflicts found in: final_specs/spec.md, validation/*.
+
+## Follow-up 153 — 2026-06-27 18:45:00
+Source: user_input/follow_ups/153-20260627-184500-drama-mainpage-open-from-nav-buttons-off-nav.md
+Summary: 点击 left nav 剧节点本身弹出剧级 main page（不只 dropdown）；剧级按钮从 nav 移到该页；148 的 dashboard 从 README 页迁到专属 DramaPage。
+
+Auto-updated:
+- apps/ui/src/components/DramaPage.tsx — 新增剧级主页组件（route /drama?drama=）：DramaDashboard（导出 production + 全剧烧字幕）+ 资源管理（导入+重命名、角色画廊）+ 📺 分集总览（从 tree 派生各集已烧字幕成片 zh/en/中英 badge）。
+- apps/ui/src/App.tsx — 注册 /drama 路由 → DramaPage。
+- apps/ui/src/components/Sidebar.tsx — 剧节点 onClick 改为 navigate(/drama?drama=) + 仍 toggle dropdown；移除 nav 内联的剧级按钮（📥 导入+重命名、🎭 角色画廊）。
+- apps/ui/src/components/Reader.tsx — DramaDashboard 从 isDramaReadme 页移除（含 import 与 isDramaReadme 判定），集中到 DramaPage；更新工具栏注释指向 DramaPage。
+- apps/ui/src/styles.css — 新增 .drama-page* 布局（header / section / 分集列表 + 语言 badge）。
+
+Verified: tsc -b 0 错；vite build 成功（已落 apps/api/static·含本次 UI）。后端 export-production 路由/命令早已 wired（148），本次纯前端 UX 重定位、无后端改动。
+
+No conflicts found in: 后端 production__*（148 已落）、final_specs/spec.md、validation/*。
+
+## Follow-up 152 — 2026-06-27 18:10:01
+Source: user_input/follow_ups/152-20260627-181001-concat-drops-audio-tail-last-word.md
+Summary: 拼接后 shot11 末字「了」消失 = 默认音频处理把音频裁到视频流长度。根因+修复+验证。
+
+Auto-updated:
+- `tools/seam_concat.py` — 根因：`_render_body` 把音频 `atrim end=dur`（dur=`_probe` 的视频流长）；clip 音频比视频长（TTS 末字在画面结束后才念完）时末字被裁，纯 butt 硬拼也中招。修：新增 `_audio_dur()` 探音频流长 + `_AUDIO_TAIL_KEEP_S=1.0`；`_render_body` 在 butt 尾(tail≈0)保留完整音频(不裁到视频长)、超出视频部分用 `tpad=stop_mode=clone` 保持末帧补齐画面(a/v 同步)、超出量 cap 1.0s 防 135c 卡死音轨。**坑**：`tpad` 须在 `_norm`(末尾含 `fps=`)之后才生效，否则静默 no-op——故 tpad 移到 `_norm` 之后。
+
+Verified:
+- shot11 body：音频 9.93→10.10s(「了」保住)、画面 tpad 补到 10.08s(a/v Δ0.02s)；3-clip 合成(含 0.3s 音频超长 clip) 解码 OK + a/v 同步；pytest test_episode_concat.py 23 passed。
+
+Note: 用户提议把音频处理选项暴露到 UI——默认修复后音频不再被裁、末字保住，无需手动选项即正确（如需显式控制可后续加 toggle）。与 `ai_videos__运镜` M8 新增「接缝两端 0.3s 留台词静默(ai_video.md (J))」互补：本修为出片端兜底、(J) 为设计端预防。用户需**重新生成 ep04** 取得修复后音频。
+
+No conflicts found in: episode__writer / 三态拼接逻辑（未触及）、tests。
+
+## Follow-up 153 — 2026-06-27 19:00:00
+Source: user_input/follow_ups/153-20260627-190000-drama-console-global-takes-and-per-episode-concat.md
+Summary: 主页剧集制作台新增「全局定版」按钮 + 每集「拼接成片」按钮列表。
+
+Auto-updated:
+- libs/infrastructure/writers/drama_takes__writer.py (新增) — DramaTakesSelector：遍历全剧 episodes/ep*，委托既有 EpisodeTakesSelector 逐集锁 take（不漂移），单集失败不致命。
+- libs/infrastructure/readers/drama_episodes__reader.py (新增) — DramaEpisodesReader：列出全剧每集 {shots, locked, has_master, episode_rel}。
+- libs/application/{dtos,mappers,commands}/drama_takes__*.py + queries/dtos/mappers drama_episodes__*.py (新增) — DDD 应用层包装。
+- apps/api/routes/drama__route.py (新增) — POST /api/select-drama-takes + /api/list-drama-episodes；注册进 routes/__init__.py；container.py 注入 4 个 provider。
+- apps/ui/src/api.ts — 新增 listDramaEpisodes / selectDramaTakes + 类型。
+- apps/ui/src/components/DramaDashboard.tsx — 加「🔒 全局定版」按钮 + 剧集列表（每集一行状态 + 「🎬 拼接成片」按钮，复用 concatEpisode，locked=0 时禁用）。
+- apps/ui/src/styles.css — 剧集列表样式。
+- final_specs/spec.md — 新增 FR-105（select-drama-takes）/ FR-106（list-drama-episodes）。
+- tests/test_drama_takes_and_episodes.py (新增, 5 passed) + tests/test_boot_smoke.py（两新端点加入 smoke 矩阵）。全部 38 passed；UI tsc 0 error。
+
+Note: UI 改动需重新 build 前端静态包（apps/api/static）后才会在 static-served 模式生效；vite dev 模式即时可见。
+
+No conflicts found in: validation/*, interview/qa.md.
+
+## Follow-up — 2026-06-27 接缝质量评分仪表盘（量化 metrics + UI dashboard）
+Source: 用户——「需要量化指标衡量是不是最好的 / 帮我对齐到最优并在 UI 给一个 dashboard 展示分数和细节 / 我要知道你设了哪些指标好一步步 improve」。
+工具层：`tools/seam_metrics.py` 暴露 `compute_scorecard()` 返回结构化评分（含 `METRIC_DEFS` 机读指标定义——名称/权重/单位/好坏阈值/中文说明，作 UI 与 scorer 的单一真相源）+ 每缝标准方法面板排名。CLI `grade()` 改为调它。
+四指标（各 0–100·加权均）：M1 运动速度连贯(cv2 光流·权40)·M2 无冻结(权15)·M3 无跳变/无拖影(权25)·M4 接缝结构连续(相邻 SSIM·权20)。
+webapp：
+- 后端 EpisodeConcatBuilder.`score_seams()`（载 tools/seam_metrics.py·调 compute_scorecard·传 rife exe·缺 RIFE 仅跳过对应面板行）；EpisodeQuery.`score_seams()` 透传 dict；route `POST /api/episode-seam-metrics`（body path/lang/compare）。
+- 前端 `SeamScoreDashboard.tsx`：📊 接缝评分按钮(Reader 出片三步区)→ 弹窗仪表盘：当前 plan 总分/最优上限/最弱缝三卡 + 指标定义折叠区 + 每缝方法排名(分数条·M1–M4 细分·原始测量值·★最佳/当前plan 标签)。首屏只评当前 plan(~15s)，勾「对比多种接法」再跑硬拼/裁切/RIFE 面板(~1–2min)。api.ts 加 SeamMetricsResult 等类型 + scoreEpisodeSeams()；styles.css 加 .seam-score-* 样式。
+验证：seam/episode pytest 53 passed；UI tsc 0 错 + vite build 成功；容器集成实跑 score_seams(ep01·compare=false)=15.4s·overall 94.2(A)·seam10→11 88.9 / seam11→12 99.4。
+
+## Follow-up — 2026-06-27 接缝评分持久化 + 打开页面自动显示 + 标注秒数区间
+Source: 用户——「结果直接记录下来，一打开页面不点 button 就能看到，是 ep01.mp4 最近一次生成的 dashboard；只针对首尾帧连接处，写明秒数范围」。
+- 持久化：build 成功后 EpisodeConcatBuilder.`_write_seam_scores()` 自动算分(chosen-only·快)并写 sidecar `ep{NN}.seam_scores.json`(带 generated_at·best-effort 不阻断 build)。tools/seam_metrics.py 加 `save_scorecard()`/`scorecard_path()`/CLI `--save`。
+- 即时读取：`read_seam_scores()`(infra)→ EpisodeQuery.`read_seam_scores()` → route `POST /api/episode-seam-scores`(读 sidecar·~170ms·无重算)。
+- 秒数区间(只首尾帧承接)：compute_scorecard 加 `_seam_timeline()`——按各 shot 有效时长(dur−head−tail·仅承接缝裁切)累加算出每个承接缝在成片里的 at_s + 区间[start_s,end_s](含 trim/桥接)，挂到 seam.time。CLI 文本/JSON/dashboard 全显示。仅 method∈trim/rife 的首尾帧缝计分(硬切不计)。
+- 前端自动显示：新增 `SeamScorePanel.tsx`——打开剧集 md 或 ep{NN}.mp4 成片页即自动拉 sidecar 并内联展示(总分+各承接缝分数/秒数区间/M1–M4)，无需点按钮；「详情/重新评分/对比接法」开完整 dashboard 弹窗。Reader 在 isEpisodeFile||isEpisodeReel 时渲染该 panel。api.ts 加 SeamTime/readEpisodeSeamScores + generated_at/persisted 字段；styles.css 加 .seam-panel-*。
+验证：seam/episode pytest 53 passed；UI tsc 0 + build OK；容器实测 read_seam_scores 173ms·overall 94.2(A)·seam10→11 @112.2s(112.0–112.4) 88.9 / seam11→12 @121.93s(121.73–122.13) 99.4。ep01 sidecar 已生成。
+
+## Follow-up — 2026-06-27 删除成片「资源忙」根治：删前释放预览流 + 后端重试穿透锁
+Source: 用户——「delete ep01.mp4 failed，点 delete 务必强制删成功，不管什么方法」。
+根因：浏览器 <video> 预览成片是经同一 webapp 服务器进程拉流(range 请求)，该进程因此持有文件读句柄；点删除时同进程去 rename 自己正开着的文件 → Windows「资源忙」，soft-delete(rename 到 _deleted/) 失败。(经 Restart Manager 定位锁持有者＝webapp python 进程。)
+修复(双侧，让删除必成)：
+- 前端 Reader.onDeleteClick：删前先卸载预览 <video>(videoRef pause + removeAttribute src + load + 250ms)，浏览器断流→服务器释放句柄。
+- 后端 media__writer：新增 `_rename_through_lock()`——rename 失败按 0.2s×15(≈3s)重试穿透瞬时锁，最后兜底 copy2+unlink；delete() 改用之。错误信息中文化。
+本次即时处置：ep01.mp4 被锁，已用 Restart Manager 定位并 kill 锁进程(webapp server PID 57564)后强制删除(用户授权杀 blocker)；用户需重启服务。
+验证：media/delete pytest 5 passed；UI tsc 0 + build OK。
+
+## Follow-up 154 — 2026-06-27 20:00:00
+Source: user_input/follow_ups/154-20260627-200000-actors-bgm-library-pages-and-voices-removal.md
+Summary: _actors→「演员库」、_bgm→「背景音乐库」各自成主页（grid 合并进主页 + 左栏按钮迁移）；删除 _voices 库。
+
+Auto-updated:
+- libs/infrastructure/readers/tree__reader.py — 新增 _SYSTEM_FOLDER_LABELS_ZH {_actors:演员库, _bgm:背景音乐库}，在 _walk_project 赋 display_name（优先于 README/concept H1）。
+- apps/ui/src/components/Sidebar.tsx — _actors/_bgm 节点点击改为 navigate(/actors|/bgm)+toggle；删除 _actors/_voices/_bgm 三组 root 内联按钮、VoicePoolGenerator/ActorPoolGenerator/BgmPoolGenerator 渲染与状态、onVoiceDeleteClick/deleteVoice/VOICE_ID_RE/isVoice* 等 voices 残留。
+- apps/ui/src/components/ActorGrid.tsx — 标题「演员池」→「演员库」；header 加 🎭 生成演员(ActorPoolGenerator 模态)+📥 导入演员(importFromDownloads ai_videos/_actors)；空态同样带工具栏。
+- apps/ui/src/components/BgmGrid.tsx — 标题「BGM 音乐库」→「背景音乐库」；header 加 🎵 生成 BGM(BgmPoolGenerator)+📥 导入下载音乐；空态文案更新。
+- apps/ui/src/styles.css — 新增 .voice-page-actions。
+- apps/ui/src/App.tsx — 删除 /voices 路由 + VoiceGrid import。
+- ai_videos/_voices/ — 整个文件夹删除（voice_0001/voice_0002；无 casting.md 引用 voice_id，安全）。
+- final_specs/spec.md — FR-87 更新 _actors/_bgm 节点行为 + 演员库/背景音乐库主页；FR-87 内 _voices 备注改为 RETIRED。
+- tests/test_tree_system_folder_labels.py (新增, 2 passed) — 校验 _actors→演员库 / _bgm→背景音乐库，且真实剧集 H1 标题不被系统标签覆盖。
+
+Note: 后端 /api/voices/* 端点保留（不再从 nav 可达，无 casting voice_id 引用）；如需彻底移除可再开 follow-up。UI 已 npm run build 刷新 apps/api/static 静态包。
+
+Verification: 全量后端 188 passed（仅 5 项既有 wukong_juexing/PUT-security 预存失败，与本次无关）；UI tsc 0 error + vite build 成功。
+
+No conflicts found in: validation/*, interview/qa.md.
+
+## Follow-up — 2026-06-27 修「拼接成片生成不出来」：评分移出关键路径(后台线程)
+Source: 用户——「点拼接成片，ep01.mp4 生成不出来」。
+根因：上一条把 seam 评分(_write_seam_scores·会重建隔离 seam pair + 跑光流·~30s)放进了 build() 同步关键路径，叠加既有 ~65s 出片(逐镜 freezedetect + 12 片重编码 + RIFE 桥接尝试)→ 单次请求 ~95s+，前端/代理看着像卡住没出片。(实测：纯 concat 20s；webapp build 无评分 ~66–70s；加同步评分 >2min。)
+修复：`_write_seam_scores` 改为 **daemon 后台线程**——ep{NN}.mp4 一写完 build() 立即返回(~65s 同改前)，评分 sidecar 稍后(~30s)自动落地，dashboard 仍能展示上次生成结果。评分不再拖慢/卡住拼接。
+验证：seam/episode/media pytest 55 passed；改动模块全 import OK；实测 build 返回 65.9s 且 ep01.mp4 生成成功。
+旁注：当前 seam_plan 两承接缝被 UI 实验设成 rife(shot10→11 d4/0.06、shot11→12 d1/0.1)，RIFE 桥接对本片降级失败("bridge unusable"→butt-join)且慢；trim@0.10 已证更优更快(94.2/A)，建议改回 trim。

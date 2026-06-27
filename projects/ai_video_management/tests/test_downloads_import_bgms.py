@@ -60,8 +60,10 @@ def test_import_bgms_unmatched_and_non_audio(tmp_path: Path) -> None:
 
     assert result.moved == []
     assert {e["kind"] for e in result.unmatched} == {"unmatched"}
-    assert (base / "_not_matched" / "bgm_9999_ghost.mp3").is_file()
-    assert (base / "_not_matched" / "no_tag_song.mp3").is_file()
+    # Unmatched audio is NOT imported — left in Downloads, no _not_matched/ folder.
+    assert not (base / "_not_matched").exists()
+    assert (downloads / "bgm_9999_ghost.mp3").is_file()
+    assert (downloads / "no_tag_song.mp3").is_file()
     # video was skipped entirely (not moved, not unmatched)
     assert (downloads / "bgm_0001_clip.mp4").is_file()
 

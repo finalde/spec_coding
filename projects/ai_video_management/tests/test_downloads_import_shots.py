@@ -312,7 +312,9 @@ def test_rename_pass_preserves_episode_final_cuts(tmp_path: Path) -> None:
     assert not any("episodes/" in t for t in renamed_to), renamed_to
 
 
-def test_unrelated_file_lands_in_not_matched(tmp_path: Path) -> None:
+def test_unrelated_file_is_not_imported(tmp_path: Path) -> None:
+    """Unmatched downloads are reported but NOT imported: the file stays in
+    Downloads untouched and no `not_matched/` folder is created."""
     root = tmp_path / "repo"
     (root / "ai_videos" / "td" / "episodes" / "ep01" / "shots" / "shot01").mkdir(parents=True)
     downloads = tmp_path / "Downloads"
@@ -322,4 +324,6 @@ def test_unrelated_file_lands_in_not_matched(tmp_path: Path) -> None:
 
     assert result.moved == []
     assert [e["kind"] for e in result.unmatched] == ["unmatched"]
-    assert (root / "ai_videos" / "td" / "not_matched" / "totally_unrelated.png").is_file()
+    # File left in place; never moved into the drama tree.
+    assert (downloads / "totally_unrelated.png").is_file()
+    assert not (root / "ai_videos" / "td" / "not_matched").exists()

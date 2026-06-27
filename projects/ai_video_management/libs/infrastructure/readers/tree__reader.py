@@ -15,6 +15,13 @@ _VIDEO_EXTENSIONS: frozenset[str] = frozenset({".mp4", ".mov", ".webm", ".mkv", 
 _AUDIO_EXTENSIONS: frozenset[str] = frozenset({".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"})
 _ACTOR_FOLDER_RE = re.compile(r"^actor_\d{4,}$")
 _VOICE_FOLDER_RE = re.compile(r"^voice_\d{4,}$")
+# Chinese display labels for the shared system folders under `ai_videos/` (they
+# carry no README/concept H1 to derive a title from). Each of these is its own
+# "library" main page in the UI.
+_SYSTEM_FOLDER_LABELS_ZH: dict[str, str] = {
+    "_actors": "演员库",
+    "_bgm": "背景音乐库",
+}
 
 
 class TreeReader:
@@ -193,7 +200,7 @@ class TreeReader:
             "children": sub,
             "project_meta": project_meta_payload,
         }
-        zh_title = self._project_zh_title(project_dir)
+        zh_title = _SYSTEM_FOLDER_LABELS_ZH.get(project_dir.name) or self._project_zh_title(project_dir)
         if zh_title:
             node["display_name"] = zh_title
         return node
