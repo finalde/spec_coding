@@ -54,6 +54,7 @@ from libs.domain.errors.character_video__error import (
     ConcatFailedError,
     FfmpegMissingForCharacterVideoError,
     InvalidCharacterVideoPathError,
+    InvalidCharactersDirError,
     InvalidShotMdPathError,
     NoCharacterTableError,
     NotCharacterVideoError,
@@ -107,9 +108,11 @@ from libs.domain.errors.frame__error import (
 from libs.domain.errors.subtitle__error import (
     BurnFailedError,
     EmptySubtitlesError,
+    EpisodeNotConcatenatedError,
     InvalidBatchScopeError,
     InvalidSubtitleLangError,
     NoBatchShotsError,
+    NoEpisodeVideoError,
     SubtitleFileMissingError,
 )
 from libs.domain.errors.intro_card__error import (
@@ -174,6 +177,7 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     (InvalidRoleError, 400, "invalid_role", True),
     # character_video
     (InvalidCharacterVideoPathError, 400, "invalid_path", False),
+    (InvalidCharactersDirError, 400, "invalid_characters_dir", False),
     (InvalidShotMdPathError, 400, "invalid_path", False),
     (NotCharacterVideoError, 400, "not_a_character_video", False),
     (NotShotMdError, 400, "not_a_shot_md", False),
@@ -225,6 +229,8 @@ _PLAIN: tuple[tuple[type[Exception], int, str, bool], ...] = (
     (InvalidSubtitleLangError, 400, "invalid_subtitle_lang", True),
     (InvalidBatchScopeError, 400, "invalid_batch_scope", True),
     (NoBatchShotsError, 404, "no_batch_shots", True),
+    (EpisodeNotConcatenatedError, 409, "episode_not_concatenated", True),
+    (NoEpisodeVideoError, 409, "no_episode_video", True),
     # intro card (11d)
     (IntroCardsFileMissingError, 404, "intro_cards_file_missing", True),
     (NoCardForShotError, 404, "no_card_for_shot", True),

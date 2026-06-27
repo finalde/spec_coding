@@ -7,12 +7,15 @@ from libs.application.dtos.character_video__dto import (
     CharacterViewCdto,
     CharacterViewFailureCdto,
     ConcatShotCharactersResultCdto,
+    ExtractAllCharacterViewsItemCdto,
+    ExtractAllCharacterViewsResultCdto,
     ExtractCharacterViewsResultCdto,
     ShotConcatSkippedCdto,
     ShotConcatUsedCdto,
     TruncateCharacterVideoResultCdto,
 )
 from libs.infrastructure.writers.character_video__writer import (
+    BatchViewExtractResult,
     ConcatResult,
     TruncateResult,
     ViewExtractResult,
@@ -75,3 +78,20 @@ class CharacterVideoMapper:
             trim=trim,
             failures=failures,
         )
+
+    @staticmethod
+    def extract_all_to_cdto(r: BatchViewExtractResult) -> ExtractAllCharacterViewsResultCdto:
+        items = tuple(
+            ExtractAllCharacterViewsItemCdto(
+                folder=item.folder,
+                status=item.status,
+                result=(
+                    CharacterVideoMapper.views_to_cdto(item.result)
+                    if item.result is not None
+                    else None
+                ),
+                reason=item.reason,
+            )
+            for item in r.items
+        )
+        return ExtractAllCharacterViewsResultCdto(characters_dir=r.characters_rel, items=items)

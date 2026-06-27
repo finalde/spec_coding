@@ -24,6 +24,10 @@ class ExtractCharacterViewsBody(BaseModel):
     path: str
 
 
+class ExtractAllCharacterViewsBody(BaseModel):
+    path: str
+
+
 @router.post("/api/truncate-character-video")
 @inject
 def truncate_character_video(
@@ -49,3 +53,14 @@ def extract_character_views(
     command: CharacterVideoCommand = Depends(Provide[Container.character_video_command]),
 ) -> Response:
     return JSONResponse(status_code=200, content=command.extract_views(body.path).to_payload())
+
+
+@router.post("/api/extract-all-character-views")
+@inject
+def extract_all_character_views(
+    body: ExtractAllCharacterViewsBody,
+    command: CharacterVideoCommand = Depends(Provide[Container.character_video_command]),
+) -> Response:
+    return JSONResponse(
+        status_code=200, content=command.extract_all_views(body.path).to_payload()
+    )

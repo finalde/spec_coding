@@ -24,6 +24,8 @@ from libs.application.commands.character_video__command import CharacterVideoCom
 from libs.application.commands.downloads__command import DownloadsCommand
 from libs.application.commands.episode__command import EpisodeCommand
 from libs.application.commands.episode_bgm__command import EpisodeBgmCommand
+from libs.application.commands.episode_takes__command import EpisodeTakesCommand
+from libs.application.commands.episode_subtitle__command import EpisodeSubtitleCommand
 from libs.application.commands.file__command import FileCommand
 from libs.application.commands.frame__command import FrameCommand
 from libs.application.commands.scene_plate__command import ScenePlateCommand
@@ -37,6 +39,7 @@ from libs.application.commands.voice__command import VoiceCommand
 from libs.application.queries.actor__query import ActorQuery
 from libs.application.queries.bgm__query import BgmQuery
 from libs.application.queries.casting__query import CastingQuery
+from libs.application.queries.episode__query import EpisodeQuery
 from libs.application.queries.episode_bgm__query import EpisodeBgmQuery
 from libs.application.queries.file__query import FileQuery
 from libs.application.commands.shot_performance__command import ShotPerformanceCommand
@@ -69,6 +72,8 @@ from libs.infrastructure.writers.character_video__writer import (
 from libs.infrastructure.writers.downloads__writer import DownloadsImporter
 from libs.infrastructure.writers.episode__writer import EpisodeConcatBuilder
 from libs.infrastructure.writers.episode_bgm__writer import EpisodeBgmManager
+from libs.infrastructure.writers.episode_takes__writer import EpisodeTakesSelector
+from libs.infrastructure.writers.episode_subtitle__writer import EpisodeSubtitleBurner
 from libs.infrastructure.writers.file__writer import FileWriter
 from libs.infrastructure.writers.frame__writer import FrameExtractor
 from libs.infrastructure.writers.scene_plate__writer import ScenePlateExtractor
@@ -185,6 +190,15 @@ class Container(containers.DeclarativeContainer):
     episode_concat_builder: providers.Singleton[EpisodeConcatBuilder] = providers.Singleton(
         EpisodeConcatBuilder, exposed=exposed_tree, resolver=safe_resolver
     )
+    episode_takes_selector: providers.Singleton[EpisodeTakesSelector] = providers.Singleton(
+        EpisodeTakesSelector, exposed=exposed_tree, resolver=safe_resolver
+    )
+    episode_subtitle_burner: providers.Singleton[EpisodeSubtitleBurner] = providers.Singleton(
+        EpisodeSubtitleBurner,
+        exposed=exposed_tree,
+        resolver=safe_resolver,
+        burner=subtitle_burner,
+    )
     episode_bgm_manager: providers.Singleton[EpisodeBgmManager] = providers.Singleton(
         EpisodeBgmManager,
         exposed=exposed_tree,
@@ -265,6 +279,15 @@ class Container(containers.DeclarativeContainer):
     )
     episode_command: providers.Factory[EpisodeCommand] = providers.Factory(
         EpisodeCommand, builder=episode_concat_builder
+    )
+    episode_takes_command: providers.Factory[EpisodeTakesCommand] = providers.Factory(
+        EpisodeTakesCommand, selector=episode_takes_selector
+    )
+    episode_subtitle_command: providers.Factory[EpisodeSubtitleCommand] = providers.Factory(
+        EpisodeSubtitleCommand, burner=episode_subtitle_burner
+    )
+    episode_query: providers.Factory[EpisodeQuery] = providers.Factory(
+        EpisodeQuery, builder=episode_concat_builder
     )
     episode_bgm_command: providers.Factory[EpisodeBgmCommand] = providers.Factory(
         EpisodeBgmCommand, manager=episode_bgm_manager

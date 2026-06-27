@@ -82,6 +82,24 @@ class BurnEpisodeSubtitlesResultCdto:
 
 
 @dataclass(frozen=True)
+class EpisodeWholeBurnResultCdto:
+    episode_rel: str
+    out_rel: str
+    lang: str
+    cue_count: int
+    shot_count: int
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "episode": self.episode_rel,
+            "out": self.out_rel,
+            "lang": self.lang,
+            "cues": self.cue_count,
+            "shots": self.shot_count,
+        }
+
+
+@dataclass(frozen=True)
 class BurnDramaSubtitlesResultCdto:
     drama_rel: str
     lang: str

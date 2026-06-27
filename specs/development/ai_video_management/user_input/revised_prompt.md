@@ -10351,3 +10351,15 @@ severity: high
 
 ## Follow-up 144 — 2026-06-22 · seam_concat.py 接缝处理工具
 新增 `tools/seam_concat.py`：处理 Seedance 首尾帧链式两段视频 concat 的接缝顿挫。默认 trim 缓动尾/头 + 去重复共享帧(可靠, ffmpeg-only)；`--rife <exe>` 走外部 RIFE 光流补帧(失败退 butt-join+warn, 无声造假禁止)。实测 ffmpeg minterpolate 不能在两张静帧间重建运动, 故不内置。仅适用连续接缝, 不改 webapp(经 141/143 定为忠实硬拼接)。
+
+## Follow-up 145 — 2026-06-22 · RIFE 补帧接进合成 button + 音轨修复
+安装/配置 RIFE 后实测 EP1 承接缝补帧获认可。给 `tools/seam_concat.py` 加回音轨（桥段用真正被裁掉的接缝内容＝前镜尾+后镜头，连续环境声而非静音/回声）+ 逐缝承接/硬切控制；把 RIFE 补帧接进 webapp「合成本集视频」button（localStorage 复选框，默认 on，≥1 承接缝时委托 seam_concat.py 重建速度斜坡，硬切仍干净切）。运动门限：仅 6≤diff≤55 才补帧，否则回退裁+硬拼。缺 exe 显式报错不静默回退。
+
+## Follow-up 146 — 2026-06-23 · 拼接方案面板（逐缝 RIFE 选择）
+点击「合成本集视频」改为弹出「拼接方案」面板（SeamPlanModal）：`POST /api/episode-seams` 拉每个衔接的 承接/硬切 + 前镜末帧/后镜首帧缩略图 + 自动帧差 + 建议。硬切锁硬拼；承接可选 硬拼/RIFE（RIFE 下可调 trim + 补帧密度）。「生成」POST `/api/concat-episode {plan}`，用户选择覆盖自动门限，方案存 `epNN/seam_plan.json` 可复现。读侧 `EpisodeQuery.analyze_seams` + Qdto；建侧 `plan` 穿过 episode__{command,mapper,writer}。
+
+## Follow-up 146 — 2026-06-23 · Actor 生成 prompt 服装性别区分 + 锁正脸
+Actor 生成两修：① 服装按性别区分（修「男角色穿女式吊带背心」——删通用 `_WARDROBE_REVEALING_ZH`，新增男款无袖运动背心 / 女款吊带背心 + `_wardrobe_for(gender)`，覆盖 face/body/combined 全 builder）；② 三个 header 统一加正脸正面平视约束（绝不侧脸/转头/低头/仰头），seductive 面部细节去「微微侧脸」，负面词加正脸约束组——否则捕捉不到面部细节。
+
+## Follow-up 147 — 2026-06-24 · 出片改 concat-first：先拼干净成片，再对整集烧一次字幕
+旧流程「每镜先烧字幕→再拼接」两处损坏字幕：拼接二次编码 + 承接裁帧改片段时长致字幕错位（每镜本地 0 起无全局 offset）。改为出片三步：① 定版（每镜 renders/ 最新复制成 shot{NN}.mp4，原始多版不动，复制非软链）；② 拼接成片（干净无字幕拼成 ep{NN}.mp4 + 写 ep{NN}.segments.json，每镜真实 [start,end) 按裁帧后时长累加，仅 lang=original）；③ 整集字幕（对 ep{NN}.mp4 一次烧字幕，每镜 cue 按 segments re-time + 按 start_s 平移到成片时间轴，只编码一次→不受拼接/裁帧影响→ep{NN}_{zh|en|zhen}.mp4）。EN/中英保留；每镜单独烧字幕保留为调试不进主区；复制非软链。旧「先烧后拼」/「每镜烧」路径保留 back-compat 不混用。

@@ -35,10 +35,12 @@ from libs.domain.value_objects.character_video__valueobject import (
 )
 from libs.domain.errors.character_video__error import (
     AudioExtractFailedError,
+    CharacterVideoDomainError,
     CharacterVideoNotFoundError,
     ConcatFailedError,
     FfmpegMissingForCharacterVideoError,
     InvalidCharacterVideoPathError,
+    InvalidCharactersDirError,
     InvalidShotMdPathError,
     NoCharacterTableError,
     NotCharacterVideoError,
@@ -786,14 +788,49 @@ class ViewExtractResult:
         }
 
 
+@dataclass(frozen=True)
+class BatchViewItem:
+    """One character folder's outcome in a batch (extract-all) run."""
+
+    folder: str  # character folder name, e.g. "c1_裴知秋"
+    status: str  # "ok" | "skipped" | "error"
+    result: ViewExtractResult | None
+    reason: str  # "" for ok; explanation for skipped/error
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "folder": self.folder,
+            "status": self.status,
+            "result": self.result.to_payload() if self.result is not None else None,
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class BatchViewExtractResult:
+    characters_rel: str
+    items: tuple[BatchViewItem, ...]
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "characters_dir": self.characters_rel,
+            "items": [i.to_payload() for i in self.items],
+        }
+
+
 class CharacterViewExtractor:
     """Extracts 3 angle PNGs (front/side/back) + the full audio (mp3) + a
     first-`TRIM_DURATION_S`-seconds trimmed mp4 from a character turntable mp4
     — 5 outputs in one click. They land in `{src.parent}/views/` with
     `{src.parent.name}_{role}.png` + `{src.parent.name}_audio.mp3` +
-    `{src.parent.name}_trim3s.mp4` naming so re-extraction in the same
+    `{src.parent.name}_trim{N}s.mp4` naming so re-extraction in the same
     character folder overwrites the same outputs regardless of mp4 stem (the
     latest extraction is the single source of truth in `views/`).
+
+    Source selection: the request may point at any video in the character
+    folder, but extraction always runs on the **newest original turntable mp4
+    by mtime** (per 2026-06-27 follow-up '多个原始视频选最新') — the truncated
+    `video.mp4` reel and the `views/` outputs are never candidates.
 
     Per follow-up 093 (3 views + audio); the trimmed mp4 was added so the same
     button yields all 5 reference files. The 3 timestamps live in
@@ -805,8 +842,41 @@ class CharacterViewExtractor:
         self._exposed = exposed
         self._resolver = resolver
 
+    def _latest_video_in(self, folder: Path) -> Path | None:
+        """Newest original turntable mp4 directly in `folder` by mtime, or None.
+
+        Per 2026-06-27 follow-up '多个原始视频选最新': when the folder holds
+        several downloaded turntable videos, extraction runs on the latest by
+        mtime. Candidates are video files directly in the folder, excluding the
+        truncated `video.mp4` reel (a generated artifact); `views/` outputs live
+        in a subfolder and are never enumerated here.
+        """
+        try:
+            entries = list(folder.iterdir())
+        except OSError:
+            return None
+        candidates = [
+            entry
+            for entry in entries
+            if entry.is_file()
+            and not entry.is_symlink()
+            and entry.suffix.lower() in VIDEO_EXTENSIONS
+            and entry.name != _OUTPUT_NAME
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda p: p.stat().st_mtime)
+
+    def _resolve_latest_source(self, validated_src: Path) -> Path:
+        """Newest original turntable mp4 in the character folder, falling back
+        to the validated source when no other candidate exists."""
+        return self._latest_video_in(validated_src.parent) or validated_src
+
     def extract(self, rel: str) -> ViewExtractResult:
-        src = self._validate_character_video_source(rel)
+        src = self._resolve_latest_source(self._validate_character_video_source(rel))
+        return self._extract_source(src)
+
+    def _extract_source(self, src: Path) -> ViewExtractResult:
         try:
             ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
         except Exception as exc:
@@ -996,3 +1066,56 @@ class CharacterViewExtractor:
             return p.resolve().relative_to(self._resolver.root).as_posix()
         except (OSError, ValueError):
             return p.as_posix()
+
+    # --- Batch extract-all (one click → every character) --------------------
+
+    def extract_all(self, characters_rel: str) -> BatchViewExtractResult:
+        """Run view/audio/trim extraction for every `cN_*` character folder
+        under a drama's `characters/` dir, each on its newest turntable mp4.
+
+        Folders with no turntable video are reported `skipped`; per-folder
+        ffmpeg/validation failures are reported `error` (the run never aborts
+        on one bad folder). Per 2026-06-27 follow-up: a single click on the
+        character gallery regenerates every character's 3 views + audio + trim.
+        """
+        chars_dir = self._validate_characters_dir(characters_rel)
+        items: list[BatchViewItem] = []
+        for sub in sorted(chars_dir.iterdir(), key=lambda p: p.name):
+            if not sub.is_dir() or sub.is_symlink():
+                continue
+            if not _CHARACTER_DIR_RE.match(sub.name):
+                continue
+            src = self._latest_video_in(sub)
+            if src is None:
+                items.append(BatchViewItem(sub.name, "skipped", None, "no turntable video"))
+                continue
+            try:
+                result = self._extract_source(src)
+                items.append(BatchViewItem(sub.name, "ok", result, ""))
+            except CharacterVideoDomainError as exc:
+                items.append(
+                    BatchViewItem(sub.name, "error", None, str(exc) or type(exc).__name__)
+                )
+        return BatchViewExtractResult(
+            characters_rel=self._rel(chars_dir),
+            items=tuple(items),
+        )
+
+    def _validate_characters_dir(self, rel: str) -> Path:
+        if not isinstance(rel, str) or rel == "":
+            raise InvalidCharactersDirError("path is empty")
+        if not self._exposed.is_inside(rel):
+            raise InvalidCharactersDirError("path outside sandbox")
+        parts = rel.split("/")
+        if len(parts) < 3 or parts[0] != "ai_videos" or parts[1].startswith("_"):
+            raise InvalidCharactersDirError("path must be ai_videos/{drama}/.../characters/")
+        if parts[-1] != "characters":
+            raise InvalidCharactersDirError("path must end in characters/")
+        resolved = self._resolver.resolve(rel)
+        if resolved is None:
+            raise InvalidCharactersDirError("path failed sandbox resolution")
+        if resolved.is_symlink():
+            raise InvalidCharactersDirError("symlink is not allowed")
+        if not resolved.is_dir():
+            raise InvalidCharactersDirError("characters dir does not exist")
+        return resolved

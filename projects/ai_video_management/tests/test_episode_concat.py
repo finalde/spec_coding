@@ -52,9 +52,12 @@ def _make_builder(root: Path) -> tuple[EpisodeConcatBuilder, list[list[Path]]]:
         out_path: Path,
         head_trims: list[float],
         tail_trims: list[float],
-    ) -> None:
+    ) -> list[float]:
         captured.append(list(inputs))
         out_path.write_bytes(b"episode")
+        # mirror the real _ffmpeg_concat contract: return per-clip kept durations
+        # (placeholder length-matched list so build() can write segments.json).
+        return [1.0] * len(inputs)
 
     builder._ffmpeg_concat = fake_concat  # type: ignore[method-assign]
     return builder, captured
@@ -108,6 +111,55 @@ def test_concat_overwrites_existing_episode_mp4(tmp_path: Path) -> None:
     assert stale.read_bytes() == b"episode"  # overwritten by the stub
 
 
+def test_concat_removes_stale_output_before_stitch(tmp_path: Path) -> None:
+    """拼接成片 deletes the prior ep{NN}.mp4 (+ its .segments.json sidecar) FIRST,
+    before the slow stitch — so the file's absence signals 'generating…' and a stale
+    reel is never mistaken for a freshly-built one."""
+    root = tmp_path / "repo"
+    ep = root / "ai_videos" / "td" / "episodes" / "ep02"
+    _touch(ep / "shots" / "shot01" / "renders" / "a.mp4", mtime=1000)
+    stale = ep / "ep02.mp4"
+    _touch(stale)
+    stale.write_bytes(b"STALE-PRIOR-BUILD")
+    seg = ep / "ep02.segments.json"
+    _touch(seg)
+    seg.write_bytes(b'{"stale": true}')
+
+    builder = EpisodeConcatBuilder(ExposedTree(root), SafeResolver(root))
+    seen: dict[str, bool] = {}
+
+    def fake_concat(ffmpeg, inputs, out_path, head_trims, tail_trims):  # type: ignore[no-untyped-def]
+        # at stitch time the stale reel + its sidecar must already be gone.
+        seen["mp4_absent"] = not out_path.exists()
+        seen["seg_absent"] = not out_path.with_suffix(".segments.json").exists()
+        out_path.write_bytes(b"episode")
+        return [1.0] * len(inputs)
+
+    builder._ffmpeg_concat = fake_concat  # type: ignore[method-assign]
+    result = builder.build("ai_videos/td/episodes/ep02/shots/shot01/shot01.md")
+
+    assert seen == {"mp4_absent": True, "seg_absent": True}
+    assert stale.read_bytes() == b"episode"  # fresh build present afterwards
+    assert result.out_rel == "ai_videos/td/episodes/ep02/ep02.mp4"
+
+
+def test_no_shots_preserves_stale_output(tmp_path: Path) -> None:
+    """A no-shots failure raises BEFORE the stale reel is cleared, so a failed
+    拼接成片 never leaves the user with neither an old nor a new mp4."""
+    root = tmp_path / "repo"
+    ep = root / "ai_videos" / "td" / "episodes" / "ep03"
+    _touch(ep / "shots" / "shot01" / "shot01.md")  # no renders/ anywhere
+    stale = ep / "ep03.mp4"
+    _touch(stale)
+    stale.write_bytes(b"STALE-PRESERVED")
+    _touch(ep / "shotlist.md")
+
+    builder, _ = _make_builder(root)
+    with pytest.raises(NoShotVideosError):
+        builder.build("ai_videos/td/episodes/ep03/shotlist.md")
+    assert stale.read_bytes() == b"STALE-PRESERVED"  # untouched on validation failure
+
+
 def test_no_shot_has_render_raises(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     ep = root / "ai_videos" / "td" / "episodes" / "ep03"
@@ -119,35 +171,48 @@ def test_no_shot_has_render_raises(tmp_path: Path) -> None:
         builder.build("ai_videos/td/episodes/ep03/shotlist.md")
 
 
-def test_concat_lang_variant_picks_language_master_and_names_output(tmp_path: Path) -> None:
+def test_concat_prefers_locked_shot_mp4_over_renders(tmp_path: Path) -> None:
+    """Follow-up 147: concat is subtitle-free and prefers the user-locked
+    selected take `shot{NN}.mp4` (written by select-takes) over renders/. A shot
+    without a locked take falls back to its newest render."""
     root = tmp_path / "repo"
     ep = root / "ai_videos" / "td" / "episodes" / "ep01"
-    # shot01 has a burned zh master in the shot-folder root (not renders/).
-    _touch(ep / "shots" / "shot01" / "renders" / "raw.mp4", mtime=1000)
-    _touch(ep / "shots" / "shot01" / "shot01_zh.mp4", mtime=2000)
-    # shot02 has a raw render but NO zh master → skipped for the zh build.
+    # shot01: a locked take in the shot root + a (newer) render → locked wins.
+    _touch(ep / "shots" / "shot01" / "renders" / "raw.mp4", mtime=5000)
+    _touch(ep / "shots" / "shot01" / "shot01.mp4", mtime=1000)
+    # shot02: no locked take → newest render.
     _touch(ep / "shots" / "shot02" / "renders" / "raw.mp4", mtime=1000)
     _touch(ep / "shotlist.md")
 
     builder, captured = _make_builder(root)
-    result = builder.build("ai_videos/td/episodes/ep01/shotlist.md", "zh")
+    result = builder.build("ai_videos/td/episodes/ep01/shotlist.md")
 
-    assert result.lang == "zh"
-    assert result.out_rel == "ai_videos/td/episodes/ep01/ep01_zh.mp4"
-    assert [u.shot for u in result.used] == ["shot01"]
-    assert result.used[0].video_rel == "ai_videos/td/episodes/ep01/shots/shot01/shot01_zh.mp4"
-    assert [(s.shot, s.reason) for s in result.skipped] == [("shot02", "no_zh_subtitle_mp4")]
-    assert [p.name for p in captured[0]] == ["shot01_zh.mp4"]
+    assert result.lang == "original"
+    assert result.out_rel == "ai_videos/td/episodes/ep01/ep01.mp4"
+    assert result.used[0].video_rel == "ai_videos/td/episodes/ep01/shots/shot01/shot01.mp4"
+    assert result.used[1].video_rel == "ai_videos/td/episodes/ep01/shots/shot02/renders/raw.mp4"
+    assert [p.name for p in captured[0]] == ["shot01.mp4", "raw.mp4"]
 
 
-def test_concat_both_variant_output_name(tmp_path: Path) -> None:
+def test_concat_writes_segments_manifest_with_cumulative_offsets(tmp_path: Path) -> None:
+    """build() writes ep{NN}.segments.json with each shot's [start,end) in the
+    final timeline, cumulative over the per-clip kept durations."""
+    import json
     root = tmp_path / "repo"
     ep = root / "ai_videos" / "td" / "episodes" / "ep01"
-    _touch(ep / "shots" / "shot01" / "shot01_zhen.mp4", mtime=2000)
+    _touch(ep / "shots" / "shot01" / "renders" / "a.mp4", mtime=1000)
+    _touch(ep / "shots" / "shot02" / "renders" / "b.mp4", mtime=1000)
     _touch(ep / "shotlist.md")
-    builder, _ = _make_builder(root)
-    result = builder.build("ai_videos/td/episodes/ep01/shotlist.md", "both")
-    assert result.out_rel == "ai_videos/td/episodes/ep01/ep01_zhen.mp4"
+
+    builder, _ = _make_builder(root)  # stub returns 1.0s per clip
+    result = builder.build("ai_videos/td/episodes/ep01/shotlist.md")
+
+    assert result.segments_rel == "ai_videos/td/episodes/ep01/ep01.segments.json"
+    data = json.loads((ep / "ep01.segments.json").read_text(encoding="utf-8"))
+    segs = data["segments"]
+    assert [s["shot"] for s in segs] == ["shot01", "shot02"]
+    assert segs[0]["start_s"] == 0.0 and segs[0]["end_s"] == 1.0
+    assert segs[1]["start_s"] == 1.0 and segs[1]["end_s"] == 2.0  # offset accumulates
 
 
 def test_non_episode_path_rejected(tmp_path: Path) -> None:

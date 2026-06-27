@@ -117,3 +117,31 @@ class ExtractCharacterViewsResultCdto:
             "trim": self.trim.to_payload() if self.trim is not None else None,
             "failures": [f.to_payload() for f in self.failures],
         }
+
+
+@dataclass(frozen=True)
+class ExtractAllCharacterViewsItemCdto:
+    folder: str
+    status: str  # "ok" | "skipped" | "error"
+    result: ExtractCharacterViewsResultCdto | None
+    reason: str
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "folder": self.folder,
+            "status": self.status,
+            "result": self.result.to_payload() if self.result is not None else None,
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class ExtractAllCharacterViewsResultCdto:
+    characters_dir: str
+    items: tuple[ExtractAllCharacterViewsItemCdto, ...]
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "characters_dir": self.characters_dir,
+            "items": [i.to_payload() for i in self.items],
+        }

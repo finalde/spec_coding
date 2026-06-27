@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "approx": true,
+  "total_s": 168.083,
+  "segments": [
+    {
+      "shot": "shot01",
+      "start_s": 0.0,
+      "end_s": 8.93,
+      "dur_s": 8.93
+    },
+    {
+      "shot": "shot02",
+      "start_s": 8.93,
+      "end_s": 18.86,
+      "dur_s": 9.93
+    },
+    {
+      "shot": "shot03",
+      "start_s": 18.86,
+      "end_s": 32.64,
+      "dur_s": 13.78
+    },
+    {
+      "shot": "shot04",
+      "start_s": 32.64,
+      "end_s": 43.42,
+      "dur_s": 10.78
+    },
+    {
+      "shot": "shot05",
+      "start_s": 43.42,
+      "end_s": 52.35,
+      "dur_s": 8.93
+    },
+    {
+      "shot": "shot06",
+      "start_s": 52.35,
+      "end_s": 67.13,
+      "dur_s": 14.78
+    },
+    {
+      "shot": "shot07",
+      "start_s": 67.13,
+      "end_s": 81.91,
+      "dur_s": 14.78
+    },
+    {
+      "shot": "shot08",
+      "start_s": 81.91,
+      "end_s": 91.69,
+      "dur_s": 9.78
+    },
+    {
+      "shot": "shot09",
+      "start_s": 91.69,
+      "end_s": 100.32,
+      "dur_s": 8.63
+    },
+    {
+      "shot": "shot10",
+      "start_s": 100.32,
+      "end_s": 111.95,
+      "dur_s": 11.63
+    },
+    {
+      "shot": "shot11",
+      "start_s": 111.95,
+      "end_s": 121.58,
+      "dur_s": 9.63
+    },
+    {
+      "shot": "shot12",
+      "start_s": 121.58,
+      "end_s": 130.293,
+      "dur_s": 8.713
+    },
+    {
+      "shot": "shot13",
+      "start_s": 130.293,
+      "end_s": 141.223,
+      "dur_s": 10.93
+    },
+    {
+      "shot": "shot14",
+      "start_s": 141.223,
+      "end_s": 154.153,
+      "dur_s": 12.93
+    },
+    {
+      "shot": "shot15",
+      "start_s": 154.153,
+      "end_s": 168.083,
+      "dur_s": 13.93
+    }
+  ]
+}

@@ -71,3 +71,8 @@ class AudioExtractFailedError(CharacterVideoDomainError):
     """ffmpeg ran but the .mp3 audio track could not be produced. Raised only
     when ALL 4 outputs fail (3 views + audio) — partial-failure runs return a
     200 with a non-empty `failures` list."""
+
+
+class InvalidCharactersDirError(CharacterVideoDomainError):
+    """Path is empty, outside sandbox, or not an `ai_videos/{drama}/.../
+    characters/` directory — used by the batch extract-all run."""

@@ -352,6 +352,17 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
                   {isRenamingThis ? "导入并重命名中…" : "📥 导入 + 重命名"}
                 </button>
               ) : null}
+              {isDrama ? (
+                <button
+                  type="button"
+                  className="drama-rename-btn"
+                  aria-label={`查看 ${item.node.name} 的角色画廊`}
+                  title="角色画廊：所有角色缩略图 + 一键重生全部三视图/前2s"
+                  onClick={(e) => { e.stopPropagation(); navigate(`/characters?drama=${encodeURIComponent(item.node.path)}`); }}
+                >
+                  🎭 角色画廊
+                </button>
+              ) : null}
               {isPerformancesRoot ? (
                 <button
                   type="button"

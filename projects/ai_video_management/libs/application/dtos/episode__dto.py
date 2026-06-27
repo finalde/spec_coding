@@ -1,5 +1,5 @@
-"""Episode-aggregate DTOs: ConcatEpisode result + per-shot used/skipped rows.
-No Qdtos for this aggregate (single write-side concat operation)."""
+"""Episode-aggregate DTOs: ConcatEpisode result + per-shot used/skipped rows,
+plus the seam-planner analysis (Qdto-shaped read of every shot→shot junction)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -26,6 +26,44 @@ class EpisodeShotSkippedCdto:
 
 
 @dataclass(frozen=True)
+class SeamInfoQdto:
+    index: int
+    from_shot: str
+    to_shot: str
+    link: str
+    diff: float | None
+    suggest: str
+    method: str
+    trim: float
+    depth: int | None
+    thumb_a: str
+    thumb_b: str
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "index": self.index, "from": self.from_shot, "to": self.to_shot,
+            "link": self.link, "diff": self.diff, "suggest": self.suggest,
+            "method": self.method, "trim": self.trim, "depth": self.depth,
+            "thumb_a": self.thumb_a, "thumb_b": self.thumb_b,
+        }
+
+
+@dataclass(frozen=True)
+class SeamAnalysisQdto:
+    episode_rel: str
+    lang: str
+    seams: tuple[SeamInfoQdto, ...]
+    has_saved_plan: bool
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "episode": self.episode_rel, "lang": self.lang,
+            "seams": [s.to_payload() for s in self.seams],
+            "has_saved_plan": self.has_saved_plan,
+        }
+
+
+@dataclass(frozen=True)
 class ConcatEpisodeResultCdto:
     episode_rel: str
     out_rel: str | None
@@ -34,6 +72,7 @@ class ConcatEpisodeResultCdto:
     lang: str
     rife_used: bool = False
     rife_bridges: int = 0
+    segments_rel: str | None = None
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -44,4 +83,5 @@ class ConcatEpisodeResultCdto:
             "lang": self.lang,
             "rife_used": self.rife_used,
             "rife_bridges": self.rife_bridges,
+            "segments": self.segments_rel,
         }

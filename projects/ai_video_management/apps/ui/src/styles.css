@@ -292,11 +292,79 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 .reader-episode-concat-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .reader-episode-concat-btn:disabled { cursor: progress; opacity: 0.55; }
-.reader-episode-rife-toggle {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 0.85em; color: var(--text); cursor: pointer; user-select: none;
+
+/* Seam-plan modal */
+.seam-modal-backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
 }
-.reader-episode-rife-toggle input { cursor: pointer; margin: 0; }
+.seam-modal {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  width: min(720px, 94vw); max-height: 88vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+}
+.seam-modal-head, .seam-modal-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.seam-modal-foot { border-bottom: none; border-top: 1px solid var(--border); gap: 8px; }
+.seam-modal-sub { display: block; font-size: 0.8em; color: var(--text-muted); margin-top: 2px; }
+.seam-modal-x {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 1.1em; cursor: pointer; padding: 4px 8px;
+}
+.seam-modal-body { overflow-y: auto; padding: 8px 16px; }
+.seam-legend {
+  background: var(--bg-toolbar); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 12px; margin: 4px 0 10px;
+  font-size: 0.8em; color: var(--text-muted); line-height: 1.5;
+}
+.seam-legend p { margin: 2px 0; }
+.seam-legend strong { color: var(--text); }
+.seam-modal-loading, .seam-modal-error { padding: 24px; text-align: center; color: var(--text-muted); }
+.seam-modal-error { color: #e06c6c; }
+.seam-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.seam-row--hardcut { opacity: 0.72; }
+.seam-thumbs { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.seam-thumbs img {
+  width: 52px; height: 92px; object-fit: cover;
+  border-radius: 3px; border: 1px solid var(--border); background: #000;
+}
+.seam-arrow { color: var(--text-muted); font-size: 0.9em; }
+.seam-meta { flex: 1 1 auto; min-width: 0; }
+.seam-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.seam-hint { font-size: 0.8em; color: var(--text-muted); margin-top: 2px; }
+.seam-badge { font-size: 0.72em; padding: 1px 6px; border-radius: 10px; font-weight: 500; }
+.seam-badge--handoff { background: rgba(90, 160, 90, 0.22); color: #6ab06a; }
+.seam-badge--hardcut { background: var(--bg-toolbar); color: var(--text-muted); }
+.seam-controls { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.seam-method { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.seam-method button {
+  background: var(--bg-toolbar); color: var(--text); border: none;
+  padding: 4px 12px; cursor: pointer; font-family: inherit; font-size: 0.85em;
+}
+.seam-method button.active { background: var(--accent, #4a78d0); color: #fff; }
+.seam-params { display: flex; gap: 8px; }
+.seam-params label { font-size: 0.78em; color: var(--text-muted); display: flex; flex-direction: column; gap: 2px; }
+.seam-params input, .seam-params select {
+  width: 64px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; font-family: inherit;
+}
+.seam-params select { width: 84px; }
+.seam-locked { font-size: 0.85em; color: var(--text-muted); }
+.seam-btn {
+  background: var(--bg-toolbar); color: var(--text);
+  border: 1px solid var(--border); border-radius: 5px; padding: 6px 16px;
+  cursor: pointer; font-family: inherit;
+}
+.seam-btn:disabled { cursor: progress; opacity: 0.55; }
+.seam-btn--primary { background: var(--accent, #4a78d0); color: #fff; border-color: transparent; }
 .reader-copy-prompts-btn {
   background: var(--bg-toolbar); color: var(--text);
   border: 1px solid var(--border); border-radius: 4px; padding: 4px 12px;
@@ -3423,3 +3491,30 @@ details[open] > .prompt-preview-toggle::before {
 .bgm-ep-hint { color: #b45309; font-size: 11px; }
 .bgm-ep-cat-select { margin-right: 6px; }
 .bgm-ep-table audio { height: 28px; max-width: 180px; }
+
+/* CharacterGrid — reuses .actor-grid* / .actor-tile*; these add the bits
+   ActorGrid renders inline that the character gallery needs as classes. */
+.actor-grid-count {
+  margin-left: 0.75rem;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+.actor-tile-label {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
+  text-align: center;
+  word-break: break-all;
+}
+.actor-tile-noimg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 9 / 16;
+  background: rgba(127, 127, 127, 0.12);
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+.character-tile-novideo {
+  color: #c0392b;
+  opacity: 0.85;
+}

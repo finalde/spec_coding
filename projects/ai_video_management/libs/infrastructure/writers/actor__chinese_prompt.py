@@ -505,6 +505,10 @@ _NEGATIVE_PROMPT_ZH: str = (
     "head-shoulder crop, upper body only, chest up, waist up, "
     "cropped feet, cropped legs, cropped hands, cropped head, "
     "head too large, body too small, "
+    # frontal-face lock — face must point straight at camera so facial detail
+    # is captured (user req); ban every away-facing head pose.
+    "侧脸, 侧面, 半侧脸, 3/4 侧脸, 转头, 扭头, 回头, 低头, 仰头, 脸朝向一侧, "
+    "面部转开, 背对镜头, 后脑勺, 不看镜头, 目光偏离镜头, profile view, side face, "
     # photorealism / anti-AI-face (was in old _NEGATIVES_ZH leading list)
     "塑料感皮肤, 蜡像感, 卡通比例, 过度磨皮, 对称完美脸, "
     "AI 生成同质化脸, 影楼美化, 千篇一律的网红脸, "
@@ -567,23 +571,38 @@ def _is_random(value: str | None) -> bool:
     return value is None or value in _RANDOM_TOKENS
 
 
-_HEADER_FACE: str = "全身定妆照（试镜照）, 正脸面向镜头, 头顶到脚趾完整入画"
-_HEADER_BODY: str = "全身定妆照（试镜照, 形体对焦）, 双腿略分开半肩宽, 头顶到脚趾完整入画"
+_HEADER_FACE: str = "全身定妆照（试镜照）, 正脸正面平视镜头（绝不侧脸、不转头、不低头、不仰头，面部完整正对镜头便于捕捉五官细节）, 头顶到脚趾完整入画"
+_HEADER_BODY: str = "全身定妆照（试镜照, 形体对焦）, 正脸正面平视镜头（绝不侧脸、不转头、不低头，面部完整正对镜头便于捕捉五官细节）, 双腿略分开半肩宽, 头顶到脚趾完整入画"
 
 # Realism cue — pushes Kling toward live-action photography and away from
 # anime / illustrated / "AI face" aesthetics. Sits on its own line so the cue
 # carries weight equal to the other structured aspects.
 _STYLE_REALISM_ZH: str = "风格：真实人像摄影, 写实风格, 真人模样"
 
-# Wardrobe cue — outcome-framed (what must be visible) rather than dictating a
-# specific outfit, so the same line works across genders. Kling adapts the
-# anatomy based on the gender descriptor line above.
-_WARDROBE_REVEALING_ZH: str = (
+# Wardrobe cue — gender-specific so a male actor never renders in a feminine
+# 吊带背心 (spaghetti-strap camisole). Both variants are tight try-out wear that
+# reveals body contour (leg shape, 腰臀比, 肩宽); only the top differs by gender —
+# male = 无袖运动背心 (athletic tank), female = 吊带背心. Kling keys clothing off
+# the explicit garment noun, so the old single neutral line leaked the camisole
+# onto men. The same wardrobe line is appended once per prompt by the line
+# builders, which pass the actor's gender slug.
+_WARDROBE_MALE_ZH: str = (
+    "统一白色紧身试镜服（纯白色无袖紧身运动背心【男款圆领运动背心、绝非女式吊带背心】 + 纯白色紧身运动短裤）, "
+    "充分展示身材轮廓, "
+    "能清晰看出腿型（直腿 / 弯腿 / O型腿 / X型腿）, "
+    "大腿内外侧线条, 胸肌与肩背轮廓, 腰臀比例, 肩宽"
+)
+_WARDROBE_FEMALE_ZH: str = (
     "统一白色紧身试镜服（纯白色紧身吊带背心 + 纯白色紧身短裤）, "
     "充分展示身材轮廓, "
     "能清晰看出腿型（直腿 / 弯腿 / O型腿 / X型腿）, "
     "大腿内外侧线条, 胸型大小, 腰臀比例, 肩宽"
 )
+
+
+def _wardrobe_for(gender_slug: str) -> str:
+    """Gender-appropriate try-out wardrobe (male never in 吊带背心)."""
+    return _WARDROBE_MALE_ZH if gender_slug == "male" else _WARDROBE_FEMALE_ZH
 
 # Hairstyle cue — uniform buzz cut for EVERY actor regardless of gender (user
 # req 2026-06-14). Hair is the single biggest confound when comparing faces in
@@ -656,7 +675,7 @@ def _structured_lines(
         f"体型：{body_value}",
         f"皮肤：{skin_value}",
         f"气质：{qi_zhi_value}",
-        _WARDROBE_REVEALING_ZH,
+        _wardrobe_for(gender_slug),
     ]
 
 
@@ -749,7 +768,7 @@ def _build_with_picks_lines(
         f"体型：{body_value}",
         f"皮肤：{skin_value}",
         f"气质：{qi_zhi_value}",
-        _WARDROBE_REVEALING_ZH,
+        _wardrobe_for(attrs["gender"]),
     ]
     return rng, body_lines, gender
 
@@ -796,6 +815,7 @@ def build_body_prompt_with_picks(
 
 _HEADER_COMBINED: str = (
     "全身定妆照（试镜照）, 一张图同时呈现完整全身形体与清晰面部, "
+    "正脸正面平视镜头（绝不侧脸、不转头、不低头、不仰头，面部完整正对镜头）, "
     "头顶到脚趾完整入画, 面部五官清晰可辨、面部细节高清"
 )
 
@@ -850,7 +870,7 @@ _LOOK_FACE_DETAIL_ZH: dict[str, tuple[str, ...]] = {
         "眼神慵懒、含着三分春意",
         "下唇微抿、欲语还休",
         "目光流转间尽是风情",
-        "微微侧脸、颈线慵懒妩媚",
+        "下颌微收、眼神慵懒直视镜头、媚意自生",
     ),
     "righteous": (
         "目光坦荡清正、不闪不避",

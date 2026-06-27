@@ -33,3 +33,11 @@ class InvalidBatchScopeError(SubtitleDomainError):
 
 class NoBatchShotsError(SubtitleDomainError):
     """The episode (or whole drama) has no shot folders to operate on."""
+
+
+class EpisodeNotConcatenatedError(SubtitleDomainError):
+    """Whole-episode burn needs `ep{NN}.segments.json` (run concat first)."""
+
+
+class NoEpisodeVideoError(SubtitleDomainError):
+    """The clean `ep{NN}.mp4` to burn onto does not exist (run concat first)."""

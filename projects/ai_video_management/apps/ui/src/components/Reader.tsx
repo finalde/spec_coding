@@ -27,8 +27,9 @@ import {
   archiveMedia,
   burnDramaSubtitles,
   burnEpisodeSubtitles,
-  concatEpisode,
+  burnEpisodeSubtitlesWhole,
   concatShotCharacters,
+  selectEpisodeTakes,
   deleteMedia,
   extractCharacterViews,
   extractFrames,
@@ -41,6 +42,7 @@ import {
 } from "../api";
 import type { EpisodeLang, SubtitleLang } from "../api";
 import { ApiError, type FileResult, type TreeNode } from "../types";
+import { SeamPlanModal } from "./SeamPlanModal";
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const VIDEO_EXTS = new Set([".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"]);
@@ -75,19 +77,14 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
   const [extractingViews, setExtractingViews] = useState<boolean>(false);
   const [extractingPlates, setExtractingPlates] = useState<boolean>(false);
   const [concatBusy, setConcatBusy] = useState<boolean>(false);
-  const [episodeConcatBusy, setEpisodeConcatBusy] = useState<boolean>(false);
-  // RIFE motion-bridge the 承接 seams when合成本集视频 (persisted, default on).
-  const [rifeSeams, setRifeSeams] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("ai_video.episode_concat.rife.v1") !== "0";
-    } catch {
-      return true;
-    }
-  });
+  // Clicking a 合成本集视频 lang button opens the per-seam planner for that lang.
+  const [seamLang, setSeamLang] = useState<EpisodeLang | null>(null);
   const [copyingPrompts, setCopyingPrompts] = useState<boolean>(false);
   const [scaffoldEpBusy, setScaffoldEpBusy] = useState<boolean>(false);
   const [burnDramaBusy, setBurnDramaBusy] = useState<boolean>(false);
   const [burnEpisodeBusy, setBurnEpisodeBusy] = useState<boolean>(false);
+  const [selectTakesBusy, setSelectTakesBusy] = useState<boolean>(false);
+  const [burnWholeBusy, setBurnWholeBusy] = useState<boolean>(false);
 
   const ext = path ? extOf(path) : "";
   const isPerfEntry = path ? /_performances\/[^/]+\/perf_\d{4}\/perf_\d{4}\.md$/.test(path) : false;
@@ -204,35 +201,12 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     }
   }, [path, onSaved]);
 
-  const onConcatEpisodeClick = useCallback(async (lang: EpisodeLang) => {
-    if (!path) return;
-    setEpisodeConcatBusy(true);
-    try {
-      const result = await concatEpisode(path, lang, rifeSeams);
-      const skippedNames = result.skipped.map((s) => `${s.shot} (${s.reason})`).join(", ");
-      let summary: string;
-      if (result.out) {
-        summary = `已合成 ${result.out.split("/").pop()} — 拼接 ${result.used.length} 个镜头`;
-        if (result.rife_used) {
-          summary += ` · RIFE 补帧 ${result.rife_bridges} 处承接缝`;
-        } else {
-          const smoothed = result.used.filter((u) => u.trimmed_s > 0).length;
-          if (smoothed > 0) summary += ` · 抹平 ${smoothed} 处承接接缝`;
-        }
-        if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
-      } else {
-        const noun = lang === "original" ? "renders/ mp4" : `shot{NN}_${lang === "both" ? "zhen" : lang}.mp4`;
-        summary = `未生成 — 没有镜头包含 ${noun}`;
-        if (result.skipped.length > 0) summary += ` · 跳过 ${result.skipped.length}: ${skippedNames}`;
-      }
-      announceToast(summary);
-      onSaved();
-    } catch (err) {
-      announceToast(`合成本集视频失败: ${archiveErrorKind(err)}`);
-    } finally {
-      setEpisodeConcatBusy(false);
-    }
-  }, [path, onSaved, rifeSeams]);
+  // Clicking a lang button opens the per-seam planner modal for that language;
+  // the modal runs the build (with the chosen plan) and reports via onDone.
+  const onEpisodeSeamDone = useCallback((summary: string) => {
+    announceToast(summary);
+    onSaved();
+  }, [onSaved]);
 
   const onScaffoldEpisodeSubtitlesClick = useCallback(async () => {
     if (!path) return;
@@ -294,6 +268,44 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
       announceToast(`本集烧字幕失败: ${archiveErrorKind(err)}`);
     } finally {
       setBurnEpisodeBusy(false);
+    }
+  }, [path, onSaved]);
+
+  // Step ① 定版: lock each shot's newest take to shot{NN}.mp4 (renders/ untouched).
+  const onSelectTakesClick = useCallback(async () => {
+    if (!path) return;
+    setSelectTakesBusy(true);
+    try {
+      const result = await selectEpisodeTakes(path);
+      let summary = `已定版 ${result.selected.length} 个镜头 → shot{NN}.mp4`;
+      if (result.skipped.length > 0) {
+        const names = result.skipped.map((s) => `${s.shot} (${s.reason})`).join(", ");
+        summary += ` · 跳过 ${result.skipped.length}: ${names}`;
+      }
+      announceToast(summary);
+      onSaved();
+    } catch (err) {
+      announceToast(`定版失败: ${archiveErrorKind(err)}`);
+    } finally {
+      setSelectTakesBusy(false);
+    }
+  }, [path, onSaved]);
+
+  // Step ③ 整集字幕: burn ONE subtitle track onto the clean ep{NN}.mp4, cues
+  // placed at their true final-timeline offset (segments.json) → no seam drift.
+  const onBurnEpisodeWholeClick = useCallback(async (lang: SubtitleLang) => {
+    if (!path) return;
+    setBurnWholeBusy(true);
+    try {
+      const result = await burnEpisodeSubtitlesWhole(path, lang);
+      const langLabel = lang === "both" ? "中英" : lang === "en" ? "英文" : "中文";
+      const out = result.out.split("/").pop() ?? result.out;
+      announceToast(`已对成片烧入${langLabel}字幕 → ${out}（${result.cues} 句 / ${result.shots} 镜）`);
+      onSaved();
+    } catch (err) {
+      announceToast(`整集烧字幕失败: ${archiveErrorKind(err)}（先「拼接成片」生成 ep{NN}.mp4 + segments.json）`);
+    } finally {
+      setBurnWholeBusy(false);
     }
   }, [path, onSaved]);
 
@@ -363,7 +375,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
       const failCount = result.failures.length;
       const summary =
         failCount === 0
-          ? `Extracted ${okCount} 文件 (三视图 + 音频 + 前3s) from ${name} → views/`
+          ? `Extracted ${okCount} 文件 (三视图 + 音频 + 前2s) from ${name} → views/`
           : `Extracted ${okCount} from ${name} (${failCount} failed)`;
       announceToast(summary);
       onSaved();
@@ -451,7 +463,7 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
     : (archiving ? "Archiving…" : "📦 Archive");
   const deleteLabel = deleting ? "Deleting…" : "🗑 Delete";
   const extractLabel = extracting ? "⏳ Extracting…" : "🎞 Extract Frames";
-  const viewsExtractLabel = extractingViews ? "⏳ 提取中…" : "🖼 提取三视图+音频+前3s";
+  const viewsExtractLabel = extractingViews ? "⏳ 提取中…" : "🖼 提取三视图+音频+前2s";
   const showViewsBtn = isVideo && !isArchivedFile && !isDeletedFile && isCharacterVideoPath(path);
   const platesExtractLabel = extractingPlates ? "⏳ 截取中…" : "🧭 截取方向背景图";
   const showPlatesBtn = isVideo && !isArchivedFile && !isDeletedFile && isSceneVideoPath(path);
@@ -521,31 +533,38 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
           </span>
         ) : null}
         {isEpisodeFile ? (
-          <span className="reader-episode-concat-group" role="group" aria-label="合成本集视频（按语言）">
-            {([
-              ["original", "🎬 合成(原片)", "无字幕：每镜取 renders/ 最新 mp4 → ep{NN}.mp4"],
-              ["zh", "🎬 中文", "每镜取 shot{NN}_zh.mp4 → ep{NN}_zh.mp4"],
-              ["en", "🎬 EN", "每镜取 shot{NN}_en.mp4 → ep{NN}_en.mp4"],
-              ["both", "🎬 中英", "每镜取 shot{NN}_zhen.mp4 → ep{NN}_zhen.mp4"],
-            ] as [EpisodeLang, string, string][]).map(([lang, label, title]) => (
-              <button key={lang} type="button" className="reader-episode-concat-btn"
-                onClick={() => onConcatEpisodeClick(lang)} disabled={episodeConcatBusy}
-                aria-label={`Concatenate episode (${lang})`}
-                title={`按镜头顺序 ffmpeg 拼接成整集放在本集文件夹下（已存在则覆盖）。缺该片源的镜头自动跳过。${title}`}>
-                {episodeConcatBusy ? "⏳" : label}
-              </button>
-            ))}
-            <label className="reader-episode-rife-toggle"
-              title="承接缝用 RIFE 补帧（把删掉的运动补回去，过渡更顺；较慢，需服务器装 rife-ncnn-vulkan）。硬切缝不受影响。">
-              <input type="checkbox" checked={rifeSeams} disabled={episodeConcatBusy}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  setRifeSeams(on);
-                  try { localStorage.setItem("ai_video.episode_concat.rife.v1", on ? "1" : "0"); } catch { /* ignore */ }
-                }} />
-              🪄 RIFE 补帧
-            </label>
+          <span className="reader-episode-concat-group" role="group" aria-label="出片三步：定版 → 拼接 → 整集字幕">
+            <button type="button" className="reader-episode-concat-btn"
+              onClick={onSelectTakesClick} disabled={selectTakesBusy}
+              aria-label="Step 1: lock each shot's newest take to shot{NN}.mp4"
+              title="① 定版：把本集每个 shot 的 renders/ 最新 mp4 复制为稳定的 shot{NN}.mp4（renders/ 原始多版保持不动）。第②步拼接用的就是这些定版片。重复点击会用当前最新 render 覆盖。">
+              {selectTakesBusy ? "⏳ 定版中…" : "① 🎯 定版"}
+            </button>
+            <button type="button" className="reader-episode-concat-btn"
+              onClick={() => setSeamLang("original")}
+              aria-label="Step 2: plan seams + concatenate the clean episode reel"
+              title="② 拼接成片：把各 shot{NN}.mp4（缺则回退 renders/ 最新）干净无字幕地拼成 ep{NN}.mp4，并写出 ep{NN}.segments.json（每镜在成片里的真实起止）。打开拼接方案逐个衔接处选硬拼/RIFE。第③步字幕按 segments 对齐，不再受拼接/裁帧影响。">
+              ② 🔗 拼接成片
+            </button>
+            <span className="reader-episode-concat-group" role="group" aria-label="③ 整集字幕（按语言）">
+              {([
+                ["zh", "③ 💬 中文", "对 ep{NN}.mp4 按 segments 烧中文字幕 → ep{NN}_zh.mp4"],
+                ["en", "💬 EN", "对 ep{NN}.mp4 烧英文字幕 → ep{NN}_en.mp4"],
+                ["both", "💬 中英", "对 ep{NN}.mp4 烧中英字幕 → ep{NN}_zhen.mp4"],
+              ] as [SubtitleLang, string, string][]).map(([lang, label, title]) => (
+                <button key={lang} type="button" className="reader-episode-concat-btn"
+                  onClick={() => onBurnEpisodeWholeClick(lang)} disabled={burnWholeBusy}
+                  aria-label={`Step 3: burn ${lang} subtitles onto the clean episode reel`}
+                  title={`③ 整集字幕：对第②步拼好的 ep{NN}.mp4 一次性烧字幕，每镜台词按 segments.json 的真实时间轴对齐、只编码一次 → 不受拼接/裁帧影响（已存在则覆盖）。需先完成第②步。${title}`}>
+                  {burnWholeBusy ? "⏳" : label}
+                </button>
+              ))}
+            </span>
           </span>
+        ) : null}
+        {seamLang && path ? (
+          <SeamPlanModal path={path} lang={seamLang}
+            onClose={() => setSeamLang(null)} onDone={onEpisodeSeamDone} />
         ) : null}
         {/* Per follow-up 2026-05-30: hide whole-file Edit for ai_videos paths.
             Users must edit prompts via the per-code-block ✏ Edit affordance
@@ -588,8 +607,8 @@ export function Reader({ tree, knownPaths, onSaved }: ReaderProps): JSX.Element 
                   {showViewsBtn ? (
                     <button type="button" className="reader-media-views-btn"
                       onClick={onExtractCharacterViewsClick} disabled={mediaActionsBusy}
-                      aria-label={`Extract 3 views, audio and first-3s trim from ${filename}`}
-                      title="一键提取 5 个文件到 ./views/：三视图 (front / side / back .png) + 音频 (.mp3) + 原片前 3 秒 (_trim3s.mp4) — 适用于 v10 character turntable (7s locked-framing + 180° slow orbit)">
+                      aria-label={`Extract 3 views, audio and first-2s trim from the latest turntable video in ${filename}'s folder`}
+                      title="一键提取 5 个文件到 ./views/：三视图 (front / side / back .png) + 音频 (.mp3) + 原片前 2 秒 (_trim2s.mp4) — 多个原始视频时取 timestamp 最新的那个；适用于 character turntable 建立视频 (4s locked-framing + 180° slow orbit)">
                       {viewsExtractLabel}
                     </button>
                   ) : null}

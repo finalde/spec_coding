@@ -960,6 +960,31 @@ export async function extractCharacterViews(path: string): Promise<ExtractCharac
   return readJson<ExtractCharacterViewsResult>(response);
 }
 
+export interface ExtractAllCharacterViewsItem {
+  folder: string;
+  status: "ok" | "skipped" | "error";
+  result: ExtractCharacterViewsResult | null;
+  reason: string;
+}
+
+export interface ExtractAllCharacterViewsResult {
+  characters_dir: string;
+  items: ExtractAllCharacterViewsItem[];
+}
+
+/** Batch re-extract 3 views + audio + 2s trim for every character folder under
+ *  a drama's `characters/` dir (path = that dir's relative path). */
+export async function extractAllCharacterViews(
+  path: string,
+): Promise<ExtractAllCharacterViewsResult> {
+  const response = await fetch("/api/extract-all-character-views", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<ExtractAllCharacterViewsResult>(response);
+}
+
 export interface EpisodeShotUsed {
   shot: string;
   video: string;
@@ -984,25 +1009,130 @@ export interface ConcatEpisodeResult {
   rife_used: boolean;
   /** Number of 承接 seams actually bridged with synthesised motion. */
   rife_bridges: number;
+  /** Sidecar ep{NN}.segments.json (each shot's final-timeline [start,end)); the
+   * whole-episode subtitle burn reads it to place cues. null if unknown. */
+  segments: string | null;
 }
 
-/** Stitch each shot's clip into one ep{NN}[_{lang}].mp4 in the episode folder
- * (overwrites). `lang` "original" uses each shot's newest renders/ mp4; zh/en/
- * both use each shot's burned `shot{NN}_{zh|en|zhen}.mp4` language master.
- * `path` may be any file under the episode folder. When `rife` is true, the
- * 承接 (continuous) seams are bridged with RIFE-synthesised motion instead of
- * butt-joined (slower; needs the rife-ncnn-vulkan exe on the server). */
+/** One shot→shot junction in the seam planner. */
+export interface SeamInfo {
+  index: number;
+  from: string;
+  to: string;
+  link: "handoff" | "hardcut";   // 承接 (RIFE-eligible) | 硬切 (butt only)
+  diff: number | null;           // mean-abs frame diff (handoff only)
+  suggest: "butt" | "rife";      // auto recommendation
+  method: "butt" | "rife";       // current choice (saved plan or suggestion)
+  trim: number;
+  depth: number | null;          // 补帧密度 override (null = auto)
+  thumb_a: string;               // data-URI JPEG of predecessor tail frame
+  thumb_b: string;               // data-URI JPEG of successor head frame
+}
+
+export interface EpisodeSeamsResult {
+  episode: string;
+  lang: EpisodeLang;
+  seams: SeamInfo[];
+  has_saved_plan: boolean;
+}
+
+/** One seam's choice in a build plan POSTed back to /api/concat-episode. */
+export interface SeamPlanEntry {
+  from: string;
+  to: string;
+  method: "butt" | "rife";
+  trim?: number | null;
+  depth?: number | null;
+}
+
+/** Analyze every shot→shot junction of an episode for the seam planner:
+ * 承接/硬切, boundary-frame thumbnails, a frame-diff suggestion, saved plan. */
+export async function analyzeEpisodeSeams(
+  path: string,
+  lang: EpisodeLang = "original",
+): Promise<EpisodeSeamsResult> {
+  const response = await fetch("/api/episode-seams", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, lang }),
+  });
+  return readJson<EpisodeSeamsResult>(response);
+}
+
+/** Step ② of the concat-first flow: stitch each shot's CLEAN clip (the locked
+ * `shot{NN}.mp4` from step ①, else newest renders/ mp4) into one ep{NN}.mp4 +
+ * sidecar ep{NN}.segments.json (final-timeline offsets the whole-episode burn
+ * needs). `lang` stays "original" in the new flow (subtitles are burned later
+ * onto the clean reel by `burnEpisodeSubtitlesWhole`); zh/en/both still stitch
+ * the old per-shot burned masters for back-compat. `path` may be any file under
+ * the episode folder. When `rife` is true the 承接 seams are bridged with
+ * RIFE-synthesised motion instead of butt-joined (slower; needs the
+ * rife-ncnn-vulkan exe on the server). */
 export async function concatEpisode(
   path: string,
   lang: EpisodeLang = "original",
   rife: boolean = false,
+  plan: SeamPlanEntry[] | null = null,
 ): Promise<ConcatEpisodeResult> {
   const response = await fetch("/api/concat-episode", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ path, lang, rife }),
+    body: JSON.stringify({ path, lang, rife, plan }),
   });
   return readJson<ConcatEpisodeResult>(response);
+}
+
+export interface SelectTake {
+  shot: string;
+  src: string;   // the newest renders/ take that was copied
+  out: string;   // the locked shot{NN}.mp4
+}
+
+export interface SelectEpisodeTakesResult {
+  episode: string;
+  selected: SelectTake[];
+  skipped: EpisodeShotSkipped[];
+}
+
+/** Step ① of the concat-first flow: lock each shot's chosen take by copying its
+ * newest renders/ mp4 to a stable `shot{NN}.mp4` (renders/ left untouched). The
+ * concat in step ② then stitches these locked takes. `path` may be any file
+ * under the episode folder. */
+export async function selectEpisodeTakes(
+  path: string,
+): Promise<SelectEpisodeTakesResult> {
+  const response = await fetch("/api/select-episode-takes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  return readJson<SelectEpisodeTakesResult>(response);
+}
+
+export interface BurnEpisodeWholeResult {
+  episode: string;
+  out: string;
+  lang: SubtitleLang;
+  cues: number;
+  shots: number;
+}
+
+/** Step ③ of the concat-first flow: burn ONE subtitle track onto the clean
+ * stitched ep{NN}.mp4, each shot's cues placed at their TRUE offset in the final
+ * reel (read from ep{NN}.segments.json) → ep{NN}_{zh|en|zhen}.mp4. This is what
+ * stops subtitles drifting at the seams — they're aligned to the final timeline
+ * and encoded once. Requires step ② (concat) to have written segments.json.
+ * `path` may be any file under the episode folder. */
+export async function burnEpisodeSubtitlesWhole(
+  path: string,
+  lang: SubtitleLang = "zh",
+): Promise<BurnEpisodeWholeResult> {
+  const response = await fetch("/api/burn-episode-subtitles-whole", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ path, lang }),
+  });
+  return readJson<BurnEpisodeWholeResult>(response);
 }
 
 // ============================================================================

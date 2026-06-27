@@ -50,6 +50,7 @@ from libs.domain.errors.subtitle__error import (
 )
 from libs.domain.value_objects.subtitle__valueobject import (
     VALID_LANGS,
+    SubtitleCue,
     cues_to_ass,
     has_text_for,
     parse_subtitles,
@@ -195,6 +196,45 @@ class SubtitleBurner:
             cue_count=len(phrases) or 1,
             created=not existed,
         )
+
+    def segment_cues(
+        self, shot_folder: Path, seg_dur_s: float
+    ) -> tuple[SubtitleCue, ...]:
+        """This shot's cues laid out on a 0..`seg_dur_s` local axis, for the
+        whole-episode burn (follow-up 147). Source priority: the shot's
+        hand-edited `subtitles.md` (keeps any English the author filled) else the
+        spoken `台词:` lines from `shot{NN}.md` (zh-only). Either way the cues are
+        RE-TIMED proportionally (by character count) to the shot's REAL final
+        duration in the stitched reel — so seam trims can't drift them. Empty
+        when the shot is silent."""
+        pairs: list[tuple[str, str]] = []
+        sub_md = shot_folder / SUBTITLE_FILE_NAME
+        if sub_md.is_file():
+            pairs = [
+                (c.zh, c.en)
+                for c in parse_subtitles(sub_md.read_text(encoding="utf-8"))
+                if c.zh or c.en
+            ]
+        if not pairs:
+            _, lines = self._read_shot_dialogue(shot_folder)
+            phrases: list[str] = []
+            for line in lines:
+                phrases.extend(_split_phrases(line))
+            pairs = [(p, "") for p in phrases]
+        if not pairs or seg_dur_s <= 0:
+            return ()
+        weights = [max(1, len(zh or en)) for zh, en in pairs]
+        total = sum(weights)
+        cues: list[SubtitleCue] = []
+        cursor = 0.0
+        for i, ((zh, en), w) in enumerate(zip(pairs, weights)):
+            start = cursor
+            end = seg_dur_s if i == len(pairs) - 1 else cursor + seg_dur_s * w / total
+            if end <= start:
+                end = start + 0.05
+            cues.append(SubtitleCue(start=round(start, 3), end=round(end, 3), zh=zh, en=en))
+            cursor = end
+        return tuple(cues)
 
     def spoken_lines(self, shot_folder: Path) -> list[str]:
         """The clean spoken `台词:` lines for a shot (empty if the shot is

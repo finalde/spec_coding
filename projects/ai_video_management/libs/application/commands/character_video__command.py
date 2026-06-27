@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from libs.application.dtos.character_video__dto import (
     ConcatShotCharactersResultCdto,
+    ExtractAllCharacterViewsResultCdto,
     ExtractCharacterViewsResultCdto,
     TruncateCharacterVideoResultCdto,
 )
@@ -34,3 +35,6 @@ class CharacterVideoCommand:
 
     def extract_views(self, rel_path: str) -> ExtractCharacterViewsResultCdto:
         return CharacterVideoMapper.views_to_cdto(self._extractor.extract(rel_path))
+
+    def extract_all_views(self, rel_path: str) -> ExtractAllCharacterViewsResultCdto:
+        return CharacterVideoMapper.extract_all_to_cdto(self._extractor.extract_all(rel_path))

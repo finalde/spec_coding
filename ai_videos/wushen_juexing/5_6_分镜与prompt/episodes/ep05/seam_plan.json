@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "seams": [
+    {
+      "from": "shot01",
+      "to": "shot02",
+      "method": "rife",
+      "trim": 0.08,
+      "depth": 2
+    },
+    {
+      "from": "shot02",
+      "to": "shot03",
+      "method": "butt",
+      "trim": null,
+      "depth": null
+    },
+    {
+      "from": "shot03",
+      "to": "shot04",
+      "method": "butt",
+      "trim": null,
+      "depth": null
+    }
+  ]
+}

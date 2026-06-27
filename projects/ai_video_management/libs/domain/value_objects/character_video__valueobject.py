@@ -2,25 +2,23 @@
 
 Per follow-up 093: extract 3 still frames (front / side / back) + the full
 audio track from a character turntable mp4 (per
-`.claude/agent_refs/project/ai_video.md` rule #12.5). Per follow-up 098
-the rule is bumped v10 → v10.2 (7s locked-framing 5-phase single-take with
-3 static landings + 2 short motion bridges) — empirical evidence (user
-report after first v10 renders) was that the model under-rotates v10's
-single 4s continuous orbit, leaving the side / back picks in motion segments
-rather than at the spec angles. v10.2 introduces explicit static holds at
-90° and 180° so each pick is taken from a guaranteed-static moment.
+`.claude/agent_refs/project/ai_video.md` rule #12.5). The turntable keeps
+3 static landings (front / side / back) joined by 2 short motion bridges so
+each pick is taken from a guaranteed-static moment.
 
-The 3 timestamps are the algebraic image of v10.2's 5-phase camera path:
+Per 2026-06-27 follow-up the turntable is COMPRESSED 7s → 4s (same
+front→side→back arc done inside 4s). The 3 timestamps are the algebraic
+image of the 4s 5-phase camera path:
 
-  0-2s static front lock         → front pick at t=1.0s (mid static intro)
-  2-3s motion 0° → 90°
-  3-4s static side lock          → side  pick at t=3.5s (mid static, was 4.0s in v10)
-  4-5s motion 90° → 180°
-  5-7s static back lock + settle → back  pick at t=6.0s (mid static, unchanged)
+  0-1s   static front lock         → front pick at t=0.5s (mid static intro)
+  1-1.5s motion 0° → 90°
+  1.5-2.5s static side lock        → side  pick at t=2.0s (mid static)
+  2.5-3s motion 90° → 180°
+  3-4s   static back lock + settle → back  pick at t=3.5s (mid static)
 
-All 3 picks share IDENTICAL medium-full framing because v10.2 forbids any
-dolly / zoom within the take — only the angle changes between landings.
-If rule #12.5 changes again (v11+), these constants must change too.
+All 3 picks share IDENTICAL medium-full framing because the take forbids any
+dolly / zoom — only the angle changes between landings. If rule #12.5's
+phase schedule changes again, these constants must change too.
 """
 from __future__ import annotations
 
@@ -34,9 +32,9 @@ class CharacterViewSpec:
 
 
 CANONICAL_VIEWS: tuple[CharacterViewSpec, ...] = (
-    CharacterViewSpec(1.0, "front"),
-    CharacterViewSpec(3.5, "side"),
-    CharacterViewSpec(6.0, "back"),
+    CharacterViewSpec(0.5, "front"),
+    CharacterViewSpec(2.0, "side"),
+    CharacterViewSpec(3.5, "back"),
 )
 
 
@@ -50,11 +48,14 @@ def audio_output_filename(prefix: str) -> str:
     return f"{prefix}_audio.mp3"
 
 
-TRIM_DURATION_S: float = 3.0
+TRIM_DURATION_S: float = 2.0
 
 
 def trim_output_filename(prefix: str) -> str:
-    """`{prefix}_trim3s.mp4` — the first `TRIM_DURATION_S` seconds of the source
-    turntable mp4, emitted alongside the 3 view PNGs + audio so a single click
-    yields all 5 files."""
-    return f"{prefix}_trim3s.mp4"
+    """`{prefix}_trim{N}s.mp4` — the first `TRIM_DURATION_S` seconds of the
+    source turntable mp4, emitted alongside the 3 view PNGs + audio so a single
+    click yields all 5 files. The `{N}s` in the name is derived from
+    `TRIM_DURATION_S`, so changing the constant renames the output in lockstep
+    (2s per the 2026-06-27 follow-up — sample window aligned to the 0-2s
+    front-lock phase)."""
+    return f"{prefix}_trim{int(TRIM_DURATION_S)}s.mp4"

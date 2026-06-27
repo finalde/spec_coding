@@ -102,6 +102,14 @@ def _norm(w: int, h: int, fps: int) -> str:
 
 
 _AR: int = 44100   # uniform audio rate/layout across every segment (concat needs identical)
+# Click-free joins. A short equal-power fade at each segment's audio boundaries
+# (NO overlap → duration preserved → no A/V drift, unlike a true crossfade which
+# would shrink the audio and desync it from the hard-cut video over many joins)
+# removes the pop from splicing two waveforms at a non-zero-crossing. Inside a
+# bridge the two reused halves ARE crossfaded (self-contained, re-padded to the
+# fixed bridge length, so no global drift).
+_SEAM_FADE_S: float = 0.010   # ~10ms boundary micro-fade (inaudible, kills clicks)
+_BRIDGE_XFADE_S: float = 0.05  # crossfade between the bridge's prev-tail & next-head halves
 
 
 def _has_audio(ffmpeg: str, src: Path) -> bool:
@@ -109,6 +117,19 @@ def _has_audio(ffmpeg: str, src: Path) -> bool:
     stderr — imageio_ffmpeg ships no ffprobe)."""
     info = _run([ffmpeg, "-i", str(src), "-hide_banner"]).stderr.decode("utf-8", "replace")
     return "Audio:" in info
+
+
+def _segment_ok(ffmpeg: str, src: Path) -> bool:
+    """True iff a freshly-built segment is usable in the final concat — i.e. it
+    exists and carries a decodable Video stream. A degenerate RIFE bridge (e.g. one
+    forced over a big scale/scene jump) can encode to a file with no usable video
+    stream; concatenating it makes the whole filtergraph fail ('matches no streams')
+    and breaks the episode. Reject such a bridge so the seam falls back to a clean
+    butt-join instead."""
+    if not src.is_file():
+        return False
+    info = _run([ffmpeg, "-i", str(src), "-hide_banner"]).stderr.decode("utf-8", "replace")
+    return "Video:" in info
 
 
 def _render_body(
@@ -145,16 +166,26 @@ def _render_body(
         raise RuntimeError(f"body render failed: {src.name}")
 
 
-# RIFE only reconstructs motion cleanly in a middle band: the two seam frames
-# must differ ENOUGH that there is real motion to interpolate, but not SO much
-# that the figure scales/jumps (RIFE then morphs → 乱码). The gate is the mean
-# absolute luma difference between the two frames (0–255, via ffmpeg
-# blend=difference→signalstats YAVG). Calibrated on EP1's two承接 seams, both of
-# which are OUTSIDE the band: shot10→11 ≈ 11 (near-duplicate handoff frame → a
-# frozen bridge reads as a 停顿) and shot11→12 ≈ 73 (a scale/framing jump → morph).
-# Out-of-band seams fall back to the clean trim+butt-join (no pause, no melt).
-_BRIDGE_MIN_DIFF: float = 20.0   # below → too similar (near-still); butt-join
-_BRIDGE_MAX_DIFF: float = 55.0   # above → scale/scene jump; butt-join
+# RIFE reconstructs motion cleanly only up to a point: too much frame-to-frame
+# change (a scale/framing jump) makes it morph the figure → 乱码. The gate is the
+# mean absolute luma difference between the two seam frames (0–255, via ffmpeg
+# blend=difference→signalstats YAVG). The HIGH bound is the load-bearing one
+# (EP1 shot11→12 ≈ 73 jump, EP4 several ≈ 56–58 → all morph if bridged). The LOW
+# bound only skips a *true freeze* (diff ≈ 0 → RIFE makes identical frames, a
+# pointless hold); it is deliberately small because a large STATIC background
+# dilutes the global diff of a seam whose SUBJECTS move (e.g. EP4 shot6→7 ≈ 12:
+# two figures shift against a fixed temple — RIFE bridges it cleanly, so it must
+# NOT be gated). Once the bridge carries real ambient audio (not silence) a small-
+# motion bridge no longer reads as a 停顿, so the old high MIN is retired.
+_BRIDGE_MIN_DIFF: float = 6.0    # below → essentially a frozen duplicate; butt-join
+# Above this the seam is a composition/camera change (not continuous motion) and
+# RIFE morphs the frame into a smear (乱码). 40 brackets the observed gap between
+# clean bridges (≤~35: EP4 shot6→7≈12, EP1 seam1≈20–30) and morphs (≥~46: EP4
+# shot9→10≈46 crowd-wide→man+stele, shot11→12≈74, several jumps 56–58). Note the
+# global luma diff is a crude proxy — it can't tell big continuous motion from a
+# composition change with similar brightness, so a 承接 seam whose render is really
+# a camera change (an over-claimed 衔接 label) is what this catches.
+_BRIDGE_MAX_DIFF: float = 40.0   # above → composition/camera change RIFE morphs; butt-join
 _YAVG_RE = re.compile(r"lavfi\.signalstats\.YAVG=([0-9.]+)")
 
 
@@ -199,6 +230,7 @@ def _rife_bridge(
     ffmpeg: str, rife: str, body_prev: Path, body_next: Path,
     src_prev: Path, src_next: Path, dur_prev: float,
     trim: float, fps: int, w: int, h: int, tmp: Path, idx: int, out: Path,
+    gate: bool = True, depth_override: int | None = None,
 ) -> bool:
     """Bridge a seam with an external RIFE interpolator: extract the predecessor's
     last frame + successor's first frame, synthesise motion-compensated in-between
@@ -220,20 +252,26 @@ def _rife_bridge(
         return False
     # Motion gate: bridge only when the two seam frames sit in the bridgeable band.
     # Too similar → a frozen bridge (停顿); too different → a scale/scene jump RIFE
-    # morphs (乱码). Either way fall back to the clean trim+butt-join.
-    diff = _frame_diff(ffmpeg, la, fb)
-    if diff is not None and not (_BRIDGE_MIN_DIFF <= diff <= _BRIDGE_MAX_DIFF):
-        why = "near-still" if diff < _BRIDGE_MIN_DIFF else "scene/scale jump"
-        print(f"  seam {idx}->{idx+1}: frame diff {diff:.0f} out of band "
-              f"[{_BRIDGE_MIN_DIFF:.0f},{_BRIDGE_MAX_DIFF:.0f}] ({why}); butt-joining",
-              file=sys.stderr)
-        return False
+    # morphs (乱码). Either way fall back to the clean trim+butt-join. Skipped when
+    # `gate` is False (the user chose RIFE explicitly via the seam plan).
+    if gate:
+        diff = _frame_diff(ffmpeg, la, fb)
+        if diff is not None and not (_BRIDGE_MIN_DIFF <= diff <= _BRIDGE_MAX_DIFF):
+            why = "near-still" if diff < _BRIDGE_MIN_DIFF else "scene/scale jump"
+            print(f"  seam {idx}->{idx+1}: frame diff {diff:.0f} out of band "
+                  f"[{_BRIDGE_MIN_DIFF:.0f},{_BRIDGE_MAX_DIFF:.0f}] ({why}); butt-joining",
+                  file=sys.stderr)
+            return False
     # Synthesise ~as many bridge frames as trim removed at this seam (both sides),
     # so the reconstructed motion ≈ the deleted motion and the seam timing stays
     # natural. Binary subdivision → 2**depth-1 frames; depth from the target, capped
-    # at 4 (15 frames). Single-pair `-0/-1/-o` only (dir-mode `-n` varies by build).
-    target = max(1, round(2.0 * trim * fps))
-    depth = max(1, min(4, math.ceil(math.log2(target + 1))))
+    # at 4 (15 frames), or an explicit `depth_override` (补帧密度) from the plan.
+    # Single-pair `-0/-1/-o` only (dir-mode `-n` varies by build).
+    if depth_override is not None:
+        depth = max(1, min(4, int(depth_override)))
+    else:
+        target = max(1, round(2.0 * trim * fps))
+        depth = max(1, min(4, math.ceil(math.log2(target + 1))))
     inner = _rife_chain(rife, la, fb, depth, sd, "r")
     if not inner:
         return False
@@ -263,10 +301,14 @@ def _rife_bridge(
         cmd += ["-i", str(src_next)]
         fc.append(f"[{ai}:a]atrim=start=0:end={trim:.3f},asetpts=N/SR/TB,{fmt}[an]")
         pads.append("[an]"); ai += 1
-    if pads:
-        joined = "".join(pads)
-        fc.append(f"{joined}concat=n={len(pads)}:v=0:a=1,"
+    if len(pads) == 2:
+        # crossfade the two reused halves (no internal hard cut → no click),
+        # then re-pad/cap to the fixed bridge length.
+        xf = max(0.02, min(_BRIDGE_XFADE_S, trim * 0.5))
+        fc.append(f"{pads[0]}{pads[1]}acrossfade=d={xf:.3f}:c1=tri:c2=tri,"
                   f"apad,atrim=0:{bridge_dur:.3f},asetpts=N/SR/TB[a]")
+    elif len(pads) == 1:
+        fc.append(f"{pads[0]}apad,atrim=0:{bridge_dur:.3f},asetpts=N/SR/TB[a]")
     else:
         cmd += ["-f", "lavfi", "-i", f"anullsrc=r={_AR}:cl=stereo"]
         fc.append(f"[{ai}:a]atrim=0:{bridge_dur:.3f}[a]")
@@ -282,9 +324,16 @@ def _rife_bridge(
 def seam_concat(
     inputs: list[Path], out_path: Path, trim: float, rife: str | None,
     fps_override: int, seams: list[bool] | None = None,
+    plan: list[dict] | None = None,
 ) -> int:
     """Stitch `inputs` into `out_path`, repairing 承接 seams. Returns the number
-    of RIFE bridges actually inserted (0 when rife is None or all seams 硬切)."""
+    of RIFE bridges actually inserted (0 when rife is None or all seams 硬切).
+
+    `plan` (length n-1, one entry per seam) is the explicit per-seam decision from
+    the UI seam-planner; when given it OVERRIDES both `seams` and the auto motion
+    gate (the user has chosen). Each entry: {bridge: bool, trim: float|None,
+    depth: int|None}. `seams` (b/c) + the auto gate remain the default when no
+    plan is supplied."""
     ffmpeg = _ffmpeg_exe()
     probes = [_probe(ffmpeg, p) for p in inputs]
     fps = fps_override or max(1, round(probes[0][1]))
@@ -292,12 +341,23 @@ def seam_concat(
     h = max((pr[3] for pr in probes), default=0) or 1280
     n = len(inputs)
 
-    # seams[i] == True ⟺ seam between clip i and i+1 is a 承接 (continuous) chain
-    # that gets trim + RIFE bridge. A 硬切 (intended cut) is pure butt-join: no
-    # trim, no bridge. Default (no spec) = every seam is a bridge (legacy behavior).
-    if seams is None:
-        bridge_seam = [True] * (n - 1)
-    else:
+    # Per-seam config arrays (length n-1): whether to bridge, the trim bite, an
+    # optional depth override, and whether the auto motion gate applies. A `plan`
+    # is the explicit user decision (gate off); otherwise fall back to seams+gate.
+    bridge_seam = [True] * (n - 1)
+    trims = [trim] * (n - 1)
+    depths: list[int | None] = [None] * (n - 1)
+    gated = [True] * (n - 1)
+    if plan is not None:
+        if len(plan) != n - 1:
+            raise RuntimeError(f"plan needs {n - 1} entries, got {len(plan)}")
+        for j, e in enumerate(plan):
+            bridge_seam[j] = bool(e.get("bridge", True))
+            if e.get("trim") is not None:
+                trims[j] = float(e["trim"])
+            depths[j] = e.get("depth")
+            gated[j] = False  # explicit user choice — no auto gate
+    elif seams is not None:
         if len(seams) != n - 1:
             raise RuntimeError(f"--seams needs {n - 1} entries, got {len(seams)}")
         bridge_seam = list(seams)
@@ -307,8 +367,8 @@ def seam_concat(
         bodies: list[Path] = []
         for i, src in enumerate(inputs):
             # trim a side only when the seam touching it is a 承接 bridge.
-            head = trim if i > 0 and bridge_seam[i - 1] else 0.0
-            tail = trim if i < n - 1 and bridge_seam[i] else 0.0
+            head = trims[i - 1] if i > 0 and bridge_seam[i - 1] else 0.0
+            tail = trims[i] if i < n - 1 and bridge_seam[i] else 0.0
             body = tmp / f"body_{i:03d}.mp4"
             _render_body(ffmpeg, src, head, tail, probes[i][0], fps, w, h, body)
             bodies.append(body)
@@ -319,11 +379,20 @@ def seam_concat(
             segments.append(bodies[i])
             if rife and i < n - 1 and bridge_seam[i]:
                 br = tmp / f"bridge_{i:03d}.mp4"
-                if _rife_bridge(ffmpeg, rife, bodies[i], bodies[i + 1],
-                                inputs[i], inputs[i + 1], probes[i][0],
-                                trim, fps, w, h, tmp, i, br):
+                ok = _rife_bridge(ffmpeg, rife, bodies[i], bodies[i + 1],
+                                  inputs[i], inputs[i + 1], probes[i][0],
+                                  trims[i], fps, w, h, tmp, i, br,
+                                  gate=gated[i], depth_override=depths[i])
+                if ok and _segment_ok(ffmpeg, br):
                     segments.append(br)
                     bridged += 1
+                elif ok:
+                    # The bridge encoded but is degenerate (no decodable video stream
+                    # — e.g. a forced bridge over a big scale/scene jump): adding it
+                    # would make the final filtergraph fail ("matches no streams") and
+                    # break the WHOLE episode. Drop it → clean butt-join for this seam.
+                    print(f"  seam {i}->{i+1}: bridge unusable (no video stream), "
+                          f"butt-joining", file=sys.stderr)
                 else:
                     # gated out of band (reason already printed) or RIFE failed —
                     # either way the seam is a clean trim+butt-join.
@@ -331,21 +400,58 @@ def seam_concat(
                           file=sys.stderr)
 
         # Concat via the filter (one re-encode) — reliable for short/heterogeneous
-        # segments where the stream-copy muxer silently drops frames.
+        # segments where the stream-copy muxer silently drops frames. Write to a
+        # `.part` sibling and atomically rename only on success: a build killed
+        # mid-encode (e.g. the HTTP client disconnects and Starlette cancels the
+        # handler) then never leaves a 0-byte/partial file at the real path — the
+        # previous good output survives, and the orphaned `.part` is cleaned up.
+        part = out_path.with_name(out_path.name + ".part")
+        # Micro-fade each segment's audio in/out (~10ms, NO overlap → exact
+        # duration preserved → video stays in sync) so the hard concat has no
+        # click/pop where two waveforms meet. Needs each segment's true duration.
+        seg_durs = [_probe(ffmpeg, s)[0] for s in segments]
+        # A segment can lack an audio stream (e.g. a degenerate 1-frame RIFE bridge,
+        # or a body whose mute-source fallback dropped out): `[k:a]` would then match
+        # no streams and the whole filtergraph fails ("final concat failed"). So probe
+        # each segment and substitute a silent `anullsrc` of its duration for any that
+        # are audio-less — mirroring the butt-path `_ffmpeg_concat`, so concat=...:a=1
+        # always has an audio input for every segment.
+        seg_has_audio = [_has_audio(ffmpeg, s) for s in segments]
         cmd: list[str] = [ffmpeg, "-y"]
         for s in segments:
             cmd.extend(["-i", str(s)])
-        labels = "".join(f"[{k}:v][{k}:a]" for k in range(len(segments)))
+        af_parts: list[str] = []
+        silent_idx = len(segments)   # next free input index for anullsrc fills
+        for k, d in enumerate(seg_durs):
+            if seg_has_audio[k]:
+                fo = max(0.0, d - _SEAM_FADE_S)
+                af_parts.append(
+                    f"[{k}:a]afade=t=in:st=0:d={_SEAM_FADE_S},"
+                    f"afade=t=out:st={fo:.3f}:d={_SEAM_FADE_S}[a{k}]"
+                )
+            else:
+                cmd.extend(["-f", "lavfi", "-i", f"anullsrc=r={_AR}:cl=stereo"])
+                af_parts.append(f"[{silent_idx}:a]atrim=0:{d:.3f},asetpts=N/SR/TB[a{k}]")
+                silent_idx += 1
+        labels = "".join(f"[{k}:v][a{k}]" for k in range(len(segments)))
+        filt = ";".join(
+            af_parts + [f"{labels}concat=n={len(segments)}:v=1:a=1[v][a]"]
+        )
         cmd.extend([
-            "-filter_complex",
-            f"{labels}concat=n={len(segments)}:v=1:a=1[v][a]",
+            "-filter_complex", filt,
             "-map", "[v]", "-map", "[a]",
             "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-ar", str(_AR), "-ac", "2",
-            "-movflags", "+faststart", "-loglevel", "error", str(out_path),
+            # `-f mp4` is required: the muxer can't be inferred from the `.part`
+            # extension (ffmpeg guesses format from the output suffix).
+            "-movflags", "+faststart", "-f", "mp4", "-loglevel", "error", str(part),
         ])
-        if _run(cmd).returncode != 0 or not out_path.is_file():
-            raise RuntimeError("final concat failed")
+        res = _run(cmd)
+        if res.returncode != 0 or not part.is_file():
+            part.unlink(missing_ok=True)
+            err = res.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"final concat failed: {err[-700:] or 'no stderr'}")
+        part.replace(out_path)
 
     dur, _, _, _ = _probe(ffmpeg, out_path)
     mode = f"{bridged} RIFE bridges" if rife else "trim + dedup (no bridge)"

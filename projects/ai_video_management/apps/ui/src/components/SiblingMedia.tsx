@@ -39,7 +39,7 @@ const ARCHIVE_DIR_NAME = "archive";
 const RENDERS_DIR_NAME = "renders";
 
 /** Matches `ai_videos/{drama}/characters/c{N}[_{slug}]/{file}.{video_ext}`.
- * Used to gate the 🖼 three-view + audio + first-3s extraction button so it
+ * Used to gate the 🖼 three-view + audio + first-2s extraction button so it
  * only appears for character turntable videos (rule #12.5 v10.2 sources).
  * Mirrors the backend `_is_under_character_folder` in character_video__writer.py:
  * `characters/cN` may sit directly under the drama (legacy flat layout) OR under
@@ -322,10 +322,10 @@ function MediaTile({
             className="sibling-media-views-btn"
             onClick={() => onExtractCharacterViews(path)}
             disabled={busy || extractingViews}
-            aria-label={`Extract 3 views, audio and first-3s trim from ${filename}`}
-            title="一键提取 5 个文件到 ./views/：三视图 (front / side / back .png) + 音频 (.mp3) + 原片前 3 秒 (_trim3s.mp4) — 适用于 v10 character turntable (7s locked-framing + 180° slow orbit)"
+            aria-label={`Extract 3 views, audio and first-2s trim from the latest turntable video in ${filename}'s folder`}
+            title="一键提取 5 个文件到 ./views/：三视图 (front / side / back .png) + 音频 (.mp3) + 原片前 2 秒 (_trim2s.mp4) — 多个原始视频时取 timestamp 最新的那个；适用于 character turntable 建立视频 (4s locked-framing + 180° slow orbit)"
           >
-            {extractingViews ? "⏳ 提取中…" : "🖼 提取三视图+音频+前3s"}
+            {extractingViews ? "⏳ 提取中…" : "🖼 提取三视图+音频+前2s"}
           </button>
         ) : null}
         <button
@@ -522,7 +522,7 @@ export function SiblingMedia({ currentPath, knownPaths, onChange }: SiblingMedia
       const hasAudio = result.audio !== null;
       const hasTrim = result.trim !== null;
       const failCount = result.failures.length;
-      const suffix = `${hasAudio ? " + 音频" : ""}${hasTrim ? " + 前3s" : ""}`;
+      const suffix = `${hasAudio ? " + 音频" : ""}${hasTrim ? " + 前2s" : ""}`;
       const summary =
         failCount === 0
           ? `Extracted ${viewCount} 视图${suffix} from ${basename(path)} → views/`

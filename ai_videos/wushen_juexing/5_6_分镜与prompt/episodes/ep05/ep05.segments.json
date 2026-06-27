@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "approx": true,
+  "total_s": 36.42,
+  "segments": [
+    {
+      "shot": "shot01",
+      "start_s": 0.0,
+      "end_s": 11.78,
+      "dur_s": 11.78
+    },
+    {
+      "shot": "shot02",
+      "start_s": 11.78,
+      "end_s": 16.56,
+      "dur_s": 4.78
+    },
+    {
+      "shot": "shot03",
+      "start_s": 16.56,
+      "end_s": 25.49,
+      "dur_s": 8.93
+    },
+    {
+      "shot": "shot04",
+      "start_s": 25.49,
+      "end_s": 36.42,
+      "dur_s": 10.93
+    }
+  ]
+}

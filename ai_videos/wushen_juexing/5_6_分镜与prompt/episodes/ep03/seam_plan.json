@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "seams": [
+    {
+      "from": "shot01",
+      "to": "shot02",
+      "method": "butt",
+      "trim": null,
+      "depth": null
+    },
+    {
+      "from": "shot02",
+      "to": "shot03",
+      "method": "rife",
+      "trim": 0.06,
+      "depth": 3
+    },
+    {
+      "from": "shot03",
+      "to": "shot04",
+      "method": "rife",
+      "trim": 0.04,
+      "depth": 3
+    },
+    {
+      "from": "shot04",
+      "to": "shot05",
+      "method": "rife",
+      "trim": 0.04,
+      "depth": 3
+    },
+    {
+      "from": "shot05",
+      "to": "shot06",
+      "method": "rife",
+      "trim": 0.04,
+      "depth": 1
+    },
+    {
+      "from": "shot06",
+      "to": "shot07",
+      "method": "rife",
+      "trim": 0.04,
+      "depth": 3
+    },
+    {
+      "from": "shot07",
+      "to": "shot08",
+      "method": "rife",
+      "trim": 0.04,
+      "depth": 4
+    },
+    {
+      "from": "shot08",
+      "to": "shot09",
+      "method": "rife",
+      "trim": 0.04,
+      "depth": 3
+    },
+    {
+      "from": "shot09",
+      "to": "shot10",
+      "method": "butt",
+      "trim": null,
+      "depth": null
+    }
+  ]
+}

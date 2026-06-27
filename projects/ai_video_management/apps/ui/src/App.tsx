@@ -4,6 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Reader } from "./components/Reader";
 import { Home } from "./components/Home";
 import { ActorGrid } from "./components/ActorGrid";
+import { CharacterGrid } from "./components/CharacterGrid";
 import { DeletedView } from "./components/DeletedView";
 import { VoiceGrid } from "./components/VoiceGrid";
 import { BgmGrid } from "./components/BgmGrid";
@@ -84,6 +85,10 @@ export default function App(): JSX.Element {
           <Route
             path="/actors"
             element={<ActorGrid tree={tree} onChange={() => setRefreshKey((k) => k + 1)} />}
+          />
+          <Route
+            path="/characters"
+            element={<CharacterGrid tree={tree} onChange={() => setRefreshKey((k) => k + 1)} />}
           />
           <Route
             path="/voices"

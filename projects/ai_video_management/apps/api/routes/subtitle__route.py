@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from apps.api.container import Container
 from libs.application.commands.subtitle__command import SubtitleCommand
 from libs.application.commands.subtitle_batch__command import SubtitleBatchCommand
+from libs.application.commands.episode_subtitle__command import EpisodeSubtitleCommand
 
 router = APIRouter()
 
@@ -62,6 +63,17 @@ def burn_episode_subtitles(
 ) -> Response:
     return JSONResponse(
         status_code=200, content=command.burn_episode(body.path, body.lang).to_payload()
+    )
+
+
+@router.post("/api/burn-episode-subtitles-whole")
+@inject
+def burn_episode_subtitles_whole(
+    body: BurnSubtitlesBody,
+    command: EpisodeSubtitleCommand = Depends(Provide[Container.episode_subtitle_command]),
+) -> Response:
+    return JSONResponse(
+        status_code=200, content=command.burn_whole(body.path, body.lang).to_payload()
     )
 
 

@@ -4098,3 +4098,84 @@ Fix:
 - 既有 21+49 项测试全过；EP1 实测：seam2 自动硬接、seam1 补 1 桥带连续环境声、含 aac 44100 stereo。
 
 No conflicts found in: episode__writer.py(逻辑不变，仅复用更新后的 tool), dto/mapper/route/UI(rife_bridges 现因门限可能为更小值，语义不变)
+
+## Follow-up 145c — 2026-06-23 (amend)
+Source: 同 145（用户：ep4 shot6→7 用 RIFE 还是有点跳转）。
+Diagnose（抽帧实证）: shot6→7 全局 mean|Δ|≈12，被 MIN=20 当「near-still」挡掉、实际走的是 butt-join（没用 RIFE）。但两帧是同机位、大段静止背景(寺庙)+两个主体小幅移动——RIFE 中点帧实测干净无 morф。根因：全局 diff 被静止背景稀释，MIN=20 过高，把「背景静、主体动」这类 RIFE 安全甜区误判为静止。
+Fix:
+- tools/seam_concat.py — _BRIDGE_MIN_DIFF 20→6（低端只挡「真冻结/重复帧」diff≈0 的无意义桥；桥已带真环境声后，小幅运动桥不再读作停顿）。高端 MAX=55 不变（morф 防护是承重项：ep4 的 56/57 跳变仍正确挡掉）。
+- 复核：ep4 重建 → 桥 2→4（含 shot6→7），仅 56/57 两条跳变硬接；ep3 同步重建。webapp button 自动生效。
+
+No conflicts found in: episode__writer.py/dto/mapper/route/UI（仅工具阈值变化）
+
+## Follow-up 146 — 2026-06-23 20:29:10
+Source: user_input/follow_ups/146-20260623-202910-actor-gendered-wardrobe-frontal-face.md
+Summary: Actor 生成 prompt 两修——① 服装按性别区分（修"男角色穿女式吊带背心"）；② 所有 actor 锁正脸朝镜头（否则捕捉不到面部细节）。根因：`_WARDROBE_REVEALING_ZH` 男女通用一条写死"吊带背心"（女款名词→Kling 给男也套女背心）；三个 header 仅 `_HEADER_FACE` 带正脸约束，`_HEADER_BODY`/`_HEADER_COMBINED`（主用）缺，且 seductive 面部细节含"微微侧脸"与正脸冲突。
+
+Auto-updated:
+- `projects/ai_video_management/libs/infrastructure/writers/actor__chinese_prompt.py` — 删 `_WARDROBE_REVEALING_ZH`，新增 `_WARDROBE_MALE_ZH`（无袖紧身运动背心【男款圆领·绝非女式吊带背心】+ 运动短裤·胸肌肩背轮廓）/ `_WARDROBE_FEMALE_ZH`（紧身吊带背心·胸型大小）+ `_wardrobe_for(gender_slug)`；`_structured_lines` 用 `_wardrobe_for(gender_slug)`、`_build_with_picks_lines` 用 `_wardrobe_for(attrs["gender"])`（覆盖 face/body/combined 全 builder）；三个 header（FACE/BODY/COMBINED）统一加"正脸正面平视镜头（绝不侧脸·不转头·不低头·不仰头·面部完整正对镜头便于捕捉五官细节）"；`_LOOK_FACE_DETAIL_ZH["seductive"]` 的"微微侧脸、颈线慵懒妩媚"→"下颌微收、眼神慵懒直视镜头、媚意自生"；`_NEGATIVE_PROMPT_ZH` 新增正脸约束组（侧脸/侧面/半侧脸/3-4侧脸/转头/扭头/回头/低头/仰头/脸朝向一侧/面部转开/背对镜头/后脑勺/不看镜头/profile view/side face）。
+
+Verified: `tests/test_actor_prompt_only_roundtrip.py` 2 passed；实跑男/女 combined prompt 确认服装分化（男运动背心 vs 女吊带背心）+ 两 header 均含正脸约束。
+
+No conflicts found in: actor__writer.py（仅消费 builder 输出·无需改）、actor__command.py、actor__route.py、ActorPoolGenerator.tsx（前端不含服装/朝向文案）。
+
+## Follow-up 146 — 2026-06-23
+Source: 用户提议——点击「合成本集视频」不要立即拼，而是弹窗逐个衔接处选 硬拼/RIFE(+参数)，确认后再生成，方案存文件可复现。
+Why: 全局帧差门限无法在 40~50 区间可靠区分「大幅连续运动」与「换机位/构图」(ep4 shot9→10=46 morф，但 ep3 有 44~46 是好的)，没有单一阈值正确。把决策交给人 + 缩略图，是正解；门限降级为"建议默认"。
+新增「拼接方案」面板(SeamPlanModal)：
+- 点击 原片/中文/EN/中英 → 弹窗，POST /api/episode-seams 拉每个衔接的 承接/硬切 + 前镜末帧/后镜首帧缩略图 + 自动帧差 + 建议。
+- 硬切缝锁定「硬拼」；承接缝可选 硬拼/RIFE，RIFE 下可调 trim(裁切) + 补帧密度(depth 1–4/自动)。
+- 「生成」→ POST /api/concat-episode {plan}，按选择拼接(用户选择覆盖自动门限)，并把方案存 epNN/seam_plan.json；重开面板自动载入。
+
+Auto-updated:
+- tools/seam_concat.py — seam_concat() 加 plan 参数(每缝 {bridge,trim,depth} 覆盖 seams+门限)；_rife_bridge 加 gate/depth_override；门限 MAX 55→40(仅作建议默认)。
+- libs/infrastructure/writers/episode__writer.py — analyze_seams()(承接判定+缩略图 base64+帧差建议+载入已存方案)、build(plan)、_plan_for_used/_save_plan/_load_plan/_seam_thumb；SeamInfo/SeamAnalysis。
+- libs/application/{dtos/episode__dto.py(SeamInfoQdto/SeamAnalysisQdto),mappers/episode__mapper.py(analysis_to_qdto),commands/episode__command.py(plan),queries/episode__query.py(新建 analyze_seams)}。
+- apps/api/{container.py(episode_query),routes/episode__route.py(POST /api/episode-seams + concat plan，SeamPlanEntry from 别名)}。
+- apps/ui/src/{api.ts(analyzeEpisodeSeams+SeamInfo/SeamPlanEntry+concatEpisode plan),components/SeamPlanModal.tsx(新建),components/Reader.tsx(lang 按钮改开弹窗，移除旧 RIFE 复选框),styles.css(.seam-modal*)}。
+
+No conflicts found in: test_episode_concat.py(21 过); 5 项预存无关失败(wukong_juexing 数据/put_file loopback，未触及本功能)。
+
+## Follow-up 146b — 2026-06-23 (amend)
+Source: 用户：点击生成 ep4 后文件打不开。
+Diagnose: ep04_zh.mp4 为 0 字节、无进程在跑——长耗时同步 build 被中断(浏览器/连接断开 → Starlette 取消 handler → ffmpeg 中途被杀)，旧代码直接写 out_path，留下 0 字节坏文件。按保存的 plan 重建即成功(34.8MB、解码干净)，证明 plan 本身没问题。
+Fix:
+- tools/seam_concat.py — 最终 concat 改**原子写**：先写 `out_path.part` 再 `Path.replace` 到正式名，仅成功才替换；失败/中断只留 .part(已清理)，正式文件保留上一份好文件、绝不被 0 字节覆盖。`.part` 扩展名 ffmpeg 无法推断容器，故显式加 `-f mp4`。
+- 验证：原子写合成解码干净、无 .part 残留；ep04_zh.mp4 已重建为有效 2:50 文件；21 项 episode 测试全过。
+
+No conflicts found in: episode__writer.py/route/UI(写机制变化，产物内容不变)。
+
+## Follow-up 147 — 2026-06-24 20:48:23
+Source: user_input/follow_ups/147-20260624-204823-concat-first-whole-episode-subtitles.md
+Summary: 出片流程改 concat-first——先拼干净成片(ep{NN}.mp4 + segments.json)，再对整集按真实时间轴烧一次字幕，根治字幕被拼接二次编码 + 承接裁帧错位的问题。三按钮：① 定版 ② 拼接成片 ③ 整集字幕(zh/en/both)。
+
+Auto-updated:
+- `projects/ai_video_management/libs/infrastructure/writers/episode_takes__writer.py`（新增 EpisodeTakesSelector：每镜 newest_render → shutil.copy2 → shot{NN}.mp4）
+- `projects/ai_video_management/libs/infrastructure/writers/episode_subtitle__writer.py`（新增 EpisodeSubtitleBurner.burn_whole / assemble_cues：读 segments.json，每镜 cue re-time 到真实段时长 + 按 start_s 平移，对 ep{NN}.mp4 烧一次 → ep{NN}_{zh|en|zhen}.mp4）
+- `projects/ai_video_management/libs/infrastructure/writers/episode__writer.py`（_select_clip 优先 shot{NN}.mp4；build 写 ep{NN}.segments.json；_write_segments / _approx_eff，承接/RIFE 路径标 approx:true）
+- `projects/ai_video_management/libs/infrastructure/writers/subtitle__writer.py`（新增 segment_cues：本地 0..dur_s 按字数 re-time，源 subtitles.md 否则 台词:）
+- `projects/ai_video_management/libs/application/commands/{episode_takes__command.py,episode_subtitle__command.py}`、`dtos/episode_takes__dto.py`、`mappers/{episode_takes__mapper.py,episode_subtitle__mapper.py}`、`queries/episode__query.py`（新增）
+- `projects/ai_video_management/libs/domain/errors/subtitle__error.py`（EpisodeNotConcatenatedError / NoEpisodeVideoError 等）
+- `projects/ai_video_management/apps/api/routes/{episode__route.py(/api/select-episode-takes),subtitle__route.py(/api/burn-episode-subtitles-whole)}`、`container.py`、`app_factory.py`（wiring）
+- `projects/ai_video_management/apps/ui/src/api.ts`（selectEpisodeTakes / burnEpisodeSubtitlesWhole + 类型；ConcatEpisodeResult 加 segments；concatEpisode 文档更新）
+- `projects/ai_video_management/apps/ui/src/components/Reader.tsx`（episode 工具栏改 ①定版 ②拼接成片 ③整集字幕 三按钮 + 两 handler；旧 per-language concat 群组替换）
+- `projects/ai_video_management/README.md`（新增「出片三步：定版 → 拼接 → 整集字幕」段；旧 per-shot 烧字幕 / per-language concat 标注保留为 back-compat 非主流程）
+- `projects/ai_video_management/tests/test_episode_concat.py`（segments.json 断言）、新增 `tests/test_episode_whole_subtitle_burn.py`（offset 累加正确）
+
+Verified:
+- pytest test_episode_concat.py + test_episode_whole_subtitle_burn.py：24 passed；subtitle/episode/takes 全量 61 passed。
+- UI `tsc --noEmit` 0 错；`vite build` 成功（重建 backend/static 含新三按钮）；`vitest run` 37 passed。
+
+No conflicts found in: interview/qa.md、findings/、final_specs/spec.md、validation/*（本次为出片工序 UI/后端实现细化，不改 spec 级契约；字幕默认关闭 rule 11c 不变——整集字幕仍是手动 opt-in 的最后一步）。
+
+Note: revised_prompt.md 此前漂移到 144，本次补回 145/146(×2)/147 以恢复「raw + 全部 follow-up」不变式。
+
+## Follow-up 146d — 2026-06-24 (amend)
+Source: 用户：rife 补帧后接缝处声音受影响，通常怎么解决 → 要求加上音频处理。
+原理: 链式拼接硬切音频→接点波形不连续=爆音(click/pop)；桥段「裁掉的接缝声」两半也是硬接+apad 留小静音尾。真·交叉淡化(overlap)会缩短音频、与硬切视频累积失同步(口型漂移)，故不能全局 crossfade。
+Fix（纯音频侧，画面/补帧逻辑不动）:
+- tools/seam_concat.py — 最终拼接：每段音频两端加 ~10ms `afade` 微淡入淡出(**不重叠→时长不变→不失同步**)再硬 concat，消除接点爆音；桥内「前镜尾+后镜头」两半改 `acrossfade` 平滑(去内部硬切)，仍 apad/atrim 到固定桥长(不影响同步)。新增 _SEAM_FADE_S=0.010 / _BRIDGE_XFADE_S=0.05。
+- 验证: ep4(2 RIFE 桥)重建，新 afade/acrossfade 滤镜图无报错、解码干净、音轨 aac 44100 stereo、**时长 169.3s 与改前一致(微淡不丢同步)**；21 项 episode 测试全过。ep04_zh.mp4 已更新。
+
+## 注（外部改动观察）
+VALID_EPISODE_LANGS 被外部改为 ("original",)（疑随"字幕默认关/弃 _zh 集变体"方向）。影响：concat-episode / episode-seams 的 lang=zh|en|both 现会 400；SeamPlanModal 的中文/EN/中英按钮需相应改走 original，或前端隐藏这些 lang。本条仅记录，未改（属另一方向，待用户确认）。
