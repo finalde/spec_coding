@@ -209,6 +209,13 @@ __marimo__/
 # Node / frontend
 node_modules/
 
+# The Python-packaging `lib/` rule above (unanchored) also matches the frontend
+# source dir `apps/ui/src/lib/`, silently dropping real .ts source from the repo
+# (a fresh clone was missing it). Re-include those frontend lib dirs — the dir
+# itself first, then its contents (git can't re-include files under an excluded dir).
+!projects/**/apps/ui/src/lib/
+!projects/**/apps/ui/src/lib/**
+
 # Frontend build artifacts (vite output + bundle copied into FastAPI for prod)
 projects/spec_driven/frontend/dist/
 projects/spec_driven/backend/static/
