@@ -92,6 +92,17 @@ def _load_seam_concat():
     return mod
 
 
+def _load_seam_metrics():
+    """The scorer module — seam_tune SELECTS using the exact same cv2 4-metric +
+    tiered rule (floor-pass first, then weighted) that seam_metrics SCORES with, so
+    the tool that picks the params and the dashboard that grades them never disagree."""
+    spec = importlib.util.spec_from_file_location("seam_metrics", _HERE / "seam_metrics.py")
+    mod = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(mod)
+    return mod
+
+
 FF = _ffmpeg()
 _YAVG = re.compile(r"signalstats\.YAVG=([0-9.]+)")
 _TIME = re.compile(r"time=\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
@@ -143,77 +154,23 @@ def _seam_frame_diff(a: Path, b: Path, tmp: Path) -> float | None:
     return float(m[-1]) if m else None
 
 
-def _diff_series(src: Path, start: float, end: float) -> list[float]:
-    """Per-frame consecutive luma-diff series over [start,end] of `src`, one ffmpeg pass."""
-    out = _run([FF, "-ss", f"{max(0.0, start):.3f}", "-to", f"{end:.3f}", "-i", str(src),
-                "-vf", "tblend=all_mode=difference,signalstats,metadata=print:file=-",
-                "-an", "-f", "null", "-"]).stdout.decode("utf-8", "replace")
-    # first frame of tblend has no predecessor → its YAVG is the frame vs itself; drop it.
-    vals = [float(x) for x in _YAVG.findall(out)]
-    return vals[1:] if len(vals) > 1 else vals
-
-
-def _score_window(series: list[float], seam_idx: float, n_bridge: int) -> tuple[float, dict]:
-    """Score smoothness from the diff series. seam_idx = float index (in `series`) where
-    the bridge starts; n_bridge bridge frames follow. Reference velocity = median of the
-    series' outer thirds (real A-tail / B-head motion); score = max |seam-region - ref|."""
-    if len(series) < 6:
-        return float("inf"), {"reason": "too-few-frames"}
-    n = len(series)
-    third = max(1, n // 3)
-    ref_vals = series[:third] + series[-third:]
-    ref = sorted(ref_vals)[len(ref_vals) // 2]
-    lo = max(0, int(seam_idx) - 2)
-    hi = min(n, int(seam_idx) + n_bridge + 3)
-    region = series[lo:hi]
-    if not region:
-        return float("inf"), {"reason": "empty-region"}
-    dev = max(abs(v - ref) for v in region)
-    rmin, rmax = min(region), max(region)
-    return dev, {"ref": round(ref, 2), "region_min": round(rmin, 2),
-                 "region_max": round(rmax, 2), "dev": round(dev, 2),
-                 "freeze": rmin < 0.4 * ref, "spike": rmax > 2.2 * ref + 4}
-
-
-def score_combo(seam_concat, a: Path, b: Path, trim: float, depth: int,
-                rife: str, tmp: Path, tag: str) -> tuple[float, dict]:
-    """Stitch the isolated (a,b) pair with (trim,depth) and score the seam smoothness."""
-    out = tmp / f"pair_{tag}.mp4"
-    plan = [{"bridge": True, "trim": trim, "depth": depth}]
+def _is_continuity_seam(epdir: Path, to_shot: str) -> bool:
+    """True iff the 'to' shot is a 首尾帧承接 shot — read from its `衔接:` line (the
+    authoritative source), NOT from the plan's method. So a 承接 seam still gets re-tuned
+    even if a prior run wrote it as butt/trim. 硬切 → False. (Mirrors the webapp's
+    _is_continuity_shot: check 硬切 before 承接 since the hard-cut text contains 承接.)"""
+    md = epdir / "shots" / to_shot / f"{to_shot}.md"
     try:
-        bridged = seam_concat.seam_concat([a, b], out, trim, rife, 0, None, plan)
-    except Exception as exc:
-        return float("inf"), {"reason": f"stitch-failed: {exc}"}
-    if not out.is_file():
-        return float("inf"), {"reason": "no-output"}
-    durA, fps = _probe(a)
-    fps = max(1, round(fps))
-    n_bridge = (2 ** depth) - 1 if bridged else 0
-    seam_t = durA - trim  # A body length in the paired output
-    win_lo, win_hi = seam_t - 0.7, seam_t + n_bridge / fps + 0.7
-    series = _diff_series(out, win_lo, win_hi)
-    seam_idx = 0.7 * fps  # frames from win_lo to the seam
-    score, det = _score_window(series, seam_idx, n_bridge)
-    det.update({"bridged": bool(bridged), "n_bridge": n_bridge, "frames": len(series)})
-    out.unlink(missing_ok=True)
-    return score, det
-
-
-def _butt_score(seam_concat, a: Path, b: Path, trim: float, tmp: Path) -> tuple[float, dict]:
-    """Score a trim-only butt-join (no RIFE) as the baseline to beat."""
-    out = tmp / "pair_butt.mp4"
-    plan = [{"bridge": True, "trim": trim, "depth": None}]
-    try:
-        seam_concat.seam_concat([a, b], out, trim, None, 0, None, plan)
-    except Exception as exc:
-        return float("inf"), {"reason": f"butt-failed: {exc}"}
-    durA, fps = _probe(a)
-    fps = max(1, round(fps))
-    series = _diff_series(out, durA - trim - 0.7, durA - trim + 0.7)
-    score, det = _score_window(series, 0.7 * fps, 0)
-    det.update({"bridged": False, "n_bridge": 0, "frames": len(series)})
-    out.unlink(missing_ok=True)
-    return score, det
+        text = md.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    for line in text.splitlines():
+        if "衔接" in line:
+            if "硬切" in line:
+                return False
+            if "承接" in line:
+                return True
+    return False
 
 
 def _clip_path(epdir: Path, shot: str, lang: str) -> Path:
@@ -246,6 +203,7 @@ def _auto_lang(epdir: Path, seams: list[dict], tmp: Path) -> str:
 def tune(epdir: Path, lang: str, trims: list[float], depths: list[int],
          rife: str, apply: bool, build: bool, out: Path | None) -> int:
     seam_concat = _load_seam_concat()
+    metrics = _load_seam_metrics()
     plan_path = epdir / "seam_plan.json"
     if not plan_path.is_file():
         print(f"no seam_plan.json in {epdir}", file=sys.stderr)
@@ -262,12 +220,16 @@ def tune(epdir: Path, lang: str, trims: list[float], depths: list[int],
             lang = _auto_lang(epdir, seams, tmp)
             print(f"[lang] auto-selected '{lang}' (most-continuous seam frames)\n")
 
-        # Tune every 首尾帧承接 seam — whether the saved plan currently has it as a RIFE
-        # bridge OR a trim-butt join (so re-running on an already-tuned ep re-tunes it,
-        # not skips it). 硬切 (butt) seams are never seams to smooth.
-        tune_seams = [s for s in seams if s.get("method") in ("rife", "trim")]
+        # Tune every 首尾帧承接 seam — identified by the 'to' shot's `衔接:承接` line (the
+        # truth), so a seam still re-tunes even if a prior run wrote it as butt/trim/rife.
+        # Fall back to the plan method for any ep whose shot .md lacks a 衔接 line. 硬切
+        # seams are never seams to smooth.
+        tune_seams = [
+            s for s in seams
+            if _is_continuity_seam(epdir, s["to"]) or s.get("method") in ("rife", "trim")
+        ]
         if not tune_seams:
-            print("no 承接 (method=rife/trim) seams to tune; nothing to do.")
+            print("no 首尾帧承接 seams to tune; nothing to do.")
         prompt_problems: list[str] = []
 
         for s in tune_seams:
@@ -293,52 +255,49 @@ def tune(epdir: Path, lang: str, trims: list[float], depths: list[int],
             if raw_diff is not None and raw_diff < _BRIDGEABLE_MIN:
                 print(f"   (near-identical frames; a short trim-only butt-join is best)\n")
 
-            # baseline trim-butt 承接 join (trim + dedup, NO RIFE) to beat. Swept over
-            # the trim grid too — the trim bite that removes the ease/dup-frame cleanly
-            # is itself a parameter.
-            butt_best = (float("inf"), None, {})
-            for bt in trims:
-                bs, bd = _butt_score(seam_concat, a, b, bt, tmp)
-                print(f"   trim-butt trim={bt:.2f}           score={bs:7.2f}  {bd}")
-                if bs < butt_best[0]:
-                    butt_best = (bs, bt, bd)
-            butt_score, butt_trim, butt_det = butt_best
+            # Candidate set for a 首尾帧承接 seam: trim-butt over the trim grid + RIFE over
+            # trim×depth. A bare hard-cut ("butt") is deliberately NOT selectable here — a
+            # 承接 seam should always at least trim the ease/dup-frame (a hardcut would lose
+            # that AND drop the seam from future re-tunes); hardcut stays only in the
+            # dashboard's comparison panel for reference. Each candidate is built+scored
+            # with the SAME cv2 4-metric the dashboard uses, then ranked by the tiered rule
+            # (2026-06-28): every metric ≥ 80 first (and only there does weighted score rank);
+            # below the floor, LEXIMIN — compare metric vectors weakest-board-first, and when
+            # the weakest are ~level (dead-band 3) fall through to the next-weakest (so an
+            # unfixable low board isn't chased at the cost of the others); weighted score only
+            # the final tiebreak; ties then prefer the smaller trim / simpler join.
+            candidates: list[tuple[str, float, int | None]] = [
+                ("trim", t, None) for t in trims
+            ]
+            candidates += [("rife", t, d) for d in depths for t in trims]
 
-            best = (float("inf"), None, None, {})
-            for depth in depths:
-                for trim in trims:
-                    sc, det = score_combo(seam_concat, a, b, trim, depth, rife, tmp,
-                                          f"{s['from']}_{trim}_{depth}")
-                    flag = ""
-                    if det.get("freeze"):
-                        flag += " FREEZE"
-                    if det.get("spike"):
-                        flag += " SPIKE"
-                    print(f"   rife trim={trim:.2f} depth={depth} (+{(2**depth)-1:>2}f) "
-                          f"score={sc:7.2f}  {det}{flag}")
-                    if sc < best[0]:
-                        best = (sc, trim, depth, det)
+            results: list[dict] = []
+            for k, (m, t, d) in enumerate(candidates):
+                r = metrics._build_and_measure(
+                    seam_concat, a, b, m, t, d, rife, tmp, f"{s['from']}_{k}"
+                )
+                if "error" in r:
+                    print(f"   {m:4} trim={t:.2f} depth={d}  ERROR({r['error']})")
+                    continue
+                results.append(r)
+                tag = f"{m} trim={t:.2f}" + (f" d{d}(+{(2**d)-1}f)" if m == "rife" else "")
+                floor = "✓全≥80" if r.get("floor_pass") else f"✗最低{r.get('min_metric')}"
+                print(f"   {tag:22} 加权{r['score']:5.1f} [{floor}] "
+                      f"M1 {r['M1_velocity']['score']:.0f}·M2 {r['M2_no_freeze']['score']:.0f}·"
+                      f"M3 {r['M3_no_jump']['score']:.0f}·M4 {r['M4_junction_ssim']['score']:.0f}")
             print()
-            bscore, btrim, bdepth, bdet = best
-            # Adopt RIFE only if it beats the butt baseline by a clear MARGIN. A plain
-            # trim+butt-join is the simpler, more robust join (no synthesized frames to
-            # morph), so it wins ties — RIFE must EARN its place. The margin scales with
-            # the baseline so near-static seams (tiny scores, all essentially flat) don't
-            # flip to RIFE on noise. RIFE's real win case is a seam with a genuine
-            # freeze/hold the butt-join can't remove, where it beats butt decisively.
-            margin = max(0.5, 0.30 * butt_score)
-            if btrim is not None and bscore < butt_score - margin:
-                s["method"] = "rife"
-                s["trim"] = round(btrim, 3)
-                s["depth"] = bdepth
-                print(f"   >> WINNER rife trim={btrim:.2f} depth={bdepth} "
-                      f"score={bscore:.2f} (beats trim-butt {butt_score:.2f})\n")
-            else:
-                s["method"] = "trim"
-                s["trim"] = round(butt_trim, 3)
-                s["depth"] = None
-                print(f"   >> WINNER trim-butt trim={butt_trim:.2f} score={butt_score:.2f} "
-                      f"(RIFE did not clearly improve)\n")
+            if not results:
+                print("   !! all candidates errored; leaving seam unchanged\n")
+                continue
+            win = max(results, key=metrics.rank_key)
+            s["method"] = win["method"]
+            s["trim"] = round(float(win["trim"]), 3)
+            s["depth"] = win["depth"] if win["method"] == "rife" else None
+            tier = ("全指标≥80" if win.get("floor_pass")
+                    else f"无任何方案达标·leximin 选(最低指标{win.get('min_metric')})")
+            dd = f" depth={win['depth']}" if win["method"] == "rife" else ""
+            print(f"   >> WINNER {win['method']} trim={s['trim']}{dd} "
+                  f"加权 {win['score']:.1f} · {tier}\n")
 
         if prompt_problems:
             print("PROMPT PROBLEMS (not fixable by tuning):")

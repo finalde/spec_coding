@@ -1825,6 +1825,8 @@ export interface SeamMetric {
 /** One method's score for a seam (chosen plan or a panel candidate). */
 export interface SeamMethodScore {
   score?: number;
+  floor_pass?: boolean;   // every metric ≥ 80 (the tiered-rule primary key)
+  min_metric?: number;    // the lowest of M1–M4 (which metric is the laggard)
   label?: string;
   method?: string;
   trim?: number;
@@ -1876,6 +1878,8 @@ export interface SeamMetricsResult {
   ceiling_grade: string | null;
   weakest: number | null;
   n_seams: number;
+  metric_floor?: number;     // the per-metric floor (80) used by the tiered rule
+  all_floor_pass?: boolean;  // every chosen seam clears the floor on every metric
   generated_at?: string;     // ISO time the sidecar was persisted (last build)
   persisted?: false;         // present (false) only when no sidecar exists yet
 }

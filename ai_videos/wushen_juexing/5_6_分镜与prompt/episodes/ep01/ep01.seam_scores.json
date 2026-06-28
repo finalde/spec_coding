@@ -7,6 +7,7 @@
     "M3": 25.0,
     "M4": 20.0
   },
+  "metric_floor": 80.0,
   "metric_defs": [
     {
       "id": "M1",
@@ -47,87 +48,95 @@
       "name": "接缝结构连续",
       "en": "junction-ssim",
       "weight": 20.0,
-      "unit": "SSIM",
-      "desc": "接缝相邻帧最低 SSIM；画面有没有“啪一下”的结构突变。",
-      "good": "SSIM≥0.95",
-      "bad": "SSIM≤0.55 (画面突变)"
+      "unit": "SSIM / MC残差比",
+      "desc": "接缝结构突变，取两者更差：相邻帧最低 SSIM(“啪一下”) 与 运动补偿残差比(硬切的内容跳变光流解释不了→残差飙升，即便同场景 SSIM 也骗不过)。",
+      "good": "SSIM≥0.95 且残差≤2.0×",
+      "bad": "SSIM≤0.55 或残差≥8.0× (画面突变)"
     }
   ],
   "seams": [
     {
       "seam": "shot10->shot11",
       "time": {
-        "at_s": 112.08,
-        "start_s": 111.76,
-        "end_s": 112.69
+        "at_s": 112.1,
+        "start_s": 111.8,
+        "end_s": 113.03
       },
       "chosen": {
-        "score": 73.3,
+        "score": 91.9,
+        "floor_pass": false,
+        "min_metric": 70.2,
+        "seam_at": 10,
         "M1_velocity": {
-          "score": 79.2,
-          "vel_break_pxf": 1.67,
-          "baseline_pxf": 0.93
+          "score": 94.6,
+          "vel_break_pxf": 0.43,
+          "baseline_pxf": 0.92
         },
         "M2_no_freeze": {
           "score": 100.0,
-          "min_ratio": 1.2
+          "min_ratio": 0.62
         },
         "M3_no_jump": {
-          "score": 73.6,
-          "peak_ratio": 2.79
+          "score": 100.0,
+          "peak_ratio": 1.47
         },
         "M4_junction_ssim": {
-          "score": 41.3,
-          "ssim": 0.715
+          "score": 70.2,
+          "ssim": 0.831,
+          "mcr_ratio": 1.32
         },
-        "frames": 31,
+        "frames": 38,
         "method": "rife",
-        "trim": 0.22,
-        "depth": 3,
-        "label": "CHOSEN(rife trim=0.22 depth=3)"
+        "trim": 0.2,
+        "depth": 4,
+        "label": "CHOSEN(rife trim=0.2 depth=4)"
       },
       "panel": []
     },
     {
       "seam": "shot11->shot12",
       "time": {
-        "at_s": 121.98,
-        "start_s": 121.78,
-        "end_s": 122.18
+        "at_s": 122.26,
+        "start_s": 121.96,
+        "end_s": 123.18
       },
       "chosen": {
-        "score": 99.4,
+        "score": 99.6,
+        "floor_pass": true,
+        "min_metric": 98.9,
+        "seam_at": 10,
         "M1_velocity": {
-          "score": 98.5,
-          "vel_break_pxf": 0.12,
-          "baseline_pxf": 0.06
+          "score": 98.9,
+          "vel_break_pxf": 0.09,
+          "baseline_pxf": 0.16
         },
         "M2_no_freeze": {
           "score": 100.0,
-          "min_ratio": 2.21
+          "min_ratio": 0.45
         },
         "M3_no_jump": {
           "score": 100.0,
-          "peak_ratio": 3.06
+          "peak_ratio": 1.32
         },
         "M4_junction_ssim": {
           "score": 100.0,
-          "ssim": 0.989
+          "ssim": 0.987,
+          "mcr_ratio": 1.16
         },
-        "frames": 23,
-        "method": "trim",
-        "trim": 0.1,
-        "depth": null,
-        "label": "CHOSEN(trim trim=0.1 depth=None)"
+        "frames": 38,
+        "method": "rife",
+        "trim": 0.2,
+        "depth": 4,
+        "label": "CHOSEN(rife trim=0.2 depth=4)"
       },
       "panel": []
     }
   ],
-  "overall": 86.3,
-  "overall_grade": "B 良好",
-  "ceiling": 86.3,
-  "ceiling_grade": "B 良好",
-  "weakest": 73.3,
-  "n_seams": 2,
-  "generated_at": "2026-06-27T14:29:56+00:00"
+  "overall": 95.8,
+  "overall_grade": "A+ 卓越",
+  "all_floor_pass": false,
+  "ceiling": 95.8,
+  "ceiling_grade": "A+ 卓越",
+  "weakest": 91.9,
+  "n_seams": 2
 }

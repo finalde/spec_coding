@@ -21,6 +21,55 @@
       "method": "butt",
       "trim": null,
       "depth": null
+    },
+    {
+      "from": "shot04",
+      "to": "shot05",
+      "method": "butt",
+      "trim": null,
+      "depth": null
+    },
+    {
+      "from": "shot05",
+      "to": "shot06",
+      "method": "butt",
+      "trim": null,
+      "depth": null
+    },
+    {
+      "from": "shot06",
+      "to": "shot07",
+      "method": "rife",
+      "trim": 0.06,
+      "depth": 1
+    },
+    {
+      "from": "shot07",
+      "to": "shot08",
+      "method": "butt",
+      "trim": null,
+      "depth": null
+    },
+    {
+      "from": "shot08",
+      "to": "shot09",
+      "method": "butt",
+      "trim": null,
+      "depth": null
+    },
+    {
+      "from": "shot09",
+      "to": "shot10",
+      "method": "butt",
+      "trim": null,
+      "depth": null
+    },
+    {
+      "from": "shot10",
+      "to": "shot11",
+      "method": "rife",
+      "trim": 0.1,
+      "depth": 1
     }
   ]
 }

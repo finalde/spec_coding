@@ -4371,3 +4371,16 @@ Source: 用户——「点拼接成片，ep01.mp4 生成不出来」。
 修复：`_write_seam_scores` 改为 **daemon 后台线程**——ep{NN}.mp4 一写完 build() 立即返回(~65s 同改前)，评分 sidecar 稍后(~30s)自动落地，dashboard 仍能展示上次生成结果。评分不再拖慢/卡住拼接。
 验证：seam/episode/media pytest 55 passed；改动模块全 import OK；实测 build 返回 65.9s 且 ep01.mp4 生成成功。
 旁注：当前 seam_plan 两承接缝被 UI 实验设成 rife(shot10→11 d4/0.06、shot11→12 d1/0.1)，RIFE 桥接对本片降级失败("bridge unusable"→butt-join)且慢；trim@0.10 已证更优更快(94.2/A)，建议改回 trim。
+
+## Follow-up — 2026-06-28 新增 /ai_videos__拼接调优 slash 技能（封装 seam_tune + seam_metrics）
+Source: 用户——「把拼接调试调优做成 Claude 可调用的特殊命令，用 /XXXX 触发，参数是某个 ep」。
+新增 `.claude/skills/ai_videos__拼接调优/SKILL.md`：把「首尾帧接缝调优→拼接→评分」串成一键工序。入参=ep 编号(ep2/2/ep02)；流程：Glob 解析 ep 目录(多 drama 则问)→ `seam_tune.py --apply --build`(扫 trim×depth 选最平滑·写 seam_plan·拼 ep{NN}.mp4)→ `seam_metrics.py --no-compare --save`(光流+SSIM 打分·存 dashboard sidecar)→ 报告每缝最优参数/分数/秒数区间 + 全集等级；承接帧差>40 报为 prompt 问题(非参数可救)。强制 PYTHONIOENCODING=utf-8(中文路径 print)、长命令走后台。desc 323 字(≤500)。也加了 seam_tune 健壮性：对已是 trim 的承接缝也重调(不跳过)、--build 默认出 canonical ep{NN}.mp4(原 _rife 后缀误导)。
+触发：`/ai_videos__拼接调优 ep2`，或自然语言「调优 ep2/拼接 ep3/给 ep5 接缝评分」。
+
+## Follow-up — 2026-06-28 接缝评分改为分层规则（先全≥80 再按权重）+ tune/score 统一同一指标
+Source: 用户——「评分机制换一下：先把所有 metric 都做到 80 以上，再按权重评分」。
+规则（_METRIC_FLOOR=80）：候选排名先比「四项 M1–M4 是否全 ≥80」(floor_pass)，达标组优先；同档再按加权分；无任何候选达标时(如某缝 M4 受真实内容位移物理封顶)退回加权分取最高。`seam_metrics.rank_key()` 实现；measure_seam 输出 floor_pass/min_metric；scorecard 加 metric_floor/all_floor_pass。
+统一：`seam_tune` 选参不再用旧的亮度 deviation 度量，改为 import `seam_metrics._build_and_measure` 用**同一套 cv2 四指标**评分 + 同一 rank_key 选最优——「选参的工具」与「打分的 dashboard」从此一致(撤掉旧 score_combo/_butt_score/_diff_series/_score_window + margin 逻辑)。
+两个健壮性修正：① 承接缝候选不含裸硬切(butt)——承接缝至少裁切，避免退化成硬切且丢失再调优资格；② tune_seams 改由 shot 的 `衔接=承接`(读 .md)判定，不再看 plan 方法,故被写成任何方法的承接缝都仍会被重调(修复"一旦写成 butt 就被跳过"的回归)。
+前端：dashboard/inline panel 排名改用 floor→score 分层；每个候选显示 ✓全≥80 / ✗最低{min} 徽标；footer/规则说明更新。api.ts SeamMethodScore 加 floor_pass/min_metric、SeamMetricsResult 加 metric_floor/all_floor_pass。skill SKILL.md 说明分层规则。
+验证：ep01 实跑——shot10→11 trim@0.10 加权88.9(无方案达标·M4 66.8 封顶) / shot11→12 trim@0.10 加权99.4(全≥80)；overall 94.2(A)·all_floor_pass=False；seam/episode/media pytest 55 passed；UI tsc 0 + build OK；sidecar 重生。

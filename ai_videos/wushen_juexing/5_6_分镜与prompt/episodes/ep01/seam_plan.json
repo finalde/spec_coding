@@ -68,15 +68,15 @@
       "from": "shot10",
       "to": "shot11",
       "method": "rife",
-      "trim": 0.22,
-      "depth": 3
+      "trim": 0.2,
+      "depth": 4
     },
     {
       "from": "shot11",
       "to": "shot12",
-      "method": "trim",
-      "trim": 0.1,
-      "depth": null
+      "method": "rife",
+      "trim": 0.2,
+      "depth": 4
     }
   ]
 }

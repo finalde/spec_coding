@@ -24,6 +24,13 @@ function gradeClass(score: number | null | undefined): string {
   return "grade-d";
 }
 
+/** Tiered rank: candidates clearing the 80-floor on every metric come first, then by
+ * weighted score (mirrors seam_metrics.rank_key so UI order == tool's pick). */
+function rankKey(m: SeamMethodScore): number {
+  if (m.error || m.score == null) return -1;
+  return (m.floor_pass ? 1e6 : 0) + m.score;
+}
+
 const METRIC_KEYS: { key: keyof SeamMethodScore; raw: string }[] = [
   { key: "M1_velocity", raw: "vel_break_pxf" },
   { key: "M2_no_freeze", raw: "min_ratio" },
@@ -54,6 +61,10 @@ function MethodRow({ m, rank, isChosen, isBest }: {
       <div className="seam-score-method-head">
         <span className="seam-score-rank">{rank}</span>
         <span className="seam-score-label">{m.label ?? m.method}</span>
+        <span className={`seam-score-tag floor ${m.floor_pass ? "ok" : "fail"}`}
+          title={m.floor_pass ? "四项指标全部 ≥80" : `有指标低于 80（最低 ${m.min_metric}）`}>
+          {m.floor_pass ? "✓全≥80" : `✗最低${m.min_metric ?? "?"}`}
+        </span>
         {isBest && <span className="seam-score-tag best">★最佳</span>}
         {isChosen && <span className="seam-score-tag chosen">当前plan</span>}
         <strong className={`seam-score-total ${gradeClass(m.score)}`}>
@@ -170,8 +181,7 @@ export function SeamScoreDashboard({ path, lang, onClose }: Props) {
 
               {data.seams.map((s) => {
                 const cands = [s.chosen, ...s.panel].filter((x) => !x.error);
-                cands.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-                const bestScore = cands[0]?.score;
+                cands.sort((a, b) => rankKey(b) - rankKey(a));  // floor-tier, then score
                 return (
                   <div key={s.seam} className="seam-score-seam">
                     <div className="seam-score-seam-head">
@@ -185,7 +195,7 @@ export function SeamScoreDashboard({ path, lang, onClose }: Props) {
                     {cands.map((m, i) => (
                       <MethodRow key={(m.label ?? "") + i} m={m} rank={i + 1}
                         isChosen={(m.label ?? "").includes("CHOSEN")}
-                        isBest={m.score === bestScore} />
+                        isBest={i === 0} />
                     ))}
                   </div>
                 );
@@ -196,7 +206,7 @@ export function SeamScoreDashboard({ path, lang, onClose }: Props) {
 
         <footer className="seam-modal-foot">
           <span className="seam-score-foot-note">
-            分数 0–100，越高越平滑；缝分 = 四指标加权均。同一缝跑硬拼/裁切/RIFE 多法并排名，★为该缝数据最优。
+            排名规则：先看四项指标是否全 ≥80（✓/✗），全过的优先；同档再按加权分。都过不了 80 时按加权分取最好。★=该缝数据最优。
           </span>
           <button type="button" className="seam-btn seam-btn--primary" onClick={onClose}>
             关闭

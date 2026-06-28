@@ -11,7 +11,8 @@
 - **何时**：阶段 2 已过 QC（`2_世界观人设/` 齐全、`ai_videos__格式契约` blocker 清零），开始把全剧切成集、定每集骨架。
 - **输入**：
   - `1_立项/concept.md`（赛道/总集数/单集时长/核心爽点主线/人物对立/硬钩规则/长线伏笔）。
-  - `2_世界观人设/{world.md, characters/{角色}/…, scenes/…, casting.md, style_guide.md}`（力量体系·藏锋尺度/势力/锁定人设/voice_id/场景代号/canon）。
+  - `2_世界观人设/{world.md, characters/{角色}/…, relationships.md, scenes/…, casting.md, style_guide.md}`（力量体系·藏锋尺度/势力/锁定人设/voice_id/场景代号/canon）。
+- **创作前必读（rule 12.11-C）**：切集 / 定每集骨架前，先读透相关角色 `## 人物灵魂`（动机根因/目标/矛盾/恐惧/创伤/此刻决策逻辑/成长轨迹）+ `relationships.md`（人物网 + 与当前主题关系），据此判断每个 beat「这个人该做什么选择、事情怎么发展才顺」，不为情节硬凑。大纲推进到哪集，就回阶段 2 把该集相关角色灵魂 / 关系深化校正一轮（ongoing）。
 - 不读后续阶段产物。大纲只对齐 concept + world/人设 canon。
 
 ---

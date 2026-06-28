@@ -1,0 +1,332 @@
+{
+  "episode": "ep03",
+  "lang": "original",
+  "weights": {
+    "M1": 40.0,
+    "M2": 15.0,
+    "M3": 25.0,
+    "M4": 20.0
+  },
+  "metric_floor": 80.0,
+  "metric_defs": [
+    {
+      "id": "M1",
+      "key": "M1_velocity",
+      "name": "运动速度连贯",
+      "en": "velocity",
+      "weight": 40.0,
+      "unit": "px/frame",
+      "desc": "光流测每帧运动速度，接缝前后应恒定；偏离基线越小越平滑。",
+      "good": "Δ→0 px/帧",
+      "bad": "Δ≥8.0 px/帧 (明显顿挫)"
+    },
+    {
+      "id": "M2",
+      "key": "M2_no_freeze",
+      "name": "无冻结",
+      "en": "no-freeze",
+      "weight": 15.0,
+      "unit": "×baseline",
+      "desc": "接缝处最小运动相对基线；出现卡住/重复帧=冻结。近静态镜无冻结概念自动满分。",
+      "good": "min≈基线",
+      "bad": "min→0 (卡住)"
+    },
+    {
+      "id": "M3",
+      "key": "M3_no_jump",
+      "name": "无跳变/无拖影",
+      "en": "no-jump",
+      "weight": 25.0,
+      "unit": "×baseline",
+      "desc": "接缝处运动/亮度峰值相对基线；硬跳或 RIFE 鬼影=尖峰。峰值低于感知地板自动满分。",
+      "good": "峰≤2.0×",
+      "bad": "峰≥5.0× (硬跳/拖影)"
+    },
+    {
+      "id": "M4",
+      "key": "M4_junction_ssim",
+      "name": "接缝结构连续",
+      "en": "junction-ssim",
+      "weight": 20.0,
+      "unit": "SSIM / MC残差比",
+      "desc": "接缝结构突变，取两者更差：相邻帧最低 SSIM(“啪一下”) 与 运动补偿残差比(硬切的内容跳变光流解释不了→残差飙升，即便同场景 SSIM 也骗不过)。",
+      "good": "SSIM≥0.95 且残差≤2.0×",
+      "bad": "SSIM≤0.55 或残差≥8.0× (画面突变)"
+    }
+  ],
+  "seams": [
+    {
+      "seam": "shot02->shot03",
+      "time": {
+        "at_s": 15.78,
+        "start_s": 15.6,
+        "end_s": 16.25
+      },
+      "chosen": {
+        "score": 99.2,
+        "floor_pass": true,
+        "min_metric": 98.0,
+        "seam_at": 16,
+        "M1_velocity": {
+          "score": 98.0,
+          "vel_break_pxf": 0.16,
+          "baseline_pxf": 0.37
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 0.57
+        },
+        "M3_no_jump": {
+          "score": 100.0,
+          "peak_ratio": 1.8
+        },
+        "M4_junction_ssim": {
+          "score": 100.0,
+          "ssim": 0.958,
+          "mcr_ratio": 1.85
+        },
+        "frames": 31,
+        "method": "rife",
+        "trim": 0.08,
+        "depth": 3,
+        "label": "CHOSEN(rife trim=0.08 depth=3)"
+      },
+      "panel": []
+    },
+    {
+      "seam": "shot03->shot04",
+      "time": {
+        "at_s": 25.78,
+        "start_s": 25.54,
+        "end_s": 26.65
+      },
+      "chosen": {
+        "score": 92.5,
+        "floor_pass": true,
+        "min_metric": 80.4,
+        "seam_at": 8,
+        "M1_velocity": {
+          "score": 91.1,
+          "vel_break_pxf": 0.71,
+          "baseline_pxf": 0.45
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 0.99
+        },
+        "M3_no_jump": {
+          "score": 100.0,
+          "peak_ratio": 2.58
+        },
+        "M4_junction_ssim": {
+          "score": 80.4,
+          "ssim": 0.872,
+          "mcr_ratio": 2.05
+        },
+        "frames": 38,
+        "method": "rife",
+        "trim": 0.14,
+        "depth": 4,
+        "label": "CHOSEN(rife trim=0.14 depth=4)"
+      },
+      "panel": []
+    },
+    {
+      "seam": "shot04->shot05",
+      "time": {
+        "at_s": 34.12,
+        "start_s": 33.94,
+        "end_s": 34.59
+      },
+      "chosen": {
+        "score": 87.7,
+        "floor_pass": false,
+        "min_metric": 55.3,
+        "seam_at": 16,
+        "M1_velocity": {
+          "score": 91.5,
+          "vel_break_pxf": 0.68,
+          "baseline_pxf": 0.58
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 0.08
+        },
+        "M3_no_jump": {
+          "score": 100.0,
+          "peak_ratio": 2.47
+        },
+        "M4_junction_ssim": {
+          "score": 55.3,
+          "ssim": 0.771,
+          "mcr_ratio": 2.12
+        },
+        "frames": 31,
+        "method": "rife",
+        "trim": 0.08,
+        "depth": 3,
+        "label": "CHOSEN(rife trim=0.08 depth=3)"
+      },
+      "panel": []
+    },
+    {
+      "seam": "shot05->shot06",
+      "time": {
+        "at_s": 43.18,
+        "start_s": 43.0,
+        "end_s": 43.65
+      },
+      "chosen": {
+        "score": 92.1,
+        "floor_pass": false,
+        "min_metric": 79.2,
+        "seam_at": 16,
+        "M1_velocity": {
+          "score": 90.7,
+          "vel_break_pxf": 0.74,
+          "baseline_pxf": 0.83
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 0.11
+        },
+        "M3_no_jump": {
+          "score": 100.0,
+          "peak_ratio": 1.98
+        },
+        "M4_junction_ssim": {
+          "score": 79.2,
+          "ssim": 0.867,
+          "mcr_ratio": 1.25
+        },
+        "frames": 31,
+        "method": "rife",
+        "trim": 0.08,
+        "depth": 3,
+        "label": "CHOSEN(rife trim=0.08 depth=3)"
+      },
+      "panel": []
+    },
+    {
+      "seam": "shot06->shot07",
+      "time": {
+        "at_s": 52.24,
+        "start_s": 52.06,
+        "end_s": 52.71
+      },
+      "chosen": {
+        "score": 88.1,
+        "floor_pass": false,
+        "min_metric": 54.9,
+        "seam_at": 16,
+        "M1_velocity": {
+          "score": 92.8,
+          "vel_break_pxf": 0.58,
+          "baseline_pxf": 0.6
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 0.04
+        },
+        "M3_no_jump": {
+          "score": 100.0,
+          "peak_ratio": 2.15
+        },
+        "M4_junction_ssim": {
+          "score": 54.9,
+          "ssim": 0.769,
+          "mcr_ratio": 1.9
+        },
+        "frames": 31,
+        "method": "rife",
+        "trim": 0.08,
+        "depth": 3,
+        "label": "CHOSEN(rife trim=0.08 depth=3)"
+      },
+      "panel": []
+    },
+    {
+      "seam": "shot07->shot08",
+      "time": {
+        "at_s": 61.18,
+        "start_s": 60.88,
+        "end_s": 62.11
+      },
+      "chosen": {
+        "score": 94.9,
+        "floor_pass": true,
+        "min_metric": 80.2,
+        "seam_at": 10,
+        "M1_velocity": {
+          "score": 97.1,
+          "vel_break_pxf": 0.23,
+          "baseline_pxf": 0.46
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 0.52
+        },
+        "M3_no_jump": {
+          "score": 100.0,
+          "peak_ratio": 1.52
+        },
+        "M4_junction_ssim": {
+          "score": 80.2,
+          "ssim": 0.871,
+          "mcr_ratio": 1.49
+        },
+        "frames": 38,
+        "method": "rife",
+        "trim": 0.2,
+        "depth": 4,
+        "label": "CHOSEN(rife trim=0.2 depth=4)"
+      },
+      "panel": []
+    },
+    {
+      "seam": "shot08->shot09",
+      "time": {
+        "at_s": 70.34,
+        "start_s": 70.04,
+        "end_s": 71.26
+      },
+      "chosen": {
+        "score": 71.5,
+        "floor_pass": false,
+        "min_metric": 18.8,
+        "seam_at": 9,
+        "M1_velocity": {
+          "score": 69.3,
+          "vel_break_pxf": 2.46,
+          "baseline_pxf": 0.26
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 0.35
+        },
+        "M3_no_jump": {
+          "score": 100.0,
+          "peak_ratio": 10.39
+        },
+        "M4_junction_ssim": {
+          "score": 18.8,
+          "ssim": 0.625,
+          "mcr_ratio": 4.81
+        },
+        "frames": 38,
+        "method": "rife",
+        "trim": 0.2,
+        "depth": 4,
+        "label": "CHOSEN(rife trim=0.2 depth=4)"
+      },
+      "panel": []
+    }
+  ],
+  "overall": 89.4,
+  "overall_grade": "B 良好",
+  "all_floor_pass": false,
+  "ceiling": 89.4,
+  "ceiling_grade": "B 良好",
+  "weakest": 71.5,
+  "n_seams": 7
+}

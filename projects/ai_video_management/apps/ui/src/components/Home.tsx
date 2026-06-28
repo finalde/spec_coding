@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { TreeNode } from "../types";
 
 export interface HomeProps {
@@ -20,6 +21,9 @@ export function Home({ tree }: HomeProps): JSX.Element {
         any character bible, style guide, script, shotlist, dual Kling/Seedance shot prompt,
         Seedream立绘 prompt, or publish metadata file.
       </p>
+      <Link to="/workflow" className="home-workflow-link">
+        🗺 查看 AI 短剧端到端工作流（六阶段 · QC 关卡 · skill / ref 调用）
+      </Link>
       {tree === null ? (
         <p className="muted">Loading tree…</p>
       ) : projects.length === 0 ? (

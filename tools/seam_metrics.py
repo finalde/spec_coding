@@ -26,9 +26,19 @@ The four metrics (each 0–100, higher = smoother; the seam score is their weigh
      ghost/smear both show up as a spike far above the natural motion. Full marks when
      the peak stays near the baseline; penalised as it exceeds ~2× baseline.
 
-  M4 · 接缝结构连续 (Junction structural continuity, weight 20) — SSIM (cv2) between the
-     last frame BEFORE and the first frame AFTER the join. Detects a visible "snap":
-     1.0 = identical structure (seamless), <~0.6 = a clear content jump.
+  M4 · 接缝结构连续 (Junction structural continuity, weight 20) — the WORSE of two cut
+     detectors: (a) the lowest adjacent-frame SSIM in the region (a visible "snap":
+     1.0 = seamless, <~0.6 = a content jump), and (b) the motion-compensated residual
+     ratio — warp the before-frame along its own flow and see what's left unexplained;
+     a hard cut's content swap can't be reconstructed by flow so its residual spikes far
+     above the natural per-frame residual, catching cuts that SSIM alone misses because
+     the two frames are the same scene/framing.
+
+The seam is LOCATED EMPIRICALLY (not trusted from durations, which drift a frame or two
+after dedup/trim): we find the transition by its local MC-residual prominence near the
+expected spot, so the metrics measure where the cut/bridge ACTUALLY is. Without this a
+mislocated hard cut leaks out of the measured region and scores as smooth (the "90+ but
+visibly cuts" bug) while RIFE's correctly-measured bridge gets out-competed.
 
 Each metric also reports its RAW measurement (px/frame, ratio, SSIM 0–1) next to its
 score, so the number is auditable, not a black box.
@@ -66,6 +76,8 @@ _SPIKE_OK_RATIO = 2.0   # seam peak motion ≤ this × baseline is unnoticeable 
 _SPIKE_BAD_RATIO = 5.0  # ≥ this × baseline is a hard jump/morph → 0
 _SSIM_BAD = 0.55        # junction SSIM ≤ this is a clear content snap → 0
 _SSIM_GOOD = 0.95       # ≥ this is structurally seamless → full marks
+_MCR_OK_RATIO = 2.0     # seam MC-residual ≤ this × baseline = motion explains it → full marks
+_MCR_BAD_RATIO = 8.0    # ≥ this × baseline = a content swap flow can't explain (hard cut) → 0
 _ANALYSIS_W = 360       # downscale width for flow/ssim (speed; motion ratios scale-free)
 # Perceptual ABSOLUTE floors — below these the difference is sub-threshold, so ratio-based
 # metrics (which blow up when the baseline is ~0 on a near-static seam) must NOT penalise.
@@ -73,6 +85,12 @@ _FREEZE_BASE_FLOOR = 1.0   # baseline motion < this px/frame → shot ~static �
 _JUMP_ABS_FLOOR = 3.0      # seam peak motion < this px/frame → no perceptible jump regardless of ratio
 
 _W = {"M1": 40.0, "M2": 15.0, "M3": 25.0, "M4": 20.0}
+# Selection rule (2026-06-28): a candidate that gets EVERY metric ≥ this floor is always
+# preferred over one that doesn't — only inside each tier does the weighted score rank.
+# So "先把所有 metric 做到 80 以上，再按权重评分"; when NO candidate can clear the floor
+# (e.g. a seam with an unavoidable structural step), fall back to weighted score.
+_METRIC_FLOOR = 80.0
+_METRIC_SCORE_KEYS = ("M1_velocity", "M2_no_freeze", "M3_no_jump", "M4_junction_ssim")
 
 
 def _ffmpeg() -> str:
@@ -134,10 +152,30 @@ def _extract_window(src: Path, start: float, end: float, tmp: Path) -> list[np.n
     return out
 
 
+def _flow_field(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Dense optical-flow vector field (HxWx2, px/frame) from a→b."""
+    return cv2.calcOpticalFlowFarneback(a, b, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+
+
 def _flow_mag(a: np.ndarray, b: np.ndarray) -> float:
     """Mean dense optical-flow magnitude (px/frame) from a→b."""
-    flow = cv2.calcOpticalFlowFarneback(a, b, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-    return float(np.mean(np.sqrt(flow[..., 0] ** 2 + flow[..., 1] ** 2)))
+    F = _flow_field(a, b)
+    return float(np.mean(np.sqrt(F[..., 0] ** 2 + F[..., 1] ** 2)))
+
+
+def _mc_residual(a: np.ndarray, b: np.ndarray, F: np.ndarray) -> float:
+    """Motion-compensated residual: warp `a` toward `b` along its own flow `F`, then
+    measure what's LEFT unexplained (mean abs luma, 0–255). For genuinely continuous
+    motion the flow explains the change → low residual; at a HARD CUT the flow is
+    matching unrelated content → the warp can't reconstruct `b` → high residual. This is
+    the signal that tells a real motion step from a content swap even when the two raw
+    frames look similar (same scene/framing) and SSIM/magnitude alone are fooled."""
+    h, w = a.shape
+    gx, gy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+    mapx = gx + F[..., 0]
+    mapy = gy + F[..., 1]
+    warped = cv2.remap(a, mapx, mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    return float(np.mean(np.abs(warped.astype(np.int16) - b.astype(np.int16))))
 
 
 def _ssim(a: np.ndarray, b: np.ndarray) -> float:
@@ -170,22 +208,60 @@ def _score_curve(val: float, good: float, bad: float) -> float:
 
 def measure_seam(frames: list[np.ndarray], seam_idx: int, n_bridge: int) -> dict:
     """Compute the four metrics from the extracted seam-window frames. `seam_idx` =
-    index of the last frame BEFORE the join; `n_bridge` synth frames follow."""
+    the EXPECTED index of the last frame before the join (derived from durations, which
+    can be off by a frame or two after dedup/trim); `n_bridge` synth frames follow.
+
+    The seam is LOCATED EMPIRICALLY, not trusted from `seam_idx`: a hard cut concentrates
+    its discontinuity in one frame step, and if the duration-math points a couple of frames
+    off, that catastrophe leaks OUT of a fixed region and the seam scores as smooth (the bug
+    behind "scores 90+ but visibly cuts", and behind RIFE never winning — its spread-out
+    bridge stayed in-region and got honestly scored while the trim-cut's spike leaked out).
+    So we slide the transition-length window over a search band around the expected spot and
+    lock onto the placement with the worst motion-compensated residual — i.e. measure where
+    the transition ACTUALLY is."""
     n = len(frames)
     if n < 8:
         return {"error": "too-few-frames", "frames": n}
-    flow = [_flow_mag(frames[i], frames[i + 1]) for i in range(n - 1)]
+    fields = [_flow_field(frames[i], frames[i + 1]) for i in range(n - 1)]
+    flow = [float(np.mean(np.sqrt(F[..., 0] ** 2 + F[..., 1] ** 2))) for F in fields]
     luma = [_luma_diff(frames[i], frames[i + 1]) for i in range(n - 1)]
     ssim_pair = [_ssim(frames[i], frames[i + 1]) for i in range(n - 1)]
-    # seam region in the consecutive-step series: steps touching the bridge ± 1
-    lo = max(0, seam_idx - 1)
-    hi = min(len(flow), seam_idx + n_bridge + 2)
-    far = flow[:max(1, lo - 1)] + flow[hi + 1:]
+    mcr = [_mc_residual(frames[i], frames[i + 1], fields[i]) for i in range(n - 1)]
+    nf = len(flow)
+    # Empirically locate the transition ONSET by local prominence — how much a step's MC-
+    # residual spikes above its own neighbours — NOT by absolute residual (which is high
+    # wherever a clip simply moves fast, so a plain max would drift onto the faster clip's
+    # steady motion instead of the seam). A hard cut is a sharp prominence spike; a RIFE
+    # bridge's onset is a smaller-but-clear rise off the calmer predecessor. Search only a
+    # tight band — the duration math is off by a frame or two (dedup), not ten.
+    region_len = min(nf, n_bridge + 2)
+    radius = 4
+    band_lo = max(0, seam_idx - radius)
+    band_hi = min(nf - 1, seam_idx + radius)
+    if band_hi < band_lo:
+        band_lo = band_hi = max(0, min(seam_idx, nf - 1))
+
+    def _prominence(i: int) -> float:
+        k = 2
+        neigh = min(mcr[max(0, i - k)], mcr[min(nf - 1, i + k)])
+        return mcr[i] / (1.0 + neigh)
+
+    p = max(range(band_lo, band_hi + 1), key=_prominence)
+    # Region STARTS at the transition step p (the cut step itself / the bridge onset) and
+    # extends forward — so it captures the discontinuity and its trailing shoulder WITHOUT
+    # swallowing the predecessor's natural ease-out frame (which would read as a false freeze).
+    lo = max(0, min(p, nf - region_len))
+    hi = lo + region_len
+    far = flow[:max(0, lo - 1)] + flow[hi + 1:]
     base = float(np.median(far)) if far else float(np.median(flow))
     base = max(base, 0.05)
     region_f = flow[lo:hi] or flow
     region_l = luma[lo:hi] or luma
     region_ssim = ssim_pair[lo:hi] or ssim_pair
+    region_mcr = mcr[lo:hi] or mcr
+    far_mcr = mcr[:max(0, lo - 1)] + mcr[hi + 1:]
+    base_mcr = max(float(np.median(far_mcr)) if far_mcr else float(np.median(mcr)), 0.5)
+    seam_idx = lo  # report where the transition was actually found
     # M1 velocity continuity: worst absolute deviation of seam-region speed from baseline.
     vel_break = max(abs(v - base) for v in region_f)
     m1 = _score_curve(vel_break, good=0.0, bad=_VEL_JOLT_PXF)
@@ -202,22 +278,65 @@ def measure_seam(frames: list[np.ndarray], seam_idx: int, n_bridge: int) -> dict
     spike_ratio = max(peak_abs / base, max(region_l) / base_l)
     m3 = 100.0 if peak_abs < _JUMP_ABS_FLOOR and max(region_l) < 12.0 else _score_curve(
         spike_ratio, good=_SPIKE_OK_RATIO, bad=_SPIKE_BAD_RATIO)
-    # M4 junction structural continuity: the WORST single adjacent-frame SSIM drop in the
-    # seam region — a real "snap" is one pair of consecutive frames with low SSIM. (Comparing
-    # across the whole bridge would unfairly punish legitimate motion between non-adjacent
-    # frames, so this is adjacent-pair min, comparable across butt/trim/rife.)
+    # M4 junction structural continuity: a real "snap" shows up two ways, and M4 is the worse
+    # of them so neither can be fooled. (a) WORST adjacent-frame SSIM in the region — the
+    # classic "啪一下" structural break. (b) MC-residual ratio — the seam's peak motion-
+    # compensated residual vs the baseline: a hard cut's content swap can't be explained by
+    # flow so its residual spikes far above the natural per-frame residual, even when the two
+    # frames are the same scene and SSIM looks fine. A smooth join / clean RIFE bridge keeps
+    # both high; a cut tanks at least one.
     j_ssim = min(region_ssim)
-    m4 = _score_curve(j_ssim, good=_SSIM_GOOD, bad=_SSIM_BAD)
+    m4_ssim = _score_curve(j_ssim, good=_SSIM_GOOD, bad=_SSIM_BAD)
+    mcr_ratio = max(region_mcr) / base_mcr
+    m4_mcr = _score_curve(mcr_ratio, good=_MCR_OK_RATIO, bad=_MCR_BAD_RATIO)
+    m4 = min(m4_ssim, m4_mcr)
     total = (m1 * _W["M1"] + m2 * _W["M2"] + m3 * _W["M3"] + m4 * _W["M4"]) / sum(_W.values())
+    min_metric = min(m1, m2, m3, m4)
     return {
         "score": round(total, 1),
+        "floor_pass": bool(min_metric >= _METRIC_FLOOR),  # every metric ≥ 80
+        "min_metric": round(min_metric, 1),
+        "seam_at": lo,  # empirically-located transition step within the window
         "M1_velocity": {"score": round(m1, 1), "vel_break_pxf": round(vel_break, 2),
                         "baseline_pxf": round(base, 2)},
         "M2_no_freeze": {"score": round(m2, 1), "min_ratio": round(fr_ratio, 2)},
         "M3_no_jump": {"score": round(m3, 1), "peak_ratio": round(spike_ratio, 2)},
-        "M4_junction_ssim": {"score": round(m4, 1), "ssim": round(j_ssim, 3)},
+        "M4_junction_ssim": {"score": round(m4, 1), "ssim": round(j_ssim, 3),
+                             "mcr_ratio": round(mcr_ratio, 2)},
         "frames": n,
     }
+
+
+def rank_key(r: dict) -> tuple:
+    """Sort key for ranking candidate methods (higher = better). Tiered per the 2026-06-28
+    rule: candidates clearing the 80-floor on EVERY metric come first; ONLY within that
+    floor-pass tier does the weighted score rank ("全部≥80 之后再按分数排名").
+
+    Below the floor (no candidate yet all-≥80) ranking is LEXIMIN (lexicographic maximin,
+    2026-06-28 refinement): compare the candidates' metric vectors sorted ascending, weakest
+    board first — bigger weakest wins; when the weakest boards are ~level (within a 3-point
+    dead-band) compare the next-weakest, and so on. This keeps the core intent (4×80 beats
+    3×100+1×79 — and that case is actually decided one tier up, since 4×80 is floor-pass)
+    while fixing the degenerate maximin case where the weakest board is capped low for EVERY
+    candidate (e.g. an unfixable freeze): pure maximin would chase a meaningless +0.x on that
+    hopeless board and sacrifice the others (picking rife with M4=13.7 over trim with
+    M4=100); leximin, after the ~level weakest, prefers the candidate that keeps the other
+    boards high. Weighted score is only the final in-band tiebreak; exact ties then prefer the
+    simpler join (trim > butt > rife) and the smaller trim. Errored candidates sink."""
+    if "error" in r or "score" not in r:
+        return (0, (), -1.0, -1, 0.0)
+    method_pref = {"trim": 2, "butt": 1, "rife": 0}.get(r.get("method"), 0)
+    score = float(r["score"])
+    if r.get("floor_pass"):
+        primary: tuple = (score,)
+    else:
+        # quantize to a 3-point dead-band so a 6.9-vs-7.1 weakest counts as level and the
+        # decision falls through to the next-weakest board (leximin), not the rounding noise.
+        metrics = (r["M1_velocity"]["score"], r["M2_no_freeze"]["score"],
+                   r["M3_no_jump"]["score"], r["M4_junction_ssim"]["score"])
+        primary = tuple(sorted(round(m / 3.0) for m in metrics))  # ascending: weakest first
+    return (1 if r.get("floor_pass") else 0, primary, score,
+            method_pref, -float(r.get("trim") or 0.0))
 
 
 def _build_and_measure(seam_concat, a: Path, b: Path, method: str, trim: float,
@@ -274,9 +393,9 @@ METRIC_DEFS = [
      "desc": "接缝处运动/亮度峰值相对基线；硬跳或 RIFE 鬼影=尖峰。峰值低于感知地板自动满分。",
      "good": f"峰≤{_SPIKE_OK_RATIO}×", "bad": f"峰≥{_SPIKE_BAD_RATIO}× (硬跳/拖影)"},
     {"id": "M4", "key": "M4_junction_ssim", "name": "接缝结构连续", "en": "junction-ssim",
-     "weight": _W["M4"], "unit": "SSIM",
-     "desc": "接缝相邻帧最低 SSIM；画面有没有“啪一下”的结构突变。",
-     "good": f"SSIM≥{_SSIM_GOOD}", "bad": f"SSIM≤{_SSIM_BAD} (画面突变)"},
+     "weight": _W["M4"], "unit": "SSIM / MC残差比",
+     "desc": "接缝结构突变，取两者更差：相邻帧最低 SSIM(“啪一下”) 与 运动补偿残差比(硬切的内容跳变光流解释不了→残差飙升，即便同场景 SSIM 也骗不过)。",
+     "good": f"SSIM≥{_SSIM_GOOD} 且残差≤{_MCR_OK_RATIO}×", "bad": f"SSIM≤{_SSIM_BAD} 或残差≥{_MCR_BAD_RATIO}× (画面突变)"},
 ]
 
 
@@ -360,17 +479,22 @@ def compute_scorecard(epdir: Path, lang: str, compare: bool,
             report.append(entry)
 
     chosen_scores = [e["chosen"]["score"] for e in report if "error" not in e["chosen"]]
+    chosen_ok = [e["chosen"] for e in report if "error" not in e["chosen"]]
     best_scores = []
     for e in report:
         ok = [x for x in ([e["chosen"]] + e.get("panel", [])) if "error" not in x]
         if ok:
-            best_scores.append(max(x["score"] for x in ok))
+            best_scores.append(max(ok, key=rank_key)["score"])  # best by tiered rule
     overall = round(sum(chosen_scores) / len(chosen_scores), 1) if chosen_scores else None
     ceiling = round(sum(best_scores) / len(best_scores), 1) if best_scores else None
     return {
         "episode": epdir.name, "lang": lang, "weights": _W,
+        "metric_floor": _METRIC_FLOOR,
         "metric_defs": METRIC_DEFS, "seams": report,
         "overall": overall, "overall_grade": _letter(overall) if overall is not None else None,
+        # all_floor_pass: every chosen seam clears the 80 floor on every metric (the
+        # primary goal under the tiered rule); else some metric is the laggard.
+        "all_floor_pass": bool(chosen_ok) and all(c.get("floor_pass") for c in chosen_ok),
         "ceiling": ceiling, "ceiling_grade": _letter(ceiling) if ceiling is not None else None,
         "weakest": round(min(chosen_scores), 1) if chosen_scores else None,
         "n_seams": len(chosen_scores),
@@ -415,7 +539,8 @@ def grade(epdir: Path, lang: str, compare: bool, rife: str | None,
 def _fmt(m: dict) -> str:
     if "error" in m:
         return f"ERROR({m['error']})"
-    return (f"{m['score']:5.1f} | M1速度 {m['M1_velocity']['score']:5.1f}"
+    floor = "✓80" if m.get("floor_pass") else f"✗{m.get('min_metric','?')}"
+    return (f"{m['score']:5.1f}[{floor}] | M1速度 {m['M1_velocity']['score']:5.1f}"
             f"(Δ{m['M1_velocity']['vel_break_pxf']}/基线{m['M1_velocity']['baseline_pxf']}px)"
             f" · M2无冻结 {m['M2_no_freeze']['score']:5.1f}(min×{m['M2_no_freeze']['min_ratio']})"
             f" · M3无跳变 {m['M3_no_jump']['score']:5.1f}(峰×{m['M3_no_jump']['peak_ratio']})"
@@ -425,7 +550,7 @@ def _fmt(m: dict) -> str:
 def _print_report(name: str, lang: str, report: list[dict], compare: bool) -> None:
     print(f"\n=== Seam quality scorecard — {name} (lang={lang}) ===")
     print("metric weights: M1 velocity 40 · M2 no-freeze 15 · M3 no-jump/morph 25 · M4 junction SSIM 20")
-    print("(each 0–100, higher = smoother; seam score = weighted mean)\n")
+    print(f"排名规则: 先比「四项是否全≥{_METRIC_FLOOR:.0f}」(✓/✗)，达标档按加权分；未达标档用 leximin(最短板优先·≈持平差<3分则比次短板·依次类推)，加权分仅最后 tiebreak。\n")
     chosen_scores = []
     best_scores = []
     for e in report:
@@ -435,10 +560,10 @@ def _print_report(name: str, lang: str, report: list[dict], compare: bool) -> No
         c = e["chosen"]
         if "error" not in c:
             chosen_scores.append(c["score"])
-        # rank chosen + panel together by score
+        # rank chosen + panel together: floor-pass tier first, then weighted score.
         cands = [c] + e.get("panel", [])
         ok = [x for x in cands if "error" not in x]
-        ok.sort(key=lambda x: -x["score"])
+        ok.sort(key=rank_key, reverse=True)
         if ok:
             best_scores.append(ok[0]["score"])
         for rank, x in enumerate(ok, 1):

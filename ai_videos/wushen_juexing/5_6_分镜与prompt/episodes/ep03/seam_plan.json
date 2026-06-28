@@ -12,50 +12,50 @@
       "from": "shot02",
       "to": "shot03",
       "method": "rife",
-      "trim": 0.06,
+      "trim": 0.08,
       "depth": 3
     },
     {
       "from": "shot03",
       "to": "shot04",
       "method": "rife",
-      "trim": 0.04,
-      "depth": 3
+      "trim": 0.14,
+      "depth": 4
     },
     {
       "from": "shot04",
       "to": "shot05",
       "method": "rife",
-      "trim": 0.04,
+      "trim": 0.08,
       "depth": 3
     },
     {
       "from": "shot05",
       "to": "shot06",
       "method": "rife",
-      "trim": 0.04,
-      "depth": 1
+      "trim": 0.08,
+      "depth": 3
     },
     {
       "from": "shot06",
       "to": "shot07",
       "method": "rife",
-      "trim": 0.04,
+      "trim": 0.08,
       "depth": 3
     },
     {
       "from": "shot07",
       "to": "shot08",
       "method": "rife",
-      "trim": 0.04,
+      "trim": 0.2,
       "depth": 4
     },
     {
       "from": "shot08",
       "to": "shot09",
       "method": "rife",
-      "trim": 0.04,
-      "depth": 3
+      "trim": 0.2,
+      "depth": 4
     },
     {
       "from": "shot09",

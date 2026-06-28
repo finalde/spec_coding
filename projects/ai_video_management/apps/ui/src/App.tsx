@@ -8,6 +8,7 @@ import { CharacterGrid } from "./components/CharacterGrid";
 import { DramaPage } from "./components/DramaPage";
 import { DeletedView } from "./components/DeletedView";
 import { BgmGrid } from "./components/BgmGrid";
+import { WorkflowPage } from "./components/WorkflowPage";
 import { bumpMediaCacheBuster, fetchTree } from "./api";
 import { collectFilePaths } from "./lib/linkResolver";
 import type { TreeNode } from "./types";
@@ -98,6 +99,7 @@ export default function App(): JSX.Element {
             path="/bgm"
             element={<BgmGrid onChange={() => setRefreshKey((k) => k + 1)} />}
           />
+          <Route path="/workflow" element={<WorkflowPage />} />
           <Route
             path="/deleted"
             element={<DeletedView tree={tree} onChange={() => setRefreshKey((k) => k + 1)} />}

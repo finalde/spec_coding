@@ -1,0 +1,181 @@
+{
+  "episode": "ep05",
+  "lang": "original",
+  "weights": {
+    "M1": 40.0,
+    "M2": 15.0,
+    "M3": 25.0,
+    "M4": 20.0
+  },
+  "metric_floor": 80.0,
+  "metric_defs": [
+    {
+      "id": "M1",
+      "key": "M1_velocity",
+      "name": "运动速度连贯",
+      "en": "velocity",
+      "weight": 40.0,
+      "unit": "px/frame",
+      "desc": "光流测每帧运动速度，接缝前后应恒定；偏离基线越小越平滑。",
+      "good": "Δ→0 px/帧",
+      "bad": "Δ≥8.0 px/帧 (明显顿挫)"
+    },
+    {
+      "id": "M2",
+      "key": "M2_no_freeze",
+      "name": "无冻结",
+      "en": "no-freeze",
+      "weight": 15.0,
+      "unit": "×baseline",
+      "desc": "接缝处最小运动相对基线；出现卡住/重复帧=冻结。近静态镜无冻结概念自动满分。",
+      "good": "min≈基线",
+      "bad": "min→0 (卡住)"
+    },
+    {
+      "id": "M3",
+      "key": "M3_no_jump",
+      "name": "无跳变/无拖影",
+      "en": "no-jump",
+      "weight": 25.0,
+      "unit": "×baseline",
+      "desc": "接缝处运动/亮度峰值相对基线；硬跳或 RIFE 鬼影=尖峰。峰值低于感知地板自动满分。",
+      "good": "峰≤2.0×",
+      "bad": "峰≥5.0× (硬跳/拖影)"
+    },
+    {
+      "id": "M4",
+      "key": "M4_junction_ssim",
+      "name": "接缝结构连续",
+      "en": "junction-ssim",
+      "weight": 20.0,
+      "unit": "SSIM / MC残差比",
+      "desc": "接缝结构突变，取两者更差：相邻帧最低 SSIM(“啪一下”) 与 运动补偿残差比(硬切的内容跳变光流解释不了→残差飙升，即便同场景 SSIM 也骗不过)。",
+      "good": "SSIM≥0.95 且残差≤2.0×",
+      "bad": "SSIM≤0.55 或残差≥8.0× (画面突变)"
+    }
+  ],
+  "seams": [
+    {
+      "seam": "shot01->shot02",
+      "time": {
+        "at_s": 11.85,
+        "start_s": 11.67,
+        "end_s": 12.15
+      },
+      "chosen": {
+        "score": 87.4,
+        "floor_pass": false,
+        "min_metric": 48.7,
+        "seam_at": 12,
+        "M1_velocity": {
+          "score": 94.2,
+          "vel_break_pxf": 0.46,
+          "baseline_pxf": 0.23
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 0.14
+        },
+        "M3_no_jump": {
+          "score": 100.0,
+          "peak_ratio": 5.35
+        },
+        "M4_junction_ssim": {
+          "score": 48.7,
+          "ssim": 0.863,
+          "mcr_ratio": 5.08
+        },
+        "frames": 26,
+        "method": "rife",
+        "trim": 0.08,
+        "depth": 2,
+        "label": "CHOSEN(rife trim=0.08 depth=2)"
+      },
+      "panel": []
+    },
+    {
+      "seam": "shot06->shot07",
+      "time": {
+        "at_s": 59.48,
+        "start_s": 59.32,
+        "end_s": 59.69
+      },
+      "chosen": {
+        "score": 76.0,
+        "floor_pass": false,
+        "min_metric": 0.0,
+        "seam_at": 10,
+        "M1_velocity": {
+          "score": 89.9,
+          "vel_break_pxf": 0.81,
+          "baseline_pxf": 0.05
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 1.0
+        },
+        "M3_no_jump": {
+          "score": 100.0,
+          "peak_ratio": 17.14
+        },
+        "M4_junction_ssim": {
+          "score": 0.0,
+          "ssim": 0.856,
+          "mcr_ratio": 21.52
+        },
+        "frames": 23,
+        "method": "rife",
+        "trim": 0.06,
+        "depth": 1,
+        "label": "CHOSEN(rife trim=0.06 depth=1)"
+      },
+      "panel": []
+    },
+    {
+      "seam": "shot10->shot11",
+      "time": {
+        "at_s": 103.09,
+        "start_s": 102.89,
+        "end_s": 103.33
+      },
+      "chosen": {
+        "score": 39.3,
+        "floor_pass": false,
+        "min_metric": 0.0,
+        "seam_at": 10,
+        "M1_velocity": {
+          "score": 50.9,
+          "vel_break_pxf": 3.93,
+          "baseline_pxf": 0.61
+        },
+        "M2_no_freeze": {
+          "score": 100.0,
+          "min_ratio": 1.46
+        },
+        "M3_no_jump": {
+          "score": 0.0,
+          "peak_ratio": 7.44
+        },
+        "M4_junction_ssim": {
+          "score": 19.9,
+          "ssim": 0.63,
+          "mcr_ratio": 3.93
+        },
+        "frames": 23,
+        "method": "rife",
+        "trim": 0.1,
+        "depth": 1,
+        "label": "CHOSEN(rife trim=0.1 depth=1)"
+      },
+      "panel": []
+    }
+  ],
+  "overall": 67.6,
+  "overall_grade": "D 待改进",
+  "all_floor_pass": false,
+  "ceiling": 67.6,
+  "ceiling_grade": "D 待改进",
+  "weakest": 39.3,
+  "n_seams": 3,
+  "generated_at": "2026-06-28T07:01:15+00:00"
+}

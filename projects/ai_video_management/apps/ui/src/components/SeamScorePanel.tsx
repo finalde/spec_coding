@@ -87,6 +87,10 @@ export function SeamScorePanel({ path, lang = "original" }: {
                   <span className="seam-panel-seam-time">@{s.time.at_s}s（{s.time.start_s}–{s.time.end_s}s）</span>
                 )}
                 <span className="seam-panel-seam-method">{c.method} trim={c.trim}{c.depth != null ? ` d${c.depth}` : ""}</span>
+                <span className={`seam-panel-floor ${c.floor_pass ? "ok" : "fail"}`}
+                  title={c.floor_pass ? "四项指标全部 ≥80" : `有指标低于 80（最低 ${c.min_metric}）`}>
+                  {c.floor_pass ? "✓全≥80" : `✗最低${c.min_metric ?? "?"}`}
+                </span>
                 <strong className={`seam-panel-seam-score ${gradeClass(c.score)}`}>{c.score?.toFixed(1)}</strong>
               </div>
               <div className="seam-panel-metrics">

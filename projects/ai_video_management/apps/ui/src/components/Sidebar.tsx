@@ -204,6 +204,15 @@ export function Sidebar({ tree, currentPath, onSelect, loadError, onTreeReload }
       <div className="sidebar-toolbar">
         <button
           type="button"
+          className="sidebar-nav-link"
+          aria-label="查看 AI 短剧端到端工作流"
+          title="AI 短剧端到端工作流 · 六阶段 / QC 关卡 / skill 调用"
+          onClick={() => navigate("/workflow")}
+        >
+          🗺 工作流
+        </button>
+        <button
+          type="button"
           className="sidebar-collapse-all"
           aria-label="折叠全部"
           title="折叠全部 · Collapse all folders"
